@@ -1,0 +1,221 @@
+---
+interface Tab {
+  label: string;
+  id: string;
+  code: string;
+}
+
+interface Props {
+  tabs: Tab[];
+}
+
+const { tabs } = Astro.props;
+---
+
+<div class="install-strip">
+  <div class="tabs" role="tablist">
+    {tabs.map((tab, i) => (
+      <button
+        class="tab"
+        role="tab"
+        id={`tab-${tab.id}`}
+        aria-selected={i === 0 ? 'true' : 'false'}
+        aria-controls={`panel-${tab.id}`}
+        tabindex={i === 0 ? '0' : '-1'}
+        data-tab={tab.id}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+  {tabs.map((tab, i) => (
+    <div
+      class="tab-panel"
+      role="tabpanel"
+      id={`panel-${tab.id}`}
+      aria-labelledby={`tab-${tab.id}`}
+      data-panel={tab.id}
+      data-active={i === 0 ? '' : undefined}
+    >
+      <div class="code-block-wrapper">
+        <pre><code>{tab.code}</code></pre>
+        <button class="copy-btn" aria-label="Copy to clipboard" data-code={tab.code}>
+          <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span class="copy-label">Copy</span>
+        </button>
+      </div>
+    </div>
+  ))}
+</div>
+
+<script>
+  document.querySelectorAll('.install-strip').forEach(block => {
+    const tabs = Array.from(block.querySelectorAll('[role="tab"]'));
+    const panels = block.querySelectorAll('[role="tabpanel"]');
+
+    function activateTab(tab: Element) {
+      const target = (tab as HTMLElement).dataset.tab;
+      tabs.forEach(t => {
+        t.setAttribute('aria-selected', 'false');
+        t.setAttribute('tabindex', '-1');
+      });
+      tab.setAttribute('aria-selected', 'true');
+      tab.setAttribute('tabindex', '0');
+      (tab as HTMLElement).focus();
+      panels.forEach(p => {
+        const el = p as HTMLElement;
+        if (el.dataset.panel === target) {
+          el.setAttribute('data-active', '');
+        } else {
+          el.removeAttribute('data-active');
+        }
+      });
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => activateTab(tab));
+      tab.addEventListener('keydown', (e: Event) => {
+        const ke = e as KeyboardEvent;
+        const idx = tabs.indexOf(tab);
+        let next = -1;
+        if (ke.key === 'ArrowRight') next = (idx + 1) % tabs.length;
+        if (ke.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+        if (ke.key === 'Home') next = 0;
+        if (ke.key === 'End') next = tabs.length - 1;
+        if (next >= 0) {
+          ke.preventDefault();
+          activateTab(tabs[next]);
+        }
+      });
+    });
+  });
+
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const el = btn as HTMLElement;
+      const code = el.dataset.code;
+      const label = el.querySelector('.copy-label');
+      if (!code || !label) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        label.textContent = 'Copied!';
+        el.classList.add('copied');
+        setTimeout(() => {
+          label.textContent = 'Copy';
+          el.classList.remove('copied');
+        }, 2000);
+      } catch {
+        label.textContent = 'Failed';
+        setTimeout(() => { label.textContent = 'Copy'; }, 2000);
+      }
+    });
+  });
+</script>
+
+<style>
+  .install-strip {
+    margin: var(--space-6) 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .tab {
+    cursor: pointer;
+    padding: var(--space-2) var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition-fast);
+  }
+
+  .tab[aria-selected='true'] {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .tab:hover {
+    color: var(--color-text-muted);
+  }
+
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel[data-active] {
+    display: block;
+  }
+
+  .code-block-wrapper {
+    position: relative;
+  }
+
+  .code-block-wrapper pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: var(--space-3) var(--space-4);
+    margin: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .code-block-wrapper pre code {
+    background: none;
+    padding: 0;
+    color: var(--color-primary);
+    font-size: inherit;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, opacity 0.2s;
+    opacity: 0;
+    line-height: 1;
+  }
+
+  .code-block-wrapper:hover .copy-btn,
+  .copy-btn:focus-visible {
+    opacity: 1;
+  }
+
+  .copy-btn:hover {
+    color: var(--color-text);
+    background: var(--color-bg);
+  }
+
+  .copy-btn.copied {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    opacity: 1;
+  }
+
+  .copy-btn.copied .copy-icon {
+    display: none;
+  }
+</style>

@@ -1,0 +1,45 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="GitHub Issues" description="Browse, filter, and preview GitHub issues from the grüt terminal UI.">
+  <h1>GitHub Issues</h1>
+  <p class="lead">
+    The Issues tab connects directly to your repository's GitHub issues —
+    browse, filter, and preview without opening a browser.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Live list</strong> — Open and closed issues fetched from the GitHub API</li>
+    <li><strong>Label filters</strong> — Filter by label, assignee, or milestone</li>
+    <li><strong>Preview integration</strong> — Select an issue and the preview panel renders its body as markdown</li>
+    <li><strong>Quick actions</strong> — Open in browser, copy URL, or reference in a commit message</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Open issue in preview panel' },
+    { key: 'o', action: 'Open issue in browser' },
+    { key: 'y', action: 'Copy issue URL to clipboard' },
+    { key: 'f', action: 'Filter issues' },
+    { key: 'R', action: 'Refresh issue list' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    When you select an issue, the preview panel switches to render the issue
+    body with full markdown formatting. Labels appear as colored badges matching
+    their GitHub colors. Selecting a different tab or file restores the preview
+    to its default mode.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

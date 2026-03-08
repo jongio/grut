@@ -1,0 +1,162 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Keybinding Reference" description="Complete keybinding reference for grüt — global, navigation, file tree, git info, GitHub, commits, and preview panels.">
+  <h1>Keybinding Reference</h1>
+  <p class="lead">
+    All default keybindings organized by context. grüt ships with three
+    keybinding schemes — <code>default</code>, <code>vim</code>, and
+    <code>classic</code> — configurable via <code>keybinding_scheme</code> in
+    your config.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/help.png" alt="Help overlay showing keybinding reference" caption="Help overlay with keybinding reference (press ? to open)" />
+
+  <h2>Global</h2>
+  <p>These bindings work everywhere, regardless of the focused panel.</p>
+  <KeybindingTable bindings={[
+    { key: '1', action: 'Focus File Tree panel' },
+    { key: '2', action: 'Focus Git Info panel' },
+    { key: '3', action: 'Focus GitHub panel' },
+    { key: '4', action: 'Focus Commits panel' },
+    { key: '5', action: 'Focus Preview panel' },
+    { key: 'Tab', action: 'Focus next panel' },
+    { key: 'Shift+Tab', action: 'Focus previous panel' },
+    { key: 'R', action: 'Refresh all data + preview' },
+    { key: 'P', action: 'Push' },
+    { key: 'F', action: 'Fetch all remotes' },
+    { key: '?', action: 'Help overlay' },
+    { key: ',', action: 'Settings' },
+    { key: '/', action: 'Fuzzy finder' },
+    { key: ':', action: 'Command palette' },
+    { key: '~', action: 'Change directory' },
+    { key: 'Ctrl+c', action: 'Quit' },
+    { key: 'Ctrl+Space', action: 'Toggle AI chat' },
+    { key: 'Ctrl+z', action: 'Undo last git action' },
+    { key: 'Ctrl+y', action: 'Redo' },
+  ]} />
+
+  <h2>Navigation</h2>
+  <p>Consistent movement keys shared across every focused panel.</p>
+  <KeybindingTable bindings={[
+    { key: 'j / ↓', action: 'Cursor down' },
+    { key: 'k / ↑', action: 'Cursor up' },
+    { key: 'g', action: 'Jump to top' },
+    { key: 'G', action: 'Jump to bottom' },
+    { key: 'd', action: 'Page down' },
+    { key: 'u', action: 'Page up' },
+    { key: 'Enter', action: 'Select / open / expand' },
+    { key: 'Esc', action: 'Back / close submode' },
+  ]} />
+
+  <h2>File Tree <small>(panel 1)</small></h2>
+  <p>Keybindings active when the File Tree panel is focused.</p>
+  <KeybindingTable bindings={[
+    { key: 'h / ←', action: 'Collapse directory' },
+    { key: 'l / →', action: 'Expand directory' },
+    { key: 'Enter', action: 'Expand dir / select file' },
+    { key: 'o', action: 'Open file in external editor' },
+    { key: '.', action: 'Toggle hidden files' },
+    { key: 'f', action: 'Toggle git filter (changed files only)' },
+    { key: 'v', action: 'Toggle tree / list view' },
+    { key: 'n', action: 'New file' },
+    { key: 'N', action: 'New directory' },
+    { key: 'x', action: 'Delete file / directory' },
+    { key: 'e / F2', action: 'Rename' },
+    { key: 'y', action: 'Copy path to clipboard' },
+    { key: 'c', action: 'Copy file' },
+    { key: 'p', action: 'Paste file' },
+    { key: 's', action: 'Stage file (in git filter mode)' },
+    { key: 'Space', action: 'Toggle stage / unstage' },
+    { key: 'J', action: 'Scroll preview down' },
+    { key: 'K', action: 'Scroll preview up' },
+  ]} />
+
+  <h2>Git Info <small>(panel 2)</small></h2>
+  <p>Keybindings for the Git Info panel. Switch tabs with single keys.</p>
+  <h3>Tabs</h3>
+  <KeybindingTable bindings={[
+    { key: 'b', action: 'Branches tab' },
+    { key: 'w', action: 'Worktrees tab' },
+    { key: 'r', action: 'Remotes tab' },
+    { key: 's', action: 'Stash tab' },
+    { key: 't', action: 'Tags tab' },
+    { key: 'l', action: 'Reflog tab' },
+  ]} />
+  <h3>Actions</h3>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Checkout / apply' },
+    { key: 'n', action: 'Create new item' },
+    { key: 'x', action: 'Delete selected' },
+    { key: 'e / F2', action: 'Rename' },
+    { key: 'o', action: 'Open in browser' },
+    { key: 'y', action: 'Copy to clipboard' },
+    { key: 'f', action: 'Fetch / filter' },
+  ]} />
+
+  <h2>GitHub <small>(panel 3)</small></h2>
+  <p>Keybindings for the GitHub panel. Switch tabs with single keys.</p>
+  <h3>Tabs</h3>
+  <KeybindingTable bindings={[
+    { key: 'b', action: 'Branches tab' },
+    { key: 't', action: 'Tags tab' },
+    { key: 'i', action: 'Issues tab' },
+    { key: 'p', action: 'Pull Requests tab' },
+    { key: 'a', action: 'Actions tab' },
+    { key: 'w', action: 'Workflows tab' },
+    { key: 'l', action: 'Releases tab' },
+  ]} />
+  <h3>Actions</h3>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Select (show in preview)' },
+    { key: 'o', action: 'Open in browser' },
+    { key: 'y', action: 'Copy to clipboard' },
+    { key: 'r', action: 'Rerun (Actions tab only)' },
+    { key: 'x', action: 'Cancel (Actions tab only)' },
+    { key: 'D', action: 'Dispatch workflow (Workflows tab only)' },
+  ]} />
+
+  <h2>Commits <small>(panel 4)</small></h2>
+  <p>Keybindings for the Commits panel.</p>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'View commit detail' },
+    { key: 'Esc', action: 'Back to list' },
+    { key: 'o', action: 'Open in browser' },
+    { key: 'y', action: 'Copy SHA' },
+    { key: 'A', action: 'Amend last commit' },
+    { key: 'r', action: 'Reword last commit' },
+    { key: '/', action: 'Search commits' },
+  ]} />
+
+  <h2>Preview <small>(panel 5)</small></h2>
+  <p>Navigation keys (<kbd>j</kbd>/<kbd>k</kbd>/<kbd>g</kbd>/<kbd>G</kbd>/<kbd>d</kbd>/<kbd>u</kbd>) scroll content. No panel-specific actions.</p>
+
+  <h2>Keybinding Schemes</h2>
+  <p>
+    grüt supports three keybinding schemes. The bindings listed above are the
+    <code>default</code> scheme. You can switch schemes in your config:
+  </p>
+  <pre><code>[general]
+keybinding_scheme = "vim"   # "default" | "vim" | "classic"</code></pre>
+  <ul>
+    <li><strong>default</strong> — the bindings shown on this page</li>
+    <li><strong>vim</strong> — vim-style motions with additional <code>dd</code>, <code>yy</code>, and visual-mode-style selection</li>
+    <li><strong>classic</strong> — keybindings for users who prefer classic TUI conventions</li>
+  </ul>
+  <p>
+    All schemes share the same global bindings (<kbd>Ctrl+c</kbd>,
+    <kbd>?</kbd>, <kbd>Tab</kbd>, number keys). The differences are in
+    navigation and git operation keys.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

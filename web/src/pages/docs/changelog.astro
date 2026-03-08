@@ -1,0 +1,131 @@
+---
+import Docs from '../../layouts/Docs.astro';
+---
+
+<Docs title="Changelog" description="Release history for grüt — new features, changes, fixes, and performance improvements.">
+  <h1>Changelog</h1>
+  <p class="lead">
+    All notable changes to grüt, following
+    <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> and
+    <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.
+  </p>
+
+  <!-- ═══════ Unreleased ═══════ -->
+  <section class="release">
+    <h2 class="release-header">
+      <span class="release-version">Unreleased</span>
+    </h2>
+
+    <h3 class="change-category added">Added</h3>
+    <ul>
+      <li>Right-click context menu with action picker for all panels</li>
+      <li>Configurable click actions with mouse support for all panels</li>
+      <li>Settings dialog overlay for preview position (comma key)</li>
+      <li>Mouse drag resize on split borders</li>
+      <li>Vertical resize keybindings (<kbd>ctrl+up</kbd>/<kbd>ctrl+down</kbd>)</li>
+      <li>Configurable preview position cycling (<kbd>ctrl+b p</kbd>)</li>
+      <li>Tab bar with canonical 1–5 preset ordering</li>
+      <li>Mage build system with preflight checks (<code>mage install</code>, <code>mage preflight</code>)</li>
+    </ul>
+
+    <h3 class="change-category changed">Changed</h3>
+    <ul>
+      <li>Git preset simplified to 2-pane layout (filetree + preview)</li>
+      <li>Panel borders use NormalBorder (square corners, no title)</li>
+    </ul>
+
+    <h3 class="change-category fixed">Fixed</h3>
+    <ul>
+      <li>Eliminate Windows clipboard command injection (CWE-78)</li>
+      <li>Input validation for OpenInEditor and OpenInBrowser</li>
+      <li>Modal mouse click and Tab cycling support</li>
+      <li>Bottom border rendering and clean footer layout</li>
+      <li>Preview panel content wrapping with truecolor ANSI codes</li>
+      <li>Folders no longer auto-expand on startup</li>
+    </ul>
+
+    <h3 class="change-category performance">Performance</h3>
+    <ul>
+      <li>Batch bottom border rendering calls</li>
+    </ul>
+  </section>
+
+  <!-- ═══════ 0.1.0 ═══════ -->
+  <section class="release">
+    <h2 class="release-header">
+      <span class="release-version">0.1.0</span>
+      <time class="release-date" datetime="2026-03-09">March 9, 2026</time>
+    </h2>
+
+    <h3 class="change-category added">Added</h3>
+    <ul>
+      <li>Terminal file explorer with Bubble Tea v2</li>
+      <li>Git integration (status, diff, log, branches, stash, conflicts)</li>
+      <li>5 preset layouts (Explorer, Git, Review, Agent, Full)</li>
+      <li>Syntax highlighting with Chroma</li>
+      <li>Nerd Font icon support</li>
+      <li>Mouse click navigation</li>
+      <li>Fuzzy finder for files and commands</li>
+      <li>Bookmarks panel</li>
+      <li>Help overlay</li>
+      <li>Split panel management (horizontal/vertical/close/zoom)</li>
+      <li>Tab management with presets</li>
+      <li>TOML-based keybinding configuration</li>
+      <li>Theme system with Dracula palette</li>
+    </ul>
+  </section>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  .release {
+    margin-bottom: var(--space-12);
+  }
+
+  .release-header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .release:first-of-type .release-header {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .release-version {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    color: var(--color-primary);
+  }
+
+  .release-date {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
+
+  .change-category {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 600;
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-3);
+    border-left: 3px solid var(--color-border);
+  }
+
+  .change-category.added { border-left-color: var(--color-success); color: var(--color-success); }
+  .change-category.changed { border-left-color: var(--color-info); color: var(--color-info); }
+  .change-category.fixed { border-left-color: var(--color-error); color: var(--color-error); }
+  .change-category.performance { border-left-color: var(--color-warning); color: var(--color-warning); }
+</style>

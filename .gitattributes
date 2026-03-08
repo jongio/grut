@@ -1,0 +1,56 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Go source files
+*.go text diff=golang
+
+# Shell scripts must use LF
+*.sh text eol=lf
+
+# Windows scripts must use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Documentation
+*.md text diff=markdown
+*.txt text
+LICENSE text
+
+# Config files
+*.json text
+*.yaml text
+*.yml text
+*.toml text
+*.xml text
+
+# Web assets
+*.html text diff=html
+*.css text diff=css
+*.js text
+*.ts text
+*.tsx text
+*.jsx text
+
+# Images (binary)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+
+# Archives (binary)
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+
+# Compiled / binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.wasm binary
+
+# Go module files
+go.sum text -diff

@@ -1,0 +1,121 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import FeatureCard from '../../components/FeatureCard.astro';
+---
+
+<Docs title="Documentation" description="grüt documentation — a terminal UI for Git built with Go.">
+  <h1>grüt Documentation</h1>
+  <p class="lead">
+    grüt is a terminal UI for Git built with Go. Browse files, stage changes,
+    commit, branch, merge, and more — all without leaving your terminal.
+  </p>
+
+  <div class="doc-grid">
+    <FeatureCard
+      title="Installation"
+      description="Install grüt via shell script, PowerShell, go install, or prebuilt binary."
+      icon="📦"
+      href="/grut/docs/installation/"
+    />
+    <FeatureCard
+      title="Getting Started"
+      description="Launch grüt, navigate files, stage changes, and make your first commit."
+      icon="🚀"
+      href="/grut/docs/"
+    />
+    <FeatureCard
+      title="Configuration"
+      description="Full TOML config reference — keybindings, themes, git, AI, and more."
+      icon="⚙️"
+      href="/grut/docs/configuration/"
+    />
+    <FeatureCard
+      title="Keybindings"
+      description="Complete keybinding reference for navigation, file tree, git, and diff viewer."
+      icon="⌨️"
+      href="/grut/docs/keybindings/"
+    />
+  </div>
+
+  <h2>File Explorer</h2>
+  <div class="doc-grid">
+    <FeatureCard
+      title="File Explorer"
+      description="Navigate your project tree with git status markers, filtering, and preview."
+      icon="📂"
+      href="/grut/docs/file-explorer/"
+    />
+    <FeatureCard
+      title="Fuzzy Finder"
+      description="Instantly jump to any file with fuzzy search."
+      icon="🔍"
+      href="/grut/docs/fuzzy-finder/"
+    />
+  </div>
+
+  <h2>Git</h2>
+  <div class="doc-grid">
+    <FeatureCard
+      title="Status & Staging"
+      description="View git status, stage and unstage files, discard changes."
+      icon="●"
+      href="/grut/docs/git-status/"
+    />
+    <FeatureCard
+      title="Commits"
+      description="Commit staged changes with messages, amend, and sign commits."
+      icon="✓"
+      href="/grut/docs/git-commits/"
+    />
+    <FeatureCard
+      title="Branches"
+      description="Create, checkout, rename, delete, and merge branches."
+      icon="⑂"
+      href="/grut/docs/git-branches/"
+    />
+    <FeatureCard
+      title="Stash"
+      description="Stash, apply, pop, and drop work-in-progress changes."
+      icon="📥"
+      href="/grut/docs/git-stash/"
+    />
+    <FeatureCard
+      title="Log"
+      description="Browse commit history with search and hash copying."
+      icon="📜"
+      href="/grut/docs/git-log/"
+    />
+    <FeatureCard
+      title="Diff"
+      description="Review diffs inline or side-by-side with hunk navigation."
+      icon="±"
+      href="/grut/docs/git-diff/"
+    />
+  </div>
+
+  <h2>Interface</h2>
+  <div class="doc-grid">
+    <FeatureCard
+      title="Themes"
+      description="Built-in themes and custom theme support."
+      icon="🎨"
+      href="/grut/docs/themes/"
+    />
+  </div>
+
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-8);
+  }
+</style>

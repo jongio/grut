@@ -1,0 +1,104 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const mergeConflictBindings = [
+  { key: 'o', action: 'Accept ours — keep current branch version' },
+  { key: 't', action: 'Accept theirs — keep incoming branch version' },
+  { key: 'b', action: 'Accept both — concatenate ours and theirs' },
+  { key: 'Enter', action: 'Mark conflict as resolved' },
+];
+
+const branchPanelBindings = [
+  { key: 'm', action: 'Merge selected branch into current branch' },
+  { key: 'Enter', action: 'Checkout selected branch' },
+];
+---
+
+<Docs title="Git Merge" description="How merging works in grüt — strategies, conflict resolution, and configuration.">
+  <h1>Git Merge</h1>
+  <p class="lead">
+    Merge branches directly from the grüt TUI. Select a target branch, choose a strategy,
+    and resolve conflicts without leaving your terminal.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-branches.png" alt="Branch panel showing local and remote branches for merge selection" caption="Select a branch to merge from the branch panel" />
+
+  <h2>Starting a Merge</h2>
+  <p>
+    Navigate to the <strong>branches panel</strong> with your configured panel-switching keybinding.
+    Use <code>j</code> / <code>k</code> to highlight the branch you want to merge, then press
+    <code>m</code> to merge it into your current branch.
+  </p>
+  <p>
+    grüt runs the merge in the background and refreshes the status panel automatically. If the
+    merge completes cleanly, you'll see the updated commit log immediately.
+  </p>
+
+  <KeybindingTable bindings={branchPanelBindings} title="Branch Panel" />
+
+  <h2>Merge Strategies</h2>
+  <p>
+    grüt supports three merge strategies, configurable via
+    <code>grut.toml</code>:
+  </p>
+  <ul>
+    <li>
+      <strong>Fast-forward</strong> (default) — moves the branch pointer forward when there is a
+      linear path. No merge commit is created.
+    </li>
+    <li>
+      <strong>Merge commit</strong> — always creates an explicit merge commit, even when a
+      fast-forward is possible. Useful for preserving branch history.
+    </li>
+    <li>
+      <strong>Squash</strong> — collapses all incoming commits into a single commit on the current
+      branch. The original branch history is not recorded in the merge.
+    </li>
+  </ul>
+
+  <h2>Configuration</h2>
+  <p>
+    Set the default merge method in your <code>grut.toml</code>:
+  </p>
+  <pre><code>[git]
+worktree_merge_method = "merge"   # options: "merge", "rebase", "squash"</code></pre>
+  <p>
+    This setting also applies when pulling from a remote — the configured method determines how
+    incoming changes are integrated.
+  </p>
+
+  <h2>Conflict Resolution</h2>
+  <p>
+    When a merge produces conflicts, grüt automatically switches to <strong>conflict resolution
+    mode</strong>. The file panel highlights conflicting files with a distinct marker, and the
+    diff view shows conflict blocks with <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ours</code> /
+    <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs</code> markers.
+  </p>
+  <p>
+    Select a conflicting file to open the inline conflict resolver. Each conflict hunk is
+    presented with three options:
+  </p>
+
+  <KeybindingTable bindings={mergeConflictBindings} title="Conflict Resolution" />
+
+  <p>
+    After resolving all conflicts in a file, press <code>Enter</code> to mark it resolved. Once
+    every conflicting file is marked resolved, grüt prompts you to complete the merge commit.
+  </p>
+
+  <h2>Aborting a Merge</h2>
+  <p>
+    If you need to abandon a merge in progress, use the command palette (<code>:</code>) and run
+    <code>merge --abort</code>. This restores your working tree to the state before the merge began.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

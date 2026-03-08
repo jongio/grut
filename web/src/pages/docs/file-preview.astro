@@ -1,0 +1,50 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="File Preview" description="The grüt preview panel adapts to show file content, diffs, PR bodies, and issue descriptions depending on your current selection.">
+  <h1>File Preview</h1>
+  <p class="lead">
+    The preview panel is grüt's most context-aware surface. It adapts its
+    display mode based on what you've selected — file content, diffs, issue
+    bodies, PR descriptions, or workflow logs — without any manual switching.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Syntax highlighting</strong> — 100+ languages via Chroma with theme-aware colors</li>
+    <li><strong>Markdown rendering</strong> — Issue and PR bodies rendered with full markdown formatting</li>
+    <li><strong>Diff mode</strong> — Automatically shows diffs when git filter is active or a commit is selected</li>
+    <li><strong>Image preview</strong> — Displays image metadata for binary image files</li>
+    <li><strong>Line numbers</strong> — Toggleable line numbers with configurable display</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'j / k', action: 'Scroll preview up/down' },
+    { key: 'J / K', action: 'Scroll preview by half-page' },
+    { key: 'w', action: 'Toggle word wrap' },
+    { key: 'z', action: 'Zoom preview to full screen' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    The preview panel reacts to selections across every other panel. Select a
+    file in the tree and preview shows its content with syntax highlighting.
+    Select an issue and preview renders its markdown body. Select a PR and
+    preview shows the PR description. Press <kbd>g</kbd> to toggle git filter
+    mode and preview switches to showing diffs. Enter a commit's file list and
+    preview shows the diff for the selected file. This contextual behavior
+    means you never have to manually switch preview modes — it always shows the
+    most relevant content for your current selection.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

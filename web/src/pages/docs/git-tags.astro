@@ -1,0 +1,92 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const tagBindings = [
+  { key: 'n', action: 'Create new tag — prompts for name and optional message' },
+  { key: 'x', action: 'Delete selected tag' },
+  { key: 'Enter', action: 'View the commit associated with the selected tag' },
+];
+---
+
+<Docs title="Git Tags" description="Tag management in grüt — create, list, and delete annotated or lightweight tags.">
+  <h1>Git Tags</h1>
+  <p class="lead">
+    Manage release tags and version markers from the tag panel. Create annotated or lightweight
+    tags, browse tag history, and inspect tagged commits.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-info-tags.png" alt="GitInfo panel showing local and remote tags with dates and annotations" caption="Tags tab in the GitInfo panel" />
+
+  <h2>The Tag Panel</h2>
+  <p>
+    The tag panel lists every tag in the repository, sorted by date with the most recent tag at
+    the top. Each entry shows:
+  </p>
+  <ul>
+    <li><strong>Tag name</strong> — e.g., <code>v1.2.0</code></li>
+    <li><strong>Tagger</strong> — the person who created the tag (annotated tags only)</li>
+    <li><strong>Date</strong> — when the tag was created</li>
+    <li><strong>Annotation preview</strong> — the first line of the tag message (annotated tags only)</li>
+  </ul>
+  <p>
+    Lightweight tags display the tag name and the commit date, but have no tagger or annotation
+    since they are simply pointers to a commit.
+  </p>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={tagBindings} title="Tag Panel" />
+
+  <h2>Creating Tags</h2>
+  <p>
+    Press <code>n</code> in the tag panel to create a new tag on the current <code>HEAD</code>
+    commit. grüt prompts you for:
+  </p>
+  <ol>
+    <li><strong>Tag name</strong> — typically a semantic version like <code>v1.3.0</code>.</li>
+    <li>
+      <strong>Tag message</strong> (optional) — if you provide a message, grüt creates an
+      <strong>annotated tag</strong>. If you leave it blank, a <strong>lightweight tag</strong> is
+      created instead.
+    </li>
+  </ol>
+
+  <h3>Annotated vs. Lightweight Tags</h3>
+  <ul>
+    <li>
+      <strong>Annotated tags</strong> are full Git objects. They store the tagger name, email,
+      date, and a message. Use annotated tags for releases and important milestones.
+    </li>
+    <li>
+      <strong>Lightweight tags</strong> are simple pointers to a commit with no additional
+      metadata. Use them for temporary or personal bookmarks.
+    </li>
+  </ul>
+  <pre><code># Equivalent git commands:
+git tag -a v1.3.0 -m "Release 1.3.0"    # annotated
+git tag v1.3.0-rc1                        # lightweight</code></pre>
+
+  <h2>Viewing Tagged Commits</h2>
+  <p>
+    Press <code>Enter</code> on any tag to jump to the full commit view for that tag. The commit
+    panel shows the diff, commit message, author, and parent commits — identical to browsing any
+    commit in the log.
+  </p>
+
+  <h2>Deleting Tags</h2>
+  <p>
+    Press <code>x</code> to delete the selected tag. grüt asks for confirmation before removing
+    the tag. Note that this only deletes the <strong>local</strong> tag — to remove a tag from a
+    remote, use the command palette:
+  </p>
+  <pre><code>:push origin --delete v1.2.0</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

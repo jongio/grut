@@ -1,0 +1,158 @@
+[general]
+keybinding_scheme = "default"
+default_layout = "explorer"
+auto_save_session = true
+show_first_run_help = true
+
+[file_tree]
+show_hidden = true
+show_icons = true
+icon_mode = "auto"
+sort_directories_first = true
+git_status_markers = true
+follow_symlinks = false
+max_depth = 20
+
+[preview]
+enabled = true
+position = "right"
+width = 40
+syntax_highlighting = true
+theme = "dracula"
+max_file_size = 1048576
+line_numbers = true
+word_wrap = false
+render_markdown = true
+
+[git]
+refresh_method = "fsnotify"
+refresh_fallback_interval = "2s"
+default_branch = "main"
+worktree_first = true
+worktree_merge_method = "merge"
+worktree_open_mode = "current"
+auto_fetch_interval = "5m"
+show_commit_graph = true
+max_log_entries = 500
+sign_commits = false
+
+[github]
+owner = ""
+repo = ""
+poll_interval = 60
+default_issue_filter = "all"
+default_pr_filter = "all"
+auto_checkout_pr_branch = true
+review_diff_context_lines = 3
+
+[terminal]
+shell = ""
+scrollback = 10000
+render_fps = 30
+prefix_key = "ctrl+b"
+
+[ai]
+enabled = true
+provider = "copilot"
+fallback_provider = "claude"
+redact_patterns = [".env", "*.key", "*.pem", "*.secret"]
+auto_commit_message = true
+auto_review_diff = false
+temperature = 0.2
+max_context_files = 20
+max_context_tokens = 100000
+auto_install_deps = false
+context_mode = "manual"
+token_model = "gpt-4"
+
+[ai.mcp]
+socket_path = ""
+
+[ai.copilot]
+model = ""
+
+[ai.claude]
+model = "claude-sonnet-4-20250514"
+max_tokens = 8192
+
+[ai.review]
+severity_threshold = "warning"
+auto_review_on_push = false
+categories = ["security", "bug", "performance", "style", "test"]
+
+[ai.conflict]
+default_mode = "interactive"
+include_surrounding_context = 50
+auto_accept_high_confidence = false
+
+[ai.changelog]
+format = "keepachangelog"
+categories = ["added", "changed", "fixed", "removed", "security", "deprecated"]
+
+[ai.commit_split]
+threshold = 10
+
+[ai.chat]
+enabled = true
+collapsed_height = 3
+expanded_height = 8
+system_prompt = ""
+render_markdown = true
+
+[mcp.security]
+allowed_commands = []
+require_confirmation = true
+allowed_write_paths = []
+rate_limit_read = 1000
+rate_limit_write = 100
+socket_auth = true
+follow_symlinks = false
+audit_log = true
+audit_log_path = ""
+max_agent_processes = 5
+agent_timeout = 1800
+
+[extensions]
+enabled = true
+install_dir = ""
+registry_url = "https://registry.grut.dev"
+auto_update = false
+lua_timeout_ms = 100
+wasm_memory_limit = 67108864
+
+[logging]
+level = "warn"
+file = ""
+max_size_mb = 10
+max_backups = 3
+
+[bookmarks]
+paths = []
+show_in_sidebar = false
+
+[session]
+enabled = true
+max_age = 30
+
+[theme]
+name = "default"
+
+[shortcuts]
+enabled = true
+auto_execute = false
+interactive_prompts = true
+
+[actions]
+# Double-click action overrides and first-use confirmations.
+# See docs/specs/click-actions/spec.md for full documentation.
+# Uncomment to override defaults:
+# [actions.double_click]
+# local_branch = "checkout"
+
+# [actions.confirmed]
+# local_branch = true
+
+# [actions.right_click]
+# local_branch = "copy_name"
+# commit = "copy_hash"
+# issue = "copy_number"

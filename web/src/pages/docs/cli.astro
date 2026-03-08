@@ -1,0 +1,146 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="CLI Reference" description="Complete command-line reference for grüt — flags, commands, environment variables, and usage examples.">
+  <h1>CLI Reference</h1>
+  <p class="lead">
+    All commands, flags, and environment variables for the <code>grut</code>
+    command-line interface.
+  </p>
+
+  <h2>Root Command</h2>
+  <pre><code>grut [flags] [command]</code></pre>
+  <p>
+    AI-native terminal file explorer, git client, and agent orchestrator.
+    Running <code>grut</code> with no arguments launches the interactive TUI
+    in the current directory.
+  </p>
+
+  <h2>Global Flags</h2>
+  <KeybindingTable bindings={[
+    { key: '--no-ai', action: 'Disable AI features for this operation' },
+    { key: '--demo', action: 'Launch with a demo project to explore grüt' },
+    { key: '-h, --help', action: 'Show help information' },
+    { key: '-v, --version', action: 'Show version information' },
+  ]} />
+
+  <h2>Environment Variables</h2>
+  <KeybindingTable bindings={[
+    { key: 'GRUT_LOG', action: 'Path to a log file (enables debug logging)' },
+  ]} />
+  <pre><code># Enable debug logging
+export GRUT_LOG=/tmp/grut-debug.log
+grut</code></pre>
+
+  <h2>Commands</h2>
+
+  <h3>version</h3>
+  <p>Print the current grüt version.</p>
+  <pre><code>grut version</code></pre>
+
+  <h3>update</h3>
+  <p>
+    Update grüt to the latest release. Downloads are SHA-256 verified to
+    ensure integrity.
+  </p>
+  <pre><code>grut update</code></pre>
+
+  <h3>mcp</h3>
+  <p>
+    Run grüt as an MCP (Model Context Protocol) server, communicating via
+    stdin/stdout JSON-RPC.
+  </p>
+  <pre><code># Standard MCP mode (stdin/stdout)
+grut mcp
+
+# TUI + MCP mode (socket transport)
+grut mcp --socket</code></pre>
+  <KeybindingTable bindings={[
+    { key: '--socket', action: 'Use socket transport for TUI+MCP mode' },
+  ]} />
+
+  <h3>run</h3>
+  <p>
+    Execute an AI-powered git workflow shortcut. Shortcuts are predefined
+    sequences of git operations that can be invoked by name.
+  </p>
+  <pre><code># Run a shortcut
+grut run pr-review
+
+# List available shortcuts
+grut run --list
+
+# Describe what a shortcut does
+grut run --describe pr-review
+
+# Preview without executing
+grut run --dry-run pr-review
+
+# Skip confirmation prompts
+grut run --no-confirm pr-review</code></pre>
+  <KeybindingTable bindings={[
+    { key: '--list', action: 'List all available shortcuts' },
+    { key: '--describe <name>', action: 'Show what a shortcut does without running it' },
+    { key: '--dry-run', action: 'Preview the operations without executing them' },
+    { key: '--no-confirm', action: 'Skip confirmation prompts' },
+  ]} />
+
+  <h3>ext</h3>
+  <p>
+    Manage grüt extensions. Extensions add new panels, commands, and
+    integrations to the TUI.
+  </p>
+  <pre><code># Create a new extension scaffold
+grut ext create my-extension
+
+# Install an extension
+grut ext install my-extension
+
+# Remove an extension
+grut ext remove my-extension
+
+# List installed extensions
+grut ext list
+
+# Enable / disable an extension
+grut ext enable my-extension
+grut ext disable my-extension
+
+# Show extension details
+grut ext info my-extension</code></pre>
+  <KeybindingTable bindings={[
+    { key: 'create', action: 'Scaffold a new extension project' },
+    { key: 'install', action: 'Install an extension' },
+    { key: 'remove', action: 'Remove an installed extension' },
+    { key: 'list', action: 'List all installed extensions' },
+    { key: 'enable', action: 'Enable a disabled extension' },
+    { key: 'disable', action: 'Disable an extension without removing it' },
+    { key: 'info', action: 'Show details about an extension' },
+  ]} />
+
+  <h2>Examples</h2>
+  <pre><code># Launch grüt in the current directory
+grut
+
+# Launch with AI features disabled
+grut --no-ai
+
+# Try grüt with a demo project
+grut --demo
+
+# Update to the latest version
+grut update
+
+# Use as an MCP server in your AI toolchain
+grut mcp --socket</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

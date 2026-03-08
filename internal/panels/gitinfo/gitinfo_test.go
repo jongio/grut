@@ -1,0 +1,4053 @@
+package gitinfo
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	gh "github.com/google/go-github/v68/github"
+	"github.com/jongio/grut/internal/actions"
+	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/git"
+	ghclient "github.com/jongio/grut/internal/github"
+	"github.com/jongio/grut/internal/notify"
+	"github.com/jongio/grut/internal/panels"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// ---------------------------------------------------------------------------
+// Mock gitOps
+// ---------------------------------------------------------------------------
+
+type mockGitOps struct {
+	branches  []git.Branch
+	worktrees []git.Worktree
+	remotes   []git.Remote
+	stashes   []git.StashEntry
+	tags      []git.Tag
+	branchErr error
+}
+
+func (m *mockGitOps) BranchList(_ context.Context) ([]git.Branch, error) {
+	return m.branches, m.branchErr
+}
+func (m *mockGitOps) BranchCreate(_ context.Context, _, _ string) error { return nil }
+func (m *mockGitOps) BranchDelete(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+func (m *mockGitOps) BranchRename(_ context.Context, _, _ string) error { return nil }
+func (m *mockGitOps) Checkout(_ context.Context, _ string) error        { return nil }
+func (m *mockGitOps) WorktreeList(_ context.Context) ([]git.Worktree, error) {
+	return m.worktrees, nil
+}
+func (m *mockGitOps) WorktreeAdd(_ context.Context, _, _ string) error         { return nil }
+func (m *mockGitOps) WorktreeRemove(_ context.Context, _ string, _ bool) error { return nil }
+func (m *mockGitOps) RemoteList(_ context.Context) ([]git.Remote, error) {
+	return m.remotes, nil
+}
+func (m *mockGitOps) RemoteAdd(_ context.Context, _, _ string) error { return nil }
+func (m *mockGitOps) RemoteRemove(_ context.Context, _ string) error { return nil }
+func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error { return nil }
+func (m *mockGitOps) StashList(_ context.Context) ([]git.StashEntry, error) {
+	return m.stashes, nil
+}
+func (m *mockGitOps) StashApply(_ context.Context, _ int) error { return nil }
+func (m *mockGitOps) StashPop(_ context.Context, _ int) error   { return nil }
+func (m *mockGitOps) StashDrop(_ context.Context, _ int) error  { return nil }
+func (m *mockGitOps) TagList(_ context.Context) ([]git.Tag, error) {
+	return m.tags, nil
+}
+func (m *mockGitOps) TagCreate(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockGitOps) TagDelete(_ context.Context, _ string) error       { return nil }
+func (m *mockGitOps) TagPush(_ context.Context, _, _ string) error      { return nil }
+func (m *mockGitOps) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEntry, error) {
+	return nil, nil
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+func newTestPanel(mock *mockGitOps) *Panel {
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
+	cmd := p.Init(context.Background())
+	if cmd != nil {
+		msg := cmd()
+		p.Update(msg)
+	}
+	return p
+}
+
+// newTestGitHubPanel creates a Panel in ModeGitHub (only GitHub tabs visible).
+func newTestGitHubPanel(mock *mockGitOps) *Panel {
+	p := NewGitHub(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
+	cmd := p.Init(context.Background())
+	if cmd != nil {
+		msg := cmd()
+		p.Update(msg)
+	}
+	return p
+}
+
+// confirmedAllActions returns an ActionsConfig with all gitinfo item types
+// pre-confirmed so that existing tests bypass the first-use prompt.
+func confirmedAllActions() config.ActionsConfig {
+	return config.ActionsConfig{
+		Confirmed: map[string]bool{
+			string(actions.ItemLocalBranch):  true,
+			string(actions.ItemRemoteBranch): true,
+			string(actions.ItemWorktree):     true,
+			string(actions.ItemRemote):       true,
+			string(actions.ItemStashEntry):   true,
+			string(actions.ItemIssue):        true,
+			string(actions.ItemPR):           true,
+			string(actions.ItemActionRun):    true,
+			string(actions.ItemTag):          true,
+		},
+	}
+}
+
+func defaultMock() *mockGitOps {
+	return &mockGitOps{
+		branches: []git.Branch{
+			{Name: "main", IsCurrent: true, Hash: "abc1234"},
+			{Name: "feature", Hash: "def5678"},
+			{Name: "origin/main", IsRemote: true, Hash: "abc1234"},
+		},
+		worktrees: []git.Worktree{
+			{Path: "/test/repo", Branch: "main", Head: "abc1234567890"},
+			{Path: "/test/.worktrees/repo/feature", Branch: "feature", Head: "def5678901234"},
+		},
+		remotes: []git.Remote{
+			{Name: "origin", FetchURL: "https://github.com/user/repo", PushURL: "https://github.com/user/repo"},
+		},
+		stashes: []git.StashEntry{
+			{Index: 0, Message: "WIP on main"},
+			{Index: 1, Message: "experimental change"},
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+func TestNewPanel(t *testing.T) {
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	assert.Equal(t, "Git", p.Title())
+}
+
+func TestPanelImplementsInterface(t *testing.T) {
+	var _ panels.Panel = (*Panel)(nil)
+}
+
+func TestInitialLoad(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	// Branches tab should have 3 items (2 local + 1 remote).
+	assert.Equal(t, 3, len(p.tabItems[tabBranches]))
+
+	// Worktrees tab should have 2 items.
+	assert.Equal(t, 2, len(p.tabItems[tabWorktrees]))
+
+	// Remotes tab should have 2 items (1 remote + 1 fetch URL sub).
+	assert.Equal(t, 2, len(p.tabItems[tabRemotes]))
+
+	// Stash tab should have 2 items.
+	assert.Equal(t, 2, len(p.tabItems[tabStash]))
+
+	// Default tab is branches, cursor on current branch ("main").
+	assert.Equal(t, tabBranches, p.activeTab)
+	branchItems := p.tabItems[tabBranches]
+	assert.Equal(t, kindLocalBranch, branchItems[p.tabCursor[tabBranches]].kind)
+	assert.Equal(t, "main", branchItems[p.tabCursor[tabBranches]].branch.Name)
+	assert.True(t, branchItems[p.tabCursor[tabBranches]].branch.IsCurrent)
+}
+
+func TestCursorNavigation(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	initial := p.tabCursor[tabBranches]
+
+	// Move down.
+	p.moveCursorDown()
+	assert.Greater(t, p.tabCursor[tabBranches], initial)
+
+	// Move back up.
+	p.moveCursorUp()
+	assert.Equal(t, initial, p.tabCursor[tabBranches])
+}
+
+func TestTabSwitching(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	// Use SetActiveTab (b/w/r/s are now global app-level shortcuts).
+	p.SetActiveTab("worktrees")
+	assert.Equal(t, tabWorktrees, p.activeTab)
+
+	p.SetActiveTab("remotes")
+	assert.Equal(t, tabRemotes, p.activeTab)
+
+	p.SetActiveTab("stash")
+	assert.Equal(t, tabStash, p.activeTab)
+
+	p.SetActiveTab("branches")
+	assert.Equal(t, tabBranches, p.activeTab)
+}
+
+func TestDataRefreshOnMessages(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	// BranchChangedMsg should trigger reload.
+	_, cmd := p.Update(panels.BranchChangedMsg{Name: "feature"})
+	assert.NotNil(t, cmd)
+
+	// WorktreeChangedMsg should trigger reload.
+	_, cmd = p.Update(panels.WorktreeChangedMsg{})
+	assert.NotNil(t, cmd)
+
+	// RemoteChangedMsg should trigger reload.
+	_, cmd = p.Update(panels.RemoteChangedMsg{})
+	assert.NotNil(t, cmd)
+
+	// RefreshBranchesMsg should trigger reload.
+	_, cmd = p.Update(panels.RefreshBranchesMsg{})
+	assert.NotNil(t, cmd)
+
+	// StashChangedMsg should trigger reload.
+	_, cmd = p.Update(panels.StashChangedMsg{})
+	assert.NotNil(t, cmd)
+}
+
+func TestEmptyData(t *testing.T) {
+	mock := &mockGitOps{}
+	p := newTestPanel(mock)
+
+	// All tabs should have zero items.
+	assert.Equal(t, 0, len(p.tabItems[tabBranches]))
+	assert.Equal(t, 0, len(p.tabItems[tabWorktrees]))
+	assert.Equal(t, 0, len(p.tabItems[tabRemotes]))
+	assert.Equal(t, 0, len(p.tabItems[tabStash]))
+}
+
+func TestViewRendering(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	view := p.View(60, 20)
+	assert.NotEmpty(t, view)
+	// Branch names should appear in the rendered output.
+	assert.Contains(t, view, "main")
+	assert.Contains(t, view, "feature")
+}
+
+func TestViewEmptyDimensions(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	assert.Empty(t, p.View(0, 10))
+	assert.Empty(t, p.View(10, 0))
+	assert.Empty(t, p.View(-1, -1))
+}
+
+func TestKeyBindings(t *testing.T) {
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	bindings := p.KeyBindings()
+	require.NotEmpty(t, bindings)
+
+	// Check that expected bindings exist.
+	actions := make(map[string]bool)
+	for _, b := range bindings {
+		actions[b.Action] = true
+	}
+	assert.True(t, actions["cursor_down"])
+	assert.True(t, actions["tab_branches"])
+	assert.True(t, actions["tab_worktrees"])
+	assert.True(t, actions["tab_remotes"])
+	assert.True(t, actions["tab_stash"])
+	assert.True(t, actions["item_copy"])
+}
+
+func TestStashTabSwitchViaKey(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	// Press 's' to switch to stash tab.
+	p.Update(tea.KeyPressMsg{Code: 's'})
+	assert.Equal(t, tabStash, p.activeTab)
+
+	// Stash tab should have the expected items.
+	assert.Equal(t, 2, len(p.tabItems[tabStash]))
+	assert.Equal(t, kindStashEntry, p.tabItems[tabStash][0].kind)
+	assert.Equal(t, "WIP on main", p.tabItems[tabStash][0].stash.Message)
+	assert.Equal(t, 0, p.tabItems[tabStash][0].stash.Index)
+	assert.Equal(t, "experimental change", p.tabItems[tabStash][1].stash.Message)
+	assert.Equal(t, 1, p.tabItems[tabStash][1].stash.Index)
+}
+
+func TestStashTabRendering(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	// Render with branches as active tab — stash tab label rendered as inactive.
+	// At width 60 the tab bar abbreviates names (full bar width > 60).
+	view := p.View(60, 20)
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "St 2")
+
+	// Switch to stash tab and verify content items render.
+	p.activeTab = tabStash
+	view = p.View(60, 20)
+	assert.Contains(t, view, "stash@{0}")
+	assert.Contains(t, view, "WIP on main")
+	assert.Contains(t, view, "stash@{1}")
+	assert.Contains(t, view, "experimental change")
+}
+
+func TestKeyNavigationIntegration(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	// Record initial cursor.
+	initial := p.tabCursor[tabBranches]
+
+	// Press 'j' to move down.
+	p.Update(tea.KeyPressMsg{Code: 'j'})
+	assert.Greater(t, p.tabCursor[tabBranches], initial)
+
+	// Press 'k' to move up.
+	p.Update(tea.KeyPressMsg{Code: 'k'})
+	assert.Equal(t, initial, p.tabCursor[tabBranches])
+
+	// Press 'g' to go to first.
+	p.Update(tea.KeyPressMsg{Code: 'g'})
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+
+	// Press 'G' to go to last.
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "G"})
+	assert.Equal(t, len(p.tabItems[tabBranches])-1, p.tabCursor[tabBranches])
+}
+
+func TestLoadError(t *testing.T) {
+	mock := &mockGitOps{
+		branchErr: assert.AnError,
+	}
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	cmd := p.Init(context.Background())
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, resultCmd := p.Update(msg)
+	// Should produce a toast error.
+	require.NotNil(t, resultCmd)
+}
+
+func TestHashAlwaysShown(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+
+	// Render a branch line at a narrow width.
+	view := p.View(30, 10)
+	// Hash should be visible in the output.
+	assert.Contains(t, view, "abc1234")
+}
+
+func TestPerTabCursorPreservation(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	// Move cursor down in branches tab.
+	p.moveCursorDown()
+	branchCursor := p.tabCursor[tabBranches]
+
+	// Switch to worktrees tab.
+	p.activeTab = tabWorktrees
+	assert.Equal(t, 0, p.tabCursor[tabWorktrees])
+
+	// Switch back — branches cursor should be preserved.
+	p.activeTab = tabBranches
+	assert.Equal(t, branchCursor, p.tabCursor[tabBranches])
+}
+
+// ---------------------------------------------------------------------------
+// Mouse interaction
+// ---------------------------------------------------------------------------
+
+func TestMouseClick_TabBarSwitchesTabs(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+
+	// Initially on branches tab.
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	// Click on worktrees tab label area.
+	// Tab bar: " Branches 3 · Worktrees 2 · Remotes 1 · Stash 2"
+	// " Branches 3" is 11 chars (pos 1-11), " · " separator (3 chars) -> worktrees starts at 15
+	// Click row 0, col 16 should land in worktrees label.
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: 16})
+	assert.Equal(t, tabWorktrees, p.activeTab)
+}
+
+func TestMouseClick_ContentRowSelectsItem(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+
+	// branches tab has 3 items (2 local + 1 remote). Cursor starts on current branch.
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	// Click on content row 2 (which is item index 1 since row 0 is tab bar).
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 2, ContentCol: 5})
+	assert.Equal(t, 1, p.tabCursor[tabBranches])
+
+	// Click on content row 3 = item index 2.
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 3, ContentCol: 5})
+	assert.Equal(t, 2, p.tabCursor[tabBranches])
+}
+
+func TestMouseClick_OutOfBoundsIgnored(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+
+	cursor := p.tabCursor[tabBranches]
+
+	// Click on row beyond available items.
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 50, ContentCol: 5})
+	assert.Equal(t, cursor, p.tabCursor[tabBranches], "out-of-bounds click should not move cursor")
+}
+
+func TestMouseDoubleClick_ContentRowTriggersAction(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+	p.Focused = true
+
+	// Double-click on content row 1 (item 0 = first branch).
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 1, ContentCol: 5})
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+	// doAction on a branch should return a command (checkout request).
+	// The current branch ("main") is already current, so it shows a toast.
+	assert.NotNil(t, cmd)
+}
+
+func TestMouseDoubleClick_TabBarIgnored(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+
+	// Double-click on tab bar row should not crash or trigger action.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
+	assert.Nil(t, cmd)
+}
+
+func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.SetSize(80, 20)
+
+	cursor := p.tabCursor[tabBranches]
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 99, ContentCol: 5})
+	assert.Equal(t, cursor, p.tabCursor[tabBranches])
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// Remotes count
+// ---------------------------------------------------------------------------
+
+func TestRemoteCount_SingleRemote(t *testing.T) {
+	mock := defaultMock() // 1 remote, same fetch/push URL
+	p := newTestPanel(mock)
+
+	// tabItems includes the remote + its fetch sub-row.
+	assert.Equal(t, 2, len(p.tabItems[tabRemotes]))
+	// remoteCount should reflect actual number of remotes.
+	assert.Equal(t, 1, p.remoteCount)
+}
+
+func TestRemoteCount_MultipleRemotes(t *testing.T) {
+	mock := &mockGitOps{
+		remotes: []git.Remote{
+			{Name: "origin", FetchURL: "https://github.com/a/b", PushURL: "https://github.com/a/b"},
+			{Name: "upstream", FetchURL: "https://github.com/c/d", PushURL: "git@github.com:c/d"},
+		},
+	}
+	p := newTestPanel(mock)
+
+	// origin = 2 items (remote + fetch), upstream = 3 items (remote + fetch + push)
+	assert.Equal(t, 5, len(p.tabItems[tabRemotes]))
+	// remoteCount should be 2.
+	assert.Equal(t, 2, p.remoteCount)
+}
+
+func TestRemoteCount_RenderedInTabBar(t *testing.T) {
+	mock := defaultMock() // 1 remote
+	p := newTestPanel(mock)
+
+	view := p.View(80, 20)
+	// Tab bar should say "Remotes 1" not "Remotes 2".
+	assert.Contains(t, view, "Remotes 1")
+	assert.NotContains(t, view, "Remotes 2")
+}
+
+// ---------------------------------------------------------------------------
+// Refresh key ('r' / 'R')
+// ---------------------------------------------------------------------------
+
+func TestRKey_SwitchesToRemotesTab(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	assert.Equal(t, tabBranches, p.activeTab)
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'r'})
+	// 'r' should switch to remotes tab in ModeGit.
+	assert.Equal(t, tabRemotes, p.activeTab)
+	require.NotNil(t, cmd, "'r' should produce a tab-selection command")
+}
+
+func TestKeyBindings_RRemotesAction(t *testing.T) {
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	bindings := p.KeyBindings()
+
+	// 'r' should be documented as remotes/rerun, not refresh.
+	for _, b := range bindings {
+		if b.Key == "r" {
+			assert.Contains(t, strings.ToLower(b.Description), "remotes")
+			return
+		}
+	}
+	t.Fatal("'r' key binding not found")
+}
+
+// ---------------------------------------------------------------------------
+// GitHub test helpers
+// ---------------------------------------------------------------------------
+
+// setGHAvailable marks the panel as having a valid GitHub client.
+// We use a trick: assign a non-nil interface value via unsafe-ish reflection,
+// but the simplest approach is to use the panel's own handleGHDataLoaded
+// to populate GitHub state.
+func populateGH(p *Panel, issues []ghIssueItem, prs []ghPRItem, actions []ghActionItem) {
+	p.ghUser = "testuser"
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.buildGitHubItems(issues, prs, actions, nil, nil)
+}
+
+func sampleIssues() []ghIssueItem {
+	return []ghIssueItem{
+		{Number: 1, Title: "Bug report", Body: "body1", State: "open", Labels: []string{"bug"}, Author: "testuser", Assignee: "testuser"},
+		{Number: 2, Title: "Feature req", Body: "body2", State: "open", Labels: []string{"enhancement"}, Author: "other", Assignee: "other"},
+		{Number: 3, Title: "Docs fix", Body: "body3", State: "open", Author: "testuser", Assignee: ""},
+	}
+}
+
+func samplePRs() []ghPRItem {
+	return []ghPRItem{
+		{Number: 10, Title: "Add auth", State: "open", HeadBranch: "auth", Author: "testuser"},
+		{Number: 11, Title: "Draft PR", State: "draft", HeadBranch: "draft-branch", Author: "other"},
+		{Number: 12, Title: "Merged PR", State: "merged", HeadBranch: "merged-branch", Author: "other"},
+	}
+}
+
+func sampleActions() []ghActionItem {
+	return []ghActionItem{
+		{RunID: 100, WorkflowName: "CI", RunNumber: 42, Status: "completed", Conclusion: "success", Branch: "main", CreatedAt: "Jan 1 10:00"},
+		{RunID: 101, WorkflowName: "Deploy", RunNumber: 5, Status: "in_progress", Conclusion: "", Branch: "feature", CreatedAt: "Jan 2 11:00"},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 1. IssueFilterKind.String() and PRFilterKind.String()
+// ---------------------------------------------------------------------------
+
+func TestIssueFilterKind_String(t *testing.T) {
+	tests := []struct {
+		kind IssueFilterKind
+		want string
+	}{
+		{issueFilterAll, "All"},
+		{issueFilterAssigned, "Assigned"},
+		{issueFilterMentioned, "Mentioned"},
+		{issueFilterCreated, "Created"},
+		{IssueFilterKind(99), "All"}, // default
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, tt.kind.String())
+	}
+}
+
+func TestPRFilterKind_String(t *testing.T) {
+	tests := []struct {
+		kind PRFilterKind
+		want string
+	}{
+		{prFilterAll, "All"},
+		{prFilterNeedsReview, "Needs Review"},
+		{prFilterMine, "Mine"},
+		{prFilterDraft, "Draft"},
+		{PRFilterKind(99), "All"}, // default
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, tt.kind.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 2. handleGHDataLoaded
+// ---------------------------------------------------------------------------
+
+func TestHandleGHDataLoaded_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{err: assert.AnError})
+	assert.Nil(t, cmd) // error is stored on panel, no cmd returned
+	assert.NotNil(t, p.ghErr)
+}
+
+func TestHandleGHDataLoaded_ValidData(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghUser = ""
+	issues := sampleIssues()
+	prs := samplePRs()
+	actions := sampleActions()
+
+	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{
+		issues:  issues,
+		prs:     prs,
+		actions: actions,
+		user:    "testuser",
+	})
+	// sampleActions contains an in_progress run → watch tick starts.
+	assert.NotNil(t, cmd, "should start watch tick for in-progress runs")
+	assert.True(t, p.actionsWatching, "should be watching with in-progress runs")
+	assert.Equal(t, "testuser", p.ghUser)
+	assert.Equal(t, len(issues), len(p.tabItems[tabIssues]))
+	assert.Equal(t, len(prs), len(p.tabItems[tabPRs]))
+	assert.Equal(t, len(actions), len(p.tabItems[tabActions]))
+}
+
+func TestHandleGHDataLoaded_EmptyData(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{})
+	assert.Nil(t, cmd)
+	assert.Equal(t, 0, len(p.tabItems[tabIssues]))
+	assert.Equal(t, 0, len(p.tabItems[tabPRs]))
+	assert.Equal(t, 0, len(p.tabItems[tabActions]))
+}
+
+// ---------------------------------------------------------------------------
+// 3. handleOpResult — all operation types + error case
+// ---------------------------------------------------------------------------
+
+func TestHandleOpResult_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleOpResult(opResultMsg{op: "checkout", name: "main", err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "checkout error")
+}
+
+func TestHandleOpResult_AllOps(t *testing.T) {
+	ops := []struct {
+		op      string
+		name    string
+		contain string
+	}{
+		{"checkout", "feature", "Switched to feature"},
+		{"branch_created", "new-branch", "Branch created: new-branch"},
+		{"branch_deleted", "old-branch", "Branch deleted: old-branch"},
+		{"branch_renamed", "renamed", "Branch renamed to: renamed"},
+		{"worktree_added", "wt-branch", "Worktree created: wt-branch"},
+		{"worktree_removed", "/path/wt", "Worktree removed: /path/wt"},
+		{"worktree_switch", "/path/switch", ""},
+		{"remote_added", "upstream", "Remote added: upstream"},
+		{"remote_removed", "upstream", "Remote removed: upstream"},
+		{"fetched", "origin", "Fetched: origin"},
+		{"unknown_op", "something", "unknown_op: something"},
+	}
+
+	for _, tt := range ops {
+		t.Run(tt.op, func(t *testing.T) {
+			p := newTestPanel(defaultMock())
+			_, cmd := p.handleOpResult(opResultMsg{op: tt.op, name: tt.name})
+			require.NotNil(t, cmd, "op %s should return a command", tt.op)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 4. handlePRDetailsLoaded
+// ---------------------------------------------------------------------------
+
+func TestHandlePRDetailsLoaded_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handlePRDetailsLoaded(prDetailsLoadedMsg{number: 1, err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+}
+
+func TestHandlePRDetailsLoaded_ValidData(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	files := []panels.PRFile{{Filename: "main.go", Status: "modified", Additions: 10, Deletions: 2}}
+	commits := []panels.PRCommit{{SHA: "abc123", Message: "fix bug", Author: "user", Date: "Jan 1 10:00"}}
+
+	_, cmd := p.handlePRDetailsLoaded(prDetailsLoadedMsg{number: 42, files: files, commits: commits})
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 5. handleActionJobsLoaded
+// ---------------------------------------------------------------------------
+
+func TestHandleActionJobsLoaded_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 1, err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+}
+
+func TestHandleActionJobsLoaded_ValidJobs(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	jobs := []panels.ActionJob{
+		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
+	}
+	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 100, jobs: jobs})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleActionJobsLoaded_FailedJobNoClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	// No ghClient set, so even with a failed job, no log-fetch Cmd is appended.
+	jobs := []panels.ActionJob{
+		{ID: 1, Name: "build", Status: "completed", Conclusion: "failure"},
+	}
+	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 100, jobs: jobs})
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 6. handleActionLogLoaded
+// ---------------------------------------------------------------------------
+
+func TestHandleActionLogLoaded_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionLogLoaded(actionLogLoadedMsg{runID: 1, jobID: 2, err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "Logs:")
+}
+
+func TestHandleActionLogLoaded_ValidLog(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionLogLoaded(actionLogLoadedMsg{runID: 1, jobID: 2, log: "build output..."})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	logMsg, ok := msg.(panels.ActionLogMsg)
+	require.True(t, ok)
+	assert.Equal(t, int64(1), logMsg.RunID)
+	assert.Equal(t, int64(2), logMsg.JobID)
+	assert.Equal(t, "build output...", logMsg.Log)
+}
+
+// ---------------------------------------------------------------------------
+// 7. handleActionRerunResult
+// ---------------------------------------------------------------------------
+
+func TestHandleActionRerunResult_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionRerunResult(actionRerunResultMsg{runID: 1, err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "Rerun:")
+}
+
+func TestHandleActionRerunResult_Success(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionRerunResult(actionRerunResultMsg{runID: 1})
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 8. handleActionCancelResult
+// ---------------------------------------------------------------------------
+
+func TestHandleActionCancelResult_Error(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionCancelResult(actionCancelResultMsg{runID: 1, err: assert.AnError})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "Cancel:")
+}
+
+func TestHandleActionCancelResult_Success(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleActionCancelResult(actionCancelResultMsg{runID: 1})
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 9. handleMouseWheel
+// ---------------------------------------------------------------------------
+
+func TestHandleMouseWheel_ScrollUp(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.SetSize(80, 20)
+	p.tabOffset[tabBranches] = 2
+
+	p.handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
+	assert.Equal(t, 0, p.tabOffset[tabBranches], "should scroll up, clamped to 0")
+}
+
+func TestHandleMouseWheel_ScrollDown(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.SetSize(80, 5) // small height to allow scrolling
+
+	p.handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	// Offset should have increased (or stayed at 0 if items fit).
+	assert.GreaterOrEqual(t, p.tabOffset[tabBranches], 0)
+}
+
+// ---------------------------------------------------------------------------
+// 10. handleModalResult — all pending operations
+// ---------------------------------------------------------------------------
+
+func TestHandleModalResult_Accept_BranchCreate(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchCreate
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "new-branch"})
+	require.NotNil(t, cmd)
+	assert.Equal(t, opNone, p.pending) // cleared
+}
+
+func TestHandleModalResult_Accept_BranchDelete(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchDelete
+	p.pendingName = "feature"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Accept_BranchRename(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchRename
+	p.pendingName = "old-name"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "new-name"})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Accept_BranchRename_SameName(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchRename
+	p.pendingName = "same"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "same"})
+	assert.Nil(t, cmd, "same name should be a no-op")
+}
+
+func TestHandleModalResult_Accept_WorktreeCreate(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opWorktreeCreate
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "wt-branch"})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Accept_WorktreeDelete(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opWorktreeDelete
+	p.pendingName = "/path/wt"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Accept_RemoteAdd(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opRemoteAdd
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "upstream"})
+	require.NotNil(t, cmd)
+	// Should now be in opRemoteAddURL state.
+	assert.Equal(t, opRemoteAddURL, p.pending)
+	assert.Equal(t, "upstream", p.pendingName)
+}
+
+func TestHandleModalResult_Accept_RemoteAddURL(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opRemoteAddURL
+	p.pendingName = "upstream"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "https://github.com/user/repo"})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Accept_RemoteDelete(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opRemoteDelete
+	p.pendingName = "origin"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_Reject(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchCreate
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd)
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_EmptyValue(t *testing.T) {
+	ops := []pendingOp{opBranchCreate, opBranchRename, opWorktreeCreate, opRemoteAdd, opRemoteAddURL}
+	for _, op := range ops {
+		p := newTestPanel(defaultMock())
+		p.pending = op
+		p.pendingName = "old"
+		_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: ""})
+		assert.Nil(t, cmd, "empty value for op %d should be no-op", op)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 11. doAction — local branch (current/non-current), worktree, remote, OOB
+// ---------------------------------------------------------------------------
+
+func TestDoAction_CurrentBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	// Cursor is on "main" (current branch).
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "current branch action should produce toast")
+}
+
+func TestDoAction_NonCurrentBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.tabCursor[tabBranches] = 1 // "feature"
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "non-current branch should trigger checkout")
+}
+
+func TestDoAction_Worktree(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabWorktrees
+	p.tabCursor[tabWorktrees] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd)
+}
+
+func TestDoAction_Remote(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd)
+}
+
+func TestDoAction_OutOfBounds(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.tabCursor[tabBranches] = 999
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd)
+}
+
+func TestDoAction_Issue(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "Bug", HTMLURL: "https://github.com/o/r/issues/1"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "issue with HTMLURL should produce open command")
+}
+
+func TestDoAction_IssueNoURL(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "Bug"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd, "issue without HTMLURL should be no-op")
+}
+
+func TestDoAction_PR(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Feature", State: "open", HTMLURL: "https://github.com/o/r/pull/10"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "PR with HTMLURL should produce open command")
+}
+
+func TestDoAction_PRNoURL(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Feature", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd, "PR without HTMLURL should be no-op")
+}
+
+func TestDoAction_ActionRun(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabActions
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{RunID: 1, RunNumber: 42, HTMLURL: "https://github.com/o/r/actions/runs/1"}},
+	}
+	p.tabCursor[tabActions] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "action run with HTMLURL should produce open command")
+}
+
+func TestDoAction_ActionRunNoURL(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabActions
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{RunID: 1, RunNumber: 42}},
+	}
+	p.tabCursor[tabActions] = 0
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd, "action run without HTMLURL should be no-op")
+}
+
+// ---------------------------------------------------------------------------
+// 12. doCreate — branches, worktrees, remotes, stash (no-op)
+// ---------------------------------------------------------------------------
+
+func TestDoCreate_Branches(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	_, cmd := p.doCreate()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opBranchCreate, p.pending)
+}
+
+func TestDoCreate_Worktrees(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	_, cmd := p.doCreate()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opWorktreeCreate, p.pending)
+}
+
+func TestDoCreate_Remotes(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	_, cmd := p.doCreate()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opRemoteAdd, p.pending)
+}
+
+func TestDoCreate_Stash_NoOp(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabStash
+	_, cmd := p.doCreate()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 13. doDelete — local (current/non-current), remote branch, worktree, remote, OOB
+// ---------------------------------------------------------------------------
+
+func TestDoDelete_CurrentBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	// cursor on "main" (current)
+	_, cmd := p.doDelete()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Cannot delete current branch")
+}
+
+func TestDoDelete_NonCurrentBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabCursor[tabBranches] = 1 // "feature"
+	_, cmd := p.doDelete()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opBranchDelete, p.pending)
+	assert.Equal(t, "feature", p.pendingName)
+}
+
+func TestDoDelete_RemoteBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	_, cmd := p.doDelete()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Contains(t, toast.Message, "Cannot delete remote branch")
+}
+
+func TestDoDelete_Worktree(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	p.tabCursor[tabWorktrees] = 0
+	_, cmd := p.doDelete()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opWorktreeDelete, p.pending)
+}
+
+func TestDoDelete_Remote(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 0
+	_, cmd := p.doDelete()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opRemoteDelete, p.pending)
+	assert.Equal(t, "origin", p.pendingName)
+}
+
+func TestDoDelete_OutOfBounds(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabCursor[tabBranches] = 999
+	_, cmd := p.doDelete()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 14. doRename — local branch, remote branch, nil branch
+// ---------------------------------------------------------------------------
+
+func TestDoRename_LocalBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabCursor[tabBranches] = 1 // "feature" (local, non-current)
+	_, cmd := p.doRename()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opBranchRename, p.pending)
+	assert.Equal(t, "feature", p.pendingName)
+}
+
+func TestDoRename_RemoteBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	_, cmd := p.doRename()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Contains(t, toast.Message, "Cannot rename remote branch")
+}
+
+func TestDoRename_NilBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees // no branch at cursor
+	_, cmd := p.doRename()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 15. doFetch — with selected remote, without (fetch all)
+// ---------------------------------------------------------------------------
+
+func TestDoFetch_WithRemote(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 0 // "origin" remote
+	_, cmd := p.doFetch()
+	require.NotNil(t, cmd)
+}
+
+func TestDoFetch_FetchAll(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches // not on a remote
+	_, cmd := p.doFetch()
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 16. buildItems — cursor defaults to current branch
+// ---------------------------------------------------------------------------
+
+func TestBuildItems_CursorOnCurrentBranch(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{
+			{Name: "alpha", Hash: "aaa"},
+			{Name: "beta", Hash: "bbb"},
+			{Name: "main", IsCurrent: true, Hash: "ccc"},
+		},
+	}
+	p := newTestPanel(mock)
+	// Current branch "main" is at index 2 in local branches.
+	assert.Equal(t, 2, p.tabCursor[tabBranches])
+	assert.Equal(t, "main", p.tabItems[tabBranches][p.tabCursor[tabBranches]].branch.Name)
+}
+
+// ---------------------------------------------------------------------------
+// 17. rebuildFromCurrent — cursor clamping when items shrink
+// ---------------------------------------------------------------------------
+
+func TestRebuildFromCurrent_CursorClamped(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.tabCursor[tabBranches] = 2 // last item (index 2)
+
+	// Shrink branches.
+	p.lastBranches = []git.Branch{{Name: "only", Hash: "xxx"}}
+	p.rebuildFromCurrent()
+
+	// Cursor should be clamped to len-1 = 0.
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+}
+
+func TestRebuildFromCurrent_EmptyList(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.tabCursor[tabBranches] = 2
+
+	p.lastBranches = nil
+	p.rebuildFromCurrent()
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+}
+
+// ---------------------------------------------------------------------------
+// 18. renderLine — dispatching to correct render function for each kind
+// ---------------------------------------------------------------------------
+
+func TestRenderLine_AllKinds(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	width := 80
+
+	tests := []struct {
+		name string
+		item listItem
+	}{
+		{"localBranch", listItem{kind: kindLocalBranch, branch: git.Branch{Name: "main", Hash: "abc"}}},
+		{"remoteBranch", listItem{kind: kindRemoteBranch, branch: git.Branch{Name: "origin/main", IsRemote: true, Hash: "abc"}}},
+		{"worktree", listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/test/repo", Branch: "main", Head: "abc1234567"}}},
+		{"remote", listItem{kind: kindRemote, remote: git.Remote{Name: "origin"}}},
+		{"remoteSub", listItem{kind: kindRemoteSub, text: "fetch: https://example.com"}},
+		{"stashEntry", listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "WIP"}}},
+		{"issue", listItem{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "Bug"}}},
+		{"pr", listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Add feature", State: "open"}}},
+		{"actionRun", listItem{kind: kindActionRun, actionRun: ghActionItem{RunID: 1, WorkflowName: "CI", RunNumber: 1, Status: "completed", Conclusion: "success"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line := p.renderLine(tt.item, width, false)
+			assert.NotEmpty(t, line)
+		})
+	}
+}
+
+func TestRenderLine_UnknownKind(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	line := p.renderLine(listItem{kind: itemKind(99)}, 80, false)
+	assert.Empty(t, line)
+}
+
+// ---------------------------------------------------------------------------
+// 19. renderIssue, renderPR, renderActionRun — content checks
+// ---------------------------------------------------------------------------
+
+func TestRenderIssue_Content(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Fix auth token", Labels: []string{"bug"}}}
+	line := p.renderIssue(item, 80, false)
+	assert.Contains(t, line, "#42")
+	assert.Contains(t, line, "Fix auth token")
+	assert.Contains(t, line, "bug")
+}
+
+func TestRenderPR_Content(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Add auth", State: "open"}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "#10")
+	assert.Contains(t, line, "Add auth")
+	assert.Contains(t, line, "open")
+}
+
+func TestRenderPR_DraftState(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{Number: 11, Title: "Draft PR", State: "draft"}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "draft")
+}
+
+func TestRenderPR_MergedState(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{Number: 12, Title: "Merged PR", State: "merged"}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "merged")
+}
+
+func TestRenderActionRun_Content(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 42, Status: "completed",
+		Conclusion: "success", Branch: "main", CreatedAt: "Jan 1 10:00",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "CI")
+	assert.Contains(t, line, "#42")
+	assert.Contains(t, line, "main")
+	assert.Contains(t, line, "✓")
+}
+
+func TestRenderActionRun_Failure(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 101, WorkflowName: "Deploy", RunNumber: 5, Conclusion: "failure",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "✗")
+}
+
+func TestRenderActionRun_InProgress(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 102, WorkflowName: "Test", RunNumber: 3, Status: "in_progress",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "●")
+}
+
+// ---------------------------------------------------------------------------
+// 20. actionsStatusIcon — all cases
+// ---------------------------------------------------------------------------
+
+func TestActionsStatusIcon(t *testing.T) {
+	tests := []struct {
+		name    string
+		actions []ghActionItem
+		want    string
+	}{
+		{"empty", nil, "0"},
+		{"success", []ghActionItem{{Conclusion: "success"}}, "✓"},
+		{"failure", []ghActionItem{{Conclusion: "failure"}}, "✗"},
+		{"timed_out", []ghActionItem{{Conclusion: "timed_out"}}, "✗"},
+		{"in_progress", []ghActionItem{{Status: "in_progress"}}, "●"},
+		{"queued", []ghActionItem{{Status: "queued"}}, "●"},
+		{"count", []ghActionItem{{Conclusion: "neutral"}, {Conclusion: "neutral"}}, "2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPanel(defaultMock())
+			p.tabItems[tabActions] = nil
+			for _, a := range tt.actions {
+				p.tabItems[tabActions] = append(p.tabItems[tabActions], listItem{kind: kindActionRun, actionRun: a})
+			}
+			assert.Equal(t, tt.want, p.actionsStatusIcon())
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 21. worktreePath
+// ---------------------------------------------------------------------------
+
+func TestWorktreePath(t *testing.T) {
+	path := worktreePath("/home/user/repo", "feature/auth")
+	// filepath.Join produces OS-native separators
+	assert.Contains(t, path, ".worktrees")
+	assert.Contains(t, path, "repo")
+	assert.Contains(t, path, "feature-auth")
+}
+
+func TestWorktreePath_WindowsStyle(t *testing.T) {
+	path := worktreePath("C:\\Users\\dev\\repo", "my-branch")
+	assert.Contains(t, path, ".worktrees")
+	assert.Contains(t, path, "repo")
+	assert.Contains(t, path, "my-branch")
+}
+
+// ---------------------------------------------------------------------------
+// remoteToHTTPS
+// ---------------------------------------------------------------------------
+
+func TestRemoteToHTTPS_SSH(t *testing.T) {
+	assert.Equal(t, "https://github.com/user/repo", remoteToHTTPS("git@github.com:user/repo.git"))
+}
+
+func TestRemoteToHTTPS_HTTPS(t *testing.T) {
+	assert.Equal(t, "https://github.com/user/repo", remoteToHTTPS("https://github.com/user/repo.git"))
+}
+
+func TestRemoteToHTTPS_HTTPS_NoGit(t *testing.T) {
+	assert.Equal(t, "https://github.com/user/repo", remoteToHTTPS("https://github.com/user/repo"))
+}
+
+func TestRemoteToHTTPS_SSHProtocol(t *testing.T) {
+	assert.Equal(t, "https://github.com/user/repo", remoteToHTTPS("ssh://git@github.com/user/repo.git"))
+}
+
+func TestRemoteToHTTPS_Empty(t *testing.T) {
+	assert.Equal(t, "", remoteToHTTPS(""))
+}
+
+func TestRemoteToHTTPS_Unknown(t *testing.T) {
+	assert.Equal(t, "", remoteToHTTPS("file:///local/path"))
+}
+
+// ---------------------------------------------------------------------------
+// 22. cycleIssueFilter, cyclePRFilter
+// ---------------------------------------------------------------------------
+
+func TestCycleIssueFilter(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+
+	assert.Equal(t, issueFilterAll, p.issueFilter)
+
+	p.cycleIssueFilter() // All -> Assigned
+	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+
+	p.cycleIssueFilter() // Assigned -> Mentioned
+	assert.Equal(t, issueFilterMentioned, p.issueFilter)
+
+	p.cycleIssueFilter() // Mentioned -> Created
+	assert.Equal(t, issueFilterCreated, p.issueFilter)
+
+	p.cycleIssueFilter() // Created -> All
+	assert.Equal(t, issueFilterAll, p.issueFilter)
+}
+
+func TestCyclePRFilter(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+
+	assert.Equal(t, prFilterAll, p.prFilter)
+
+	p.cyclePRFilter() // All -> NeedsReview
+	assert.Equal(t, prFilterNeedsReview, p.prFilter)
+
+	p.cyclePRFilter() // NeedsReview -> Mine
+	assert.Equal(t, prFilterMine, p.prFilter)
+
+	p.cyclePRFilter() // Mine -> Draft
+	assert.Equal(t, prFilterDraft, p.prFilter)
+
+	p.cyclePRFilter() // Draft -> All
+	assert.Equal(t, prFilterAll, p.prFilter)
+}
+
+func TestCycleIssueFilter_FiltersItems(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+
+	// All: all 3 issues.
+	assert.Equal(t, 3, len(p.tabItems[tabIssues]))
+
+	// Assigned: only issue 1 (assignee = testuser).
+	p.cycleIssueFilter()
+	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+	assert.Equal(t, 1, len(p.tabItems[tabIssues]))
+
+	// Mentioned: all issues.
+	p.cycleIssueFilter()
+	assert.Equal(t, 3, len(p.tabItems[tabIssues]))
+
+	// Created: issues by testuser (1 and 3).
+	p.cycleIssueFilter()
+	assert.Equal(t, 2, len(p.tabItems[tabIssues]))
+}
+
+func TestCyclePRFilter_FiltersItems(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+
+	// All: 3 PRs.
+	assert.Equal(t, 3, len(p.tabItems[tabPRs]))
+
+	// NeedsReview: open PRs not by testuser → #11 is draft, so only open non-authored.
+	p.cyclePRFilter()
+	// PR #11 (draft, other) → State is "draft", not "open", so doesn't match.
+	// PR #12 (merged, other) → State is "merged", not "open", so doesn't match.
+	// So 0 match NeedsReview.
+	assert.Equal(t, 0, len(p.tabItems[tabPRs]))
+
+	// Mine: authored by testuser → PR #10.
+	p.cyclePRFilter()
+	assert.Equal(t, 1, len(p.tabItems[tabPRs]))
+
+	// Draft: state == "draft" → PR #11.
+	p.cyclePRFilter()
+	assert.Equal(t, 1, len(p.tabItems[tabPRs]))
+}
+
+// ---------------------------------------------------------------------------
+// 23. matchesIssueFilter, matchesPRFilter
+// ---------------------------------------------------------------------------
+
+func TestMatchesIssueFilter_AllCases(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghUser = "testuser"
+
+	iss := ghIssueItem{Author: "testuser", Assignee: "testuser"}
+
+	p.issueFilter = issueFilterAll
+	assert.True(t, p.matchesIssueFilter(iss))
+
+	p.issueFilter = issueFilterAssigned
+	assert.True(t, p.matchesIssueFilter(iss))
+
+	p.issueFilter = issueFilterAssigned
+	assert.False(t, p.matchesIssueFilter(ghIssueItem{Assignee: "other"}))
+
+	p.issueFilter = issueFilterMentioned
+	assert.True(t, p.matchesIssueFilter(iss))
+
+	p.issueFilter = issueFilterCreated
+	assert.True(t, p.matchesIssueFilter(iss))
+
+	p.issueFilter = issueFilterCreated
+	assert.False(t, p.matchesIssueFilter(ghIssueItem{Author: "other"}))
+}
+
+func TestMatchesPRFilter_AllCases(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghUser = "testuser"
+
+	pr := ghPRItem{Author: "other", State: "open"}
+
+	p.prFilter = prFilterAll
+	assert.True(t, p.matchesPRFilter(pr))
+
+	p.prFilter = prFilterNeedsReview
+	assert.True(t, p.matchesPRFilter(pr))
+
+	p.prFilter = prFilterNeedsReview
+	assert.False(t, p.matchesPRFilter(ghPRItem{Author: "testuser", State: "open"}))
+
+	p.prFilter = prFilterMine
+	assert.False(t, p.matchesPRFilter(pr))
+	assert.True(t, p.matchesPRFilter(ghPRItem{Author: "testuser"}))
+
+	p.prFilter = prFilterDraft
+	assert.False(t, p.matchesPRFilter(pr))
+	assert.True(t, p.matchesPRFilter(ghPRItem{State: "draft"}))
+}
+
+// ---------------------------------------------------------------------------
+// 24. Tab-specific selection commands — returns nil when wrong tab
+// ---------------------------------------------------------------------------
+
+func TestBranchSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	assert.Nil(t, p.branchSelectedCmd())
+}
+
+func TestWorktreeSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.worktreeSelectedCmd())
+}
+
+func TestRemoteSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.remoteSelectedCmd())
+}
+
+func TestStashSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.stashSelectedCmd())
+}
+
+func TestIssueSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.issueSelectedCmd())
+}
+
+func TestPRSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.prSelectedCmd())
+}
+
+func TestActionRunSelectedCmd_WrongTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.actionRunSelectedCmd())
+}
+
+func TestBranchSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	cmd := p.branchSelectedCmd()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	sel, ok := msg.(panels.BranchSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "main", sel.Name)
+}
+
+func TestWorktreeSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	cmd := p.worktreeSelectedCmd()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	sel, ok := msg.(panels.WorktreeSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "/test/repo", sel.Path)
+}
+
+func TestRemoteSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	cmd := p.remoteSelectedCmd()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	sel, ok := msg.(panels.RemoteSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "origin", sel.Name)
+}
+
+func TestStashSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabStash
+	cmd := p.stashSelectedCmd()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	sel, ok := msg.(panels.StashSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, 0, sel.Index)
+}
+
+func TestIssueSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.activeTab = tabIssues
+	cmd := p.issueSelectedCmd()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	sel, ok := msg.(panels.IssueSelectedMsg)
+	require.True(t, ok)
+	assert.Equal(t, 1, sel.Number)
+}
+
+func TestPRSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+	p.activeTab = tabPRs
+	cmd := p.prSelectedCmd()
+	require.NotNil(t, cmd)
+}
+
+func TestActionRunSelectedCmd_ValidCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	cmd := p.actionRunSelectedCmd()
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 25. selectedBranch, selectedWorktree, selectedRemote — valid/wrong kind
+// ---------------------------------------------------------------------------
+
+func TestSelectedBranch_WrongKind(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	assert.Nil(t, p.selectedBranch())
+}
+
+func TestSelectedWorktree_WrongKind(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.selectedWorktree())
+}
+
+func TestSelectedRemote_WrongKind(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	assert.Nil(t, p.selectedRemote())
+}
+
+func TestSelectedRemote_OnRemoteSub(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 1 // fetch URL sub-item
+	assert.Nil(t, p.selectedRemote())
+}
+
+// ---------------------------------------------------------------------------
+// 26. handleGitHubTabBarClick — clicking each GitHub tab
+// ---------------------------------------------------------------------------
+
+func TestHandleGitHubTabBarClick_Issues(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.handleGitHubTabBarClick(1) // " Issues ..." starts at pos 1
+	assert.Equal(t, tabIssues, p.activeTab)
+}
+
+func TestHandleGitHubTabBarClick_PRs(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	// PRs label starts after "Issues N" + " · " separator.
+	issueLabel := len("Issues 3")
+	prsStart := 1 + issueLabel + 3 // leading space + label + separator
+	p.handleGitHubTabBarClick(prsStart)
+	assert.Equal(t, tabPRs, p.activeTab)
+}
+
+func TestHandleGitHubTabBarClick_Actions(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	// Click far enough right to land in Actions.
+	issueLabel := len("Issues 3")
+	prsLabel := len("PRs 3")
+	actionsStart := 1 + issueLabel + 3 + prsLabel + 3
+	p.handleGitHubTabBarClick(actionsStart)
+	assert.Equal(t, tabActions, p.activeTab)
+}
+
+func TestHandleGitHubTabBarClick_Abbreviated(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	// Force abbreviated mode by setting a narrow width.
+	p.lastWidth = 30
+
+	// With abbreviated labels: " Iss 3 · PRs 3 · Act ✓ · Wf 0 · Rel 0"
+	// Positions: Iss starts at 1, length = len("Iss 3") = 5
+	p.handleGitHubTabBarClick(1)
+	assert.Equal(t, tabIssues, p.activeTab, "click on abbreviated Issues")
+
+	// PRs starts at 1 + 5 + 3 = 9, length = len("PRs 3") = 5
+	p.handleGitHubTabBarClick(9)
+	assert.Equal(t, tabPRs, p.activeTab, "click on abbreviated PRs")
+
+	// Actions starts at 9 + 5 + 3 = 17
+	p.handleGitHubTabBarClick(17)
+	assert.Equal(t, tabActions, p.activeTab, "click on abbreviated Actions")
+}
+
+// ---------------------------------------------------------------------------
+// 27. ensureCursorVisible — cursor below and above viewport
+// ---------------------------------------------------------------------------
+
+func TestEnsureCursorVisible_Below(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.SetSize(80, 5) // small height → viewH = 4 (5 - 1 tab bar)
+	p.tabCursor[tabBranches] = 2
+	p.tabOffset[tabBranches] = 0
+	p.ensureCursorVisible()
+	// Cursor 2 should be visible within 4-line viewport starting at 0.
+	assert.LessOrEqual(t, p.tabOffset[tabBranches], p.tabCursor[tabBranches])
+}
+
+func TestEnsureCursorVisible_Above(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.SetSize(80, 5)
+	p.tabCursor[tabBranches] = 0
+	p.tabOffset[tabBranches] = 2
+	p.ensureCursorVisible()
+	assert.Equal(t, 0, p.tabOffset[tabBranches])
+}
+
+func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.SetSize(80, 0)
+	// Should not panic.
+	p.ensureCursorVisible()
+}
+
+// ---------------------------------------------------------------------------
+// 28. githubPollTickCmd — nil when ghClient is nil or PollInterval <= 0
+// ---------------------------------------------------------------------------
+
+func TestGithubPollTickCmd_NilClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghCfg.PollInterval = 30
+	// ghClient is nil by default.
+	cmd := p.githubPollTickCmd()
+	assert.Nil(t, cmd)
+}
+
+func TestGithubPollTickCmd_ZeroPollInterval(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghCfg.PollInterval = 0
+	cmd := p.githubPollTickCmd()
+	assert.Nil(t, cmd)
+}
+
+func TestGithubPollTickCmd_NegativePollInterval(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghCfg.PollInterval = -1
+	cmd := p.githubPollTickCmd()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// 29. Key handling for tab switches (b, w, s, i, p, a)
+// ---------------------------------------------------------------------------
+
+func TestKeyTabSwitch_B(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabWorktrees
+	p.Update(tea.KeyPressMsg{Code: 'b'})
+	assert.Equal(t, tabBranches, p.activeTab)
+}
+
+func TestKeyTabSwitch_W(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'w'})
+	assert.Equal(t, tabWorktrees, p.activeTab)
+}
+
+func TestKeyTabSwitch_S(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 's'})
+	assert.Equal(t, tabStash, p.activeTab)
+}
+
+func TestKeyTabSwitch_I_NoGHClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'i'})
+	// Without ghClient, should not switch to issues.
+	assert.NotEqual(t, tabIssues, p.activeTab)
+}
+
+func TestKeyTabSwitch_P_NoGHClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'p'})
+	assert.NotEqual(t, tabPRs, p.activeTab)
+}
+
+func TestKeyTabSwitch_A_NoGHClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'a'})
+	assert.NotEqual(t, tabActions, p.activeTab)
+}
+
+// ---------------------------------------------------------------------------
+// 30. Key handling for navigation — focused=false returns nil
+// ---------------------------------------------------------------------------
+
+func TestKeyNavigation_NotFocused_ReturnsNil(t *testing.T) {
+	keys := []tea.KeyPressMsg{
+		{Code: 'j'},
+		{Code: 'k'},
+		{Code: 'g'},
+		{Code: -1, Text: "G"},
+		{Code: tea.KeyEnter},
+		{Code: 'y'},
+		{Code: 'n'},
+		{Code: 'd'},
+		{Code: tea.KeyF2},
+		{Code: 'f'},
+	}
+	for _, key := range keys {
+		p := newTestPanel(defaultMock())
+		p.Focused = false
+		_, cmd := p.Update(key)
+		assert.Nil(t, cmd, "key %v with Focused=false should return nil cmd", key)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 31. Esc key from issues/prs/actions tabs returning to branches
+// ---------------------------------------------------------------------------
+
+func TestEscKey_IssuesTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Equal(t, tabBranches, p.activeTab)
+	assert.NotNil(t, cmd)
+}
+
+func TestEscKey_PRsTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabPRs
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Equal(t, tabBranches, p.activeTab)
+	assert.NotNil(t, cmd)
+}
+
+func TestEscKey_ActionsTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabActions
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Equal(t, tabBranches, p.activeTab)
+	assert.NotNil(t, cmd)
+}
+
+func TestEscKey_BranchesTab_NoOp(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabBranches
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Nil(t, cmd)
+	assert.Equal(t, tabBranches, p.activeTab)
+}
+
+// ---------------------------------------------------------------------------
+// 32. View with GitHub unavailable showing "GitHub unavailable"
+// ---------------------------------------------------------------------------
+
+func TestView_GitHubUnavailable(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.ghErr = assert.AnError
+	p.activeTab = tabIssues
+	// No items in issues tab + ghErr set → should show "GitHub unavailable".
+	view := p.View(80, 20)
+	assert.Contains(t, view, "GitHub unavailable")
+}
+
+func TestView_GitHubTab_NoItems(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabIssues
+	// No ghErr, no items → should show "No items".
+	view := p.View(80, 20)
+	assert.Contains(t, view, "No items")
+}
+
+// ---------------------------------------------------------------------------
+// Additional edge-case tests
+// ---------------------------------------------------------------------------
+
+func TestSetActiveTab_AllNames(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	names := map[string]tabID{
+		"branches":  tabBranches,
+		"worktrees": tabWorktrees,
+		"remotes":   tabRemotes,
+		"stash":     tabStash,
+		"issues":    tabIssues,
+		"prs":       tabPRs,
+		"actions":   tabActions,
+	}
+	for name, tab := range names {
+		p.SetActiveTab(name)
+		assert.Equal(t, tab, p.activeTab, "SetActiveTab(%q)", name)
+	}
+}
+
+func TestSetActiveTab_InvalidName(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches
+	p.SetActiveTab("invalid")
+	assert.Equal(t, tabBranches, p.activeTab, "invalid name should not change tab")
+}
+
+func TestActiveTabSelectionCmd_AllTabs(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+
+	tabs := []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabIssues, tabPRs, tabActions}
+	for _, tab := range tabs {
+		p.activeTab = tab
+		cmd := p.activeTabSelectionCmd()
+		assert.NotNil(t, cmd, "activeTabSelectionCmd for tab %d should not be nil", tab)
+	}
+}
+
+func TestUpdate_GithubPollTickMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	// Without ghClient, the poll tick should still be handled without panic.
+	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
+	// Since ghClient is nil, loadGitHubData will be called but
+	// githubPollTickCmd returns nil.
+	assert.NotNil(t, cmd)
+}
+
+func TestRenderTabBar_WithAndWithoutGH(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	bar := p.renderTabBar(80)
+	// Tab bar content is rendered with ANSI codes; check for partial text.
+	assert.NotEmpty(t, bar)
+	// The bar should contain the tab labels (possibly ANSI-styled).
+	// Just verify it's non-empty and doesn't contain GitHub tabs without ghClient.
+	assert.NotContains(t, bar, "Issues")
+}
+
+// ---------------------------------------------------------------------------
+// doActionsRerun, doActionsCancel — with action items
+// ---------------------------------------------------------------------------
+
+func TestDoActionsRerun_NoItems(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 0
+	// No items in actions tab.
+	_, cmd := p.doActionsRerun()
+	assert.Nil(t, cmd)
+}
+
+func TestDoActionsRerun_WithItem(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 0
+	// doActionsRerun needs ghClient to actually create the cmd.
+	// Without ghClient, rerunFailedJobsCmd will panic. Test the selection logic.
+	_, cmd := p.doActionsRerun()
+	// rerunFailedJobsCmd calls p.ghClient which is nil, but the cmd func is returned.
+	// The test verifies doActionsRerun found the item and returned a cmd (lazy eval).
+	assert.NotNil(t, cmd)
+}
+
+func TestDoActionsCancel_NoItems(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabActions
+	_, cmd := p.doActionsCancel()
+	assert.Nil(t, cmd)
+}
+
+func TestDoActionsCancel_WithItem(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 0
+	_, cmd := p.doActionsCancel()
+	assert.NotNil(t, cmd)
+}
+
+func TestDoActionsRerun_OutOfBounds(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 999
+	_, cmd := p.doActionsRerun()
+	assert.Nil(t, cmd)
+}
+
+func TestDoActionsCancel_OutOfBounds(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 999
+	_, cmd := p.doActionsCancel()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// doFetch — more coverage (the fetch cmd returns a batch)
+// ---------------------------------------------------------------------------
+
+func TestDoFetch_OnRemoteSubItem(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 1 // fetch URL sub-item, not a remote
+	_, cmd := p.doFetch()
+	require.NotNil(t, cmd, "fetch on non-remote should still work (fetch all)")
+}
+
+// ---------------------------------------------------------------------------
+// handleModalResult — edge case: opBranchRename with whitespace-only value
+// ---------------------------------------------------------------------------
+
+func TestHandleModalResult_BranchRename_WhitespaceOnly(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchRename
+	p.pendingName = "old-name"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   "})
+	assert.Nil(t, cmd, "whitespace-only rename should be no-op")
+}
+
+// ---------------------------------------------------------------------------
+// View rendering edge cases
+// ---------------------------------------------------------------------------
+
+func TestView_WithGHTabsHasFilterLabels(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	// Simulate ghClient non-nil by checking renderTabBar behavior.
+	// Since we can't easily set ghClient, test the View path for GitHub tabs.
+	p.activeTab = tabIssues
+	view := p.View(80, 20)
+	assert.NotEmpty(t, view)
+}
+
+func TestView_ActionsTabContent(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	view := p.View(80, 20)
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "CI")
+}
+
+func TestView_PRsTabContent(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+	p.activeTab = tabPRs
+	view := p.View(80, 20)
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "Add auth")
+}
+
+// ---------------------------------------------------------------------------
+// renderStashEntry edge cases (narrow width)
+// ---------------------------------------------------------------------------
+
+func TestRenderStashEntry_NarrowWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "A very long message that should be truncated"}}
+	line := p.renderStashEntry(item, 15, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderStashEntry_VeryNarrow(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "msg"}}
+	line := p.renderStashEntry(item, 3, false)
+	assert.NotEmpty(t, line)
+}
+
+// ---------------------------------------------------------------------------
+// Full mock ghclient.Client — enables testing all GitHub-dependent code paths
+// ---------------------------------------------------------------------------
+
+type mockGHClientFull struct {
+	user       *gh.User
+	userErr    error
+	issues     []*gh.Issue
+	issuesErr  error
+	prs        []*gh.PullRequest
+	prsErr     error
+	runs       []*gh.WorkflowRun
+	runsErr    error
+	prFiles    []*gh.CommitFile
+	prFilesErr error
+	prCommits  []*gh.RepositoryCommit
+	prCommErr  error
+	jobs       []*gh.WorkflowJob
+	jobsErr    error
+	jobLog     string
+	jobLogErr  error
+	rerunErr   error
+	cancelErr  error
+}
+
+func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
+	return m.user, m.userErr
+}
+
+func (m *mockGHClientFull) ListIssues(_ context.Context, _, _ string, _ *gh.IssueListByRepoOptions) ([]*gh.Issue, error) {
+	return m.issues, m.issuesErr
+}
+
+func (m *mockGHClientFull) GetIssue(_ context.Context, _, _ string, _ int) (*gh.Issue, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetIssueComments(_ context.Context, _, _ string, _ int) ([]*gh.IssueComment, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) CreateIssue(_ context.Context, _, _ string, _ *gh.IssueRequest) (*gh.Issue, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) EditIssue(_ context.Context, _, _ string, _ int, _ *gh.IssueRequest) error {
+	return nil
+}
+
+func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, _ int, _ string) error {
+	return nil
+}
+func (m *mockGHClientFull) CloseIssue(_ context.Context, _, _ string, _ int) error  { return nil }
+func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) error { return nil }
+func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, error) {
+	return m.prs, m.prsErr
+}
+
+func (m *mockGHClientFull) GetPR(_ context.Context, _, _ string, _ int) (*gh.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetPRFiles(_ context.Context, _, _ string, _ int) ([]*gh.CommitFile, error) {
+	return m.prFiles, m.prFilesErr
+}
+
+func (m *mockGHClientFull) GetPRComments(_ context.Context, _, _ string, _ int) ([]*gh.PullRequestComment, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetPRReviews(_ context.Context, _, _ string, _ int) ([]*gh.PullRequestReview, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetPRDiff(_ context.Context, _, _ string, _ int) (string, error) {
+	return "", nil
+}
+
+func (m *mockGHClientFull) GetPRCommits(_ context.Context, _, _ string, _ int) ([]*gh.RepositoryCommit, error) {
+	return m.prCommits, m.prCommErr
+}
+
+func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, _ *gh.NewPullRequest) (*gh.PullRequest, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) MergePR(_ context.Context, _, _ string, _ int, _ string, _ *gh.PullRequestOptions) error {
+	return nil
+}
+
+func (m *mockGHClientFull) CommentOnPR(_ context.Context, _, _ string, _ int, _, _ string, _ int) error {
+	return nil
+}
+
+func (m *mockGHClientFull) SubmitReview(_ context.Context, _, _ string, _ int, _ *gh.PullRequestReviewRequest) error {
+	return nil
+}
+
+func (m *mockGHClientFull) RequestReviewers(_ context.Context, _, _ string, _ int, _ []string) error {
+	return nil
+}
+
+func (m *mockGHClientFull) ListWorkflowRuns(_ context.Context, _, _ string, _ *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, error) {
+	return m.runs, m.runsErr
+}
+
+func (m *mockGHClientFull) GetWorkflowRun(_ context.Context, _, _ string, _ int64) (*gh.WorkflowRun, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) ListWorkflowJobs(_ context.Context, _, _ string, _ int64) ([]*gh.WorkflowJob, error) {
+	return m.jobs, m.jobsErr
+}
+
+func (m *mockGHClientFull) GetJobLogs(_ context.Context, _, _ string, _ int64) (string, error) {
+	return m.jobLog, m.jobLogErr
+}
+
+func (m *mockGHClientFull) RerunFailedJobs(_ context.Context, _, _ string, _ int64) error {
+	return m.rerunErr
+}
+
+func (m *mockGHClientFull) CancelWorkflowRun(_ context.Context, _, _ string, _ int64) error {
+	return m.cancelErr
+}
+
+func (m *mockGHClientFull) ListNotifications(_ context.Context, _ *gh.NotificationListOptions) ([]*gh.Notification, error) {
+	return nil, nil
+}
+func (m *mockGHClientFull) MarkRead(_ context.Context, _ string) error { return nil }
+func (m *mockGHClientFull) RepoInfo(_ context.Context, _, _ string) (*gh.Repository, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) ListWorkflows(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.Workflow, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetWorkflowInputs(_ context.Context, _, _, _, _ string) ([]ghclient.WorkflowInput, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) DispatchWorkflow(_ context.Context, _, _ string, _ int64, _ string, _ map[string]any) error {
+	return nil
+}
+
+func (m *mockGHClientFull) RerunWorkflow(_ context.Context, _, _ string, _ int64) error {
+	return nil
+}
+
+func (m *mockGHClientFull) ListReleases(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.RepositoryRelease, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetRelease(_ context.Context, _, _ string, _ int64) (*gh.RepositoryRelease, error) {
+	return nil, nil
+}
+
+func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*gh.RepositoryRelease, error) {
+	return nil, nil
+}
+
+// newGHPanelWithClient creates a panel with a real mock ghClient for full GitHub testing.
+func newGHPanelWithClient(mock *mockGitOps, ghMock *mockGHClientFull) *Panel {
+	p := newTestGitHubPanel(mock)
+	p.ghClient = ghMock
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.ctx = context.Background()
+	return p
+}
+
+// helper to create a gh.User pointer
+func ghUser(login string) *gh.User {
+	return &gh.User{Login: &login}
+}
+
+// ---------------------------------------------------------------------------
+// loadGitHubData — the 9.8% coverage function
+// ---------------------------------------------------------------------------
+
+func TestLoadGitHubData_FullPath(t *testing.T) {
+	login := "testuser"
+	num1, num2 := 1, 2
+	title1, title2 := "Bug report", "Feature req"
+	body1 := "body1"
+	state := "open"
+	url1 := "https://github.com/o/r/issues/1"
+	url2 := "https://github.com/o/r/issues/2"
+	labelName := "bug"
+	assigneeLogin := "testuser"
+
+	ghMock := &mockGHClientFull{
+		user: ghUser(login),
+		issues: []*gh.Issue{
+			{
+				Number:    &num1,
+				Title:     &title1,
+				Body:      &body1,
+				State:     &state,
+				User:      ghUser("testuser"),
+				Labels:    []*gh.Label{{Name: &labelName}},
+				Assignees: []*gh.User{{Login: &assigneeLogin}},
+				HTMLURL:   &url1,
+			},
+			{
+				Number:  &num2,
+				Title:   &title2,
+				State:   &state,
+				HTMLURL: &url2,
+				// No User, no Labels, no Assignees — exercises nil branches
+			},
+		},
+		prs: func() []*gh.PullRequest {
+			prNum := 10
+			prTitle := "Add auth"
+			prState := "open"
+			prURL := "https://github.com/o/r/pull/10"
+			headRef := "auth-branch"
+			head := &gh.PullRequestBranch{Ref: &headRef}
+			return []*gh.PullRequest{
+				{
+					Number:  &prNum,
+					Title:   &prTitle,
+					State:   &prState,
+					Head:    head,
+					User:    ghUser("testuser"),
+					HTMLURL: &prURL,
+				},
+			}
+		}(),
+		runs: func() []*gh.WorkflowRun {
+			runID := int64(100)
+			name := "CI"
+			runNum := 42
+			status := "completed"
+			conclusion := "success"
+			branch := "main"
+			url := "https://github.com/o/r/actions/runs/100"
+			created := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+			ts := &gh.Timestamp{Time: created}
+			return []*gh.WorkflowRun{
+				{
+					ID:         &runID,
+					Name:       &name,
+					RunNumber:  &runNum,
+					Status:     &status,
+					Conclusion: &conclusion,
+					HeadBranch: &branch,
+					HTMLURL:    &url,
+					CreatedAt:  ts,
+				},
+			}
+		}(),
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.loadGitHubData()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(ghDataLoadedMsg)
+	require.True(t, ok)
+
+	assert.Equal(t, "testuser", result.user)
+	assert.Len(t, result.issues, 2)
+	assert.Equal(t, 1, result.issues[0].Number)
+	assert.Equal(t, "Bug report", result.issues[0].Title)
+	assert.Equal(t, []string{"bug"}, result.issues[0].Labels)
+	assert.Equal(t, "testuser", result.issues[0].Author)
+	assert.Equal(t, "testuser", result.issues[0].Assignee)
+	// Second issue has no User/Assignees — should have empty strings.
+	assert.Equal(t, "", result.issues[1].Author)
+	assert.Equal(t, "", result.issues[1].Assignee)
+
+	assert.Len(t, result.prs, 1)
+	assert.Equal(t, 10, result.prs[0].Number)
+	assert.Equal(t, "testuser", result.prs[0].Author)
+
+	assert.Len(t, result.actions, 1)
+	assert.Equal(t, int64(100), result.actions[0].RunID)
+	assert.Equal(t, "success", result.actions[0].Conclusion)
+}
+
+func TestLoadGitHubData_SkipsPRsInIssueList(t *testing.T) {
+	num := 5
+	title := "PR disguised as issue"
+	state := "open"
+	prLinks := &gh.PullRequestLinks{}
+
+	ghMock := &mockGHClientFull{
+		user: ghUser("user"),
+		issues: []*gh.Issue{
+			{Number: &num, Title: &title, State: &state, PullRequestLinks: prLinks},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadGitHubData()()
+	result := msg.(ghDataLoadedMsg)
+	assert.Empty(t, result.issues, "PRs in issue list should be skipped")
+}
+
+func TestLoadGitHubData_DraftAndMergedPRs(t *testing.T) {
+	draftNum := 11
+	draftTitle := "WIP"
+	draftState := "open"
+	draftVal := true
+	mergedNum := 12
+	mergedTitle := "Done"
+	mergedState := "closed"
+	mergedVal := true
+
+	ghMock := &mockGHClientFull{
+		user: ghUser("user"),
+		prs: []*gh.PullRequest{
+			{Number: &draftNum, Title: &draftTitle, State: &draftState, Draft: &draftVal, Head: &gh.PullRequestBranch{}},
+			{Number: &mergedNum, Title: &mergedTitle, State: &mergedState, Merged: &mergedVal, Head: &gh.PullRequestBranch{}},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadGitHubData()()
+	result := msg.(ghDataLoadedMsg)
+	assert.Equal(t, "draft", result.prs[0].State)
+	assert.Equal(t, "merged", result.prs[1].State)
+}
+
+func TestLoadGitHubData_APIErrors(t *testing.T) {
+	// Errors on issues/prs/runs should not crash — they're silently skipped.
+	ghMock := &mockGHClientFull{
+		userErr:   assert.AnError,
+		issuesErr: assert.AnError,
+		prsErr:    assert.AnError,
+		runsErr:   assert.AnError,
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadGitHubData()()
+	result := msg.(ghDataLoadedMsg)
+	assert.Empty(t, result.user)
+	assert.Empty(t, result.issues)
+	assert.Empty(t, result.prs)
+	assert.Empty(t, result.actions)
+}
+
+// ---------------------------------------------------------------------------
+// loadPRDetails — 0% coverage
+// ---------------------------------------------------------------------------
+
+func TestLoadPRDetails_Success(t *testing.T) {
+	filename := "main.go"
+	status := "modified"
+	additions := 10
+	deletions := 2
+	patch := "@@ -1,2 +1,3 @@"
+	sha := "abc123"
+	commitMsg := "fix bug"
+	authorLogin := "user"
+	authorName := "User Name"
+	commitDate := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	ts := &gh.Timestamp{Time: commitDate}
+
+	ghMock := &mockGHClientFull{
+		prFiles: []*gh.CommitFile{
+			{Filename: &filename, Status: &status, Additions: &additions, Deletions: &deletions, Patch: &patch},
+		},
+		prCommits: []*gh.RepositoryCommit{
+			{
+				SHA:    &sha,
+				Commit: &gh.Commit{Message: &commitMsg, Author: &gh.CommitAuthor{Name: &authorName, Date: ts}},
+				Author: ghUser(authorLogin),
+			},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.loadPRDetails(42)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(prDetailsLoadedMsg)
+	require.True(t, ok)
+	assert.Nil(t, result.err)
+	assert.Equal(t, 42, result.number)
+	assert.Len(t, result.files, 1)
+	assert.Equal(t, "main.go", result.files[0].Filename)
+	assert.Len(t, result.commits, 1)
+	assert.Equal(t, "abc123", result.commits[0].SHA)
+	assert.Equal(t, "user", result.commits[0].Author)
+}
+
+func TestLoadPRDetails_FilesError(t *testing.T) {
+	ghMock := &mockGHClientFull{prFilesErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadPRDetails(1)()
+	result := msg.(prDetailsLoadedMsg)
+	assert.NotNil(t, result.err)
+	assert.Contains(t, result.err.Error(), "PR files")
+}
+
+func TestLoadPRDetails_CommitsError(t *testing.T) {
+	ghMock := &mockGHClientFull{prCommErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadPRDetails(1)()
+	result := msg.(prDetailsLoadedMsg)
+	assert.NotNil(t, result.err)
+	assert.Contains(t, result.err.Error(), "PR commits")
+}
+
+func TestLoadPRDetails_CommitWithoutAuthor(t *testing.T) {
+	sha := "def456"
+	commitMsg := "auto commit"
+	authorName := "Bot"
+	commitDate := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	ts := &gh.Timestamp{Time: commitDate}
+
+	ghMock := &mockGHClientFull{
+		prCommits: []*gh.RepositoryCommit{
+			{
+				SHA:    &sha,
+				Commit: &gh.Commit{Message: &commitMsg, Author: &gh.CommitAuthor{Name: &authorName, Date: ts}},
+				// Author (gh.User) is nil — should fall back to Commit.Author.Name
+			},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadPRDetails(1)()
+	result := msg.(prDetailsLoadedMsg)
+	require.Nil(t, result.err)
+	assert.Equal(t, "Bot", result.commits[0].Author)
+}
+
+func TestLoadPRDetails_CommitNilCommit(t *testing.T) {
+	sha := "ghi789"
+
+	ghMock := &mockGHClientFull{
+		prCommits: []*gh.RepositoryCommit{
+			{SHA: &sha}, // Commit field is nil
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadPRDetails(1)()
+	result := msg.(prDetailsLoadedMsg)
+	require.Nil(t, result.err)
+	assert.Equal(t, "", result.commits[0].Message)
+	assert.Equal(t, "", result.commits[0].Author)
+	assert.Equal(t, "", result.commits[0].Date)
+}
+
+// ---------------------------------------------------------------------------
+// loadActionJobs — 0% coverage
+// ---------------------------------------------------------------------------
+
+func TestLoadActionJobs_Success(t *testing.T) {
+	jobID := int64(200)
+	jobName := "build"
+	jobStatus := "completed"
+	jobConclusion := "success"
+	started := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	completed := time.Date(2024, 1, 1, 10, 5, 0, 0, time.UTC)
+	startedTs := &gh.Timestamp{Time: started}
+	completedTs := &gh.Timestamp{Time: completed}
+	stepNum := int64(1)
+	stepName := "Checkout"
+	stepStatus := "completed"
+	stepConclusion := "success"
+
+	ghMock := &mockGHClientFull{
+		jobs: []*gh.WorkflowJob{
+			{
+				ID:          &jobID,
+				Name:        &jobName,
+				Status:      &jobStatus,
+				Conclusion:  &jobConclusion,
+				StartedAt:   startedTs,
+				CompletedAt: completedTs,
+				Steps: []*gh.TaskStep{
+					{Number: &stepNum, Name: &stepName, Status: &stepStatus, Conclusion: &stepConclusion},
+				},
+			},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.loadActionJobs(100)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(actionJobsLoadedMsg)
+	require.True(t, ok)
+	assert.Nil(t, result.err)
+	assert.Equal(t, int64(100), result.runID)
+	assert.Len(t, result.jobs, 1)
+	assert.Equal(t, "build", result.jobs[0].Name)
+	assert.Len(t, result.jobs[0].Steps, 1)
+}
+
+func TestLoadActionJobs_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{jobsErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadActionJobs(100)()
+	result := msg.(actionJobsLoadedMsg)
+	assert.NotNil(t, result.err)
+}
+
+func TestLoadActionJobs_NoTimestamps(t *testing.T) {
+	jobID := int64(201)
+	jobName := "test"
+	jobStatus := "queued"
+	jobConclusion := ""
+
+	ghMock := &mockGHClientFull{
+		jobs: []*gh.WorkflowJob{
+			{ID: &jobID, Name: &jobName, Status: &jobStatus, Conclusion: &jobConclusion},
+		},
+	}
+
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadActionJobs(100)()
+	result := msg.(actionJobsLoadedMsg)
+	assert.Nil(t, result.err)
+	assert.Equal(t, "", result.jobs[0].StartedAt)
+	assert.Equal(t, "", result.jobs[0].CompletedAt)
+}
+
+// ---------------------------------------------------------------------------
+// loadActionLog — 0% coverage
+// ---------------------------------------------------------------------------
+
+func TestLoadActionLog_Success(t *testing.T) {
+	ghMock := &mockGHClientFull{jobLog: "Step 1: checkout\nStep 2: build\nDone."}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.loadActionLog(100, 200)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(actionLogLoadedMsg)
+	require.True(t, ok)
+	assert.Nil(t, result.err)
+	assert.Equal(t, int64(100), result.runID)
+	assert.Equal(t, int64(200), result.jobID)
+	assert.Contains(t, result.log, "Step 1")
+}
+
+func TestLoadActionLog_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{jobLogErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.loadActionLog(100, 200)()
+	result := msg.(actionLogLoadedMsg)
+	assert.NotNil(t, result.err)
+}
+
+// ---------------------------------------------------------------------------
+// handleKey — branches needing ghClient
+// ---------------------------------------------------------------------------
+
+func TestHandleKey_I_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'i'})
+	assert.Equal(t, tabIssues, p.activeTab)
+}
+
+func TestHandleKey_P_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'p'})
+	assert.Equal(t, tabPRs, p.activeTab)
+}
+
+func TestHandleKey_A_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: 'a'})
+	assert.Equal(t, tabActions, p.activeTab)
+}
+
+func TestHandleKey_R_ActionsTab_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 0
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'r'})
+	assert.NotNil(t, cmd, "'r' on actions tab with ghClient should rerun")
+}
+
+func TestHandleKey_X_ActionsTab_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	p.tabCursor[tabActions] = 0
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'x'})
+	assert.NotNil(t, cmd, "'x' on actions tab should cancel")
+}
+
+func TestHandleKey_X_BranchesTab_DeletesCurrentBranchWarns(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabBranches
+	// Cursor is on "main" (IsCurrent), so delete should warn.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'x'})
+	require.NotNil(t, cmd, "'x' on current branch should return a warning command")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Cannot delete current branch")
+}
+
+func TestHandleKey_X_ActionsTab_NoGHClient(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'x'})
+	assert.Nil(t, cmd, "'x' on actions without ghClient should be no-op")
+}
+
+func TestHandleKey_F_IssuesTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	populateGH(p, sampleIssues(), nil, nil)
+	p.activeTab = tabIssues
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f'})
+	assert.NotNil(t, cmd, "'f' on issues tab should cycle filter")
+	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+}
+
+func TestHandleKey_F_PRsTab(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	populateGH(p, nil, samplePRs(), nil)
+	p.activeTab = tabPRs
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f'})
+	assert.NotNil(t, cmd, "'f' on PRs tab should cycle filter")
+	assert.Equal(t, prFilterNeedsReview, p.prFilter)
+}
+
+func TestHandleKey_R_Remotes_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.Focused = true
+	p.activeTab = tabBranches // not actions tab, so 'r' = remotes tab
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'r'})
+	// In ModeGitHub, 'r' falls through (remotes switch is only for ModeGit).
+	// It should not crash and may return nil.
+	_ = cmd
+}
+
+// ---------------------------------------------------------------------------
+// requestCheckout — remote branch prefix stripping
+// ---------------------------------------------------------------------------
+
+func TestRequestCheckout_RemoteBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	_, cmd := p.requestCheckout()
+	require.NotNil(t, cmd)
+	// Should show a confirmation dialog (not direct checkout).
+	msg := cmd()
+	_, isModal := msg.(notify.ShowModalMsg)
+	assert.True(t, isModal, "expected confirmation dialog, got %T", msg)
+	// The pendingName should have the remote prefix stripped.
+	assert.Equal(t, "main", p.pendingName, "remote branch should have prefix stripped")
+}
+
+func TestRequestCheckout_NilBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees // no branch at cursor
+	_, cmd := p.requestCheckout()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// requestWorktreeSwitch — new_terminal mode
+// ---------------------------------------------------------------------------
+
+func TestRequestWorktreeSwitch_NilWorktree(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabBranches // no worktree at cursor
+	_, cmd := p.requestWorktreeSwitch()
+	assert.Nil(t, cmd)
+}
+
+func TestRequestWorktreeSwitch_NewTerminal(t *testing.T) {
+	mock := defaultMock()
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "new_terminal"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	cmd := p.Init(context.Background())
+	if cmd != nil {
+		msg := cmd()
+		p.Update(msg)
+	}
+	p.activeTab = tabWorktrees
+	p.tabCursor[tabWorktrees] = 0
+	_, resultCmd := p.requestWorktreeSwitch()
+	assert.NotNil(t, resultCmd, "new_terminal mode should return a command")
+}
+
+func TestRequestWorktreeSwitch_CurrentMode(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabWorktrees
+	p.tabCursor[tabWorktrees] = 0
+	_, cmd := p.requestWorktreeSwitch()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "worktree_switch", result.op)
+}
+
+// ---------------------------------------------------------------------------
+// renderTabBar — with ghClient (two-row tab bar) + filter labels
+// ---------------------------------------------------------------------------
+
+func TestRenderTabBar_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+
+	bar := panels.StripANSI(p.renderTabBar(80))
+	assert.Contains(t, bar, "Issues")
+	assert.Contains(t, bar, "PRs")
+	assert.Contains(t, bar, "Actions")
+	assert.NotContains(t, bar, "\n", "ModeGitHub should have one row (no git tabs)")
+}
+
+func TestRenderTabBar_WithIssueFilter(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.issueFilter = issueFilterAssigned
+	p.activeTab = tabIssues
+
+	bar := panels.StripANSI(p.renderTabBar(80))
+	assert.Contains(t, bar, "Assigned")
+}
+
+func TestRenderTabBar_WithPRFilter(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.prFilter = prFilterMine
+	p.activeTab = tabPRs
+
+	bar := panels.StripANSI(p.renderTabBar(80))
+	assert.Contains(t, bar, "Mine")
+}
+
+func TestRenderTabBar_ActiveGHTab(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.activeTab = tabActions
+
+	bar := p.renderTabBar(80)
+	assert.NotEmpty(t, bar)
+}
+
+// ---------------------------------------------------------------------------
+// ensureCursorVisible with ghClient — 2-line tab bar
+// ---------------------------------------------------------------------------
+
+func TestEnsureCursorVisible_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.SetSize(80, 5) // height 5, tab bar is 1 line (ModeGitHub) → viewH = 4
+	p.tabCursor[tabIssues] = 2
+	p.tabOffset[tabIssues] = 0
+	p.ensureCursorVisible()
+	assert.LessOrEqual(t, p.tabOffset[tabIssues], p.tabCursor[tabIssues])
+}
+
+func TestEnsureCursorVisible_SmallHeight_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.SetSize(80, 1)        // height 1, tab bar is 1 line → viewH = 0 → early return
+	p.ensureCursorVisible() // should not panic
+}
+
+// ---------------------------------------------------------------------------
+// KeyBindings — with ghClient adds GitHub bindings
+// ---------------------------------------------------------------------------
+
+func TestKeyBindings_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	bindings := p.KeyBindings()
+
+	actions := make(map[string]bool)
+	for _, b := range bindings {
+		actions[b.Action] = true
+	}
+	assert.True(t, actions["tab_issues"], "should have issues tab binding")
+	assert.True(t, actions["tab_prs"], "should have PRs tab binding")
+	assert.True(t, actions["tab_actions"], "should have actions tab binding")
+}
+
+// ---------------------------------------------------------------------------
+// githubPollTickCmd — valid case (non-nil client + positive interval)
+// ---------------------------------------------------------------------------
+
+func TestGithubPollTickCmd_ValidConfig(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.ghCfg.PollInterval = 30
+	cmd := p.githubPollTickCmd()
+	assert.NotNil(t, cmd, "valid ghClient + positive interval should return a tick cmd")
+}
+
+// ---------------------------------------------------------------------------
+// handleActionJobsLoaded — with ghClient and failed job triggers log fetch
+// ---------------------------------------------------------------------------
+
+func TestHandleActionJobsLoaded_FailedJobWithClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u"), jobLog: "error log"}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	jobs := []panels.ActionJob{
+		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
+		{ID: 2, Name: "test", Status: "completed", Conclusion: "failure"},
+	}
+	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 100, jobs: jobs})
+	require.NotNil(t, cmd, "failed job with ghClient should trigger log fetch")
+}
+
+func TestHandleActionJobsLoaded_NoFailedJobs(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	jobs := []panels.ActionJob{
+		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
+	}
+	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 100, jobs: jobs})
+	require.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// View — with ghClient (2-line tab bar)
+// ---------------------------------------------------------------------------
+
+func TestView_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+
+	view := panels.StripANSI(p.View(80, 20))
+	assert.Contains(t, view, "Issues")
+	assert.Contains(t, view, "Bug report")
+}
+
+func TestView_WithGHClient_TinyHeight(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	// Height 2 = exactly the tab bar, no content room.
+	view := p.View(80, 2)
+	assert.NotEmpty(t, view)
+}
+
+func TestView_WithGHClient_GHUnavailable(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.ghErr = assert.AnError
+	p.activeTab = tabPRs
+	view := p.View(80, 20)
+	assert.Contains(t, view, "GitHub unavailable")
+}
+
+// ---------------------------------------------------------------------------
+// Update — message dispatch coverage
+// ---------------------------------------------------------------------------
+
+func TestUpdate_PRDetailsLoadedMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update(prDetailsLoadedMsg{number: 1, files: nil, commits: nil})
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdate_ActionJobsLoadedMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update(actionJobsLoadedMsg{runID: 1, jobs: nil})
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdate_ActionLogLoadedMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update(actionLogLoadedMsg{runID: 1, jobID: 2, log: "log"})
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdate_ActionRerunResultMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update(actionRerunResultMsg{runID: 1})
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdate_ActionCancelResultMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update(actionCancelResultMsg{runID: 1})
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdate_UnhandledMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.Update("some random string msg")
+	assert.Nil(t, cmd, "unhandled message should return nil cmd")
+}
+
+// ---------------------------------------------------------------------------
+// mouseClick / mouseDoubleClick with ghClient (2-line tab bar)
+// ---------------------------------------------------------------------------
+
+func TestMouseClick_GHTabBarClick(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.SetSize(80, 20)
+
+	// In ModeGitHub, row 0 is the GitHub tab bar (single row).
+	// Branches is now the first tab, so clicking col 1 selects it.
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: 1})
+	assert.Equal(t, tabBranches, p.activeTab, "clicking GH tab bar row should switch to branches (first tab)")
+}
+
+func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.SetSize(80, 20)
+
+	// In ModeGitHub, tab bar is 1 row. Row 1 = first content item (Issues tab).
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 1, ContentCol: 5})
+	assert.Equal(t, 0, p.tabCursor[tabIssues])
+}
+
+func TestMouseDoubleClick_WithGHClient_TabBar(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.SetSize(80, 20)
+
+	// In ModeGitHub, row 0 is the tab bar.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
+	assert.Nil(t, cmd, "double-click on tab bar should be ignored")
+}
+
+func TestMouseWheel_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
+	p.SetSize(80, 5)
+
+	// Scroll down with 1-line tab bar (ModeGitHub).
+	p.handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	assert.GreaterOrEqual(t, p.tabOffset[tabIssues], 0)
+}
+
+// ---------------------------------------------------------------------------
+// prSelectedCmd with ghClient — triggers loadPRDetails
+// ---------------------------------------------------------------------------
+
+func TestPRSelectedCmd_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, nil, samplePRs(), nil)
+	p.activeTab = tabPRs
+	cmd := p.prSelectedCmd()
+	require.NotNil(t, cmd, "prSelectedCmd with ghClient should trigger loadPRDetails")
+}
+
+// ---------------------------------------------------------------------------
+// actionRunSelectedCmd with ghClient — triggers loadActionJobs
+// ---------------------------------------------------------------------------
+
+func TestActionRunSelectedCmd_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	populateGH(p, nil, nil, sampleActions())
+	p.activeTab = tabActions
+	cmd := p.actionRunSelectedCmd()
+	require.NotNil(t, cmd, "actionRunSelectedCmd with ghClient should trigger loadActionJobs")
+}
+
+// ---------------------------------------------------------------------------
+// rerunFailedJobsCmd, cancelWorkflowRunCmd — actually execute the cmds
+// ---------------------------------------------------------------------------
+
+func TestRerunFailedJobsCmd_Success(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.rerunFailedJobsCmd(100)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(actionRerunResultMsg)
+	require.True(t, ok)
+	assert.Nil(t, result.err)
+}
+
+func TestRerunFailedJobsCmd_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{rerunErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.rerunFailedJobsCmd(100)()
+	result := msg.(actionRerunResultMsg)
+	assert.NotNil(t, result.err)
+}
+
+func TestCancelWorkflowRunCmd_Success(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	cmd := p.cancelWorkflowRunCmd(100)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(actionCancelResultMsg)
+	require.True(t, ok)
+	assert.Nil(t, result.err)
+}
+
+func TestCancelWorkflowRunCmd_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{cancelErr: assert.AnError}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	msg := p.cancelWorkflowRunCmd(100)()
+	result := msg.(actionCancelResultMsg)
+	assert.NotNil(t, result.err)
+}
+
+// ---------------------------------------------------------------------------
+// Rendering edge cases — narrow widths triggering truncation
+// ---------------------------------------------------------------------------
+
+func TestRenderIssue_NarrowWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "A very long issue title that needs truncation", Labels: []string{"bug"}}}
+	// Width of 20 forces title truncation.
+	line := p.renderIssue(item, 20, true)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderIssue_NoLabels(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "No labels"}}
+	line := p.renderIssue(item, 80, false)
+	assert.Contains(t, line, "#1")
+}
+
+func TestRenderIssue_TinyWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "Bug", Labels: []string{"big-label"}}}
+	line := p.renderIssue(item, 5, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderPR_NarrowWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "A very long PR title that needs truncation", State: "open"}}
+	line := p.renderPR(item, 20, true)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderPR_TinyWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "PR", State: "open"}}
+	line := p.renderPR(item, 5, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderActionRun_NarrowWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "A Very Long Workflow Name", RunNumber: 42,
+		Status: "completed", Conclusion: "success", Branch: "main", CreatedAt: "Jan 1 10:00",
+	}}
+	line := p.renderActionRun(item, 20, true)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderActionRun_TinyWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "success", Branch: "main", CreatedAt: "Jan 1",
+	}}
+	line := p.renderActionRun(item, 5, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderActionRun_UnknownStatus(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 1, Status: "waiting", Conclusion: "",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "●")
+}
+
+func TestRenderActionRun_TimedOut(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "timed_out",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "✗")
+}
+
+func TestRenderActionRun_Queued(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 1, Status: "queued",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.Contains(t, line, "●")
+}
+
+func TestRenderActionRun_NoBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
+		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "success",
+	}}
+	line := p.renderActionRun(item, 80, false)
+	assert.NotEmpty(t, line)
+}
+
+// ---------------------------------------------------------------------------
+// renderBranch — narrow and cursor edge cases
+// ---------------------------------------------------------------------------
+
+func TestRenderBranch_NarrowTruncation(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "a-very-long-branch-name-that-exceeds-width", Hash: "abc1234"}}
+	line := p.renderBranch(item, 20, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderBranch_AheadBehind(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "feature", Hash: "abc1234", Ahead: 3, Behind: 2}}
+	line := p.renderBranch(item, 80, false)
+	assert.Contains(t, line, "↑3")
+	assert.Contains(t, line, "↓2")
+}
+
+func TestRenderBranch_TinyWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "main", Hash: "abc1234"}}
+	line := p.renderBranch(item, 3, false)
+	assert.NotEmpty(t, line)
+}
+
+// ---------------------------------------------------------------------------
+// renderWorktree — narrow and cursor edge cases
+// ---------------------------------------------------------------------------
+
+func TestRenderWorktree_NarrowTruncation(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/very/long/path/to/worktree/directory", Branch: "main", Head: "abc1234567"}}
+	line := p.renderWorktree(item, 20, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderWorktree_TinyWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/p", Branch: "b", Head: "abc1234567"}}
+	line := p.renderWorktree(item, 3, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderWorktree_NoBranch(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/test", Head: "abc"}}
+	line := p.renderWorktree(item, 80, false)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderWorktree_ShortHead(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/test", Branch: "main", Head: "abc"}}
+	line := p.renderWorktree(item, 80, false)
+	assert.Contains(t, line, "abc")
+}
+
+// ---------------------------------------------------------------------------
+// renderRemote / renderRemoteSub with cursor
+// ---------------------------------------------------------------------------
+
+func TestRenderRemote_WithCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindRemote, remote: git.Remote{Name: "origin"}}
+	line := p.renderRemote(item, 80, true)
+	assert.NotEmpty(t, line)
+}
+
+func TestRenderRemoteSub_WithCursor(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindRemoteSub, text: "fetch: https://example.com"}
+	line := p.renderRemoteSub(item, 80, true)
+	assert.NotEmpty(t, line)
+}
+
+// ---------------------------------------------------------------------------
+// renderStashEntry with zero/negative width
+// ---------------------------------------------------------------------------
+
+func TestRenderStashEntry_ZeroWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "msg"}}
+	line := p.renderStashEntry(item, 0, false)
+	assert.NotEmpty(t, line) // lipgloss renders empty string but width=0
+}
+
+// ---------------------------------------------------------------------------
+// doAction — stash entry and remoteSub
+// ---------------------------------------------------------------------------
+
+func TestDoAction_StashEntry(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabStash
+	p.tabCursor[tabStash] = 0
+	_, cmd := p.doAction()
+	// Stash entry should now show an action prompt.
+	require.NotNil(t, cmd, "stash double-click should show action prompt")
+	msg := cmd()
+	_, isModal := msg.(notify.ShowModalMsg)
+	assert.True(t, isModal, "expected stash action prompt, got %T", msg)
+}
+
+func TestDoAction_RemoteSub(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 1 // remoteSub item
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd, "remoteSub has no action")
+}
+
+// ---------------------------------------------------------------------------
+// Tab / Shift+Tab cycling within panel
+// ---------------------------------------------------------------------------
+
+func TestTabCyclesGitTabs(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	expected := []tabID{tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog, tabBranches}
+	for _, want := range expected {
+		p.Update(tea.KeyPressMsg{Code: '\t'})
+		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Tab", want)
+	}
+}
+
+func TestShiftTabCyclesGitTabsBackward(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	assert.Equal(t, tabBranches, p.activeTab)
+
+	expected := []tabID{tabReflog, tabTags, tabStash, tabRemotes, tabWorktrees, tabBranches}
+	for _, want := range expected {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Shift+Tab", want)
+	}
+}
+
+func TestTabCyclesGitHubTabs(t *testing.T) {
+	p := newTestGitHubPanel(defaultMock())
+	p.Focused = true
+	// ModeGitHub starts on tabIssues (set by NewGitHub).
+	assert.Equal(t, tabIssues, p.activeTab)
+
+	expected := []tabID{tabPRs, tabActions, tabWorkflows, tabReleases, tabBranches, tabTags, tabIssues}
+	for _, want := range expected {
+		p.Update(tea.KeyPressMsg{Code: '\t'})
+		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Tab", want)
+	}
+}
+
+func TestShiftTabCyclesGitHubTabsBackward(t *testing.T) {
+	p := newTestGitHubPanel(defaultMock())
+	p.Focused = true
+	assert.Equal(t, tabIssues, p.activeTab)
+
+	expected := []tabID{tabTags, tabBranches, tabReleases, tabWorkflows, tabActions, tabPRs, tabIssues}
+	for _, want := range expected {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Shift+Tab", want)
+	}
+}
+
+func TestTabNotFocusedDoesNothing(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.Focused = false
+	p.activeTab = tabBranches
+	p.Update(tea.KeyPressMsg{Code: '\t'})
+	assert.Equal(t, tabBranches, p.activeTab, "Tab should be ignored when panel is not focused")
+}
+
+func TestVisibleTabsGitMode(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	tabs := p.visibleTabs()
+	assert.Equal(t, []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}, tabs)
+}
+
+func TestVisibleTabsGitHubMode(t *testing.T) {
+	p := newTestGitHubPanel(defaultMock())
+	tabs := p.visibleTabs()
+	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}, tabs)
+}
+
+// ---------------------------------------------------------------------------
+// doDelete — stash tab and issues tab (no handler)
+// ---------------------------------------------------------------------------
+
+func TestDoDelete_StashEntry(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.activeTab = tabStash
+	p.tabCursor[tabStash] = 0
+	_, cmd := p.doDelete()
+	assert.Nil(t, cmd, "stash delete not supported")
+}
+
+// ---------------------------------------------------------------------------
+// Update dispatches through GH poll tick with ghClient
+// ---------------------------------------------------------------------------
+
+func TestUpdate_GithubPollTickMsg_WithGHClient(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.ghCfg.PollInterval = 30
+	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
+	assert.NotNil(t, cmd, "poll tick with ghClient should trigger loadGitHubData + next tick")
+}
+
+// ---------------------------------------------------------------------------
+// Branch checkout confirmation dialog
+// ---------------------------------------------------------------------------
+
+func TestRequestCheckout_ShowsConfirmation(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{{Name: "main", IsCurrent: true}, {Name: "develop"}},
+	}
+	p := newTestPanel(mock)
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 1 // develop
+	_, cmd := p.requestCheckout()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	// Should be a ShowModalMsg (confirmation), not an opResultMsg.
+	_, isModal := msg.(notify.ShowModalMsg)
+	assert.True(t, isModal, "expected confirmation dialog, got %T", msg)
+	assert.Equal(t, opBranchCheckout, p.pending)
+	assert.Equal(t, "develop", p.pendingName)
+}
+
+func TestHandleModalResult_BranchCheckout_Accept(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{{Name: "main"}, {Name: "develop"}},
+	}
+	p := newTestPanel(mock)
+	p.pending = opBranchCheckout
+	p.pendingName = "develop"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd, "accepting checkout should produce a cmd")
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg, got %T", msg)
+	assert.Equal(t, "checkout", result.op)
+	assert.Equal(t, "develop", result.name)
+	assert.NoError(t, result.err)
+}
+
+func TestHandleModalResult_BranchCheckout_Decline(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchCheckout
+	p.pendingName = "develop"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "declining checkout should produce no cmd")
+	assert.Equal(t, opNone, p.pending)
+}
+
+// ---------------------------------------------------------------------------
+// Stash action prompt
+// ---------------------------------------------------------------------------
+
+func TestDoAction_StashEntry_ShowsPrompt(t *testing.T) {
+	mock := &mockGitOps{
+		stashes: []git.StashEntry{{Index: 0, Message: "WIP"}},
+	}
+	p := newTestPanel(mock)
+	p.activeTab = tabStash
+	p.tabCursor[tabStash] = 0
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, isModal := msg.(notify.ShowModalMsg)
+	assert.True(t, isModal, "expected stash action prompt, got %T", msg)
+	assert.Equal(t, opStashAction, p.pending)
+}
+
+func TestHandleModalResult_StashAction_Apply(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opStashAction
+	p.pendingName = "0"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "apply"})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "stash_applied", result.op)
+	assert.NoError(t, result.err)
+}
+
+func TestHandleModalResult_StashAction_Pop(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opStashAction
+	p.pendingName = "0"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "pop"})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "stash_popped", result.op)
+}
+
+func TestHandleModalResult_StashAction_Drop(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opStashAction
+	p.pendingName = "0"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "drop"})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "stash_dropped", result.op)
+}
+
+func TestHandleModalResult_StashAction_Unknown(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opStashAction
+	p.pendingName = "0"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "unknown"})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected toast for unknown action, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+}
+
+// ---------------------------------------------------------------------------
+// Remote double-click opens browser
+// ---------------------------------------------------------------------------
+
+func TestDoAction_Remote_ReturnsCmd(t *testing.T) {
+	mock := &mockGitOps{
+		remotes: []git.Remote{{Name: "origin", FetchURL: "https://github.com/user/repo"}},
+	}
+	p := newTestPanel(mock)
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 0
+	_, cmd := p.doAction()
+	// On a headless test we can't actually open a browser, but the cmd should be non-nil.
+	assert.NotNil(t, cmd, "remote double-click should produce a cmd")
+}
+
+// Suppress unused import warnings.
+var (
+	_ = time.Now
+	_ = notify.ModalResultMsg{}
+	_ = actions.ItemLocalBranch
+)
+
+// ---------------------------------------------------------------------------
+// First-use confirmation prompt tests
+// ---------------------------------------------------------------------------
+
+func TestDoAction_FirstUsePrompt(t *testing.T) {
+	// With no confirmations, doAction should show the confirmation modal
+	// instead of executing the action.
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{} // no confirmations
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 1 // "feature" (non-current)
+
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "unconfirmed action should produce a command")
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok, "expected ShowModalMsg, got %T", msg)
+	assert.Equal(t, "Double-Click: Branch", modal.Title)
+	assert.Equal(t, notify.ModalActionPickerWithCheckbox, modal.Kind)
+	assert.Equal(t, opFirstUseConfirm, p.pending)
+	assert.Equal(t, string(actions.ItemLocalBranch), p.pendingName)
+}
+
+func TestDoAction_FirstUseAcceptWithRemember(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{} // no confirmations
+
+	// Simulate the first-use prompt state for a stash entry.
+	p.activeTab = tabStash
+	p.tabCursor[tabStash] = 0
+	p.pending = opFirstUseConfirm
+	p.pendingName = string(actions.ItemStashEntry)
+
+	// User picks the default action (prompt_action) and checks "always".
+	defaultAction := string(actions.DefaultAction(actions.ItemStashEntry))
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: defaultAction, Remember: true})
+	require.NotNil(t, cmd, "accepting first-use should produce a command")
+
+	// Should have marked the item type confirmed in-memory.
+	assert.True(t, p.actionsCfg.Confirmed[string(actions.ItemStashEntry)],
+		"action picker choice with Remember should be confirmed in actionsCfg")
+
+	// The returned cmd should be the stash action prompt (executeRightClickAction for stash).
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok, "stash executeRightClickAction should show stash action prompt, got %T", msg)
+	assert.Equal(t, "Stash Action", modal.Title)
+}
+
+func TestDoAction_FirstUseAcceptWithoutRemember(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{} // no confirmations
+
+	// Simulate the first-use prompt state for a remote.
+	p.activeTab = tabRemotes
+	p.tabCursor[tabRemotes] = 0
+	p.pending = opFirstUseConfirm
+	p.pendingName = string(actions.ItemRemote)
+
+	// User picks the default action (open_in_browser) without checking "always".
+	defaultAction := string(actions.DefaultAction(actions.ItemRemote))
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: defaultAction})
+	require.NotNil(t, cmd, "accepting first-use should produce a command")
+
+	// Without Remember, the choice should NOT be confirmed.
+	confirmed := false
+	if p.actionsCfg.Confirmed != nil {
+		confirmed = p.actionsCfg.Confirmed[string(actions.ItemRemote)]
+	}
+	assert.False(t, confirmed,
+		"action picker choice without Remember should not mark confirmed")
+}
+
+func TestDoAction_FirstUseReject(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{}
+
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 1
+	p.pending = opFirstUseConfirm
+	p.pendingName = string(actions.ItemLocalBranch)
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "rejecting first-use should produce no command")
+}
+
+func TestDoAction_AlreadyConfirmed(t *testing.T) {
+	// Pre-confirmed item type should bypass the prompt and execute directly.
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{
+		Confirmed: map[string]bool{
+			string(actions.ItemStashEntry): true,
+		},
+	}
+	p.activeTab = tabStash
+	p.tabCursor[tabStash] = 0
+
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd, "confirmed action should execute directly")
+
+	// For stash entries, the direct action is the stash action prompt.
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok, "expected stash action prompt, got %T", msg)
+	assert.Equal(t, "Stash Action", modal.Title)
+	assert.Equal(t, opStashAction, p.pending)
+}
+
+func TestDoAction_BlockedWhilePending(t *testing.T) {
+	// doAction must be a no-op when a pending operation is already active.
+	// This prevents Enter key-repeat after a modal dismissal from
+	// triggering duplicate workflow dispatches (or any other action).
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{
+		Confirmed: map[string]bool{
+			string(actions.ItemLocalBranch): true,
+		},
+	}
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 1 // "feature" branch
+
+	// Simulate an in-flight pending operation (e.g. workflow dispatch).
+	p.pending = opWorkflowDispatch
+	p.pendingName = "123:ci"
+
+	_, cmd := p.doAction()
+	assert.Nil(t, cmd, "doAction should be blocked when pending != opNone")
+	// pending state must be untouched.
+	assert.Equal(t, opWorkflowDispatch, p.pending)
+	assert.Equal(t, "123:ci", p.pendingName)
+}
+
+// ---------------------------------------------------------------------------
+// CI watch animation tests
+// ---------------------------------------------------------------------------
+
+func TestWatchFrames(t *testing.T) {
+	// watchFrames should contain exactly the 4 expected Unicode frames.
+	expected := []string{"●", "◐", "○", "◑"}
+	assert.Equal(t, expected, watchFrames)
+}
+
+func TestActionsStatusIcon_WatchingCycles(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{Status: "in_progress"}},
+	}
+	p.actionsWatching = true
+
+	// Each frame index should produce the corresponding watchFrame character.
+	for i, want := range watchFrames {
+		p.actionsWatchFrame = i
+		assert.Equal(t, want, p.actionsStatusIcon(), "frame %d", i)
+	}
+}
+
+func TestActionsStatusIcon_NotWatchingFallback(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{Status: "in_progress"}},
+	}
+	p.actionsWatching = false
+	// When not watching, in-progress status should return the static "●".
+	assert.Equal(t, "●", p.actionsStatusIcon())
+}
+
+func TestActionsStatusIcon_WatchingOverriddenByConclusion(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	p.actionsWatchFrame = 2
+
+	// A completed (success) run should still show ✓ even if actionsWatching is true.
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{Conclusion: "success"}},
+	}
+	assert.Equal(t, "✓", p.actionsStatusIcon())
+
+	// Same for failure.
+	p.tabItems[tabActions] = []listItem{
+		{kind: kindActionRun, actionRun: ghActionItem{Conclusion: "failure"}},
+	}
+	assert.Equal(t, "✗", p.actionsStatusIcon())
+}
+
+func TestActionsWatchTickCmd_WhenWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	cmd := p.actionsWatchTickCmd()
+	require.NotNil(t, cmd, "actionsWatchTickCmd should return a command when watching")
+}
+
+func TestActionsWatchTickCmd_WhenNotWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = false
+	cmd := p.actionsWatchTickCmd()
+	assert.Nil(t, cmd, "actionsWatchTickCmd should return nil when not watching")
+}
+
+func TestActionsWatchTickMsg_AdvancesFrame(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	p.actionsWatchFrame = 0
+
+	_, cmd := p.Update(actionsWatchTickMsg{time.Now()})
+	assert.Equal(t, 1, p.actionsWatchFrame, "frame should advance from 0 to 1")
+	assert.NotNil(t, cmd, "should schedule next tick")
+
+	// Advance again — should wrap around after len(watchFrames)-1.
+	p.actionsWatchFrame = len(watchFrames) - 1
+	p.Update(actionsWatchTickMsg{time.Now()})
+	assert.Equal(t, 0, p.actionsWatchFrame, "frame should wrap around to 0")
+}
+
+func TestActionsWatchTickMsg_StopsWhenNotWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = false
+	p.actionsWatchFrame = 2
+
+	_, cmd := p.Update(actionsWatchTickMsg{time.Now()})
+	assert.Equal(t, 2, p.actionsWatchFrame, "frame should not advance when not watching")
+	assert.Nil(t, cmd, "should not schedule next tick when not watching")
+}
+
+func TestHandleGHDataLoaded_StartsWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = false
+
+	msg := ghDataLoadedMsg{
+		actions: []ghActionItem{
+			{RunID: 1, Status: "in_progress"},
+			{RunID: 2, Status: "completed", Conclusion: "success"},
+		},
+	}
+
+	_, cmd := p.Update(msg)
+	assert.True(t, p.actionsWatching, "should start watching with in-progress runs")
+	assert.Equal(t, 0, p.actionsWatchFrame, "frame should reset to 0 on start")
+	assert.NotNil(t, cmd, "should start the watch tick")
+}
+
+func TestHandleGHDataLoaded_StopsWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	p.actionsWatchFrame = 3
+
+	msg := ghDataLoadedMsg{
+		actions: []ghActionItem{
+			{RunID: 1, Status: "completed", Conclusion: "success"},
+			{RunID: 2, Status: "completed", Conclusion: "failure"},
+		},
+	}
+
+	_, cmd := p.Update(msg)
+	assert.False(t, p.actionsWatching, "should stop watching when no in-progress runs")
+	assert.Nil(t, cmd, "should not schedule watch tick")
+}
+
+func TestHandleGHDataLoaded_QueuedStartsWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = false
+
+	msg := ghDataLoadedMsg{
+		actions: []ghActionItem{
+			{RunID: 1, Status: "queued"},
+		},
+	}
+
+	_, cmd := p.Update(msg)
+	assert.True(t, p.actionsWatching, "queued runs should also trigger watching")
+	assert.NotNil(t, cmd, "should start the watch tick for queued runs")
+}
+
+func TestHandleGHDataLoaded_AlreadyWatchingNoRestart(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	p.actionsWatchFrame = 2
+
+	msg := ghDataLoadedMsg{
+		actions: []ghActionItem{
+			{RunID: 1, Status: "in_progress"},
+		},
+	}
+
+	_, cmd := p.Update(msg)
+	assert.True(t, p.actionsWatching, "should remain watching")
+	// When already watching, we don't restart the tick (frame stays at 2).
+	assert.Equal(t, 2, p.actionsWatchFrame, "frame should not reset when already watching")
+	assert.Nil(t, cmd, "should not restart the tick when already watching")
+}
+
+func TestHandleGHDataLoaded_ErrorDoesNotCrash(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+
+	msg := ghDataLoadedMsg{
+		err: fmt.Errorf("API error"),
+	}
+
+	_, cmd := p.Update(msg)
+	// On error, actionsWatching should remain unchanged (not touched by error path).
+	assert.True(t, p.actionsWatching, "error should not alter watching state")
+	assert.Nil(t, cmd, "error should not produce commands")
+}
+
+func TestHandleGHDataLoaded_EmptyActionsStopsWatching(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+
+	msg := ghDataLoadedMsg{
+		actions: []ghActionItem{},
+	}
+
+	_, cmd := p.Update(msg)
+	assert.False(t, p.actionsWatching, "empty actions should stop watching")
+	assert.Nil(t, cmd, "should not schedule tick for empty actions")
+}
+
+// ---------------------------------------------------------------------------
+// TargetedPanelMsg wrapping verification
+// ---------------------------------------------------------------------------
+
+func TestActionsWatchTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.actionsWatching = true
+	cmd := p.actionsWatchTickCmd()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	targeted, ok := msg.(panels.TargetedPanelMsg)
+	require.True(t, ok, "actionsWatchTickCmd should produce a TargetedPanelMsg, got %T", msg)
+	assert.Equal(t, "gitinfo", targeted.Target)
+	_, isInner := targeted.Inner.(actionsWatchTickMsg)
+	assert.True(t, isInner, "Inner should be actionsWatchTickMsg, got %T", targeted.Inner)
+}
+
+func TestGithubPollTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.ghCfg.PollInterval = 1 // 1 second — fast for test
+	cmd := p.githubPollTickCmd()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	targeted, ok := msg.(panels.TargetedPanelMsg)
+	require.True(t, ok, "githubPollTickCmd should produce a TargetedPanelMsg, got %T", msg)
+	assert.Equal(t, "gitinfo", targeted.Target)
+	_, isInner := targeted.Inner.(githubPollTickMsg)
+	assert.True(t, isInner, "Inner should be githubPollTickMsg, got %T", targeted.Inner)
+}
+
+// ---------------------------------------------------------------------------
+// Tab switching via keys (w, l) and pagination (d, u, D)
+// ---------------------------------------------------------------------------
+
+func TestWKey_SwitchesToWorktreesTab(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	assert.Equal(t, tabBranches, p.activeTab)
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'w'})
+	assert.Equal(t, tabWorktrees, p.activeTab)
+	assert.NotNil(t, cmd, "'w' should produce a tab-selection command")
+}
+
+func TestWKey_SwitchesToWorkflowsInGitHub(t *testing.T) {
+	mock := defaultMock()
+	p := newTestGitHubPanel(mock)
+	p.Focused = true
+
+	p.Update(tea.KeyPressMsg{Code: 'w'})
+	assert.Equal(t, tabWorkflows, p.activeTab)
+}
+
+func TestLKey_SwitchesToReflogTab(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	p.Update(tea.KeyPressMsg{Code: 'l'})
+	assert.Equal(t, tabReflog, p.activeTab)
+}
+
+func TestLKey_SwitchesToReleasesInGitHub(t *testing.T) {
+	mock := defaultMock()
+	p := newTestGitHubPanel(mock)
+	p.Focused = true
+
+	p.Update(tea.KeyPressMsg{Code: 'l'})
+	assert.Equal(t, tabReleases, p.activeTab)
+}
+
+func TestDKey_PageDown(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	// Pressing 'd' should not panic; page down on the active tab.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'd'})
+	assert.NotNil(t, cmd, "'d' should produce a tab-selection command")
+}
+
+func TestUKey_PageUp(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.Focused = true
+
+	// Pressing 'u' should not panic; page up on the active tab.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'u'})
+	assert.NotNil(t, cmd, "'u' should produce a tab-selection command")
+}
+
+func TestDKey_DispatchWorkflow(t *testing.T) {
+	mock := defaultMock()
+	p := newTestGitHubPanel(mock)
+	p.Focused = true
+
+	// Switch to workflows tab first.
+	p.Update(tea.KeyPressMsg{Code: 'w'})
+	assert.Equal(t, tabWorkflows, p.activeTab)
+
+	// 'D' on workflows tab without ghClient should be a no-op (smoke test).
+	_, cmd := p.Update(tea.KeyPressMsg{Code: -1, Text: "D"})
+	// Without a real GH client, dispatch won't fire — just verify no panic.
+	_ = cmd
+}

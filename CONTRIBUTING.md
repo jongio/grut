@@ -1,0 +1,143 @@
+# Contributing to grüt
+
+Thank you for your interest in contributing to grüt! This document provides guidelines and instructions for contributing.
+
+## Getting Started
+
+### Prerequisites
+
+- **Go 1.26+** (check with `go version`)
+- **Git** (check with `git --version`)
+- **Mage** (optional, install with `go install github.com/magefile/mage@latest`)
+
+### Setup
+
+1. Fork and clone the repository:
+
+   ```bash
+   git clone https://github.com/<your-username>/grut.git
+   cd grut
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   go mod download
+   ```
+
+3. Build and install the dev binary:
+
+   ```bash
+   mage install
+   ```
+
+   This runs tests, builds `grut-dev` with version info, adds it to your PATH, and verifies the install. You can now run `grut-dev` alongside any release version of `grut`.
+
+   Or without mage:
+
+   ```bash
+   go build -o grut .
+   ```
+
+## Installing a Release
+
+To install the latest release (or test against a specific version):
+
+```sh
+# Latest — Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh
+
+# Specific version — Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- v0.1.0
+
+# Latest — Windows (PowerShell)
+irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+
+# Specific version — Windows (PowerShell)
+$v="v0.1.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+```
+
+## Development Workflow
+
+### Building
+
+```bash
+go build ./...
+```
+
+### Testing
+
+```bash
+go test ./...
+```
+
+### Full Preflight Check
+
+Run all checks before submitting a PR:
+
+```bash
+mage preflight
+```
+
+This runs 12 checks: `fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode`
+
+Some checks (golangci-lint, govulncheck, gofumpt, deadcode, WSL) are skipped if the tool is not installed, with instructions printed to install them.
+
+### Code Style
+
+- Follow standard Go conventions (`gofmt`, `go vet`)
+- Use `golangci-lint` for linting
+- Keep functions focused and well-named
+- Add tests for new functionality
+
+## Submitting Changes
+
+### Pull Request Process
+
+1. Create a feature branch from `main`:
+
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+
+2. Make your changes with clear, descriptive commits.
+
+3. Run the preflight checks:
+
+   ```bash
+   mage preflight
+   ```
+
+4. Push your branch and open a Pull Request.
+
+5. Describe your changes clearly in the PR description.
+
+### Commit Messages
+
+Use clear, descriptive commit messages:
+
+- `feat: add worktree switching support`
+- `fix: resolve path traversal in file tree`
+- `docs: update README with new keybindings`
+- `test: add coverage for git status parser`
+
+### What We Look For
+
+- **Tests**: New features should include tests
+- **Documentation**: Update docs for user-facing changes
+- **Backward Compatibility**: Avoid breaking existing behavior
+- **Clean Code**: Follow existing patterns in the codebase
+
+## Reporting Issues
+
+- Use [GitHub Issues](https://github.com/jongio/grut/issues) to report bugs
+- Include steps to reproduce, expected behavior, and actual behavior
+- Include your OS, terminal emulator, and grüt version (`grut --version`)
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

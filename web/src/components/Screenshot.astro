@@ -1,0 +1,384 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+  caption?: string;
+  description?: string;
+}
+
+const { src, alt, caption, description } = Astro.props;
+---
+
+<figure class="screenshot">
+  <div class="screenshot-frame" role="button" tabindex="0" aria-label={`View full size: ${alt}`} data-lightbox-trigger data-lightbox-src={src} data-lightbox-alt={alt}>
+    <div class="screenshot-titlebar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="titlebar-text">grüt</span>
+    </div>
+    <img src={src} alt={alt} loading="lazy" />
+    <div class="screenshot-zoom-hint" aria-hidden="true">
+      <span class="zoom-icon">⌕</span> Click to enlarge
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+  {description && <p class="screenshot-description">{description}</p>}
+</figure>
+
+<style>
+  .screenshot {
+    margin: var(--space-6) 0;
+  }
+
+  .screenshot-frame {
+    position: relative;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color var(--transition-base);
+  }
+
+  .screenshot-frame:hover,
+  .screenshot-frame:focus-visible {
+    border-color: var(--color-primary);
+  }
+
+  .screenshot-frame:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .screenshot-titlebar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-overlay);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .dot.red { background: #FF5F57; }
+  .dot.yellow { background: #FEBC2E; }
+  .dot.green { background: #28C840; }
+
+  .titlebar-text {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+    margin-left: var(--space-2);
+  }
+
+  .screenshot-frame > img {
+    width: 100%;
+    display: block;
+  }
+
+  .screenshot-zoom-hint {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: var(--space-2) var(--space-3);
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    pointer-events: none;
+  }
+
+  .screenshot-frame:hover .screenshot-zoom-hint {
+    opacity: 1;
+  }
+
+  .zoom-icon {
+    margin-right: var(--space-1);
+  }
+
+  figcaption {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--space-2);
+    text-align: center;
+    font-style: italic;
+  }
+
+  .screenshot-description {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin: var(--space-1) 0 0;
+    text-align: center;
+    line-height: var(--leading-normal);
+  }
+</style>
+
+<style is:global>
+  /* ── Gallery Lightbox Overlay ── */
+  .gallery-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(4px);
+    padding: var(--space-8);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .gallery-lightbox[hidden] {
+    display: none;
+  }
+
+  .gallery-lightbox.is-visible {
+    opacity: 1;
+  }
+
+  .gallery-lightbox .lightbox-close {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-4);
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--text-2xl);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 120ms ease;
+    z-index: 1;
+  }
+
+  .gallery-lightbox .lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .gallery-lightbox .lightbox-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ── Navigation Buttons ── */
+  .gallery-lightbox .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 2rem;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 120ms ease;
+    z-index: 1;
+    opacity: 0;
+  }
+
+  .gallery-lightbox:hover .lightbox-nav,
+  .gallery-lightbox .lightbox-nav:focus-visible {
+    opacity: 1;
+  }
+
+  .gallery-lightbox .lightbox-nav:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .gallery-lightbox .lightbox-nav:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 2px;
+  }
+
+  .gallery-lightbox .lightbox-prev {
+    left: var(--space-4);
+  }
+
+  .gallery-lightbox .lightbox-next {
+    right: var(--space-4);
+  }
+
+  /* Always visible on touch devices */
+  @media (hover: none) {
+    .gallery-lightbox .lightbox-nav {
+      opacity: 1;
+    }
+  }
+
+  /* ── Position Counter ── */
+  .gallery-lightbox .lightbox-counter {
+    position: absolute;
+    bottom: var(--space-4);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+    user-select: none;
+  }
+</style>
+
+<script>
+  let galleryCleanup: (() => void) | null = null;
+
+  function initGallery() {
+    // Clean up previous instance (e.g. after Astro page swap)
+    if (galleryCleanup) {
+      galleryCleanup();
+      galleryCleanup = null;
+    }
+    document.getElementById('gallery-lightbox')?.remove();
+
+    const triggers = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-lightbox-trigger]')
+    );
+    if (triggers.length === 0) return;
+
+    const items = triggers.map((t) => ({
+      src: t.dataset.lightboxSrc!,
+      alt: t.dataset.lightboxAlt!,
+    }));
+
+    let currentIndex = -1;
+
+    // Build shared lightbox overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'gallery-lightbox';
+    overlay.className = 'gallery-lightbox';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<button class="lightbox-close" aria-label="Close">&times;</button>' +
+      '<button class="lightbox-nav lightbox-prev" aria-label="Previous screenshot">\u2039</button>' +
+      '<img class="lightbox-img" src="" alt="" />' +
+      '<button class="lightbox-nav lightbox-next" aria-label="Next screenshot">\u203a</button>' +
+      '<div class="lightbox-counter" aria-live="polite"></div>';
+    document.body.appendChild(overlay);
+
+    const img = overlay.querySelector('.lightbox-img') as HTMLImageElement;
+    const counter = overlay.querySelector('.lightbox-counter') as HTMLElement;
+    const prevBtn = overlay.querySelector('.lightbox-prev') as HTMLButtonElement;
+    const nextBtn = overlay.querySelector('.lightbox-next') as HTMLButtonElement;
+    const closeBtn = overlay.querySelector('.lightbox-close') as HTMLButtonElement;
+
+    function show(index: number) {
+      currentIndex = index;
+      img.src = items[index].src;
+      img.alt = items[index].alt;
+      overlay.setAttribute('aria-label', items[index].alt);
+      counter.textContent = `${index + 1} / ${items.length}`;
+      const single = items.length <= 1;
+      prevBtn.hidden = single;
+      nextBtn.hidden = single;
+      counter.hidden = single;
+    }
+
+    function open(index: number) {
+      show(index);
+      overlay.hidden = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          overlay.classList.add('is-visible');
+          closeBtn.focus();
+        });
+      });
+      document.body.style.overflow = 'hidden';
+    }
+
+    function close() {
+      overlay.classList.remove('is-visible');
+      setTimeout(() => {
+        overlay.hidden = true;
+        document.body.style.overflow = '';
+      }, 200);
+      currentIndex = -1;
+    }
+
+    function navigate(dir: number) {
+      if (currentIndex < 0 || items.length <= 1) return;
+      show((currentIndex + dir + items.length) % items.length);
+    }
+
+    // Wire up trigger click & keyboard handlers
+    triggers.forEach((trigger, i) => {
+      trigger.addEventListener('click', () => open(i));
+      trigger.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open(i);
+        }
+      });
+    });
+
+    // Overlay interaction handlers
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigate(-1);
+    });
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigate(1);
+    });
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+
+    // Global keyboard navigation
+    function onKeydown(e: KeyboardEvent) {
+      if (currentIndex < 0) return;
+      switch (e.key) {
+        case 'Escape':
+          close();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          navigate(-1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          navigate(1);
+          break;
+      }
+    }
+    document.addEventListener('keydown', onKeydown);
+
+    // Store cleanup for re-initialization
+    galleryCleanup = () => {
+      document.removeEventListener('keydown', onKeydown);
+      overlay.remove();
+    };
+  }
+
+  initGallery();
+  document.addEventListener('astro:after-swap', initGallery);
+</script>

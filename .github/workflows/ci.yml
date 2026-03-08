@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+# Cancel in-progress runs for the same branch/PR to avoid wasted resources.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"           # Match release build settings
+
+    steps:
+      # Pin actions to full SHA for supply-chain security.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+
+      - name: Check formatting (gofmt)
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files need formatting:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check modules tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Check strict formatting (gofumpt)
+        run: |
+          go install mvdan.cc/gofumpt@latest || { echo "gofumpt install failed, skipping"; exit 0; }
+          unformatted=$(gofumpt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files need strict formatting (gofumpt):"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check dead code
+        continue-on-error: true
+        run: |
+          go install golang.org/x/tools/cmd/deadcode@latest || { echo "deadcode install failed, skipping"; exit 0; }
+          deadcode ./...
+
+      - run: go build ./...
+
+      - run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        with:
+          version: latest
+          install-mode: goinstall
+
+      - run: go test ./...
+
+      - name: Benchmarks
+        run: go test -bench=. -benchmem -run='^$' -count=1 -timeout=5m ./...
+
+      - name: Test (race detector)
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./... -count=1
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  # Verify the binary compiles for all release platforms.
+  # CGO_ENABLED=0 means cross-compilation is pure Go — no native runners needed.
+  cross-compile:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      # Pin actions to full SHA for supply-chain security.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+
+      - name: Cross-compile
+        run: |
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=$(echo $platform | cut -d/ -f1)
+            arch=$(echo $platform | cut -d/ -f2)
+            ext=""
+            if [ "$os" = "windows" ]; then ext=".exe"; fi
+            echo "Building $os/$arch..."
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build \
+              -ldflags "-X github.com/jongio/grut/internal/config.AppVersion=pr-${{ github.event.pull_request.number }}" \
+              -o "dist/grut_${os}_${arch}${ext}" .
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: grut-pr-${{ github.event.pull_request.number }}
+          path: dist/
+          retention-days: 7

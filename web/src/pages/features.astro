@@ -1,0 +1,194 @@
+---
+import Landing from '../layouts/Landing.astro';
+import Screenshot from '../components/Screenshot.astro';
+---
+
+<Landing title="Features" description="Explore everything grüt can do — file explorer, git workflow, GitHub integration, diff review, fuzzy finder, and more.">
+
+  <section class="features-hero" aria-labelledby="features-heading">
+    <h1 id="features-heading" class="features-title">Features</h1>
+    <p class="features-subtitle">
+      Everything you need to navigate, commit, and review — without leaving
+      the terminal.
+    </p>
+  </section>
+
+  <!-- ═══════ File Explorer ═══════ -->
+  <section class="feature-row" aria-labelledby="feat-explorer">
+    <div class="feature-text">
+      <h2 id="feat-explorer">File Explorer</h2>
+      <p>
+        Navigate your project with a tree view that shows git status markers,
+        file operations, hidden files, and symlinks. Create, rename, and
+        delete files without switching tools.
+      </p>
+      <a href="/grut/docs/file-explorer/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/file-explorer.png" alt="File explorer with tree navigation and git status markers" />
+    </div>
+  </section>
+
+  <!-- ═══════ Git Integration ═══════ -->
+  <section class="feature-row reverse" aria-labelledby="feat-git">
+    <div class="feature-text">
+      <h2 id="feat-git">Git Integration</h2>
+      <p>
+        Full git workflow from staging to push — branches, merge, rebase,
+        stash, tags, worktrees, blame, and bisect. Everything is keyboard-driven
+        and updates in real time.
+      </p>
+      <a href="/grut/docs/git-status/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/git-info.png" alt="Git info panel with branches, tags, and status" />
+    </div>
+  </section>
+
+  <!-- ═══════ GitHub Integration ═══════ -->
+  <section class="feature-row" aria-labelledby="feat-github">
+    <div class="feature-text">
+      <h2 id="feat-github">GitHub Integration</h2>
+      <p>
+        Browse issues, pull requests, Actions workflows, and releases directly
+        in the TUI. Review PR details and check CI status without opening a
+        browser.
+      </p>
+      <a href="/grut/docs/git-status/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/git-info-prs.png" alt="GitHub pull requests panel in grüt" />
+    </div>
+  </section>
+
+  <!-- ═══════ Diff Review ═══════ -->
+  <section class="feature-row reverse" aria-labelledby="feat-diff">
+    <div class="feature-text">
+      <h2 id="feat-diff">Diff Review</h2>
+      <p>
+        Review changes hunk-by-hunk with an approve/reject workflow. Switch
+        between inline and side-by-side views, jump between hunks, and stage
+        exactly what you want.
+      </p>
+      <a href="/grut/docs/diff-review/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Diff viewer with syntax-highlighted changes" />
+    </div>
+  </section>
+
+  <!-- ═══════ Fuzzy Finder ═══════ -->
+  <section class="feature-row" aria-labelledby="feat-fuzzy">
+    <div class="feature-text">
+      <h2 id="feat-fuzzy">Fuzzy Finder</h2>
+      <p>
+        Press <kbd>/</kbd> and start typing to instantly search across your
+        entire project. Results update as you type, filtering out hidden
+        files automatically.
+      </p>
+      <a href="/grut/docs/fuzzy-finder/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/fuzzy-finder.png" alt="Fuzzy finder overlay with instant file search" />
+    </div>
+  </section>
+
+  <!-- ═══════ Themes ═══════ -->
+  <section class="feature-row" aria-labelledby="feat-themes">
+    <div class="feature-text">
+      <h2 id="feat-themes">Themes</h2>
+      <p>
+        Ship with four built-in themes — Default, Catppuccin, Tokyo Night,
+        and Gruvbox — or create your own with a simple TOML file.
+      </p>
+      <a href="/grut/docs/themes/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/settings.png" alt="Theme selector in the settings overlay" />
+    </div>
+  </section>
+
+  <!-- ═══════ Sessions ═══════ -->
+  <section class="feature-row reverse" aria-labelledby="feat-sessions">
+    <div class="feature-text">
+      <h2 id="feat-sessions">Sessions</h2>
+      <p>
+        grüt automatically saves your layout preset, focused panel, and
+        working directory. Relaunch and pick up exactly where you left off.
+      </p>
+      <a href="/grut/docs/sessions/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/hero-main.png" alt="grüt session restored with full layout" />
+    </div>
+  </section>
+
+</Landing>
+
+<style>
+  .features-hero {
+    text-align: center;
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-12);
+    max-width: var(--content-max);
+    margin: 0 auto;
+  }
+
+  .features-title {
+    font-family: var(--font-mono);
+    font-size: var(--text-3xl);
+    margin-bottom: var(--space-4);
+  }
+
+  .features-subtitle {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* ── Alternating feature rows ── */
+  .feature-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-10);
+    align-items: center;
+    max-width: var(--content-max);
+    margin: 0 auto var(--space-16);
+    padding-top: var(--space-8);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .feature-row:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .feature-row.reverse .feature-text { order: 2; }
+  .feature-row.reverse .feature-media { order: 1; }
+
+  .feature-text h2 {
+    margin-top: 0;
+    font-size: var(--text-2xl);
+  }
+
+  .feature-text p {
+    color: var(--color-text-muted);
+    line-height: var(--leading-normal);
+  }
+
+  .feature-text a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  @media (max-width: 768px) {
+    .feature-row {
+      grid-template-columns: 1fr;
+      gap: var(--space-6);
+    }
+
+    .feature-row.reverse .feature-text { order: 1; }
+    .feature-row.reverse .feature-media { order: 2; }
+  }
+</style>

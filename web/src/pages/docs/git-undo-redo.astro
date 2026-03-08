@@ -1,0 +1,94 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Undo & Redo" description="Undo and redo git operations with reflog integration and safety confirmations in grüt.">
+  <h1>Git Undo & Redo</h1>
+  <p class="lead">
+    grüt tracks every git operation you perform and provides undo/redo
+    capability — so you can reverse a stage, uncommit, or revert to any
+    previous state with confidence.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-log.png" alt="Git log showing commit history used for undo and redo operations" caption="Commit history — undo reverses the last operation" />
+
+  <h2>Quick Undo / Redo</h2>
+  <KeybindingTable bindings={[
+    { key: 'u', action: 'Undo the last git operation' },
+    { key: 'Ctrl+r', action: 'Redo the last undone operation' },
+  ]} />
+  <p>
+    grüt maintains an operation stack for the current session. Pressing
+    <kbd>u</kbd> reverses the most recent operation — for example, unstaging a
+    file you just staged, or uncommitting the last commit (keeping changes in
+    the working tree). Pressing <kbd>Ctrl+r</kbd> re-applies the undone
+    operation.
+  </p>
+
+  <h2>Supported Undo Operations</h2>
+  <p>
+    The following operations can be undone:
+  </p>
+  <ul>
+    <li><strong>Stage</strong> → unstages the file (<code>git reset HEAD &lt;file&gt;</code>)</li>
+    <li><strong>Unstage</strong> → re-stages the file</li>
+    <li><strong>Commit</strong> → soft-resets to uncommit (<code>git reset --soft HEAD~1</code>), keeping all changes staged</li>
+    <li><strong>Discard changes</strong> → restores from reflog if possible</li>
+    <li><strong>Branch checkout</strong> → switches back to the previous branch</li>
+    <li><strong>Branch delete</strong> → recreates the branch at its last known commit</li>
+    <li><strong>Stash</strong> → pops the stash back</li>
+  </ul>
+
+  <h2>Reflog Integration</h2>
+  <p>
+    For operations that go beyond the current session, grüt integrates with
+    <code>git reflog</code>. The reflog panel shows a chronological list of
+    every HEAD movement in your repository — commits, checkouts, rebases,
+    resets, and more.
+  </p>
+  <p>
+    Open the reflog browser to see recent operations and jump to any
+    previous state. Each entry shows the operation type, short description,
+    and the commit hash at that point.
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'j / k', action: 'Navigate reflog entries' },
+    { key: 'Enter', action: 'View details for the selected entry' },
+    { key: 'Ctrl+r', action: 'Reset to the selected reflog entry' },
+  ]} />
+
+  <h2>Safety Confirmations</h2>
+  <p>
+    Destructive operations always require explicit confirmation. When you
+    attempt an action that could result in data loss — such as discarding
+    unstaged changes, hard-resetting, or force-deleting a branch — grüt
+    displays a confirmation dialog:
+  </p>
+  <ul>
+    <li>The dialog describes exactly what will happen</li>
+    <li>Press <kbd>y</kbd> to confirm or <kbd>n</kbd> to cancel</li>
+    <li>Some operations show the number of affected files or commits</li>
+  </ul>
+  <p>
+    This safety net ensures you never accidentally lose work. Combined with
+    reflog integration, grüt gives you a reliable path to recover from
+    any mistake.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/git-status/">Git Status & Staging</a> — stage and unstage changes</li>
+    <li><a href="/grut/docs/git-stash/">Git Stash</a> — stash and restore changes</li>
+    <li><a href="/grut/docs/git-log/">Git Log</a> — browse commit history</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

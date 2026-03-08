@@ -1,0 +1,48 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="GitHub Pull Requests" description="Review pull requests in grüt with triple-panel sync — PR files, commits, and description update simultaneously.">
+  <h1>GitHub Pull Requests</h1>
+  <p class="lead">
+    The Pull Requests tab gives you a full PR review experience inside the
+    terminal. Select a PR and three panels reconfigure simultaneously to show
+    PR files, PR commits, and the PR description.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Triple-panel sync</strong> — Selecting a PR updates the file tree to show PR-changed files, the commit list to show PR commits, and the preview to render the PR description</li>
+    <li><strong>Diff review</strong> — Navigate PR files and view diffs with syntax highlighting</li>
+    <li><strong>Status checks</strong> — See CI/CD status alongside each PR</li>
+    <li><strong>Quick actions</strong> — Checkout PR branch, open in browser, or copy URL</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Select PR and activate triple-panel sync' },
+    { key: 'o', action: 'Open PR in browser' },
+    { key: 'y', action: 'Copy PR URL to clipboard' },
+    { key: 'c', action: 'Checkout PR branch locally' },
+    { key: 'f', action: 'Filter pull requests' },
+    { key: 'R', action: 'Refresh PR list' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    PR selection is the most dramatic example of grüt's reactive panels. When
+    you select a pull request, the file tree narrows to only files changed in
+    that PR, the commit panel filters to PR commits, and the preview panel
+    renders the PR description body. Press <kbd>Escape</kbd> to exit PR mode
+    and restore all panels to their default state.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

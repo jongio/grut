@@ -1,0 +1,45 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="GitHub Workflows" description="Browse and dispatch GitHub Actions workflows from the grüt terminal UI.">
+  <h1>GitHub Workflows</h1>
+  <p class="lead">
+    The Workflows tab lists all configured GitHub Actions workflows for your
+    repository and lets you trigger workflow dispatch events with custom
+    parameters.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Workflow list</strong> — All workflows defined in <code>.github/workflows/</code></li>
+    <li><strong>Dispatch trigger</strong> — Trigger <code>workflow_dispatch</code> workflows with input parameters directly from the TUI</li>
+    <li><strong>Run history</strong> — See recent runs for each workflow</li>
+    <li><strong>Preview integration</strong> — Select a workflow to see its definition and recent run status</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'View workflow details and recent runs' },
+    { key: 'D', action: 'Dispatch workflow (if workflow_dispatch enabled)' },
+    { key: 'o', action: 'Open workflow in browser' },
+    { key: 'y', action: 'Copy workflow URL to clipboard' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    When you select a workflow, the preview panel shows the workflow YAML
+    definition alongside its recent run history. Dispatching a workflow
+    opens an input form where you can provide parameter values before
+    triggering the run.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

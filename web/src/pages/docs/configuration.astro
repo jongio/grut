@@ -1,0 +1,180 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Configuration Reference" description="Full TOML configuration reference for grüt — keybindings, themes, git, AI, and more.">
+  <h1>Configuration Reference</h1>
+  <p class="lead">
+    grüt is configured via a TOML file. Every option has a sensible default —
+    you only need to set the values you want to change.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/settings.png" alt="Settings overlay showing configuration options" caption="Settings overlay for in-app configuration (press S to open)" />
+
+  <h2>Config File Location</h2>
+  <p>grüt looks for its config file at:</p>
+  <ul>
+    <li><strong>Linux / macOS:</strong> <code>~/.config/grut/config.toml</code></li>
+    <li><strong>Windows:</strong> <code>%APPDATA%\grut\config.toml</code></li>
+  </ul>
+  <p>
+    If the file does not exist, grüt uses built-in defaults. You can create the
+    file manually or run <code>grut --init-config</code> to generate one with
+    all defaults.
+  </p>
+
+  <h2>[general]</h2>
+  <p>Top-level application settings.</p>
+  <pre><code>[general]
+keybinding_scheme = "default"   # "default" | "vim" | "classic"
+default_layout    = "explorer"  # "explorer" | "git" | "review" | "agent" | "full"
+auto_save_session = true        # restore last session on startup
+show_first_run_help = true      # show help overlay on first launch</code></pre>
+
+  <h2>[file_tree]</h2>
+  <p>Controls the file explorer panel.</p>
+  <pre><code>[file_tree]
+show_hidden           = false     # show dotfiles and hidden directories
+icon_mode             = "auto"    # "nerd" | "ascii" | "auto" (detect Nerd Font)
+sort_directories_first = true     # directories before files in the tree
+git_status_markers    = true      # show ●/✗/? markers next to files
+max_depth             = 0         # max tree depth (0 = unlimited)</code></pre>
+
+  <h2>[preview]</h2>
+  <p>Controls the file preview panel.</p>
+  <pre><code>[preview]
+enabled             = true
+width               = 50          # percentage of available width (20–80)
+syntax_highlighting = true
+max_file_size       = "1MB"       # skip preview for files larger than this
+line_numbers        = true
+word_wrap           = false</code></pre>
+
+  <h2>[git]</h2>
+  <p>Git integration settings.</p>
+  <pre><code>[git]
+refresh_method       = "fsnotify"   # "fsnotify" | "poll"
+default_branch       = "main"       # fallback when origin/HEAD is unavailable
+worktree_first       = false        # prefer worktrees over branches
+worktree_merge_method = "merge"     # "merge" | "rebase" | "squash"
+auto_fetch_interval  = "5m"         # auto-fetch period (0 = disabled)
+show_commit_graph    = true         # show graph lines in log view
+max_log_entries      = 500          # max commits loaded in log view
+sign_commits         = false        # GPG/SSH sign commits</code></pre>
+
+  <h2>[terminal]</h2>
+  <p>Embedded terminal settings.</p>
+  <pre><code>[terminal]
+shell       = ""          # shell binary (empty = system default)
+scrollback  = 10000       # scrollback buffer lines
+render_fps  = 30          # terminal render frames per second
+prefix_key  = "ctrl+a"   # prefix key for terminal commands</code></pre>
+
+  <h2>[ai]</h2>
+  <p>AI integration and context builder settings.</p>
+  <pre><code>[ai]
+auto_install_deps = true          # auto-install AI tool dependencies
+context_mode      = "selection"   # "selection" | "git-diff" | "full-tree"
+token_model       = "gpt-4"      # model used for token counting</code></pre>
+
+  <h2>[theme]</h2>
+  <p>Theme selection. Use a built-in name or a path to a custom theme file.</p>
+  <pre><code>[theme]
+name = "default"   # "default" | "catppuccin" | "tokyonight" | "gruvbox"
+                   # or an absolute/relative path to a .toml theme file</code></pre>
+
+  <h2>[session]</h2>
+  <p>Session persistence settings.</p>
+  <pre><code>[session]
+enabled  = true
+max_age  = "30d"   # auto-delete sessions older than this</code></pre>
+
+  <h2>[bookmarks]</h2>
+  <p>Pinned directories for quick navigation.</p>
+  <pre><code>[bookmarks]
+paths = [
+  "~/projects",
+  "~/dotfiles",
+]
+show_in_sidebar = true   # display bookmarks in the file tree sidebar</code></pre>
+
+  <h2>[logging]</h2>
+  <p>Diagnostic logging.</p>
+  <pre><code>[logging]
+level = "warn"    # "debug" | "info" | "warn" | "error"
+file  = ""        # log file path (empty = stderr)</code></pre>
+
+  <h2>Full Example</h2>
+  <p>A complete config with every section:</p>
+  <pre><code># grüt configuration
+# ~/.config/grut/config.toml
+
+[general]
+keybinding_scheme   = "vim"
+default_layout      = "git"
+auto_save_session   = true
+show_first_run_help = false
+
+[file_tree]
+show_hidden            = true
+icon_mode              = "nerd"
+sort_directories_first = true
+git_status_markers     = true
+max_depth              = 0
+
+[preview]
+enabled             = true
+width               = 50
+syntax_highlighting = true
+max_file_size       = "2MB"
+line_numbers        = true
+word_wrap           = false
+
+[git]
+refresh_method        = "fsnotify"
+default_branch        = "main"
+worktree_first        = false
+worktree_merge_method = "merge"
+auto_fetch_interval   = "5m"
+show_commit_graph     = true
+max_log_entries       = 1000
+sign_commits          = true
+
+[terminal]
+shell      = "/bin/zsh"
+scrollback = 10000
+render_fps = 30
+prefix_key = "ctrl+a"
+
+[ai]
+auto_install_deps = true
+context_mode      = "selection"
+token_model       = "gpt-4"
+
+[theme]
+name = "catppuccin"
+
+[session]
+enabled = true
+max_age = "30d"
+
+[bookmarks]
+paths = [
+  "~/projects",
+  "~/dotfiles",
+]
+show_in_sidebar = true
+
+[logging]
+level = "warn"
+file  = ""</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

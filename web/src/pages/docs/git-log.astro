@@ -1,0 +1,102 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Log" description="Browse commit history with search, commit graph visualization, and quick hash copying in grüt.">
+  <h1>Git Log</h1>
+  <p class="lead">
+    The commit log panel shows the full history of your repository — commit
+    hashes, authors, dates, and messages — with search, graph visualization,
+    and quick-copy support.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-log.png" alt="Git log panel showing commit history with hashes, authors, and messages" caption="Commit log with graph visualization" />
+
+  <h2>Opening the Log</h2>
+  <p>
+    The git log panel is visible in the <strong>Commits</strong> panel (focus
+    with <kbd>4</kbd>). Each entry displays the abbreviated commit hash, author
+    name, relative date, and the first line of the commit message.
+  </p>
+
+  <h2>Navigation</h2>
+  <p>
+    Navigate the log with standard vim-style keys:
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'j / ↓', action: 'Move cursor down' },
+    { key: 'k / ↑', action: 'Move cursor up' },
+    { key: 'g', action: 'Jump to newest commit' },
+    { key: 'G', action: 'Jump to oldest loaded commit' },
+    { key: 'd', action: 'Page down' },
+    { key: 'u', action: 'Page up' },
+  ]} />
+
+  <h2>Actions</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'View full commit details and diff' },
+    { key: 'y', action: 'Copy commit hash to clipboard' },
+    { key: '/', action: 'Search the log' },
+  ]} />
+  <p>
+    Pressing <kbd>Enter</kbd> on a commit opens the commit detail view, showing
+    the full message, file list, and diff for every changed file. Press
+    <kbd>Esc</kbd> to return to the log.
+  </p>
+
+  <h2>Search</h2>
+  <p>
+    Press <kbd>/</kbd> to open the search prompt. Type a query to filter commits
+    by message text, author name, or commit hash. Matching commits are
+    highlighted and non-matching entries are hidden. Press <kbd>Esc</kbd> to
+    clear the filter and restore the full log.
+  </p>
+  <p>
+    Search is case-insensitive and matches partial strings. For example, typing
+    <code>fix</code> matches commit messages containing "fix", "hotfix",
+    "bugfix", etc.
+  </p>
+
+  <h2>Commit Graph</h2>
+  <p>
+    grüt can render an ASCII commit graph alongside the log, visualizing branch
+    and merge topology. Enable it in your config:
+  </p>
+  <pre><code>[log]
+show_commit_graph = true</code></pre>
+  <p>
+    The graph draws branch lines, merge points, and fork points using box-drawing
+    characters. Colors distinguish different branches when your terminal supports
+    them.
+  </p>
+
+  <h2>Configuration</h2>
+  <p>
+    The log panel respects the following configuration options:
+  </p>
+  <pre><code>[log]
+max_log_entries = 500       # Maximum commits to load (default: 500)
+show_commit_graph = false   # Show ASCII branch graph (default: false)</code></pre>
+  <p>
+    Setting <code>max_log_entries</code> to a lower value improves startup time
+    in repositories with very long histories. grüt loads commits lazily — the
+    limit controls the upper bound, not the initial fetch size.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/git-diff/">Git Diff</a> — inspect changes in detail</li>
+    <li><a href="/grut/docs/diff-review/">Diff Review</a> — hunk-level approve/reject workflow</li>
+    <li><a href="/grut/docs/git-branches/">Git Branches</a> — branch management</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

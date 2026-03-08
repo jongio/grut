@@ -1,0 +1,129 @@
+{
+  "$schema": "docs/keybindings.schema.json",
+  "version": "1.0",
+  "description": "Single source of truth for all grut keyboard shortcuts. Referenced by help overlay, docs site, and README.",
+  "global": {
+    "description": "Always work regardless of focused panel",
+    "bindings": [
+      { "key": "1", "action": "Focus File Tree panel" },
+      { "key": "2", "action": "Focus Git Info panel" },
+      { "key": "3", "action": "Focus GitHub panel" },
+      { "key": "4", "action": "Focus Commits panel" },
+      { "key": "5", "action": "Focus Preview panel" },
+      { "key": "Tab", "action": "Focus next panel" },
+      { "key": "Shift+Tab", "action": "Focus previous panel" },
+      { "key": "R", "action": "Refresh all data + preview" },
+      { "key": "P", "action": "Push" },
+      { "key": "F", "action": "Fetch all remotes" },
+      { "key": "?", "action": "Help overlay" },
+      { "key": ",", "action": "Settings" },
+      { "key": "/", "action": "Fuzzy finder" },
+      { "key": ":", "action": "Command palette" },
+      { "key": "~", "action": "Change directory" },
+      { "key": "ctrl+c", "action": "Quit" },
+      { "key": "ctrl+space", "action": "Toggle AI chat" },
+      { "key": "ctrl+z", "action": "Undo last git action" },
+      { "key": "ctrl+y", "action": "Redo" }
+    ]
+  },
+  "navigation": {
+    "description": "Consistent in every focused panel",
+    "bindings": [
+      { "key": "j", "altKey": "down", "action": "Cursor down" },
+      { "key": "k", "altKey": "up", "action": "Cursor up" },
+      { "key": "g", "action": "Jump to top" },
+      { "key": "G", "action": "Jump to bottom" },
+      { "key": "d", "action": "Page down" },
+      { "key": "u", "action": "Page up" },
+      { "key": "Enter", "action": "Select / open / expand" },
+      { "key": "Esc", "action": "Back / close submode" }
+    ]
+  },
+  "panels": {
+    "filetree": {
+      "description": "File Tree panel (panel 1)",
+      "focusKey": "1",
+      "bindings": [
+        { "key": "h", "altKey": "left", "action": "Collapse directory" },
+        { "key": "l", "altKey": "right", "action": "Expand directory" },
+        { "key": "Enter", "action": "Expand dir / select file" },
+        { "key": "o", "action": "Open file in external editor" },
+        { "key": ".", "action": "Toggle hidden files" },
+        { "key": "g", "action": "Toggle git filter (changed files only)" },
+        { "key": "v", "action": "Toggle tree/list view" },
+        { "key": "n", "action": "New file" },
+        { "key": "N", "action": "New directory" },
+        { "key": "x", "action": "Delete file/directory" },
+        { "key": "e", "altKey": "F2", "action": "Rename" },
+        { "key": "y", "action": "Copy path to clipboard" },
+        { "key": "c", "action": "Copy file" },
+        { "key": "p", "action": "Paste file" },
+        { "key": "s", "action": "Stage file (in git filter mode)" },
+        { "key": "space", "action": "Toggle stage/unstage" },
+        { "key": "J", "action": "Scroll preview down" },
+        { "key": "K", "action": "Scroll preview up" }
+      ]
+    },
+    "gitinfo": {
+      "description": "Git Info panel (panel 2)",
+      "focusKey": "2",
+      "tabs": [
+        { "key": "b", "tab": "Branches" },
+        { "key": "w", "tab": "Worktrees" },
+        { "key": "r", "tab": "Remotes" },
+        { "key": "s", "tab": "Stash" },
+        { "key": "t", "tab": "Tags" },
+        { "key": "l", "tab": "Reflog" }
+      ],
+      "bindings": [
+        { "key": "Enter", "action": "Checkout / apply" },
+        { "key": "n", "action": "Create new item" },
+        { "key": "x", "action": "Delete selected" },
+        { "key": "e", "altKey": "F2", "action": "Rename" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy to clipboard" },
+        { "key": "f", "action": "Fetch / filter" }
+      ]
+    },
+    "github": {
+      "description": "GitHub panel (panel 3)",
+      "focusKey": "3",
+      "tabs": [
+        { "key": "b", "tab": "Branches" },
+        { "key": "t", "tab": "Tags" },
+        { "key": "i", "tab": "Issues" },
+        { "key": "p", "tab": "Pull Requests" },
+        { "key": "a", "tab": "Actions" },
+        { "key": "w", "tab": "Workflows" },
+        { "key": "l", "tab": "Releases" }
+      ],
+      "bindings": [
+        { "key": "Enter", "action": "Select (show in preview)" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy to clipboard" },
+        { "key": "r", "action": "Rerun (Actions tab only)" },
+        { "key": "x", "action": "Cancel (Actions tab only)" },
+        { "key": "D", "action": "Dispatch workflow (Workflows tab only)" }
+      ]
+    },
+    "commits": {
+      "description": "Commits panel (panel 4)",
+      "focusKey": "4",
+      "bindings": [
+        { "key": "Enter", "action": "View commit detail" },
+        { "key": "Esc", "action": "Back to list" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy SHA" },
+        { "key": "A", "action": "Amend last commit" },
+        { "key": "r", "action": "Reword last commit" },
+        { "key": "/", "action": "Search commits" }
+      ]
+    },
+    "preview": {
+      "description": "Preview panel (panel 5)",
+      "focusKey": "5",
+      "bindings": [],
+      "note": "Navigation keys (j/k/g/G/d/u) scroll content. No panel-specific actions."
+    }
+  }
+}

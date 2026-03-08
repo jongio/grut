@@ -1,0 +1,71 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import InstallBlock from '../../components/InstallBlock.astro';
+---
+
+<Docs title="Installation" description="Install grüt on Linux, macOS, or Windows.">
+  <h1>Installation</h1>
+  <p class="lead">
+    grüt can be installed with a single command on Linux, macOS, and Windows —
+    or built from source with Go.
+  </p>
+
+  <InstallBlock tabs={[
+    { label: 'Windows', id: 'windows', code: 'irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex' },
+    { label: 'Linux / macOS', id: 'unix', code: 'curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | bash' },
+    { label: 'Go', id: 'go', code: 'go install github.com/jongio/grut@latest' },
+  ]} />
+
+  <h2>Pin a Specific Version</h2>
+  <p>
+    Set the <code>VERSION</code> environment variable to install a specific release:
+  </p>
+  <pre><code>VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | bash</code></pre>
+  <pre><code>$env:VERSION = "v0.1.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex</code></pre>
+
+  <h2>Binary Download</h2>
+  <p>
+    Prebuilt binaries for Linux, macOS, and Windows are available on the
+    <a href="https://github.com/jongio/grut/releases">GitHub Releases</a> page.
+    Download the archive for your OS and architecture, extract it, and move the
+    binary to a directory on your <code>PATH</code>.
+  </p>
+  <ol>
+    <li>Go to <a href="https://github.com/jongio/grut/releases">github.com/jongio/grut/releases</a></li>
+    <li>Download the archive for your platform (e.g. <code>grut_linux_amd64.tar.gz</code>)</li>
+    <li>Extract: <pre><code>tar xzf grut_linux_amd64.tar.gz</code></pre></li>
+    <li>Move the binary: <pre><code>sudo mv grut /usr/local/bin/</code></pre></li>
+  </ol>
+
+  <h2>System Requirements</h2>
+  <ul>
+    <li><strong>Go 1.26+</strong> — required only if building from source</li>
+    <li><strong>Terminal</strong> — any modern terminal with 256-color support (iTerm2, Windows Terminal, Alacritty, Ghostty, Kitty, etc.)</li>
+    <li><strong>Nerd Font</strong> — recommended for file icons. Without one, grüt falls back to ASCII icons. Popular choices: JetBrainsMono Nerd Font, 0xProto Nerd Font, FiraCode Nerd Font.</li>
+    <li><strong>Git</strong> — grüt shells out to git for all operations, so a working <code>git</code> on your <code>PATH</code> is required.</li>
+  </ul>
+
+  <h2>Verify Installation</h2>
+  <p>After installing, verify grüt is available:</p>
+  <pre><code>grut --version</code></pre>
+  <p>You should see the installed version printed to the terminal.</p>
+
+  <h2>Updating</h2>
+  <p>
+    grüt includes a built-in self-update command that downloads the latest release
+    from GitHub, verifies the SHA-256 checksum, and replaces the running binary:
+  </p>
+  <pre><code>grut update</code></pre>
+  <p>
+    A background update check also runs automatically on every launch. If a newer
+    version is available, grüt will notify you when the TUI exits.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

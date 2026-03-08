@@ -1,0 +1,76 @@
+# ── Build artifacts ──────────────────────────────────────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+
+# ── Test / coverage ─────────────────────────────────────────
+*.out
+coverage.html
+
+# ── Go ──────────────────────────────────────────────────────
+vendor/
+
+# ── Node.js ─────────────────────────────────────────────────
+node_modules/
+
+# ── OS generated ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor / IDE ────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ── Config (user-specific) ──────────────────────────────────
+*.local.toml
+
+# ── Claude / Copilot agent state ─────────────────────────────
+.claude/
+
+# ── Bundled fonts (use system-installed nerd fonts instead) ──
+assets/fonts/
+
+# ── Project-specific ────────────────────────────────────────
+.copilot/
+
+# ── Generated screenshots ───────────────────────────────────
+# web/public/screenshots/ — committed so CI can deploy the site
+
+# ── Ad-hoc analysis artifacts ───────────────────────────────
+SECURITY_ANALYSIS.md
+TAGS_ARCHITECTURE_ANALYSIS.txt
+
+# Coverage artifacts (files and directories)
+cov_*
+*.func.txt
+/cov/
+/cover/
+/coverage
+/coverage/
+/cover_config/
+/mq_coverage/
+/mq_middleware_cov/
+/mq_mw/
+/phase5cov/
+/phase6cov/
+/chat_cover/
+
+# Package lock files (generated)
+cmd/screenshots/package-lock.json
+
+# Archived docs
+docs/archive/
+
+# Backup files
+*.bak
+
+# Scratch files
+test.txt

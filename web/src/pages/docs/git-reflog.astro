@@ -1,0 +1,46 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="Git Reflog" description="Browse the git reflog in grüt to recover lost commits and undo operations.">
+  <h1>Git Reflog</h1>
+  <p class="lead">
+    The Reflog tab shows your local history of HEAD movements — every checkout,
+    commit, rebase, and reset — so you can recover lost commits and undo
+    operations that went wrong.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Full history</strong> — Every HEAD update including commits, checkouts, rebases, merges, and resets</li>
+    <li><strong>Commit recovery</strong> — Jump to any previous state to recover lost work</li>
+    <li><strong>Diff preview</strong> — Select a reflog entry to see what changed at that point</li>
+    <li><strong>Timestamps</strong> — Each entry shows when the operation occurred</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'View reflog entry details in preview' },
+    { key: 'c', action: 'Checkout the selected reflog entry' },
+    { key: 'b', action: 'Create a new branch from selected entry' },
+    { key: 'y', action: 'Copy commit SHA to clipboard' },
+    { key: 'R', action: 'Refresh reflog' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    When you select a reflog entry, the preview panel shows the commit details
+    and diff for that point in history. This makes the reflog a powerful
+    recovery tool — you can visually inspect what the repo looked like at any
+    previous state before deciding to checkout or branch from it.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

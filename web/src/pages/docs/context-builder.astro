@@ -1,0 +1,96 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="Context Builder" description="Select files and count tokens for AI context in grüt — build structured file sets for LLM prompts.">
+  <h1>Context Builder</h1>
+  <p class="lead">
+    The context builder lets you select files from your repository,
+    count their tokens, and export a structured context document for use
+    with AI tools and LLM prompts.
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    When working with AI assistants you often need to provide repository
+    context — relevant source files, configuration, and documentation. The
+    context builder gives you a dedicated panel to curate that context:
+    select files, see per-file and total token counts, and export
+    everything as structured markdown.
+  </p>
+
+  <h2>Selecting Files</h2>
+  <p>
+    Navigate the file tree and add files to the context set. The panel
+    shows each selected file with its path and estimated token count. You
+    can reorder, add, or remove files at any time.
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'a', action: 'Add selected file to context' },
+    { key: 'd', action: 'Remove selected file from context' },
+    { key: 'Enter', action: 'Preview file contents' },
+    { key: 'y', action: 'Copy context to clipboard' },
+    { key: 'Esc', action: 'Close context builder' },
+  ]} />
+
+  <h2>Token Counting</h2>
+  <p>
+    Each file's token count is estimated using a word-based heuristic with
+    a 1.3× multiplier to approximate subword tokenization. The total token
+    count is displayed at the top of the panel so you can stay within your
+    model's context window.
+  </p>
+  <p>
+    Token limits are configurable — set a maximum token budget and grüt
+    warns you when the context exceeds it.
+  </p>
+
+  <h2>Export Format</h2>
+  <p>
+    When you copy or export the context, grüt produces structured markdown
+    with a summary header and language-tagged code blocks:
+  </p>
+  <pre><code># Context (3 files, 850 tokens)
+
+## src/main.go
+```go
+package main
+// ...
+```
+
+## internal/config/config.go
+```go
+package config
+// ...
+```</code></pre>
+
+  <h2>Security</h2>
+  <p>
+    File paths are validated against the repository root to prevent
+    directory traversal. Only files within the current repository can be
+    added to the context set.
+  </p>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[ai]
+max_context_files = 20    # Maximum files in context set
+max_context_tokens = 8000 # Maximum token budget
+context_mode = "manual"   # Context selection mode: manual | smart
+token_model = "gpt-4"     # Tokenizer model for estimation</code></pre>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="/grut/docs/ai-chat/">AI Chat</a> — interactive AI chat panel</li>
+    <li><a href="/grut/docs/ai-integration/">AI Integration</a> — AI-powered git operations</li>
+    <li><a href="/grut/docs/file-explorer/">File Explorer</a> — tree-view file navigation</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

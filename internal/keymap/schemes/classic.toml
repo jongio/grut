@@ -1,0 +1,372 @@
+# Classic keybinding scheme for grut.
+# Keys are adjusted to match classic TUI conventions.
+
+# Global bindings (always active)
+[[bindings]]
+key = "ctrl+c"
+action = "quit"
+mode = "global"
+description = "Quit grut"
+
+[[bindings]]
+key = "+"
+action = "resize_right"
+mode = "global"
+description = "Grow focused panel"
+
+[[bindings]]
+key = "-"
+action = "resize_left"
+mode = "global"
+description = "Shrink focused panel"
+
+[[bindings]]
+key = "ctrl+b z"
+action = "zoom_toggle"
+mode = "global"
+description = "Toggle zoom on focused panel"
+
+[[bindings]]
+key = "ctrl+space"
+action = "chat_focus"
+mode = "global"
+description = "Toggle AI chat focus"
+
+[[bindings]]
+key = "?"
+action = "help"
+mode = "global"
+description = "Show help overlay"
+
+[[bindings]]
+key = "["
+action = "focus_prev"
+mode = "global"
+description = "Previous panel (classic style)"
+
+[[bindings]]
+key = "]"
+action = "focus_next"
+mode = "global"
+description = "Next panel (classic style)"
+
+# Panel-specific number keys for direct focus
+[[bindings]]
+key = "1"
+action = "focus_panel_1"
+mode = "global"
+description = "Focus File Tree panel"
+
+[[bindings]]
+key = "2"
+action = "focus_panel_2"
+mode = "global"
+description = "Focus Git Info panel"
+
+[[bindings]]
+key = "3"
+action = "focus_panel_3"
+mode = "global"
+description = "Focus GitHub panel"
+
+[[bindings]]
+key = "4"
+action = "focus_panel_4"
+mode = "global"
+description = "Focus Commits panel"
+
+[[bindings]]
+key = "5"
+action = "focus_panel_5"
+mode = "global"
+description = "Focus Preview panel"
+
+# Panel mode bindings — classic navigation
+[[bindings]]
+key = "j"
+action = "cursor_down"
+mode = "panel"
+description = "Move cursor down"
+
+[[bindings]]
+key = "k"
+action = "cursor_up"
+mode = "panel"
+description = "Move cursor up"
+
+[[bindings]]
+key = "down"
+action = "cursor_down"
+mode = "panel"
+description = "Move cursor down (arrow)"
+
+[[bindings]]
+key = "up"
+action = "cursor_up"
+mode = "panel"
+description = "Move cursor up (arrow)"
+
+[[bindings]]
+key = "enter"
+action = "select"
+mode = "panel"
+description = "Select/open item"
+
+[[bindings]]
+key = "q"
+action = "quit"
+mode = "panel"
+description = "Quit"
+
+[[bindings]]
+key = ":"
+action = "command_palette"
+mode = "panel"
+description = "Open command palette"
+
+[[bindings]]
+key = "~"
+action = "change_directory"
+mode = "panel"
+description = "Change directory"
+
+[[bindings]]
+key = "/"
+action = "search"
+mode = "panel"
+description = "Start search"
+
+# File tree specific — classic scheme uses space to stage
+[[bindings]]
+key = "h"
+action = "collapse"
+mode = "panel"
+context = "filetree"
+description = "Collapse directory"
+
+[[bindings]]
+key = "l"
+action = "expand"
+mode = "panel"
+context = "filetree"
+description = "Expand directory"
+
+[[bindings]]
+key = "."
+action = "toggle_hidden"
+mode = "panel"
+context = "filetree"
+description = "Toggle hidden files"
+
+# Git status specific — classic conventions
+[[bindings]]
+key = " "
+action = "stage"
+mode = "panel"
+context = "gitstatus"
+description = "Stage/unstage file"
+
+[[bindings]]
+key = "a"
+action = "stage_all"
+mode = "panel"
+context = "gitstatus"
+description = "Stage all files"
+
+[[bindings]]
+key = "d"
+action = "discard"
+mode = "panel"
+context = "gitstatus"
+description = "Discard changes"
+
+[[bindings]]
+key = "F"
+action = "fetch"
+mode = "global"
+description = "Fetch all remotes"
+
+[[bindings]]
+key = "c"
+action = "commit"
+mode = "panel"
+context = "gitstatus"
+description = "Commit"
+
+[[bindings]]
+key = "p"
+action = "push"
+mode = "panel"
+context = "gitstatus"
+description = "Push"
+
+[[bindings]]
+key = "P"
+action = "pull"
+mode = "panel"
+context = "gitstatus"
+description = "Pull"
+
+# CRUD shortcuts — gitinfo panel
+[[bindings]]
+key = "n"
+action = "item_create"
+mode = "panel"
+context = "gitinfo"
+description = "Create new item (branch/remote/tag/worktree)"
+
+[[bindings]]
+key = "x"
+action = "item_delete"
+mode = "panel"
+context = "gitinfo"
+description = "Delete selected item"
+
+[[bindings]]
+key = "e"
+action = "item_edit"
+mode = "panel"
+context = "gitinfo"
+description = "Edit/rename selected item"
+
+[[bindings]]
+key = "F2"
+action = "item_edit"
+mode = "panel"
+context = "gitinfo"
+description = "Edit/rename selected item"
+
+[[bindings]]
+key = "o"
+action = "item_open"
+mode = "panel"
+context = "gitinfo"
+description = "Open in browser"
+
+[[bindings]]
+key = "y"
+action = "item_copy"
+mode = "panel"
+context = "gitinfo"
+description = "Copy identifier to clipboard"
+
+# CRUD shortcuts — branches panel
+[[bindings]]
+key = "n"
+action = "item_create"
+mode = "panel"
+context = "branches"
+description = "Create new branch"
+
+[[bindings]]
+key = "x"
+action = "item_delete"
+mode = "panel"
+context = "branches"
+description = "Delete branch"
+
+[[bindings]]
+key = "e"
+action = "item_edit"
+mode = "panel"
+context = "branches"
+description = "Rename branch"
+
+[[bindings]]
+key = "F2"
+action = "item_edit"
+mode = "panel"
+context = "branches"
+description = "Rename branch"
+
+[[bindings]]
+key = "o"
+action = "item_open"
+mode = "panel"
+context = "branches"
+description = "Open branch in browser"
+
+[[bindings]]
+key = "y"
+action = "item_copy"
+mode = "panel"
+context = "branches"
+description = "Copy branch name"
+
+# CRUD shortcuts — filetree panel
+[[bindings]]
+key = "n"
+action = "item_create"
+mode = "panel"
+context = "filetree"
+description = "Create new file or directory"
+
+[[bindings]]
+key = "x"
+action = "item_delete"
+mode = "panel"
+context = "filetree"
+description = "Delete file or directory"
+
+[[bindings]]
+key = "e"
+action = "item_edit"
+mode = "panel"
+context = "filetree"
+description = "Rename file or directory"
+
+[[bindings]]
+key = "F2"
+action = "item_edit"
+mode = "panel"
+context = "filetree"
+description = "Rename file or directory"
+
+[[bindings]]
+key = "o"
+action = "item_open"
+mode = "panel"
+context = "filetree"
+description = "Open file in editor"
+
+[[bindings]]
+key = "y"
+action = "item_copy"
+mode = "panel"
+context = "filetree"
+description = "Copy file path"
+
+# CRUD shortcuts — stash panel
+[[bindings]]
+key = "n"
+action = "item_create"
+mode = "panel"
+context = "stash"
+description = "Push new stash"
+
+[[bindings]]
+key = "x"
+action = "item_delete"
+mode = "panel"
+context = "stash"
+description = "Drop stash entry"
+
+[[bindings]]
+key = "y"
+action = "item_copy"
+mode = "panel"
+context = "stash"
+description = "Copy stash reference"
+
+# Input mode bindings
+[[bindings]]
+key = "escape"
+action = "exit_input"
+mode = "input"
+description = "Exit input mode"
+
+[[bindings]]
+key = "enter"
+action = "submit_input"
+mode = "input"
+description = "Submit input"

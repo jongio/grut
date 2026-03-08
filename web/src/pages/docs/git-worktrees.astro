@@ -1,0 +1,105 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const worktreeBindings = [
+  { key: 'n', action: 'Create new worktree — prompts for branch name and path' },
+  { key: 'x', action: 'Remove selected worktree' },
+  { key: 'Enter', action: 'Switch to selected worktree' },
+];
+---
+
+<Docs title="Git Worktrees" description="Worktree-first workflow in grüt — manage multiple working directories from a single TUI.">
+  <h1>Git Worktrees</h1>
+  <p class="lead">
+    grüt is <strong>worktree-first</strong> — designed from the ground up for developers who use
+    multiple working directories. Create, switch, and manage worktrees without leaving the TUI.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-worktrees.png" alt="Git worktrees panel listing active worktrees with branch names and paths" caption="Worktree management panel" />
+
+  <h2>What Are Worktrees?</h2>
+  <p>
+    Git worktrees let you check out multiple branches simultaneously in separate directories,
+    all backed by the same repository. Instead of stashing changes and switching branches, you
+    open a new worktree and work in parallel.
+  </p>
+  <p>
+    grüt makes worktrees a first-class citizen. The worktree panel shows every linked worktree,
+    and switching between them is instant.
+  </p>
+
+  <h2>Configuration</h2>
+  <p>
+    Enable worktree-first navigation in your <code>grut.toml</code>:
+  </p>
+  <pre><code>[git]
+worktree_first = true</code></pre>
+  <p>
+    With <code>worktree_first = true</code>, branch operations default to creating new worktrees
+    rather than checking out branches in the current directory. This keeps your working tree
+    clean and avoids interrupting in-progress work.
+  </p>
+
+  <h2>The Worktree Panel</h2>
+  <p>
+    The worktree panel lists all worktrees linked to the current repository. Each entry shows:
+  </p>
+  <ul>
+    <li><strong>Branch name</strong> — the branch checked out in that worktree</li>
+    <li><strong>Directory path</strong> — the filesystem location of the worktree</li>
+    <li><strong>Status</strong> — clean, modified, or conflict indicators</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={worktreeBindings} title="Worktree Panel" />
+
+  <h2>Creating a Worktree</h2>
+  <p>
+    Press <code>n</code> in the worktree panel. grüt prompts for:
+  </p>
+  <ol>
+    <li><strong>Branch name</strong> — an existing branch or a new branch to create.</li>
+    <li><strong>Directory path</strong> — where to place the worktree on disk.</li>
+  </ol>
+  <p>
+    After creation, grüt automatically navigates to the new worktree. The file tree, git status,
+    and terminal all update to reflect the new working directory.
+  </p>
+  <pre><code># Equivalent git command:
+git worktree add ../feature-auth feature/auth</code></pre>
+
+  <h2>Switching Worktrees</h2>
+  <p>
+    Press <code>Enter</code> on any worktree entry to switch to it. grüt reloads the entire
+    interface for the new worktree — file tree, status panel, commit log, and terminal all
+    reflect the switched context.
+  </p>
+
+  <h2>Independent Environments</h2>
+  <p>
+    Each worktree operates as a fully independent environment within grüt:
+  </p>
+  <ul>
+    <li><strong>File tree</strong> — shows only the files in that worktree's directory</li>
+    <li><strong>Git status</strong> — tracks changes specific to that worktree's branch</li>
+    <li><strong>Terminal</strong> — <code>cwd</code> is set to the worktree's directory</li>
+    <li><strong>Commit log</strong> — shows the history of the checked-out branch</li>
+  </ul>
+
+  <h2>Removing a Worktree</h2>
+  <p>
+    Press <code>x</code> to remove the selected worktree. grüt runs
+    <code>git worktree remove</code> and cleans up the directory. You cannot remove the main
+    worktree or a worktree with uncommitted changes — commit or stash first.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

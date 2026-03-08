@@ -1,0 +1,214 @@
+---
+interface SidebarSection {
+  title: string;
+  items: { label: string; href: string }[];
+}
+
+const sections: SidebarSection[] = [
+  {
+    title: 'Getting Started',
+    items: [
+      { label: 'Introduction', href: '/grut/docs/' },
+      { label: 'Installation', href: '/grut/docs/installation/' },
+      { label: 'Configuration', href: '/grut/docs/configuration/' },
+      { label: 'Keybindings', href: '/grut/docs/keybindings/' },
+      { label: 'CLI Reference', href: '/grut/docs/cli/' },
+    ],
+  },
+  {
+    title: 'Files',
+    items: [
+      { label: 'File Explorer', href: '/grut/docs/file-explorer/' },
+      { label: 'Fuzzy Finder', href: '/grut/docs/fuzzy-finder/' },
+      { label: 'Bookmarks', href: '/grut/docs/bookmarks/' },
+    ],
+  },
+  {
+    title: 'Git',
+    items: [
+      { label: 'Status & Staging', href: '/grut/docs/git-status/' },
+      { label: 'Branches', href: '/grut/docs/git-branches/' },
+      { label: 'Worktrees', href: '/grut/docs/git-worktrees/' },
+      { label: 'Remotes', href: '/grut/docs/git-remotes/' },
+      { label: 'Stash', href: '/grut/docs/git-stash/' },
+      { label: 'Tags', href: '/grut/docs/git-tags/' },
+      { label: 'Reflog', href: '/grut/docs/git-reflog/' },
+      { label: 'Log', href: '/grut/docs/git-log/' },
+      { label: 'Diff', href: '/grut/docs/git-diff/' },
+      { label: 'Merge', href: '/grut/docs/git-merge/' },
+      { label: 'Rebase', href: '/grut/docs/git-rebase/' },
+      { label: 'Conflicts', href: '/grut/docs/git-conflicts/' },
+      { label: 'Bisect', href: '/grut/docs/git-bisect/' },
+      { label: 'Blame', href: '/grut/docs/git-blame/' },
+      { label: 'Undo & Redo', href: '/grut/docs/git-undo-redo/' },
+    ],
+  },
+  {
+    title: 'GitHub',
+    items: [
+      { label: 'Issues', href: '/grut/docs/github-issues/' },
+      { label: 'Pull Requests', href: '/grut/docs/github-pull-requests/' },
+      { label: 'Actions', href: '/grut/docs/github-actions/' },
+      { label: 'Workflows', href: '/grut/docs/github-workflows/' },
+      { label: 'Releases', href: '/grut/docs/github-releases/' },
+    ],
+  },
+  {
+    title: 'Commits',
+    items: [
+      { label: 'Commits', href: '/grut/docs/git-commits/' },
+    ],
+  },
+  {
+    title: 'Preview',
+    items: [
+      { label: 'File Preview', href: '/grut/docs/file-preview/' },
+      { label: 'Diff Review', href: '/grut/docs/diff-review/' },
+    ],
+  },
+  {
+    title: 'AI',
+    items: [
+      { label: 'AI Chat', href: '/grut/docs/ai-chat/' },
+      { label: 'AI Integration', href: '/grut/docs/ai-integration/' },
+    ],
+  },
+  {
+    title: 'Interface',
+    items: [
+      { label: 'Themes', href: '/grut/docs/themes/' },
+      { label: 'Sessions', href: '/grut/docs/sessions/' },
+      { label: 'Layout & Panels', href: '/grut/docs/layout-panels/' },
+      { label: 'Terminal', href: '/grut/docs/terminal/' },
+    ],
+  },
+  {
+    title: 'Resources',
+    items: [
+      { label: 'Changelog', href: '/grut/docs/changelog/' },
+    ],
+  },
+];
+
+const currentPath = Astro.url.pathname;
+---
+
+<aside class="sidebar" aria-label="Documentation navigation" transition:persist>
+  <nav>
+    {sections.map((section) => (
+      <div class="sidebar-section">
+        <h3 class="sidebar-heading">{section.title}</h3>
+        <ul role="list">
+          {section.items.map((item) => (
+            <li>
+              <a
+                href={item.href}
+                class:list={['sidebar-link', { active: currentPath === item.href }]}
+                aria-current={currentPath === item.href ? 'page' : undefined}
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<script>
+  function updateSidebarActiveLink() {
+    const path = window.location.pathname;
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    sidebar.querySelectorAll('.sidebar-link').forEach((link) => {
+      const href = link.getAttribute('href');
+      if (href === path) {
+        link.classList.add('active');
+        link.setAttribute('aria-current', 'page');
+      } else {
+        link.classList.remove('active');
+        link.removeAttribute('aria-current');
+      }
+    });
+  }
+
+  function scrollActiveIntoView() {
+    const active = document.querySelector('.sidebar-link.active');
+    if (active) {
+      active.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }
+
+  // Initial page load: scroll active link into view if below the fold
+  scrollActiveIntoView();
+
+  // After client-side navigation: update active class on the persisted sidebar
+  document.addEventListener('astro:page-load', () => {
+    updateSidebarActiveLink();
+    scrollActiveIntoView();
+  });
+</script>
+
+<style>
+  .sidebar {
+    width: var(--sidebar-width);
+    position: fixed;
+    top: var(--header-height);
+    bottom: 0;
+    left: 0;
+    overflow-y: auto;
+    padding: var(--space-6) var(--space-4);
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+
+  @media (max-width: 768px) {
+    .sidebar {
+      display: none;
+    }
+  }
+
+  .sidebar-section {
+    margin-bottom: var(--space-6);
+  }
+
+  .sidebar-heading {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+    padding-left: var(--space-3);
+  }
+
+  ul {
+    list-style: none;
+  }
+
+  .sidebar-link {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius);
+    border-left: 2px solid transparent;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+  }
+
+  .sidebar-link:hover {
+    color: var(--color-text);
+    background: var(--color-surface);
+    text-decoration: none;
+  }
+
+  .sidebar-link.active {
+    color: var(--color-primary);
+    border-left-color: var(--color-primary);
+    background: var(--color-primary-glow);
+  }
+</style>

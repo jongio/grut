@@ -1,0 +1,81 @@
+---
+---
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-left">
+      <span class="footer-brand">grüt</span>
+      <span class="footer-sep">·</span>
+      <span class="footer-text">MIT License</span>
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/jongio/grut" target="_blank" rel="noopener noreferrer">
+        GitHub
+      </a>
+      <a href="https://github.com/jongio/grut/releases" target="_blank" rel="noopener noreferrer">
+        Releases
+      </a>
+      <a href="https://github.com/jongio/grut/issues" target="_blank" rel="noopener noreferrer">
+        Issues
+      </a>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-6) var(--space-6);
+    margin-top: var(--space-16);
+  }
+
+  .footer-inner {
+    max-width: calc(var(--content-max) + var(--sidebar-width) + var(--space-16));
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .footer-brand {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--color-primary);
+  }
+
+  .footer-sep {
+    color: var(--color-text-faint);
+  }
+
+  .footer-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  .footer-right {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .footer-right a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .footer-right a:hover {
+    color: var(--color-text);
+  }
+</style>

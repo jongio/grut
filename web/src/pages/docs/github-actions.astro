@@ -1,0 +1,45 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="GitHub Actions" description="Monitor GitHub Actions workflow runs from the grüt terminal UI.">
+  <h1>GitHub Actions</h1>
+  <p class="lead">
+    The Actions tab shows recent workflow runs for your repository — see
+    status, duration, and results without leaving the terminal.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Run history</strong> — Recent workflow runs with status indicators (success, failure, in-progress)</li>
+    <li><strong>Job details</strong> — Expand a run to see individual job statuses</li>
+    <li><strong>Log preview</strong> — Select a run and the preview panel shows job logs</li>
+    <li><strong>Quick navigation</strong> — Jump to the run on GitHub for full log output</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Expand run to show job details' },
+    { key: 'o', action: 'Open run in browser' },
+    { key: 'y', action: 'Copy run URL to clipboard' },
+    { key: 'r', action: 'Rerun action' },
+    { key: 'x', action: 'Cancel action' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    Selecting an action run updates the preview panel with run metadata and log
+    output. Status icons use color-coded indicators — green for success, red
+    for failure, and amber for in-progress — so you can scan results at a
+    glance.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

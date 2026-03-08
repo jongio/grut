@@ -1,0 +1,102 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const stashBindings = [
+  { key: 'n / s', action: 'Push new stash — prompts for a message' },
+  { key: 'a / Enter', action: 'Apply selected stash (keep stash in list)' },
+  { key: 'p', action: 'Pop selected stash (apply and remove from list)' },
+  { key: 'x', action: 'Drop selected stash (delete without applying)' },
+  { key: 'D', action: 'Drop all stash entries (with confirmation)' },
+  { key: 'v', action: 'Preview stash diff' },
+  { key: 'y', action: 'Copy stash reference to clipboard' },
+];
+---
+
+<Docs title="Git Stash" description="Stash management in grüt — save, apply, pop, and drop stashes from the TUI.">
+  <h1>Git Stash</h1>
+  <p class="lead">
+    Temporarily shelve changes with the stash panel. Save work-in-progress, switch context,
+    and restore changes later — all without leaving grüt.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-stash.png" alt="Git stash panel listing saved stashes with messages" caption="Stash management panel" />
+
+  <h2>The Stash Panel</h2>
+  <p>
+    The stash panel lists every stash entry in the repository, ordered by most recent first.
+    Each entry displays:
+  </p>
+  <ul>
+    <li><strong>Index</strong> — the stash reference number (e.g., <code>stash@&#123;0&#125;</code>)</li>
+    <li><strong>Message</strong> — the description you provided when creating the stash</li>
+    <li><strong>Timestamp</strong> — when the stash was created</li>
+  </ul>
+  <p>
+    Navigate stash entries with <code>j</code> / <code>k</code> and preview the stashed diff
+    in the adjacent preview pane.
+  </p>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={stashBindings} title="Stash Panel" />
+
+  <h2>Creating a Stash</h2>
+  <p>
+    To stash your current changes:
+  </p>
+  <ol>
+    <li>Switch to the stash panel.</li>
+    <li>Press <code>s</code> to push a new stash.</li>
+    <li>Type a descriptive message in the prompt (e.g., <code>WIP: auth refactor</code>).</li>
+    <li>Press <code>Enter</code> to confirm.</li>
+  </ol>
+  <p>
+    grüt stashes <strong>both staged and unstaged changes</strong>, returning your working tree
+    to a clean state. Untracked files are not included by default — stage them first if you want
+    them stashed.
+  </p>
+
+  <h2>Applying vs. Popping</h2>
+  <p>
+    There are two ways to restore stashed changes:
+  </p>
+  <ul>
+    <li>
+      <strong>Apply</strong> (<code>a</code> or <code>Enter</code>) — restores the changes but
+      keeps the stash entry in the list. Useful when you want to apply the same stash to multiple
+      branches.
+    </li>
+    <li>
+      <strong>Pop</strong> (<code>p</code>) — restores the changes and removes the stash entry.
+      This is the most common operation — use it when you're done with the stash.
+    </li>
+  </ul>
+
+  <h2>Dropping a Stash</h2>
+  <p>
+    Press <code>x</code> on any stash entry to delete it permanently. grüt asks for confirmation
+    before dropping to prevent accidental data loss.
+  </p>
+
+  <h2>Typical Workflow</h2>
+  <pre><code># You're working on feature-x, but need to fix a bug on main
+# 1. Stash your current changes
+#    → press s in stash panel, type "WIP: feature-x progress", Enter
+
+# 2. Switch to main, fix the bug, commit
+
+# 3. Switch back to feature-x
+# 4. Pop the stash
+#    → press p on stash@&#123;0&#125;
+
+# Your work-in-progress is restored exactly as you left it.</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

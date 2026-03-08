@@ -1,0 +1,81 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="Layout & Panels" description="Manage panel layout in grüt — focus panels by number, zoom, and navigate between panels.">
+  <h1>Layout &amp; Panels</h1>
+  <p class="lead">
+    grüt organizes its interface into five panels — File Tree, Git Info,
+    GitHub, Commits, and Preview. Focus any panel instantly with its number key,
+    zoom any panel to full screen, or cycle between panels with Tab.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Number-key focus</strong> — Press <kbd>1</kbd>–<kbd>5</kbd> to jump directly to any panel</li>
+    <li><strong>Zoom mode</strong> — Expand any panel to full screen and back</li>
+    <li><strong>Panel focus</strong> — Cycle focus between visible panels with <kbd>Tab</kbd></li>
+    <li><strong>Session persistence</strong> — Layout choice is saved and restored on restart</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: '1', action: 'Focus File Tree panel' },
+    { key: '2', action: 'Focus Git Info panel' },
+    { key: '3', action: 'Focus GitHub panel' },
+    { key: '4', action: 'Focus Commits panel' },
+    { key: '5', action: 'Focus Preview panel' },
+    { key: 'Tab', action: 'Focus next panel' },
+    { key: 'Shift+Tab', action: 'Focus previous panel' },
+  ]} />
+
+  <h2>Panel Overview</h2>
+  <table>
+    <thead>
+      <tr><th>Key</th><th>Panel</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><kbd>1</kbd></td><td>File Tree</td><td>Project file browser with git status markers</td></tr>
+      <tr><td><kbd>2</kbd></td><td>Git Info</td><td>Branches, worktrees, remotes, stash, tags, reflog</td></tr>
+      <tr><td><kbd>3</kbd></td><td>GitHub</td><td>Issues, PRs, actions, workflows, releases</td></tr>
+      <tr><td><kbd>4</kbd></td><td>Commits</td><td>Commit log with details and diff</td></tr>
+      <tr><td><kbd>5</kbd></td><td>Preview</td><td>File content, diffs, PR bodies, workflow details</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Context Awareness</h2>
+  <p>
+    All panels share a reactive selection model. Focusing a different panel
+    doesn't lose your place — switching from the File Tree to Git Info and back
+    keeps your cursor position. Zooming a panel doesn't lose your place —
+    unzoom and all panels are still in sync.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-6);
+  }
+
+  th, td {
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+  }
+
+  th {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+</style>

@@ -1,0 +1,106 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Diff" description="View file diffs with inline and side-by-side modes, syntax highlighting, and hunk navigation in grüt.">
+  <h1>Git Diff</h1>
+  <p class="lead">
+    The diff viewer shows changes with syntax highlighting, line numbers, and
+    two display modes — inline and side-by-side — so you can review exactly
+    what changed.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Git diff panel showing file changes with syntax highlighting" caption="Diff viewer with syntax-highlighted changes" />
+
+  <h2>Diff Sources</h2>
+  <p>
+    The diff viewer works with several types of changes:
+  </p>
+  <ul>
+    <li><strong>Unstaged changes</strong> — differences between the working tree and the index</li>
+    <li><strong>Staged changes</strong> — differences between the index and the last commit</li>
+    <li><strong>Commit diffs</strong> — changes introduced by a specific commit</li>
+    <li><strong>Branch comparisons</strong> — differences between two branches or refs</li>
+  </ul>
+  <p>
+    Select a file in the git status panel or commit detail view and grüt
+    automatically shows the relevant diff.
+  </p>
+
+  <h2>Display Modes</h2>
+  <p>
+    grüt supports two diff display modes:
+  </p>
+  <ul>
+    <li>
+      <strong>Inline</strong> — additions and deletions are interleaved in a
+      single column. Additions are highlighted in green, deletions in red.
+      This is the default mode.
+    </li>
+    <li>
+      <strong>Side-by-side</strong> — the old version appears on the left and
+      the new version on the right. Changed lines are aligned for easy
+      comparison.
+    </li>
+  </ul>
+  <p>
+    Press <kbd>t</kbd> to toggle between inline and side-by-side mode.
+  </p>
+
+  <h2>Navigation</h2>
+  <KeybindingTable bindings={[
+    { key: 'j', action: 'Scroll down' },
+    { key: 'k', action: 'Scroll up' },
+    { key: 'n', action: 'Jump to next hunk' },
+    { key: 'N', action: 'Jump to previous hunk' },
+    { key: 't', action: 'Toggle inline / side-by-side mode' },
+    { key: 'g', action: 'Jump to top of diff' },
+    { key: 'G', action: 'Jump to bottom of diff' },
+    { key: 'd', action: 'Page down' },
+    { key: 'u', action: 'Page up' },
+  ]} />
+
+  <h2>Syntax Highlighting</h2>
+  <p>
+    Diff output preserves the syntax highlighting of the original file. grüt
+    detects the file language from the extension and applies the appropriate
+    highlighting to both added and removed lines. This makes it easier to
+    read diffs in context, especially for large changes.
+  </p>
+
+  <h2>Line Numbers</h2>
+  <p>
+    Both modes display line numbers from the original and modified files. In
+    inline mode, two columns of line numbers appear — the left column shows the
+    old line number and the right column shows the new line number. Removed lines
+    only show the old number; added lines only show the new number.
+  </p>
+
+  <h2>Colors</h2>
+  <p>
+    The diff viewer uses your terminal's color capabilities:
+  </p>
+  <ul>
+    <li><span style="color: #4ade80;">Green background</span> — added lines</li>
+    <li><span style="color: #f87171;">Red background</span> — removed lines</li>
+    <li>Dimmed text — unchanged context lines</li>
+    <li>Bold highlights — changed characters within a line (word-level diff)</li>
+  </ul>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/diff-review/">Diff Review</a> — approve or reject individual hunks</li>
+    <li><a href="/grut/docs/git-status/">Git Status & Staging</a> — stage and unstage changes</li>
+    <li><a href="/grut/docs/git-log/">Git Log</a> — browse commit history</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

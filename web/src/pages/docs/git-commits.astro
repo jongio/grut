@@ -1,0 +1,102 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Commits" description="Commit staged changes in grüt — commit dialog, amend, signing, and the commit panel.">
+  <h1>Git Commits</h1>
+  <p class="lead">
+    Once you've staged your changes, press <kbd>c</kbd> to commit. grüt provides
+    a focused commit workflow without ever leaving the terminal.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-commits.png" alt="Git commits panel showing recent commits with details" caption="Commits panel in the explorer layout" />
+
+  <h2>Commit Dialog</h2>
+  <p>
+    Press <kbd>c</kbd> from the git status panel to open the commit dialog. The
+    dialog shows:
+  </p>
+  <ul>
+    <li>A text input for your commit message</li>
+    <li>A summary of staged changes (files added, modified, deleted)</li>
+    <li>The current branch name</li>
+  </ul>
+  <p>
+    Type your commit message and press <kbd>Enter</kbd> to commit. Press
+    <kbd>Esc</kbd> to cancel without committing.
+  </p>
+
+  <h2>Commit Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'c', action: 'Open commit dialog' },
+    { key: 'Enter', action: 'Confirm and execute commit (in dialog)' },
+    { key: 'Esc', action: 'Cancel commit dialog' },
+  ]} />
+
+  <h2>Commit Options</h2>
+  <h3>Sign Commits</h3>
+  <p>
+    Enable commit signing in your config to sign every commit with GPG or SSH:
+  </p>
+  <pre><code>[git]
+sign_commits = true</code></pre>
+  <p>
+    This requires <code>git</code> to be configured with a signing key. grüt
+    passes the <code>-S</code> flag to <code>git commit</code>.
+  </p>
+
+  <h3>Amend Last Commit</h3>
+  <p>
+    To amend the most recent commit, stage your changes and use the command
+    palette (<kbd>:</kbd>) to run <code>commit --amend</code>. This opens the
+    commit dialog pre-filled with the previous commit message.
+  </p>
+
+  <h2>Commit Panel</h2>
+  <p>
+    Before committing, the commit panel at the bottom of the status view shows
+    a summary of what will be committed:
+  </p>
+  <ul>
+    <li>Number of staged files</li>
+    <li>Insertions and deletions (line counts)</li>
+    <li>File types affected</li>
+  </ul>
+  <p>
+    This gives you a quick sanity check before pressing <kbd>c</kbd>.
+  </p>
+
+  <h2>After Committing</h2>
+  <p>When a commit succeeds:</p>
+  <ul>
+    <li>The status panel refreshes — staged files are cleared</li>
+    <li>The commit log updates with the new commit at the top</li>
+    <li>The branch's ahead/behind count updates if a remote is configured</li>
+    <li>A brief success notification appears at the bottom of the screen</li>
+  </ul>
+  <p>
+    If the commit fails (e.g. due to a pre-commit hook), grüt displays the
+    error output from <code>git</code> so you can fix the issue and retry.
+  </p>
+
+  <h2>Pushing After Commit</h2>
+  <p>
+    After committing, press <kbd>P</kbd> (Shift+p) to push your commits to the
+    remote. The branch panel shows how many commits you are ahead of the remote.
+  </p>
+  <p>
+    See also: <a href="/grut/docs/git-status/">Status & Staging</a> for the
+    pre-commit workflow, and <a href="/grut/docs/git-branches/">Branches</a> for
+    branch-level operations.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

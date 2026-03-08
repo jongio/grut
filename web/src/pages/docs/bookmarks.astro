@@ -1,0 +1,66 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="Bookmarks" description="Pin frequently used directories in grüt for instant one-key access.">
+  <h1>Bookmarks</h1>
+  <p class="lead">
+    Bookmarks let you pin directories for quick navigation. Jump to any
+    bookmarked path with a single keystroke instead of traversing the file
+    tree.
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    The bookmark manager stores a list of directory paths that you access
+    frequently. Bookmarks are persisted to a TOML file alongside your
+    configuration, so they survive restarts. You can seed initial bookmarks
+    in your config file and add or remove them interactively at any time.
+  </p>
+
+  <h2>Adding &amp; Removing Bookmarks</h2>
+  <p>
+    Navigate to any directory in the file tree and press the bookmark key
+    to add it. Open the bookmark overlay to see all saved bookmarks,
+    select one to jump to it, or delete bookmarks you no longer need.
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'B', action: 'Open bookmarks overlay' },
+    { key: 'Enter', action: 'Jump to selected bookmark' },
+    { key: 'd', action: 'Delete selected bookmark' },
+    { key: 'r', action: 'Rename selected bookmark' },
+    { key: 'Esc', action: 'Close bookmarks overlay' },
+  ]} />
+
+  <h2>Persistence</h2>
+  <p>
+    Bookmarks are stored in a separate TOML file in your grüt config
+    directory. The bookmark manager loads saved bookmarks on startup and
+    merges them with any paths defined in your configuration. Changes are
+    written to disk immediately.
+  </p>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[bookmarks]
+paths = [             # Seed bookmarks from config
+  "~/projects",
+  "~/dotfiles",
+]
+show_in_sidebar = true # Show bookmarks section in sidebar</code></pre>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="/grut/docs/file-explorer/">File Explorer</a> — tree-view file navigation</li>
+    <li><a href="/grut/docs/fuzzy-finder/">Fuzzy Finder</a> — instant file search</li>
+    <li><a href="/grut/docs/sessions/">Sessions</a> — session persistence</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

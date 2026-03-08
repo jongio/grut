@@ -1,0 +1,103 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const blameBindings = [
+  { key: 'B', action: 'Open blame view for the current file' },
+  { key: 'Enter', action: 'View the full commit for the selected blame entry' },
+  { key: 'j / ↓', action: 'Move to the next blame entry' },
+  { key: 'k / ↑', action: 'Move to the previous blame entry' },
+  { key: 'Esc', action: 'Exit blame view and return to file preview' },
+];
+---
+
+<Docs title="Git Blame" description="Line-by-line authorship view in grüt — see who changed every line and when.">
+  <h1>Git Blame</h1>
+  <p class="lead">
+    Trace the origin of every line in a file. grüt's blame view shows commit hash, author, date,
+    and content side-by-side, color-coded by author for instant visual identification.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-blame.png" alt="Blame view showing line-by-line authorship with commit hash, author, and date" caption="Blame annotations overlaid on the file preview" />
+
+  <h2>Opening Blame</h2>
+  <p>
+    Open blame for any file in two ways:
+  </p>
+  <ul>
+    <li>
+      <strong>From the file tree</strong> — highlight a file and press <code>B</code> to open
+      its blame view directly.
+    </li>
+    <li>
+      <strong>From the file preview</strong> — while previewing a file's contents, press
+      <code>B</code> to switch to blame view for the same file.
+    </li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={blameBindings} title="Blame View" />
+
+  <h2>Blame Layout</h2>
+  <p>
+    Each line in the blame view is annotated with four columns:
+  </p>
+  <ul>
+    <li><strong>Commit hash</strong> — the short SHA of the commit that last modified this line</li>
+    <li><strong>Author</strong> — who made the change</li>
+    <li><strong>Date</strong> — when the change was committed</li>
+    <li><strong>Line content</strong> — the actual source code</li>
+  </ul>
+  <pre><code>a1b2c3d4  Alice   2024-11-15  func main() &#123;
+a1b2c3d4  Alice   2024-11-15      app := grut.New()
+f5e6d7c8  Bob     2025-01-03      app.EnableWorktrees()
+a1b2c3d4  Alice   2024-11-15      app.Run()
+9a8b7c6d  Carol   2025-02-20  &#125;</code></pre>
+
+  <h2>Color Coding</h2>
+  <p>
+    grüt assigns a unique color to each author, making it easy to see at a glance which parts of
+    a file were written by whom. Consecutive lines from the same commit share the same background
+    tint, creating visual "blocks" that highlight logical changes.
+  </p>
+  <p>
+    This is especially useful for understanding ownership in files with many contributors — you
+    can quickly spot who is responsible for a particular section without reading each annotation.
+  </p>
+
+  <h2>Navigating Blame Entries</h2>
+  <p>
+    Use <code>j</code> / <code>k</code> to move between blame entries. When you land on a line,
+    the status bar shows the full commit message for that line's commit.
+  </p>
+  <p>
+    Press <code>Enter</code> on any blame entry to jump to the <strong>full commit view</strong>,
+    showing the complete diff, commit message, author details, and parent commits. Press
+    <code>Esc</code> to return to the blame view.
+  </p>
+
+  <h2>Use Cases</h2>
+  <ul>
+    <li>
+      <strong>Bug investigation</strong> — find out when a problematic line was introduced and by
+      whom, then inspect the full commit for context.
+    </li>
+    <li>
+      <strong>Code review context</strong> — understand the history behind a piece of code before
+      suggesting changes.
+    </li>
+    <li>
+      <strong>Ownership mapping</strong> — identify the primary author of a module to know who to
+      consult for changes.
+    </li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

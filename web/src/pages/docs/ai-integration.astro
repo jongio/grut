@@ -1,0 +1,129 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="AI Integration" description="AI-powered commit messages, conflict resolution, code review, and branch operations in grüt.">
+  <h1>AI Integration</h1>
+  <p class="lead">
+    grüt's AI subsystem provides intelligent assistance for git operations —
+    from generating commit messages to suggesting conflict resolutions.
+  </p>
+
+  <h2>AI-Powered Features</h2>
+  <p>
+    When an AI provider is configured, grüt enhances several workflows with
+    contextual intelligence:
+  </p>
+  <ul>
+    <li>
+      <strong>Smart commit messages</strong> — analyzes your staged diff and
+      generates a conventional commit message. Edit before confirming.
+    </li>
+    <li>
+      <strong>Conflict resolution suggestions</strong> — when merge conflicts
+      arise, AI examines both sides and proposes resolutions with explanations.
+    </li>
+    <li>
+      <strong>Code review</strong> — request an AI review of your changes before
+      committing. Highlights potential issues, style concerns, and logic errors.
+    </li>
+    <li>
+      <strong>Branch operations</strong> — suggests branch names from issue
+      titles or commit descriptions.
+    </li>
+  </ul>
+
+  <h2>Supported Providers</h2>
+  <p>
+    grüt supports the following AI providers:
+  </p>
+  <ul>
+    <li>
+      <strong>Claude (Anthropic)</strong> — full support for all AI features.
+      Requires an API key via <code>ANTHROPIC_API_KEY</code> environment
+      variable or configuration.
+    </li>
+    <li>
+      <strong>GitHub Copilot</strong> — integrates with your existing Copilot
+      subscription. Uses the Copilot API for completions and suggestions.
+    </li>
+  </ul>
+
+  <h2>AI Middleware</h2>
+  <p>
+    The AI subsystem works as <strong>middleware</strong> that wraps git
+    operations. When you stage changes and open the commit dialog, the AI
+    middleware intercepts the operation, analyzes the diff, and provides
+    suggestions — all before the actual git command executes.
+  </p>
+  <p>
+    This middleware architecture means AI features are non-blocking: if the AI
+    provider is slow or unavailable, grüt falls back to manual input with zero
+    delay.
+  </p>
+
+  <h2>Architecture</h2>
+  <p>The AI subsystem consists of four components:</p>
+  <ul>
+    <li>
+      <strong>Provider registry</strong> — manages available AI providers and
+      selects the active one based on configuration and availability.
+    </li>
+    <li>
+      <strong>Context management</strong> — builds relevant context for each AI
+      request (diffs, file contents, commit history) while respecting token
+      limits.
+    </li>
+    <li>
+      <strong>Security auditing</strong> — logs all AI interactions and redacts
+      PII before sending data to external providers.
+    </li>
+    <li>
+      <strong>Operation middleware</strong> — hooks into git operations to
+      inject AI assistance at the right moments.
+    </li>
+  </ul>
+
+  <h2>Security</h2>
+  <p>
+    grüt takes security seriously when sending code to external AI providers:
+  </p>
+  <ul>
+    <li>
+      <strong>PII redaction</strong> — email addresses, API keys, and other
+      sensitive patterns are stripped from context before sending.
+    </li>
+    <li>
+      <strong>Audit logging</strong> — every AI interaction is logged locally
+      with timestamps, provider, and a summary of what was sent.
+    </li>
+    <li>
+      <strong>Opt-in design</strong> — AI features are never invoked without
+      explicit user action.
+    </li>
+  </ul>
+
+  <h2>Disabling AI</h2>
+  <p>
+    To disable all AI features, use the command-line flag:
+  </p>
+  <pre><code>grut --no-ai</code></pre>
+  <p>Or disable auto-installation of AI dependencies in config:</p>
+  <pre><code>[ai]
+auto_install_deps = false</code></pre>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[ai]
+auto_install_deps = false   # Auto-install AI provider dependencies
+token_model = "gpt-4"      # Tokenizer model for context building
+context_mode = "manual"     # Context selection mode: manual | smart</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

@@ -1,0 +1,158 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Status & Staging" description="How grüt displays git status, stages and unstages files, and tracks changes across your working tree.">
+  <h1>Git Status & Staging</h1>
+  <p class="lead">
+    grüt gives you a live view of your working tree status with inline markers,
+    a dedicated status panel, and single-key staging.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-info.png" alt="Git info panel showing branches, tags, and status" caption="Git info panel with branches, tags, and status" />
+
+  <h2>Status Panel</h2>
+  <p>
+    The git status panel (visible in the <strong>Git</strong> and
+    <strong>Full</strong> layouts) groups files into three sections:
+  </p>
+  <ul>
+    <li><strong>Staged</strong> — files added to the index, ready to commit</li>
+    <li><strong>Modified</strong> — tracked files with unstaged changes</li>
+    <li><strong>Untracked</strong> — new files not yet tracked by git</li>
+  </ul>
+  <p>
+    Each section shows a file count badge. Navigate between files with
+    <kbd>j</kbd>/<kbd>k</kbd> and press <kbd>Enter</kbd> to preview the diff.
+  </p>
+
+  <h2>File Tree Markers</h2>
+  <p>
+    When <code>git_status_markers</code> is enabled (the default), the file tree
+    shows status markers next to each file:
+  </p>
+  <table class="marker-table">
+    <thead>
+      <tr>
+        <th>Marker</th>
+        <th>Meaning</th>
+        <th>Color</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="marker staged">●</span></td>
+        <td>Staged (added to index)</td>
+        <td>Green</td>
+      </tr>
+      <tr>
+        <td><span class="marker modified">✗</span></td>
+        <td>Modified (unstaged changes)</td>
+        <td>Yellow</td>
+      </tr>
+      <tr>
+        <td><span class="marker untracked">?</span></td>
+        <td>Untracked (new file)</td>
+        <td>Gray</td>
+      </tr>
+      <tr>
+        <td><span class="marker staged">▸</span></td>
+        <td>Renamed</td>
+        <td>Green</td>
+      </tr>
+      <tr>
+        <td><span class="marker deleted">✗</span></td>
+        <td>Deleted</td>
+        <td>Red</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Directories inherit the "most urgent" status of their children — a directory
+    containing a modified file shows the modified marker.
+  </p>
+
+  <h2>Staging & Unstaging</h2>
+  <p>
+    Staging is done directly from the file tree. Press <kbd>f</kbd> to toggle
+    the git filter (showing only changed files), then use these keys:
+  </p>
+  <KeybindingTable title="Stage / Unstage (File Tree)" bindings={[
+    { key: 's', action: 'Stage the selected file' },
+    { key: 'Space', action: 'Toggle stage / unstage' },
+  ]} />
+  <p>
+    Staging a file moves it from the "Modified" or "Untracked" section to the
+    "Staged" section. The file tree marker updates to <span class="marker staged">●</span> immediately.
+  </p>
+
+  <h2>Staging Workflow</h2>
+  <p>A typical staging workflow in grüt:</p>
+  <ol>
+    <li>Focus the <strong>Git Info</strong> panel with <kbd>2</kbd></li>
+    <li>Navigate to a modified file in the status panel</li>
+    <li>Press <kbd>Enter</kbd> to review the diff</li>
+    <li>Press <kbd>s</kbd> to stage the file</li>
+    <li>Repeat for each file you want to include in the commit</li>
+    <li>Press <kbd>c</kbd> to open the commit dialog</li>
+  </ol>
+  <p>
+    You can also stage directly from the file tree — navigate to a file and press
+    <kbd>s</kbd>. The status panel and file tree markers stay in sync.
+  </p>
+
+  <h2>Discarding Changes</h2>
+  <p>
+    Press <kbd>d</kbd> on a modified file to discard its changes. grüt asks for
+    confirmation before discarding because this operation cannot be undone for
+    unstaged changes.
+  </p>
+  <blockquote>
+    <strong>Warning:</strong> Discarding unstaged changes is permanent. Staged
+    changes can be unstaged first, but unstaged modifications are lost forever.
+  </blockquote>
+
+  <h2>Auto-Refresh</h2>
+  <p>
+    grüt watches your working tree for changes using <code>fsnotify</code> (or
+    polling, if configured). When files change on disk — from your editor, a
+    build tool, or another process — the status panel and file tree update
+    automatically. No manual refresh needed.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  .marker-table {
+    margin: var(--space-4) 0 var(--space-6);
+  }
+
+  .marker {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 700;
+  }
+
+  .marker.staged {
+    color: var(--color-git-added);
+  }
+
+  .marker.modified {
+    color: var(--color-git-modified);
+  }
+
+  .marker.untracked {
+    color: var(--color-text-muted);
+  }
+
+  .marker.deleted {
+    color: var(--color-git-deleted);
+  }
+</style>

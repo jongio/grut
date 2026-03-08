@@ -1,0 +1,125 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Branches" description="Manage git branches in grüt — create, checkout, rename, delete, and merge branches from the terminal UI.">
+  <h1>Git Branches</h1>
+  <p class="lead">
+    The branch panel gives you full control over local and remote branches —
+    create, checkout, rename, delete, and merge without typing a single git
+    command.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-branches.png" alt="Git branches panel listing local and remote branches" caption="Branch management panel" />
+
+  <h2>Branch Panel</h2>
+  <p>
+    The branch panel is visible in the <strong>Git</strong>, <strong>Review</strong>,
+    and <strong>Full</strong> layouts. It lists:
+  </p>
+  <ul>
+    <li><strong>Local branches</strong> — with the current branch highlighted by a <span class="current-marker">●</span> marker</li>
+    <li><strong>Remote branches</strong> — grouped under each remote name (e.g. <code>origin/</code>)</li>
+  </ul>
+  <p>
+    Each branch entry shows:
+  </p>
+  <ul>
+    <li>Branch name</li>
+    <li>Last commit message (truncated)</li>
+    <li>Ahead/behind remote count (e.g. <code>↑2 ↓1</code>)</li>
+  </ul>
+
+  <h2>Branch Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Checkout the selected branch' },
+    { key: 'n', action: 'Create a new branch from HEAD' },
+    { key: 'x', action: 'Delete the selected branch' },
+    { key: 'e / F2', action: 'Rename the selected branch' },
+    { key: 'o', action: 'Open branch in browser' },
+    { key: 'y', action: 'Copy branch name to clipboard' },
+    { key: 'f', action: 'Fetch from remotes' },
+  ]} />
+
+  <h2>Checking Out a Branch</h2>
+  <p>
+    Navigate to a branch with <kbd>j</kbd>/<kbd>k</kbd> and press
+    <kbd>Enter</kbd> to check it out. grüt:
+  </p>
+  <ol>
+    <li>Runs <code>git checkout &lt;branch&gt;</code></li>
+    <li>Refreshes the file tree to reflect the new branch's files</li>
+    <li>Updates the status panel with any changed files</li>
+    <li>Updates the commit log to show the new branch's history</li>
+    <li>Moves the <span class="current-marker">●</span> marker to the checked-out branch</li>
+  </ol>
+  <p>
+    If you have uncommitted changes that would conflict, grüt shows the git
+    error and the checkout is aborted. Stage or stash your changes first.
+  </p>
+
+  <h2>Creating a New Branch</h2>
+  <p>
+    Press <kbd>n</kbd> to create a new branch. grüt opens a text input where
+    you type the branch name and press <kbd>Enter</kbd>.
+  </p>
+  <ul>
+    <li>The new branch is created from the current <code>HEAD</code></li>
+    <li>grüt automatically checks out the new branch after creation</li>
+    <li>The branch list updates immediately</li>
+  </ul>
+  <p>Press <kbd>Esc</kbd> to cancel branch creation.</p>
+
+  <h2>Deleting a Branch</h2>
+  <p>
+    Navigate to a branch and press <kbd>x</kbd>. grüt asks for confirmation
+    before deleting. Deleting the currently checked-out branch is not
+    allowed — switch to a different branch first.
+  </p>
+  <p>
+    For unmerged branches, grüt warns you that the branch contains commits not
+    present in any other branch and asks for explicit confirmation.
+  </p>
+
+  <h2>Renaming a Branch</h2>
+  <p>
+    Press <kbd>e</kbd> or <kbd>F2</kbd> on a branch to rename it. A text input appears pre-filled
+    with the current name. Edit the name and press <kbd>Enter</kbd> to confirm.
+  </p>
+
+  <h2>Merging</h2>
+  <p>
+    Press <kbd>m</kbd> to merge the selected branch into the current branch.
+    grüt runs <code>git merge &lt;branch&gt;</code> and refreshes all panels.
+  </p>
+  <p>
+    If the merge results in conflicts, grüt switches to the conflict resolution
+    view. See <a href="/grut/docs/git-conflicts/">Conflicts</a> for details.
+  </p>
+
+  <h2>Remote Branches</h2>
+  <p>
+    Remote branches appear below local branches in the branch panel, grouped by
+    remote name. You can check out a remote branch by pressing <kbd>Enter</kbd>
+    — grüt creates a local tracking branch automatically.
+  </p>
+  <p>
+    Use <kbd>F</kbd> to fetch the latest remote refs
+    before browsing remote branches.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  .current-marker {
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+</style>

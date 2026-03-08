@@ -1,0 +1,92 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Fuzzy Finder" description="Quickly navigate to any file or execute commands with grüt's fuzzy finder overlay.">
+  <h1>Fuzzy Finder</h1>
+  <p class="lead">
+    The fuzzy finder is a fast overlay for jumping to any file in your project
+    by typing a few characters — plus a command palette mode for executing
+    commands by name.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/fuzzy-finder.png" alt="Fuzzy finder overlay for quick file navigation" caption="Fuzzy finder overlay for instant file search" />
+
+  <h2>File Search</h2>
+  <p>
+    Press <kbd>/</kbd> to open the fuzzy finder. An input prompt appears at
+    the top of the screen with a filtered list of files below it. Start typing
+    to narrow the results — the fuzzy matching algorithm finds files even with
+    non-contiguous characters.
+  </p>
+  <p>
+    For example, typing <code>mncfg</code> matches
+    <code><strong>m</strong>ai<strong>n</strong>_<strong>c</strong>on<strong>f</strong>i<strong>g</strong>.go</code>.
+    Matching characters are highlighted in the results so you can see how your
+    query maps to each file name.
+  </p>
+  <KeybindingTable bindings={[
+    { key: '/', action: 'Open fuzzy finder' },
+    { key: 'j / ↓', action: 'Move selection down' },
+    { key: 'k / ↑', action: 'Move selection up' },
+    { key: 'Enter', action: 'Open the selected file' },
+    { key: 'Esc', action: 'Close the fuzzy finder' },
+  ]} />
+
+  <h2>Search Scope</h2>
+  <p>
+    The fuzzy finder indexes the entire project tree, respecting
+    <code>.gitignore</code> rules. Ignored files, build artifacts, and
+    <code>node_modules</code> directories are excluded automatically.
+    Hidden files follow the <code>show_hidden</code> config setting.
+  </p>
+  <p>
+    Paths are displayed relative to the project root. The file list is
+    ranked by match quality — the closest matches appear at the top.
+  </p>
+
+  <h2>Command Palette</h2>
+  <p>
+    Press <kbd>:</kbd> to open the command palette. This mode searches through
+    all available grüt commands by name. Type to filter, select a command, and
+    press <kbd>Enter</kbd> to execute it.
+  </p>
+  <p>
+    The command palette is useful for discovering commands you haven't memorized
+    keybindings for, or for accessing less frequently used operations without
+    leaving the keyboard.
+  </p>
+  <KeybindingTable bindings={[
+    { key: ':', action: 'Open command palette' },
+    { key: 'j / ↓', action: 'Move selection down' },
+    { key: 'k / ↑', action: 'Move selection up' },
+    { key: 'Enter', action: 'Execute the selected command' },
+    { key: 'Esc', action: 'Close the command palette' },
+  ]} />
+
+  <h2>Performance</h2>
+  <p>
+    The fuzzy finder is designed for speed. File indexing runs on startup in the
+    background and completes in under a second for most projects. Filtering uses
+    a scoring algorithm that runs incrementally — results update as you type
+    with no perceptible delay, even in repositories with tens of thousands of
+    files.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/file-explorer/">File Explorer</a> — tree-view file navigation</li>
+    <li><a href="/grut/docs/bookmarks/">Bookmarks</a> — pin directories for quick access</li>
+    <li><a href="/grut/docs/keybindings/">Keybindings</a> — full key reference</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

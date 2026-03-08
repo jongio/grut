@@ -1,0 +1,129 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="File Explorer" description="Navigate your project with a tree-view file explorer featuring git status markers, icons, and file operations in grüt.">
+  <h1>File Explorer</h1>
+  <p class="lead">
+    The file explorer is the core navigation panel — a tree-view of your project
+    with Nerd Font icons, git status markers, syntax-highlighted preview, and
+    built-in file operations.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/file-explorer.png" alt="File explorer panel showing a project tree with git status markers and file icons" caption="File explorer with git status markers and Nerd Font icons" />
+
+  <h2>Navigation</h2>
+  <p>
+    The file tree uses vim-style navigation. Directories can be expanded and
+    collapsed, and selecting a file opens a preview in the adjacent panel.
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'j / ↓', action: 'Move cursor down' },
+    { key: 'k / ↑', action: 'Move cursor up' },
+    { key: 'h / ←', action: 'Collapse directory or move to parent' },
+    { key: 'l / →', action: 'Expand directory or open file preview' },
+    { key: 'Enter', action: 'Open file in preview panel' },
+    { key: 'g', action: 'Jump to top of tree' },
+    { key: 'G', action: 'Jump to bottom of tree' },
+    { key: 'd', action: 'Page down' },
+    { key: 'u', action: 'Page up' },
+  ]} />
+
+  <h2>File Operations</h2>
+  <p>
+    Create, rename, and delete files directly from the tree:
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'n', action: 'Create a new file' },
+    { key: 'N', action: 'Create a new directory' },
+    { key: 'e / F2', action: 'Rename the selected file or directory' },
+    { key: 'x', action: 'Delete the selected file or directory (with confirmation)' },
+    { key: 'o', action: 'Open file in external editor' },
+    { key: 'y', action: 'Copy file path to clipboard' },
+    { key: 'c', action: 'Copy selected file' },
+    { key: 'p', action: 'Paste file' },
+    { key: '.', action: 'Toggle hidden files' },
+    { key: 'f', action: 'Toggle git filter (changed files only)' },
+    { key: 'v', action: 'Toggle tree / list view' },
+    { key: 's', action: 'Stage file (in git filter mode)' },
+    { key: 'Space', action: 'Toggle stage / unstage' },
+    { key: 'J', action: 'Scroll preview down' },
+    { key: 'K', action: 'Scroll preview up' },
+  ]} />
+  <p>
+    When creating a file or directory, grüt opens an inline text input at the
+    current cursor position. Type the name and press <kbd>Enter</kbd> to
+    confirm, or <kbd>Esc</kbd> to cancel.
+  </p>
+  <p>
+    Deletion always requires confirmation — grüt shows the file name and asks
+    you to press <kbd>y</kbd> to confirm or <kbd>n</kbd> to cancel. Directories
+    are deleted recursively after confirmation.
+  </p>
+
+  <h2>File Icons</h2>
+  <p>
+    grüt displays file and directory icons using Nerd Fonts. Icons are
+    determined by file extension and special file names (e.g.,
+    <code>Dockerfile</code>, <code>Makefile</code>, <code>.gitignore</code>).
+    If your terminal does not support Nerd Fonts, switch to ASCII mode:
+  </p>
+  <pre><code>[explorer]
+icon_mode = "ascii"   # Options: "nerd", "ascii", "auto" (default: "auto")</code></pre>
+  <p>
+    In <code>auto</code> mode, grüt attempts to detect Nerd Font support and
+    falls back to ASCII icons if the detection fails.
+  </p>
+
+  <h2>Git Status Markers</h2>
+  <p>
+    When inside a git repository, the file tree shows status markers next to
+    each file:
+  </p>
+  <ul>
+    <li><code>✗</code> — modified (unstaged)</li>
+    <li><code>●</code> — staged</li>
+    <li><code>+</code> — untracked (new file)</li>
+    <li><code>-</code> — deleted</li>
+    <li><code>→</code> — renamed</li>
+    <li><code>✗</code> — conflicted</li>
+  </ul>
+  <p>
+    Directory nodes aggregate the status of their children — a directory shows
+    a marker if any file within it has changes.
+  </p>
+
+  <h2>Preview Panel</h2>
+  <p>
+    Selecting a file shows a syntax-highlighted preview in the adjacent panel.
+    The preview supports over 100 languages, displays line numbers, and
+    truncates files that exceed the configured size limit. Binary files show
+    a type indicator instead of content.
+  </p>
+
+  <h2>Configuration</h2>
+  <pre><code>[explorer]
+icon_mode = "auto"              # "nerd", "ascii", or "auto"
+show_hidden = false             # Show dotfiles and hidden directories
+sort_directories_first = true   # Directories appear before files
+git_status_markers = true       # Show git status markers on files
+max_depth = 0                   # Max tree depth (0 = unlimited)
+follow_symlinks = false         # Follow symbolic links in the tree</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/fuzzy-finder/">Fuzzy Finder</a> — quick file search</li>
+    <li><a href="/grut/docs/bookmarks/">Bookmarks</a> — pin frequently used directories</li>
+    <li><a href="/grut/docs/layout-panels/">Layout &amp; Panels</a> — multi-panel layout</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

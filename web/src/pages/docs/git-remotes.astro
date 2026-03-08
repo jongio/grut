@@ -1,0 +1,114 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const remoteBindings = [
+  { key: 'F', action: 'Fetch from remote — update tracking branches' },
+  { key: 'p', action: 'Pull from remote — fetch and integrate changes' },
+  { key: 'P', action: 'Push to remote — send local commits upstream' },
+];
+---
+
+<Docs title="Git Remotes" description="Remote management in grüt — fetch, pull, push, and configure multiple remotes.">
+  <h1>Git Remotes</h1>
+  <p class="lead">
+    Interact with remote repositories directly from grüt. Fetch updates, pull changes, push
+    commits, and manage multiple remotes with single-key commands.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-info-remotes.png" alt="GitInfo panel showing configured remotes with fetch and push URLs" caption="Remotes tab in the GitInfo panel" />
+
+  <h2>The Remotes Panel</h2>
+  <p>
+    The remotes panel lists every configured remote for the current repository. Each entry shows:
+  </p>
+  <ul>
+    <li><strong>Remote name</strong> — e.g., <code>origin</code>, <code>upstream</code>, <code>fork</code></li>
+    <li><strong>URL</strong> — the fetch/push URL for the remote</li>
+    <li><strong>Tracking branches</strong> — which local branches track branches on this remote</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={remoteBindings} title="Remote Operations" />
+
+  <h2>Fetching</h2>
+  <p>
+    Press <code>F</code> to fetch from the remote. This is a global keybinding — it works from any
+    panel, not just the remotes tab. Fetching downloads new commits, branches, and
+    tags from the remote repository <strong>without modifying your working tree or local
+    branches</strong>. It only updates the remote tracking refs (e.g.,
+    <code>origin/main</code>).
+  </p>
+  <p>
+    After a fetch, the commit log and branch panel update to show any new remote commits. You can
+    then decide whether to merge, rebase, or cherry-pick those changes.
+  </p>
+
+  <h2>Pulling</h2>
+  <p>
+    Press <code>p</code> to pull from the tracking remote for the current branch. A pull is
+    equivalent to a fetch followed by an integration step (merge or rebase, depending on your
+    <a href="/grut/docs/git-merge/">configured merge method</a>).
+  </p>
+  <pre><code>[git]
+worktree_merge_method = "merge"   # pull uses this strategy</code></pre>
+  <p>
+    If the pull results in conflicts, grüt enters conflict resolution mode — the same workflow
+    used for <a href="/grut/docs/git-merge/">merges</a> and
+    <a href="/grut/docs/git-rebase/">rebases</a>.
+  </p>
+
+  <h2>Pushing</h2>
+  <p>
+    Press <code>P</code> to push local commits to the tracking remote. grüt pushes the current
+    branch to its configured upstream. If no upstream is set, grüt prompts you to select a remote
+    and set tracking.
+  </p>
+  <p>
+    If the push is rejected (e.g., the remote has new commits), grüt shows the error and suggests
+    pulling first. Force-push is available through the command palette:
+  </p>
+  <pre><code>:push --force-with-lease</code></pre>
+
+  <h2>Multiple Remotes</h2>
+  <p>
+    Many workflows use more than one remote. A typical open-source setup:
+  </p>
+  <ul>
+    <li><code>origin</code> — your personal fork on GitHub</li>
+    <li><code>upstream</code> — the original repository you forked from</li>
+  </ul>
+  <p>
+    You can add and manage remotes through the command palette or via standard git commands in
+    grüt's integrated terminal:
+  </p>
+  <pre><code># Add a new remote
+git remote add upstream https://github.com/original/repo.git
+
+# Verify remotes
+git remote -v</code></pre>
+  <p>
+    All configured remotes appear in the remotes panel immediately after being added.
+  </p>
+
+  <h2>Push/Pull Targets</h2>
+  <p>
+    Push and pull operations always target the <strong>tracking remote</strong> for the current
+    branch. If your branch <code>feature/auth</code> tracks <code>origin/feature/auth</code>,
+    pressing <code>P</code> pushes to <code>origin</code> and pressing <code>p</code> pulls from
+    <code>origin</code>.
+  </p>
+  <p>
+    To change the tracking remote for a branch, use the command palette:
+  </p>
+  <pre><code>:branch --set-upstream-to=upstream/main</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

@@ -1,0 +1,130 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="AI Chat" description="Interactive AI chat panel in grüt — ask questions, run tools, and get contextual help without leaving the terminal.">
+  <h1>AI Chat</h1>
+  <p class="lead">
+    grüt includes an interactive AI chat panel that lets you have multi-turn
+    conversations with an AI assistant directly inside the terminal — ask
+    questions about your repository, generate commit messages, resolve
+    conflicts, and execute tools.
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    The chat panel appears as a collapsible footer at the bottom of the
+    interface. When collapsed it occupies a single row showing the input
+    prompt. Expand it to see the full conversation history with streaming
+    responses, tool calls, and markdown-formatted output.
+  </p>
+  <p>
+    Focus the chat panel and start typing to send a message. The AI streams
+    its response in real time with an animated spinner. Previous messages
+    stay visible so you can scroll back through the conversation.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li>
+      <strong>Multi-turn conversations</strong> — the chat retains full
+      conversation history so the AI understands context from earlier
+      messages.
+    </li>
+    <li>
+      <strong>Streaming responses</strong> — answers appear token-by-token
+      as the AI generates them, so you see progress immediately.
+    </li>
+    <li>
+      <strong>Tool calling</strong> — the AI can invoke built-in tools
+      (file reads, git operations, GitHub queries) and show results inline.
+      Destructive operations require confirmation before executing.
+    </li>
+    <li>
+      <strong>Markdown rendering</strong> — responses are formatted with
+      headings, code blocks, lists, and inline code for readability.
+    </li>
+    <li>
+      <strong>Full-screen overlay</strong> — expand the chat to an overlay
+      mode for longer conversations where you need more screen space.
+    </li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Send message' },
+    { key: 'Esc', action: 'Exit chat / collapse panel' },
+    { key: 'Up / Down', action: 'Scroll conversation history' },
+    { key: 'Ctrl+L', action: 'Clear conversation' },
+  ]} />
+
+  <h2>Supported Providers</h2>
+  <p>
+    The chat panel works with any configured AI provider:
+  </p>
+  <ul>
+    <li>
+      <strong>GitHub Copilot</strong> — uses your existing Copilot
+      subscription. No additional API key required.
+    </li>
+    <li>
+      <strong>Claude (Anthropic)</strong> — requires an
+      <code>ANTHROPIC_API_KEY</code> environment variable.
+    </li>
+  </ul>
+
+  <h2>Tool Execution</h2>
+  <p>
+    When the AI decides a tool call is needed, grüt executes it
+    automatically and feeds the result back into the conversation. Tools
+    include:
+  </p>
+  <ul>
+    <li><strong>File operations</strong> — read file contents within the repository</li>
+    <li><strong>Git operations</strong> — check status, view diffs, read logs</li>
+    <li><strong>GitHub operations</strong> — list issues, pull requests, workflows</li>
+  </ul>
+  <p>
+    Destructive operations (writes, deletes, pushes) always prompt for
+    confirmation before executing.
+  </p>
+
+  <h2>Security</h2>
+  <p>
+    All data sent to the AI provider is subject to grüt's security
+    pipeline:
+  </p>
+  <ul>
+    <li>PII and secrets are redacted before transmission</li>
+    <li>Every interaction is logged locally with timestamps and a summary</li>
+    <li>Chat is opt-in — it never activates without explicit user action</li>
+  </ul>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[ai]
+enabled = true              # Enable AI features globally
+provider = "copilot"        # "copilot" | "claude" | "none"
+
+[ai.chat]
+enabled = true              # Enable the chat panel
+collapsed_height = 1        # Height in rows when collapsed
+expanded_height = 20        # Height in rows when expanded
+render_markdown = true      # Format responses as markdown
+system_prompt = ""          # Custom system prompt override</code></pre>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="/grut/docs/ai-integration/">AI Integration</a> — AI middleware for git operations</li>
+    <li><a href="/grut/docs/context-builder/">Context Builder</a> — select files for AI context</li>
+    <li><a href="/grut/docs/configuration/">Configuration</a> — full config reference</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

@@ -1,0 +1,44 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="GitHub Releases" description="Browse GitHub releases and their assets from the grüt terminal UI.">
+  <h1>GitHub Releases</h1>
+  <p class="lead">
+    The Releases tab shows published releases for your repository — browse
+    release notes, see attached assets, and jump to any release on GitHub.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Release list</strong> — All releases with version tag, date, and author</li>
+    <li><strong>Release notes</strong> — Select a release to preview its markdown body</li>
+    <li><strong>Assets</strong> — See download assets attached to each release</li>
+    <li><strong>Pre-release indicators</strong> — Pre-releases and drafts are clearly marked</li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={[
+    { key: 'Enter', action: 'Preview release notes' },
+    { key: 'o', action: 'Open release in browser' },
+    { key: 'y', action: 'Copy release URL to clipboard' },
+    { key: 'R', action: 'Refresh release list' },
+  ]} />
+
+  <h2>Context Awareness</h2>
+  <p>
+    Selecting a release updates the preview panel with the full release notes
+    rendered as markdown. The release tag is highlighted in the tag list if the
+    Tags tab is also visible, keeping your navigation context consistent across
+    panels.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

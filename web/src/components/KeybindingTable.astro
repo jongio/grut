@@ -1,0 +1,71 @@
+---
+interface Keybinding {
+  key: string;
+  action: string;
+}
+
+interface Props {
+  bindings: Keybinding[];
+  title?: string;
+}
+
+const { bindings, title } = Astro.props;
+---
+
+{title && <h4>{title}</h4>}
+<div class="keybinding-table-wrap">
+  <table class="keybinding-table">
+    <thead>
+      <tr>
+        <th>Key</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {bindings.map((b) => (
+        <tr>
+          <td><kbd>{b.key}</kbd></td>
+          <td>{b.action}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .keybinding-table-wrap {
+    margin: var(--space-4) 0 var(--space-6);
+    overflow-x: auto;
+  }
+
+  .keybinding-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .keybinding-table th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .keybinding-table td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+  }
+
+  .keybinding-table td:first-child {
+    white-space: nowrap;
+    width: 140px;
+  }
+
+  .keybinding-table tbody tr:hover {
+    background: var(--color-surface);
+  }
+</style>

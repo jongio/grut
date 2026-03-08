@@ -1,0 +1,99 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Git Conflicts" description="Resolve merge and rebase conflicts with a dedicated conflict resolution UI in grüt.">
+  <h1>Git Conflicts</h1>
+  <p class="lead">
+    When a merge, rebase, or cherry-pick produces conflicts, grüt switches to a
+    dedicated conflict resolution panel — showing both sides, highlighting
+    differences, and letting you resolve each conflict with a single keypress.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/conflicts.png" alt="Conflict resolution panel showing ours and theirs side by side" caption="Dedicated conflict resolution panel" />
+
+  <h2>Conflict Detection</h2>
+  <p>
+    grüt automatically detects conflicts after any git operation that can produce
+    them (merge, rebase, cherry-pick, stash pop). Conflicting files appear in the
+    status panel with a <code>✗</code> conflict marker, and grüt displays a
+    notification with the number of files in conflict.
+  </p>
+
+  <h2>Conflict Panel</h2>
+  <p>
+    Select a conflicting file to open the conflict resolution view. The panel
+    shows a two-column layout:
+  </p>
+  <ul>
+    <li><strong>Left (Ours)</strong> — the version from your current branch</li>
+    <li><strong>Right (Theirs)</strong> — the incoming version from the branch being merged</li>
+  </ul>
+  <p>
+    Conflicting regions are highlighted with distinct colors. Lines that differ
+    between the two sides are emphasized so you can quickly identify what
+    changed.
+  </p>
+
+  <h2>Resolution Options</h2>
+  <p>
+    For each conflict region, choose a resolution:
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'o', action: 'Accept ours — keep the current branch version' },
+    { key: 't', action: 'Accept theirs — take the incoming version' },
+    { key: 'b', action: 'Accept both — include both versions sequentially' },
+    { key: 'e', action: 'Manual edit — open in your configured editor' },
+  ]} />
+  <p>
+    After choosing a resolution, the conflict marker is removed from that region
+    and the resolved content is shown inline. You can change your decision by
+    pressing a different resolution key before moving on.
+  </p>
+
+  <h2>Navigation</h2>
+  <KeybindingTable bindings={[
+    { key: 'j', action: 'Move to next conflict region' },
+    { key: 'k', action: 'Move to previous conflict region' },
+    { key: 'n', action: 'Jump to next conflicting file' },
+    { key: 'N', action: 'Jump to previous conflicting file' },
+  ]} />
+
+  <h2>Completing Resolution</h2>
+  <p>
+    Once all conflicts in a file are resolved, the file's status changes from
+    <code>✗</code> to <code>●</code> (staged). When every conflicting file
+    has been resolved:
+  </p>
+  <ol>
+    <li>grüt stages all resolved files automatically</li>
+    <li>A prompt asks you to continue the interrupted operation</li>
+    <li>
+      Press <kbd>Enter</kbd> to confirm — grüt runs the appropriate
+      <code>git merge --continue</code>, <code>git rebase --continue</code>,
+      or <code>git cherry-pick --continue</code>
+    </li>
+  </ol>
+  <p>
+    To abort the operation instead, press <kbd>q</kbd> and confirm when
+    prompted. This runs the corresponding <code>--abort</code> command and
+    restores your branch to its pre-operation state.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/git-branches/">Git Branches</a> — branch management and merging</li>
+    <li><a href="/grut/docs/git-undo-redo/">Git Undo & Redo</a> — reverse an operation if needed</li>
+    <li><a href="/grut/docs/git-diff/">Git Diff</a> — view diffs in detail</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

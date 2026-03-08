@@ -1,0 +1,99 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Diff Review" description="Review changes at the hunk level with approve, reject, and selective staging in grut.">
+  <h1>Diff Review</h1>
+  <p class="lead">
+    The diff review workflow lets you approve or reject individual hunks within
+    a file — enabling selective staging of exactly the changes you want to
+    commit.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Diff review panel showing hunk-level approve and reject workflow" caption="Diff viewer with hunk-level approve/reject controls" />
+
+  <h2>Review Panel</h2>
+  <p>
+    The review panel shows the diff for a file broken into discrete hunks.
+    Each hunk represents a contiguous block of changes (additions, deletions,
+    or modifications). Every hunk has its own status indicator:
+  </p>
+  <ul>
+    <li><code>○</code> — <strong>Pending</strong> — not yet reviewed</li>
+    <li><code>✓</code> — <strong>Approved</strong> — will be staged</li>
+    <li><code>✗</code> — <strong>Rejected</strong> — will be discarded</li>
+  </ul>
+  <p>
+    Navigate between hunks and set their status to build up exactly the
+    change set you want.
+  </p>
+
+  <h2>Hunk Actions</h2>
+  <KeybindingTable bindings={[
+    { key: 'n', action: 'Jump to next hunk' },
+    { key: 'N', action: 'Jump to previous hunk' },
+    { key: 'a', action: 'Approve the current hunk' },
+    { key: 'x', action: 'Reject the current hunk' },
+    { key: 'r', action: 'Reset hunk to pending' },
+    { key: 'Enter', action: 'Apply — stage approved hunks, discard rejected' },
+    { key: 'Esc', action: 'Cancel review without applying changes' },
+  ]} />
+
+  <h2>Selective Staging</h2>
+  <p>
+    This workflow is designed for situations where a file contains multiple
+    unrelated changes and you want to commit them separately. Instead of
+    staging the entire file, you review each hunk and decide:
+  </p>
+  <ol>
+    <li>Navigate to a modified file in the status panel</li>
+    <li>Enter diff review mode</li>
+    <li>Review each hunk — press <kbd>a</kbd> to approve or <kbd>x</kbd> to reject</li>
+    <li>Press <kbd>Enter</kbd> to apply your decisions</li>
+    <li>Approved hunks are staged; rejected hunks are discarded from the working tree</li>
+    <li>Pending hunks (neither approved nor rejected) remain as unstaged changes</li>
+  </ol>
+  <p>
+    This gives you the same power as <code>git add -p</code> but with a visual
+    interface that shows the full context of each hunk.
+  </p>
+
+  <h2>Batch Actions</h2>
+  <p>
+    For files with many hunks, you can use batch actions to speed up the
+    review:
+  </p>
+  <KeybindingTable bindings={[
+    { key: 'A', action: 'Approve all hunks in the current file' },
+    { key: 'X', action: 'Reject all hunks in the current file' },
+    { key: 'R', action: 'Reset all hunks to pending' },
+  ]} />
+
+  <h2>Review Status Bar</h2>
+  <p>
+    The status bar at the bottom of the review panel shows a summary of your
+    progress:
+  </p>
+  <ul>
+    <li>Total number of hunks in the file</li>
+    <li>Count of approved, rejected, and pending hunks</li>
+    <li>Current hunk position (e.g., "3 of 7")</li>
+  </ul>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/grut/docs/git-diff/">Git Diff</a> — view diffs in inline or side-by-side mode</li>
+    <li><a href="/grut/docs/git-status/">Git Status & Staging</a> — stage and unstage files</li>
+    <li><a href="/grut/docs/git-log/">Git Log</a> — browse commit history</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

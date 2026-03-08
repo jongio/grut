@@ -1,0 +1,80 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+---
+
+<Docs title="Terminal" description="Embedded terminal panel in grüt — run shell commands without leaving the file explorer.">
+  <h1>Terminal</h1>
+  <p class="lead">
+    grüt includes an embedded terminal panel so you can run shell commands
+    without leaving the explorer. Switch between normal navigation and
+    command input with a single keystroke.
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    The terminal panel starts a shell process (<code>cmd.exe</code> on
+    Windows, <code>$SHELL</code> on Linux/macOS) and pipes input and output
+    directly inside the TUI. Output is displayed in a scrollable buffer
+    with configurable scrollback depth.
+  </p>
+
+  <h2>Modes</h2>
+  <p>The terminal operates in two modes:</p>
+  <ul>
+    <li>
+      <strong>Normal mode</strong> — scroll through output with
+      <kbd>j</kbd>/<kbd>k</kbd>. Press <kbd>i</kbd> or <kbd>Enter</kbd>
+      to switch to insert mode and start typing commands.
+    </li>
+    <li>
+      <strong>Insert mode</strong> — type commands directly into the shell.
+      Press the prefix key (<kbd>Ctrl+B</kbd> by default) to return to
+      normal mode.
+    </li>
+  </ul>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable title="Terminal — Normal Mode" bindings={[
+    { key: 'i / Enter', action: 'Enter insert mode (start typing)' },
+    { key: 'j / k', action: 'Scroll output down / up' },
+    { key: 'G', action: 'Jump to bottom of output' },
+    { key: 'g', action: 'Jump to top of output' },
+  ]} />
+
+  <KeybindingTable title="Terminal — Insert Mode" bindings={[
+    { key: 'Ctrl+B', action: 'Exit insert mode (configurable prefix key)' },
+    { key: 'Enter', action: 'Execute command' },
+    { key: 'Ctrl+C', action: 'Send interrupt signal' },
+  ]} />
+
+  <h2>Scrollback Buffer</h2>
+  <p>
+    Terminal output is kept in a line buffer with a configurable maximum.
+    When the buffer fills, the oldest lines are discarded. The render loop
+    is throttled to approximately 30 fps so rapid output doesn't block the
+    rest of the UI.
+  </p>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[terminal]
+shell = ""            # Shell to launch (default: cmd.exe or $SHELL)
+scrollback = 1000     # Maximum output lines to retain
+render_fps = 30       # Render frame rate
+prefix_key = "ctrl+b" # Key to exit insert mode</code></pre>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="/grut/docs/keybindings/">Keybindings</a> — full key reference</li>
+    <li><a href="/grut/docs/layout-panels/">Layout &amp; Panels</a> — panel management</li>
+    <li><a href="/grut/docs/sessions/">Sessions</a> — session persistence</li>
+  </ul>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

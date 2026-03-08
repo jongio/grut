@@ -1,0 +1,52 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+
+linters:
+  default: standard
+  enable:
+    - errname
+    - exhaustive
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - makezero
+    - nilerr
+    - noctx
+    - prealloc
+    - predeclared
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+
+  settings:
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - appendAssign
+        - elseif
+
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [errcheck, goconst, unparam, forcetypeassert, noctx, exhaustive, prealloc]
+      - path: magefile\.go
+        linters: [unparam, errcheck]
+      # External library enum types — only a relevant subset is handled.
+      - text: "missing cases in switch of type tea\\.Mouse"
+        linters:
+          - exhaustive
+      # runtime.GOOS comparisons are idiomatic Go, not magic strings.
+      - text: 'string `(windows|darwin|linux)` has'
+        linters:
+          - goconst

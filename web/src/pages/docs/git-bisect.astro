@@ -1,0 +1,119 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+
+const bisectBindings = [
+  { key: 'Ctrl+b', action: 'Start bisect — prompts for good and bad commits' },
+  { key: 'g', action: 'Mark current commit as good' },
+  { key: 'b', action: 'Mark current commit as bad' },
+  { key: 'r', action: 'Reset / abort bisect — return to original state' },
+];
+---
+
+<Docs title="Git Bisect" description="Binary search for bugs in grüt — find the exact commit that introduced a regression.">
+  <h1>Git Bisect</h1>
+  <p class="lead">
+    Use binary search to pinpoint the exact commit that introduced a bug. grüt wraps
+    <code>git bisect</code> with a visual interface that tracks progress and remaining steps.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/git-log.png" alt="Git log view used during bisect to navigate commit history" caption="Bisect uses the commit log to track good and bad commits" />
+
+  <h2>How Bisect Works</h2>
+  <p>
+    Git bisect performs a binary search through your commit history. You provide two reference
+    points — a known <strong>good</strong> commit (where the bug didn't exist) and a known
+    <strong>bad</strong> commit (where the bug is present). Git then checks out the midpoint
+    commit for you to test.
+  </p>
+  <p>
+    After testing, you mark the commit as good or bad. Git narrows the range and checks out the
+    next midpoint. This process repeats — bisecting the range in half each time — until the
+    first bad commit is identified.
+  </p>
+
+  <h2>Keybindings</h2>
+  <KeybindingTable bindings={bisectBindings} title="Bisect Controls" />
+
+  <h2>Starting a Bisect</h2>
+  <ol>
+    <li>
+      Press <code>Ctrl+b</code> to start a bisect session.
+    </li>
+    <li>
+      grüt prompts for the <strong>bad commit</strong> — typically <code>HEAD</code> or the
+      current commit where you observe the bug.
+    </li>
+    <li>
+      grüt prompts for the <strong>good commit</strong> — a commit SHA, tag, or branch name
+      where the bug did not exist.
+    </li>
+    <li>
+      grüt calculates the midpoint and checks it out. The interface updates to show the bisect
+      state.
+    </li>
+  </ol>
+
+  <h2>Bisect Progress</h2>
+  <p>
+    During an active bisect, the status bar shows real-time information:
+  </p>
+  <pre><code>BISECTING  step 3 of ~7  remaining: 12 commits  ━━━━━━━━░░░░  43%</code></pre>
+  <p>
+    The progress indicator tells you:
+  </p>
+  <ul>
+    <li><strong>Current step</strong> — which bisect step you're on</li>
+    <li><strong>Estimated total steps</strong> — <code>log₂(n)</code> where <code>n</code> is the
+    number of commits in the range</li>
+    <li><strong>Remaining commits</strong> — how many commits are still in the search range</li>
+    <li><strong>Percentage</strong> — visual progress bar</li>
+  </ul>
+
+  <h2>Marking Commits</h2>
+  <p>
+    At each bisect step, test whether the bug exists in the currently checked-out commit:
+  </p>
+  <ul>
+    <li>Press <code>g</code> if the bug is <strong>not present</strong> (good commit).</li>
+    <li>Press <code>b</code> if the bug <strong>is present</strong> (bad commit).</li>
+  </ul>
+  <p>
+    After each mark, grüt automatically checks out the next midpoint commit and updates the
+    progress indicator.
+  </p>
+
+  <h2>Bisect Result</h2>
+  <p>
+    When the search completes, grüt displays the <strong>first bad commit</strong> — the exact
+    commit that introduced the regression:
+  </p>
+  <pre><code>Bisect complete!
+
+First bad commit:
+  f5e6d7c8  "refactor: change auth token validation"
+  Author: Bob &lt;bob@example.com&gt;
+  Date:   2025-01-03 14:22:07
+
+This is the commit that introduced the bug.</code></pre>
+  <p>
+    From here, you can press <code>Enter</code> to view the full diff of the offending commit
+    and understand exactly what changed.
+  </p>
+
+  <h2>Aborting a Bisect</h2>
+  <p>
+    Press <code>r</code> at any time during a bisect to abort. grüt runs
+    <code>git bisect reset</code>, restoring your working tree to the branch and commit you were
+    on before starting the bisect.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

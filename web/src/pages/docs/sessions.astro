@@ -1,0 +1,78 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Session Persistence" description="grüt saves and restores your workspace between sessions — layout preset, focused panel, and working directory.">
+  <h1>Session Persistence</h1>
+  <p class="lead">
+    grüt automatically saves your workspace state when you exit and restores it
+    when you relaunch — so you pick up exactly where you left off.
+  </p>
+
+  <Screenshot src="/grut/screenshots/default/settings.png" alt="Settings panel showing session persistence configuration" caption="Session settings in the Settings panel" />
+
+  <h2>What Gets Saved</h2>
+  <p>
+    When session persistence is enabled, grüt stores the following state on
+    exit:
+  </p>
+  <ul>
+    <li><strong>Working directory</strong> — the project root you were working in</li>
+    <li><strong>Layout preset</strong> — which preset (Explorer, Git, Review, Agent, Full) was active</li>
+    <li><strong>Focused panel</strong> — which panel had focus when you exited</li>
+    <li><strong>Tab name</strong> — the label for each workspace tab</li>
+  </ul>
+
+  <h2>How It Works</h2>
+  <p>
+    Session data is stored in your platform's user data directory:
+  </p>
+  <ul>
+    <li><strong>Linux:</strong> <code>~/.local/share/grut/sessions/</code></li>
+    <li><strong>macOS:</strong> <code>~/Library/Application Support/grut/sessions/</code></li>
+    <li><strong>Windows:</strong> <code>%APPDATA%\grut\sessions\</code></li>
+  </ul>
+  <p>
+    Each project gets its own session file, keyed by the absolute path of the
+    root directory. This means you can have independent sessions for every
+    project you work on.
+  </p>
+
+  <h2>Auto-Save &amp; Auto-Restore</h2>
+  <p>
+    By default, grüt auto-saves the session on exit (including <kbd>q</kbd> and
+    <kbd>Ctrl+c</kbd>) and auto-restores when you open the same directory
+    again. This is seamless — there are no prompts or confirmation dialogs.
+  </p>
+
+  <h2>Session Expiration</h2>
+  <p>
+    Sessions older than <code>max_age</code> days are automatically cleaned up
+    on launch. This prevents stale session files from accumulating.
+  </p>
+  <pre><code>[session]
+max_age = 30               # Days before a session expires (default: 30)</code></pre>
+
+  <h2>Disabling Sessions</h2>
+  <p>
+    If you prefer a clean slate on every launch, disable session persistence
+    in your configuration:
+  </p>
+  <pre><code>[session]
+enabled = false</code></pre>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>[session]
+enabled = true             # Enable session save/restore (default: true)
+max_age = 30               # Days before session files expire (default: 30)</code></pre>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+</style>

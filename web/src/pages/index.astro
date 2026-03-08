@@ -1,0 +1,223 @@
+---
+import Landing from '../layouts/Landing.astro';
+import FeatureCard from '../components/FeatureCard.astro';
+import InstallBlock from '../components/InstallBlock.astro';
+import Screenshot from '../components/Screenshot.astro';
+---
+
+<Landing title="grüt" description="A terminal file explorer with deep Git integration.">
+
+  <!-- ═══════════════ HERO ═══════════════ -->
+  <section class="hero" aria-labelledby="hero-heading">
+    <img src="/grut/logo-light.svg" alt="grüt" class="hero-logo" width="160" height="56" />
+    <h1 id="hero-heading" class="hero-tagline">
+      A terminal file explorer with deep Git&nbsp;integration.
+    </h1>
+
+    <!-- install tabs -->
+    <div class="install">
+      <InstallBlock tabs={[
+        { label: 'Windows', id: 'windows', code: 'irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex' },
+        { label: 'Linux / macOS', id: 'unix', code: 'curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | bash' },
+        { label: 'Go', id: 'go', code: 'go install github.com/jongio/grut@latest' },
+      ]} />
+    </div>
+  </section>
+
+  <!-- ═══════════════ SCREENSHOT ═══════════════ -->
+  <section class="hero-screenshot">
+    <Screenshot src="/grut/screenshots/default/hero-main.png" alt="grüt terminal interface showing the explorer layout with file tree, git info, and preview panels" />
+  </section>
+
+  <!-- ═══════════════ SCREENSHOT GALLERY ═══════════════ -->
+  <section class="gallery" aria-labelledby="gallery-heading">
+    <h2 id="gallery-heading" class="section-heading">Screenshots</h2>
+    <div class="gallery-grid">
+      <Screenshot src="/grut/screenshots/default/file-explorer.png" alt="File explorer with tree navigation and git status markers" caption="File explorer" description="Navigate your project tree with git status markers on every file. Create, rename, delete, and preview files without leaving the terminal." />
+      <Screenshot src="/grut/screenshots/default/git-info.png" alt="Git info panel with branches, tags, and status" caption="Git info" description="Stage and unstage files with a single keystroke. See modified, added, and untracked files at a glance with color-coded status indicators." />
+      <Screenshot src="/grut/screenshots/default/git-log.png" alt="Git log with commit history" caption="Git log" description="Browse commit history with author info, timestamps, and commit graphs. Jump to any commit to see its diff." />
+      <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Diff viewer with syntax highlighting" caption="Diff viewer" description="Syntax-highlighted diffs with hunk-level navigation. Approve or reject individual hunks for selective staging." />
+      <Screenshot src="/grut/screenshots/default/git-branches.png" alt="Branch management panel" caption="Branches" description="Manage local and remote branches — create, checkout, rename, merge, and delete. See tracking status and ahead/behind counts." />
+      <Screenshot src="/grut/screenshots/default/fuzzy-finder.png" alt="Fuzzy finder for instant file search" caption="Fuzzy finder" description="Press / to instantly search across all files in your project. Jump to any file in milliseconds with fuzzy matching." />
+      <Screenshot src="/grut/screenshots/default/file-preview.png" alt="File preview panel" caption="Preview" description="Preview files with syntax highlighting as you navigate. Adapts to show diffs, PR bodies, or file content depending on context." />
+      <Screenshot src="/grut/screenshots/default/settings.png" alt="Settings overlay with theme selector" caption="Settings" description="Configure themes, keybindings, and preferences through an in-app settings overlay. Changes apply immediately." />
+      <Screenshot src="/grut/screenshots/default/hero-main.png" alt="Full layout with all panels visible" caption="Full layout" description="All panels visible at once — file tree, git info, and preview. Switch between five layout presets with a single key." />
+      <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Diff viewer with syntax highlighting" caption="Diff review" description="Dedicated code review mode with syntax-highlighted diffs. Navigate hunks and approve or reject changes one at a time." />
+      <Screenshot src="/grut/screenshots/default/help.png" alt="Help overlay with keybinding reference" caption="Keybindings" description="Press ? to open the keybinding reference overlay. See every shortcut organized by context." />
+    </div>
+  </section>
+
+  <!-- ═══════════════ FEATURES ═══════════════ -->
+  <section class="features" aria-labelledby="features-heading">
+    <h2 id="features-heading" class="section-heading">Features</h2>
+    <div class="feature-grid">
+      <FeatureCard
+        title="File Explorer"
+        icon="▸"
+        description="Browse, preview, create, rename, delete files with tree navigation and syntax highlighting."
+        href="/grut/docs/file-explorer/"
+      />
+      <FeatureCard
+        title="Git Integration"
+        icon="●"
+        description="Full git workflow — staging, commits, branches, merge, rebase, stash, tags, worktrees, blame, bisect."
+        href="/grut/docs/git-status/"
+      />
+      <FeatureCard
+        title="Splits & Layouts"
+        icon="┃"
+        description="Multi-panel layout with horizontal and vertical splits, 5 preset configurations, and zoom mode."
+        href="/grut/docs/layout-panels/"
+      />
+      <FeatureCard
+        title="Themes"
+        icon="◈"
+        description="4 built-in themes — Default, Catppuccin, Tokyo Night, Gruvbox — plus custom TOML themes."
+        href="/grut/docs/themes/"
+      />
+      <FeatureCard
+        title="Terminal"
+        icon="▸"
+        description="Embedded terminal with insert/normal modes — run commands without leaving the explorer."
+        href="/grut/docs/terminal/"
+      />
+      <FeatureCard
+        title="Fuzzy Finder"
+        icon="/"
+        description="Instant file search across your project — press / to jump to any file in milliseconds."
+        href="/grut/docs/fuzzy-finder/"
+      />
+      <FeatureCard
+        title="Bookmarks"
+        icon="★"
+        description="Pin frequently used directories for one-key access — press B to bookmark, jump back instantly."
+        href="/grut/docs/bookmarks/"
+      />
+      <FeatureCard
+        title="Context Builder"
+        icon="◇"
+        description="Select files and count tokens for AI context — copy structured file sets for LLM prompts."
+        href="/grut/docs/context-builder/"
+      />
+      <FeatureCard
+        title="Diff Review"
+        icon="±"
+        description="Hunk-level approve/reject workflow — review changes one piece at a time with keyboard shortcuts."
+        href="/grut/docs/diff-review/"
+      />
+      <FeatureCard
+        title="Sessions"
+        icon="↻"
+        description="Automatic session persistence — saves and restores your layout preset, directory, and panel state on restart."
+        href="/grut/docs/sessions/"
+      />
+    </div>
+  </section>
+
+
+</Landing>
+
+<style>
+  /* ── Layout ── */
+  .hero,
+  .hero-screenshot,
+  .gallery,
+  .features {
+    max-width: var(--content-max);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .section-heading {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-top: 0;
+    margin-bottom: var(--space-8);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding-top: var(--space-16);
+    padding-bottom: var(--space-16);
+  }
+
+  .hero-logo {
+    display: inline-block;
+    margin-bottom: var(--space-6);
+  }
+
+  .hero-tagline {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    font-weight: 400;
+    color: var(--color-text-muted);
+    max-width: 560px;
+    margin: 0 auto var(--space-10);
+    line-height: var(--leading-normal);
+  }
+
+  /* ── Install tabs ── */
+  .install {
+    max-width: 620px;
+    margin: 0 auto;
+    text-align: left;
+  }
+
+  /* ── Feature grid ── */
+  .features {
+    padding-bottom: var(--space-16);
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 640px) {
+    .feature-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 960px) {
+    .feature-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .feature-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  /* ── Screenshot gallery ── */
+  .gallery {
+    padding-bottom: var(--space-16);
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+  }
+
+  @media (min-width: 640px) {
+    .gallery-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 960px) {
+    .gallery-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+
+</style>

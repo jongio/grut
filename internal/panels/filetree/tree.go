@@ -1,0 +1,714 @@
+package filetree
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/panels"
+)
+
+// ---------------------------------------------------------------------------
+// Tree loading
+// ---------------------------------------------------------------------------
+
+// loadChildren populates n.children from the filesystem via os.ReadDir and
+// os.Lstat.  Loading is lazy — children are only loaded the first time a
+// directory is expanded.
+func (ft *FileTree) loadChildren(n *node) {
+	if n.loaded || !n.isDir {
+		return
+	}
+
+	// Max depth enforcement.
+	if n.depth+1 >= ft.cfg.MaxDepth {
+		n.loaded = true
+		return
+	}
+
+	entries, err := os.ReadDir(n.path)
+	if err != nil {
+		n.loadErr = err
+		n.loaded = true
+		return
+	}
+	n.loadErr = nil
+
+	children := make([]*node, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		childPath := filepath.Join(n.path, name)
+
+		child := &node{
+			name:  name,
+			path:  childPath,
+			depth: n.depth + 1,
+		}
+
+		info, err := os.Lstat(childPath)
+		if err != nil {
+			continue // skip entries we cannot stat
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			child.isSymlink = true
+			if target, err := os.Readlink(childPath); err == nil {
+				child.symlinkTarget = target
+			}
+			// Follow symlink to determine directory/executable status.
+			if targetInfo, err := os.Stat(childPath); err == nil {
+				child.isDir = targetInfo.IsDir()
+				if !targetInfo.IsDir() {
+					child.isExecutable = targetInfo.Mode()&0o111 != 0
+				}
+			}
+		} else {
+			child.isDir = info.IsDir()
+			if !info.IsDir() {
+				child.isExecutable = info.Mode()&0o111 != 0
+			}
+		}
+
+		children = append(children, child)
+	}
+
+	ft.sortChildren(children)
+	n.children = children
+	n.loaded = true
+}
+
+// loadChildrenStatic is a standalone version of loadChildren that uses
+// an explicit config rather than the FileTree receiver. Safe for use in
+// background goroutines launched by tea.Cmd (F05).
+func loadChildrenStatic(n *node, cfg config.FileTreeConfig) {
+	if n.loaded || !n.isDir {
+		return
+	}
+	if n.depth+1 >= cfg.MaxDepth {
+		n.loaded = true
+		return
+	}
+	entries, err := os.ReadDir(n.path)
+	if err != nil {
+		n.loadErr = err
+		n.loaded = true
+		return
+	}
+	n.loadErr = nil
+	children := make([]*node, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		childPath := filepath.Join(n.path, name)
+		child := &node{name: name, path: childPath, depth: n.depth + 1}
+		info, err := os.Lstat(childPath)
+		if err != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			child.isSymlink = true
+			if target, err := os.Readlink(childPath); err == nil {
+				child.symlinkTarget = target
+			}
+			if targetInfo, err := os.Stat(childPath); err == nil {
+				child.isDir = targetInfo.IsDir()
+				if !targetInfo.IsDir() {
+					child.isExecutable = targetInfo.Mode()&0o111 != 0
+				}
+			}
+		} else {
+			child.isDir = info.IsDir()
+			if !info.IsDir() {
+				child.isExecutable = info.Mode()&0o111 != 0
+			}
+		}
+		children = append(children, child)
+	}
+	sortChildrenStatic(children, cfg.SortDirectoriesFirst)
+	n.children = children
+	n.loaded = true
+}
+
+// ---------------------------------------------------------------------------
+// Sorting
+// ---------------------------------------------------------------------------
+
+// sortChildrenStatic sorts children without a FileTree receiver. Safe for
+// use in background goroutines.
+func sortChildrenStatic(children []*node, dirFirst bool) {
+	slices.SortStableFunc(children, func(a, b *node) int {
+		if dirFirst && a.isDir != b.isDir {
+			if a.isDir {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+	})
+}
+
+func (ft *FileTree) sortChildren(children []*node) {
+	// Stable sort: directories first (when configured), then case-insensitive
+	// alphabetical. Uses stdlib slices.SortStableFunc (Go 1.21+).
+	dirFirst := ft.cfg.SortDirectoriesFirst
+	slices.SortStableFunc(children, func(a, b *node) int {
+		if dirFirst && a.isDir != b.isDir {
+			if a.isDir {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Visible list
+// ---------------------------------------------------------------------------
+
+// rebuildVisible flattens the tree into ft.visible, applying the hidden-file
+// filter and any active mode filters (commit-files, PR-files, git-changed).
+func (ft *FileTree) rebuildVisible() {
+	ft.visible = ft.visible[:0]
+	ft.walkVisible(ft.root)
+
+	// Clamp cursor.
+	if len(ft.visible) == 0 {
+		ft.cursor = 0
+		return
+	}
+	if ft.cursor >= len(ft.visible) {
+		ft.cursor = len(ft.visible) - 1
+	}
+	if ft.cursor < 0 {
+		ft.cursor = 0
+	}
+
+	ft.ensureCursorVisible()
+}
+
+func (ft *FileTree) walkVisible(n *node) {
+	for _, child := range n.children {
+		// Always hide the .git metadata directory.
+		if child.name == ".git" && child.isDir {
+			continue
+		}
+		// In filtered modes (commit/PR/git-changed) the mode's own
+		// path-based filter already constrains visibility, so bypass
+		// the hidden-file check.  Without this, dotfile changes
+		// (e.g. .github/) are suppressed before the filter runs.
+		if !ft.showHidden && isHidden(child.name) {
+			inFilteredMode := (ft.commitFilesMode && ft.commitChangedPaths != nil) ||
+				(ft.prFilesMode && ft.prChangedPaths != nil) ||
+				(ft.gitFilter && ft.gitChangedPaths != nil)
+			if !inFilteredMode {
+				continue
+			}
+		}
+		// Commit-files filter: skip files/dirs not in the commit-changed set.
+		// Takes priority over git filter since the user explicitly selected
+		// a commit to inspect.
+		if ft.commitFilesMode && ft.commitChangedPaths != nil {
+			if child.isDir {
+				if !ft.commitChangedDirs[child.path] {
+					continue
+				}
+			} else {
+				if !ft.commitChangedPaths[child.path] {
+					continue
+				}
+			}
+		} else if ft.prFilesMode && ft.prChangedPaths != nil {
+			// PR-files filter: skip files/dirs not in the PR-changed set.
+			if child.isDir {
+				if !ft.prChangedDirs[child.path] {
+					continue
+				}
+			} else {
+				if !ft.prChangedPaths[child.path] {
+					continue
+				}
+			}
+		} else if ft.gitFilter && ft.gitChangedPaths != nil {
+			// Git filter: skip files not in the changed set, and skip
+			// directories that contain no changed descendants.
+			if child.isDir {
+				if !ft.gitChangedDirs[child.path] {
+					continue
+				}
+			} else {
+				if !ft.gitChangedPaths[child.path] {
+					continue
+				}
+			}
+		}
+		ft.visible = append(ft.visible, child)
+		if child.isDir && child.expanded {
+			ft.walkVisible(child)
+		}
+	}
+}
+
+func isHidden(name string) bool {
+	return len(name) > 0 && name[0] == '.'
+}
+
+// ---------------------------------------------------------------------------
+// Refresh handler
+// ---------------------------------------------------------------------------
+
+// handleRefresh reloads the tree from disk and restarts the watcher command.
+func (ft *FileTree) handleRefresh() (panels.Panel, tea.Cmd) {
+	ft.reloadTree()
+
+	cmds := []tea.Cmd{ft.loadGitFileStatus(), ft.loadGitIgnored()}
+
+	// Restart the watcher to continue receiving events.
+	if ft.watcher != nil && ft.ctx != nil {
+		cmds = append(cmds, ft.watcher.start(ft.ctx))
+	}
+	return ft, tea.Batch(cmds...)
+}
+
+// reloadTree reloads the entire tree from disk, preserving the cursor
+// position as much as possible.
+func (ft *FileTree) reloadTree() {
+	// Remember the current cursor path for restoration.
+	var cursorPath string
+	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
+		cursorPath = ft.visible[ft.cursor].path
+	}
+
+	// Collect expanded directories.
+	expanded := ft.collectExpanded(ft.root)
+
+	// Rebuild root.
+	ft.root = &node{
+		name:  filepath.Base(ft.rootPath),
+		path:  ft.rootPath,
+		isDir: true,
+		depth: -1,
+	}
+	ft.loadChildren(ft.root)
+
+	// Re-expand previously expanded directories.
+	ft.restoreExpanded(ft.root, expanded)
+
+	ft.rebuildVisible()
+
+	// Restore cursor position.
+	if cursorPath != "" {
+		for i, n := range ft.visible {
+			if n.path == cursorPath {
+				ft.cursor = i
+				ft.ensureCursorVisible()
+				return
+			}
+		}
+	}
+}
+
+// collectExpanded gathers paths of all expanded directories.
+func (ft *FileTree) collectExpanded(n *node) map[string]bool {
+	expanded := make(map[string]bool)
+	var walk func(*node)
+	walk = func(n *node) {
+		if n.isDir && n.expanded {
+			expanded[n.path] = true
+		}
+		for _, child := range n.children {
+			walk(child)
+		}
+	}
+	walk(n)
+	return expanded
+}
+
+// restoreExpanded re-expands directories that were expanded before a reload.
+func (ft *FileTree) restoreExpanded(n *node, expanded map[string]bool) {
+	for _, child := range n.children {
+		if child.isDir && expanded[child.path] {
+			child.expanded = true
+			ft.loadChildren(child)
+			ft.restoreExpanded(child, expanded)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Path safety
+// ---------------------------------------------------------------------------
+
+// isPathSafe checks that a symlink target resolves inside the repo root.
+func (ft *FileTree) isPathSafe(symlinkPath string) bool {
+	rootResolved, err := filepath.EvalSymlinks(ft.rootPath)
+	if err != nil {
+		rootResolved = filepath.Clean(ft.rootPath)
+	}
+	resolved, err := filepath.EvalSymlinks(symlinkPath)
+	if err != nil {
+		return false
+	}
+	resolved = filepath.Clean(resolved)
+
+	rel, err := filepath.Rel(rootResolved, resolved)
+	if err != nil {
+		return false
+	}
+	// Outside root when relative path starts with "..".
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// isSymlinkLoop detects whether expanding the symlink would create a cycle.
+// A loop exists when the symlink target is an ancestor of (or equal to) the
+// directory that contains the symlink.
+func (ft *FileTree) isSymlinkLoop(symlinkPath string) bool {
+	target, err := filepath.EvalSymlinks(symlinkPath)
+	if err != nil {
+		return true // cannot resolve → play safe
+	}
+	target = filepath.Clean(target)
+
+	symlinkDir := filepath.Dir(symlinkPath)
+	symlinkDirReal, err := filepath.EvalSymlinks(symlinkDir)
+	if err != nil {
+		return true
+	}
+	symlinkDirReal = filepath.Clean(symlinkDirReal)
+
+	rel, err := filepath.Rel(target, symlinkDirReal)
+	if err != nil {
+		return true // cannot determine relationship → play safe
+	}
+	// If target is an ancestor of (or equal to) symlinkDir, rel will NOT start
+	// with ".." — that means it's a loop.
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// displayWidth returns the visible column width of s, treating Private Use
+// Area (PUA) characters as width 2.  Terminals with nerd fonts render PUA
+// glyphs as double-width even though Go's runewidth and lipgloss report
+// them as width 1.
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if r >= 0xE000 && r <= 0xF8FF ||
+			r >= 0xF0000 && r <= 0xFFFFF ||
+			r >= 0x100000 && r <= 0x10FFFF {
+			w += 2
+		} else {
+			w += lipgloss.Width(string(r))
+		}
+	}
+	return w
+}
+
+// runeDisplayWidth returns the visible column width of a single rune.
+func runeDisplayWidth(r rune) int {
+	if r >= 0xE000 && r <= 0xF8FF ||
+		r >= 0xF0000 && r <= 0xFFFFF ||
+		r >= 0x100000 && r <= 0x10FFFF {
+		return 2
+	}
+	return lipgloss.Width(string(r))
+}
+
+// truncateToWidth truncates s so its display width does not exceed maxW.
+// If truncation is needed, the last visible character is replaced with "…".
+func truncateToWidth(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	w := displayWidth(s)
+	if w <= maxW {
+		return s
+	}
+	runes := []rune(s)
+	cum := 0
+	for i, r := range runes {
+		rw := runeDisplayWidth(r)
+		if cum+rw > maxW-1 {
+			return string(runes[:i]) + "…"
+		}
+		cum += rw
+	}
+	return s
+}
+
+// ---------------------------------------------------------------------------
+// View rendering
+// ---------------------------------------------------------------------------
+
+func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
+	var b strings.Builder
+
+	if ft.listMode {
+		// List mode: show relative path, no indentation or tree connectors.
+		rel, err := filepath.Rel(ft.rootPath, n.path)
+		if err != nil {
+			rel = n.name
+		}
+		if ft.cfg.ShowIcons {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+				b.WriteString(icon)
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteString(rel)
+		if n.isDir {
+			b.WriteByte(filepath.Separator)
+		}
+	} else {
+		// Tree mode: indentation + expand/collapse + icons + name.
+		b.WriteString(strings.Repeat("  ", n.depth))
+
+		if n.isDir {
+			b.WriteString(getExpandIcon(n.expanded, ft.cfg.IconMode))
+			b.WriteByte(' ')
+		} else {
+			b.WriteString("  ")
+		}
+
+		if ft.cfg.ShowIcons {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+				b.WriteString(icon)
+				b.WriteByte(' ')
+			}
+		}
+
+		b.WriteString(n.name)
+
+		if n.isDir && n.loadErr != nil {
+			b.WriteString(" [error]")
+		}
+
+		if n.isSymlink && n.symlinkTarget != "" {
+			b.WriteString(" → ")
+			b.WriteString(n.symlinkTarget)
+		}
+	}
+
+	content := b.String()
+
+	// Colours.
+	fg := defaultColors.Default
+	ignored := ft.isPathIgnored(n.path)
+	switch {
+	case ignored:
+		fg = defaultColors.Dim
+	case n.isDir:
+		fg = defaultColors.Directory
+	case n.isSymlink:
+		fg = defaultColors.Symlink
+	case n.isExecutable:
+		fg = defaultColors.Executable
+	}
+
+	// Determine git status indicator for this node.
+	var gitIndicator string
+	var gitColor string
+	gitIndicatorW := 0 // visible column width of " " + indicator
+	if ft.gitClient != nil && !n.isDir && ft.gitFileStatus != nil {
+		if indicator, ok := ft.gitFileStatus[n.path]; ok {
+			gitColor = "#F8F8F2"
+			switch indicator {
+			case "M":
+				gitColor = "#FFB86C"
+			case "A":
+				gitColor = "#50FA7B"
+			case "D":
+				gitColor = "#FF5555"
+			case "?":
+				gitColor = "#6272A4"
+			case "R", "C":
+				gitColor = "#8BE9FD"
+			case "U":
+				gitColor = "#FF79C6"
+			}
+			gitIndicator = gitStatusIcon(indicator, ft.cfg.IconMode)
+			gitIndicatorW = 1 + displayWidth(gitIndicator) // " " + icon
+		}
+	}
+	// Show ignored indicator when no other git status is present.
+	if ignored && gitIndicator == "" {
+		gitIndicator = gitStatusIcon("!", ft.cfg.IconMode)
+		gitColor = defaultColors.Dim
+		gitIndicatorW = 1 + displayWidth(gitIndicator)
+	}
+
+	// Truncate content, reserving space for git indicator when present.
+	availW := width
+	if gitIndicatorW > 0 {
+		availW = width - gitIndicatorW
+		if availW < 1 {
+			availW = 1
+		}
+	}
+	content = truncateToWidth(content, availW)
+
+	// Pad content with spaces to fill availW exactly (manual padding, no
+	// lipgloss Width which can cause wrapping).
+	visW := displayWidth(content)
+	if visW < availW {
+		content += strings.Repeat(" ", availW-visW)
+	}
+
+	// Append git indicator before styling.
+	if gitIndicator != "" {
+		content += " " + gitIndicator
+	}
+
+	// Hard-truncate the combined line to exactly width columns.
+	content = truncateToWidth(content, width)
+
+	// Apply colours.
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
+	if ft.selected[n.path] {
+		style = style.Background(lipgloss.Color(defaultColors.SelectedBg))
+	}
+	if isCursor && ft.focused {
+		style = style.Background(lipgloss.Color(defaultColors.CursorBg)).Bold(true)
+	}
+
+	// Render the content line. If there's a git indicator, render the main
+	// part and the indicator separately so they can have different colours.
+	if gitIndicator != "" {
+		// Split back: main part is everything except last (1 + icon_width) chars.
+		mainPart := truncateToWidth(content, availW)
+		mainVisW := displayWidth(mainPart)
+		if mainVisW < availW {
+			mainPart += strings.Repeat(" ", availW-mainVisW)
+		}
+		line := style.Render(mainPart)
+		line += lipgloss.NewStyle().
+			Foreground(lipgloss.Color(gitColor)).
+			Bold(true).
+			Render(" " + gitIndicator)
+		return line
+	}
+
+	return style.Render(content)
+}
+
+// ---------------------------------------------------------------------------
+// Cursor path helpers
+// ---------------------------------------------------------------------------
+
+// cursorPath returns the absolute path of the node at the current cursor
+// position. Returns "" when the visible list is empty or cursor is out of
+// range.
+func (ft *FileTree) cursorPath() string {
+	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
+		return ft.visible[ft.cursor].path
+	}
+	return ""
+}
+
+// restoreCursorToPath moves the cursor to the node matching the given path.
+// If the path is not found in the current visible list, the cursor is
+// clamped to valid bounds.
+func (ft *FileTree) restoreCursorToPath(path string) {
+	if path == "" {
+		return
+	}
+	for i, n := range ft.visible {
+		if n.path == path {
+			ft.cursor = i
+			ft.ensureCursorVisible()
+			return
+		}
+	}
+	// Path not in current view — clamp cursor.
+	if ft.cursor >= len(ft.visible) {
+		ft.cursor = len(ft.visible) - 1
+	}
+	if ft.cursor < 0 {
+		ft.cursor = 0
+	}
+	ft.ensureCursorVisible()
+}
+
+// revealFile expands all parent directories of the given path and
+// positions the cursor on it. Used when the fuzzy finder selects a file.
+func (ft *FileTree) revealFile(path string) {
+	if path == "" || ft.root == nil {
+		return
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return
+	}
+
+	// Build the list of path segments from root to the target.
+	rel, err := filepath.Rel(ft.rootPath, absPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return
+	}
+
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+
+	// Walk the tree, loading and expanding each directory segment.
+	current := ft.root
+	for i, part := range parts {
+		if !current.loaded {
+			ft.loadChildren(current)
+		}
+		current.expanded = true
+
+		var found *node
+		for _, child := range current.children {
+			if child.name == part {
+				found = child
+				break
+			}
+		}
+		if found == nil {
+			return // path segment not found in tree
+		}
+
+		if i < len(parts)-1 {
+			// Intermediate directory — continue walking.
+			current = found
+		} else {
+			// Final segment — rebuild visible and position cursor.
+			ft.rebuildVisible()
+			ft.restoreCursorToPath(found.path)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test-only accessors (unexported; tests are in the same package) (F22)
+// ---------------------------------------------------------------------------
+
+// cursor returns the current cursor index.
+func (ft *FileTree) cursorIndex() int { return ft.cursor }
+
+// visibleCount returns the number of currently visible nodes.
+func (ft *FileTree) visibleCount() int { return len(ft.visible) }
+
+// visibleName returns the name of the node at the given visible index.
+func (ft *FileTree) visibleName(i int) string {
+	if i < 0 || i >= len(ft.visible) {
+		return ""
+	}
+	return ft.visible[i].name
+}
+
+// visiblePath returns the path of the node at the given visible index.
+func (ft *FileTree) visiblePath(i int) string {
+	if i < 0 || i >= len(ft.visible) {
+		return ""
+	}
+	return ft.visible[i].path
+}
+
+// isSelected returns whether the path is in the multi-select set.
+func (ft *FileTree) isPathSelected(path string) bool { return ft.selected[path] }
+
+// showHiddenState returns the current hidden-file visibility state.
+func (ft *FileTree) showHiddenState() bool { return ft.showHidden }

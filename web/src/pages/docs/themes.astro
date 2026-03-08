@@ -1,0 +1,184 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import KeybindingTable from '../../components/KeybindingTable.astro';
+import Screenshot from '../../components/Screenshot.astro';
+---
+
+<Docs title="Themes" description="Built-in themes and custom TOML theme format for grüt.">
+  <h1>Themes</h1>
+  <p class="lead">
+    grüt ships with four built-in themes and supports fully custom themes via
+    TOML files. Every color in the UI — from syntax highlighting to git markers —
+    is themeable.
+  </p>
+
+  <h2>Built-in Themes</h2>
+  <div class="theme-grid">
+    <div class="theme-card">
+      <h3>Default</h3>
+      <Screenshot src="/grut/screenshots/default/hero-main.png" alt="Default theme — dark background with purple accents" />
+      <p>Dark background with purple accents — the original grüt palette.</p>
+    </div>
+    <div class="theme-card">
+      <h3>Catppuccin</h3>
+      <Screenshot src="/grut/screenshots/catppuccin/hero-main.png" alt="Catppuccin theme — soft pastel dark palette" />
+      <p>Pastel dark palette. Soft, easy on the eyes during long sessions.</p>
+    </div>
+    <div class="theme-card">
+      <h3>Tokyo Night</h3>
+      <Screenshot src="/grut/screenshots/tokyonight/hero-main.png" alt="Tokyo Night theme — blue-tinted dark palette" />
+      <p>Blue-tinted dark theme inspired by the lights of Tokyo at night.</p>
+    </div>
+    <div class="theme-card">
+      <h3>Gruvbox</h3>
+      <Screenshot src="/grut/screenshots/gruvbox/hero-main.png" alt="Gruvbox theme — warm retro dark palette" />
+      <p>Warm, retro dark palette with earthy tones and high contrast.</p>
+    </div>
+  </div>
+
+  <h2>Selecting a Theme</h2>
+  <p>
+    Set the <code>name</code> field under <code>[theme]</code> in your
+    configuration file:
+  </p>
+  <pre><code>[theme]
+name = "catppuccin"        # Built-in: default, catppuccin, tokyonight, gruvbox</code></pre>
+  <p>
+    To use a custom theme, point <code>name</code> to the absolute path of your
+    TOML theme file:
+  </p>
+  <pre><code>[theme]
+name = "/home/user/.config/grut/themes/my-theme.toml"</code></pre>
+
+  <h2>Custom Theme Format</h2>
+  <p>
+    A custom theme is a TOML file with the following sections. Every section is
+    optional — missing values fall back to the Default theme.
+  </p>
+  <pre><code># Example: Tokyo Night theme
+[meta]
+name    = "tokyonight"
+variant = "night"             # optional label for the variant
+
+[colors]
+background = "#1A1B26"
+foreground = "#C0CAF5"
+cursor     = "#C0CAF5"
+selection  = "#292E42"
+
+[colors.normal]
+black   = "#15161E"
+red     = "#F7768E"
+green   = "#9ECE6A"
+yellow  = "#E0AF68"
+blue    = "#7AA2F7"
+magenta = "#BB9AF7"
+cyan    = "#7DCFFF"
+white   = "#A9B1D6"
+
+[colors.bright]
+black   = "#414868"
+red     = "#F7768E"
+green   = "#9ECE6A"
+yellow  = "#E0AF68"
+blue    = "#7AA2F7"
+magenta = "#BB9AF7"
+cyan    = "#7DCFFF"
+white   = "#C0CAF5"
+
+[ui]
+border           = "#3B4261"
+border_focused   = "#7AA2F7"
+status_bar_bg    = "#16161E"
+status_bar_fg    = "#C0CAF5"
+title_bg         = "#24283B"
+title_focused_bg = "#2A3054"
+tab_active_bg    = "#7AA2F7"
+tab_active_fg    = "#1A1B26"
+tab_inactive_bg  = "#292E42"
+tab_inactive_fg  = "#A9B1D6"
+selection_bg     = "#292E42"
+selection_fg     = "#C0CAF5"
+cursor_line      = "#292E42"
+
+[syntax]
+keyword  = "#BB9AF7"
+string   = "#9ECE6A"
+number   = "#FF9E64"
+comment  = "#565F89"
+function = "#7AA2F7"
+type     = "#E0AF68"
+operator = "#89DDFF"
+
+[diff]
+added   = "#9ECE6A"
+removed = "#F7768E"
+header  = "#BB9AF7"
+hunk    = "#7AA2F7"
+context = "#565F89"
+
+[git]
+staged    = "#9ECE6A"
+unstaged  = "#E0AF68"
+untracked = "#565F89"
+conflict  = "#F7768E"
+branch    = "#BB9AF7"
+tag       = "#7DCFFF"
+
+[notify]
+info    = "#7DCFFF"
+warn    = "#E0AF68"
+error   = "#F7768E"
+success = "#9ECE6A"
+
+[files]
+directory  = "#7AA2F7"
+default    = "#A9B1D6"
+executable = "#9ECE6A"
+symlink    = "#7DCFFF"</code></pre>
+
+  <h2>Themes Directory</h2>
+  <p>
+    Place custom theme files in the grüt themes directory. grüt scans this
+    location for available themes:
+  </p>
+  <pre><code>~/.config/grut/themes/</code></pre>
+  <p>
+    Extensions can also bundle themes. When an extension includes a
+    <code>themes/</code> directory, those themes become available automatically
+    after installation.
+  </p>
+</Docs>
+
+<style>
+  .lead {
+    font-size: var(--text-lg);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-8);
+  }
+
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+    margin: var(--space-4) 0 var(--space-6);
+  }
+
+  .theme-card {
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+  }
+
+  .theme-card h3 {
+    margin-top: 0;
+    margin-bottom: var(--space-2);
+  }
+
+  .theme-card p {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+</style>

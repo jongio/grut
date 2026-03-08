@@ -1,0 +1,104 @@
+version: 2
+
+project_name: grut
+
+builds:
+  - main: .
+    binary: grut
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/jongio/grut/internal/config.AppVersion={{.Version}}
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE*
+      - CHANGELOG.md
+
+checksum:
+  name_template: "grut_checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--oidc-issuer=https://token.actions.githubusercontent.com"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Performance
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^style:"
+      - "^ci:"
+      - "^test:"
+
+release:
+  github:
+    owner: jongio
+    name: grut
+  draft: false
+  header: |
+    ## Install
+
+    **Linux / macOS:**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh
+    ```
+
+    **Windows (PowerShell):**
+    ```powershell
+    irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+    ```
+
+    **Install this specific version:**
+    ```bash
+    # Linux / macOS
+    curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- {{ .Tag }}
+
+    # Windows (PowerShell)
+    $v="{{ .Tag }}"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+    ```
+
+    **Go Install:**
+    ```sh
+    go install github.com/jongio/grut@latest
+    ```
+  prerelease: auto
