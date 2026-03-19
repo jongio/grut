@@ -88,6 +88,7 @@ func (p *Panel) buildLines() {
 	lines = append(lines, "bind:j/k or ↑/↓\tNavigate items")
 	lines = append(lines, "bind:Enter\tOpen / expand")
 	lines = append(lines, "bind:?\tFull keyboard reference")
+	lines = append(lines, "bind:W\tShow this welcome screen")
 	lines = append(lines, "")
 
 	// File tree.
@@ -107,7 +108,7 @@ func (p *Panel) buildLines() {
 	lines = append(lines, "")
 
 	// Footer.
-	lines = append(lines, "footer:[Enter] OK    [d] Don't Show Again    [?] Full Help")
+	lines = append(lines, "footer:[Enter] OK    [d] Don't Show Again    [?] Full Help    [W] Reopen Anytime")
 
 	p.lines = lines
 }

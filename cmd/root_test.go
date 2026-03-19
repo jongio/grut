@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/session"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -117,4 +118,37 @@ func TestOpenLogPath_UNCForwardSlashRejected(t *testing.T) {
 func TestOpenLogPath_NonexistentDirReturnsNil(t *testing.T) {
 	f := openLogPath(t.TempDir() + string(os.PathSeparator) + "does-not-exist" + string(os.PathSeparator) + "grut.log")
 	assert.Nil(t, f, "non-existent directory should return nil (silent fallback)")
+}
+
+// ---------------------------------------------------------------------------
+// --reset-welcome flag
+// ---------------------------------------------------------------------------
+
+func TestResetWelcomeFlagRegistered(t *testing.T) {
+	root := NewRootCommand()
+	flag := root.PersistentFlags().Lookup("reset-welcome")
+	require.NotNil(t, flag, "--reset-welcome persistent flag must be registered")
+	assert.Equal(t, "bool", flag.Value.Type())
+	assert.Equal(t, "false", flag.DefValue)
+}
+
+func TestResetWelcomeFlagInheritedBySubcommands(t *testing.T) {
+	root := NewRootCommand()
+
+	for _, sub := range root.Commands() {
+		flag := sub.InheritedFlags().Lookup("reset-welcome")
+		assert.NotNil(t, flag, "subcommand %q must inherit --reset-welcome", sub.Name())
+	}
+}
+
+func TestResetWelcomeState_ResetsMarker(t *testing.T) {
+	// Ensure first-run is marked done, then reset and verify.
+	require.NoError(t, session.MarkFirstRunDone())
+	assert.False(t, session.IsFirstRun(), "precondition: should not be first run")
+
+	require.NoError(t, resetWelcomeState())
+	assert.True(t, session.IsFirstRun(), "should be first run after resetWelcomeState")
+
+	// Re-mark so other tests relying on global state aren't affected.
+	require.NoError(t, session.MarkFirstRunDone())
 }

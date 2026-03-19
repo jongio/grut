@@ -699,6 +699,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("directories"), nil
 	case "help":
 		return m.toggleHelp()
+	case "welcome":
+		return m.toggleWelcome()
 	case "settings":
 		return m.toggleSettings()
 	case "chat_focus":

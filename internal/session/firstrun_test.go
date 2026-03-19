@@ -133,3 +133,41 @@ func TestMarkFirstRunDone_Global(t *testing.T) {
 	require.NoError(t, MarkFirstRunDone())
 	assert.False(t, IsFirstRun(), "should not be first run after marking done")
 }
+
+// ---------------------------------------------------------------------------
+// Reset first-run (marker removed → true again)
+// ---------------------------------------------------------------------------
+
+func TestResetFirstRunIn_RemovesMarker(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, MarkFirstRunDoneIn(dir))
+	assert.False(t, IsFirstRunIn(dir), "precondition: should not be first run after marking")
+
+	require.NoError(t, ResetFirstRunIn(dir))
+	assert.True(t, IsFirstRunIn(dir), "should be first run after reset")
+}
+
+func TestResetFirstRunIn_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	// Reset without ever marking — should not error.
+	require.NoError(t, ResetFirstRunIn(dir), "reset when no marker should not error")
+	assert.True(t, IsFirstRunIn(dir))
+}
+
+func TestResetFirstRunIn_AfterDoubleMarkAndReset(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, MarkFirstRunDoneIn(dir))
+	require.NoError(t, MarkFirstRunDoneIn(dir))
+	require.NoError(t, ResetFirstRunIn(dir))
+	assert.True(t, IsFirstRunIn(dir), "should be first run after reset regardless of double mark")
+}
+
+func TestResetFirstRun_Global(t *testing.T) {
+	// Ensure marked first, then reset.
+	require.NoError(t, MarkFirstRunDone())
+	require.NoError(t, ResetFirstRun())
+	assert.True(t, IsFirstRun(), "should be first run after global reset")
+
+	// Re-mark so other tests relying on global state aren't affected.
+	require.NoError(t, MarkFirstRunDone())
+}
