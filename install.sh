@@ -97,7 +97,7 @@ resolve_version() {
         return
     fi
 
-    info "Querying GitHub for latest release…"
+    info "Querying GitHub for latest release…" >&2
 
     # Parse the tag_name from the JSON response without requiring jq.
     tag=$(http_get "${GITHUB_API}" \
