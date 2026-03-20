@@ -5,7 +5,11 @@ import (
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/keymap"
+	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/session"
+	"github.com/jongio/grut/internal/theme"
+	"github.com/jongio/grut/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,4 +155,57 @@ func TestResetWelcomeState_ResetsMarker(t *testing.T) {
 
 	// Re-mark so other tests relying on global state aren't affected.
 	require.NoError(t, session.MarkFirstRunDone())
+}
+
+// ---------------------------------------------------------------------------
+// Startup smoke tests — exercise the full init chain that RunE performs
+// ---------------------------------------------------------------------------
+
+// TestDefaultConfigThemeIsValid ensures the theme name in embedded defaults
+// resolves to a loadable theme. This prevents a removed/renamed theme in
+// defaults.toml from silently breaking app startup.
+func TestDefaultConfigThemeIsValid(t *testing.T) {
+	cfg, err := config.LoadDefaults()
+	require.NoError(t, err, "LoadDefaults must succeed")
+
+	th, err := theme.Load(cfg.Theme.Name)
+	require.NoError(t, err, "theme %q from defaults must load", cfg.Theme.Name)
+	assert.NotNil(t, th)
+
+	// Also verify the name is in the builtin list.
+	builtins := theme.BuiltinNames()
+	assert.Contains(t, builtins, cfg.Theme.Name,
+		"default config theme %q must be a builtin theme", cfg.Theme.Name)
+}
+
+// TestInitChainSucceeds exercises every initialization step that RunE
+// performs before starting the TUI. If this test fails, the app cannot
+// launch — exactly the class of bug where "all tests pass but the app
+// won't start."
+func TestInitChainSucceeds(t *testing.T) {
+	// 1. Load config (using defaults to avoid user-config dependency).
+	cfg, err := config.LoadDefaults()
+	require.NoError(t, err, "config.LoadDefaults")
+
+	// 2. Load theme.
+	th, err := theme.Load(cfg.Theme.Name)
+	require.NoError(t, err, "theme.Load(%q)", cfg.Theme.Name)
+
+	// 3. Create panel registry with defaults.
+	reg := layout.NewRegistry()
+	layout.RegisterDefaults(reg, cfg, nil, th) // nil git client is valid
+
+	// 4. Create layout engine.
+	preset := layout.ExplorerPreset()
+	engine, err := layout.NewEngine(reg, preset)
+	require.NoError(t, err, "layout.NewEngine")
+
+	// 5. Create keymap.
+	km, err := keymap.NewKeymap(cfg.General.KeybindingScheme)
+	require.NoError(t, err, "keymap.NewKeymap(%q)", cfg.General.KeybindingScheme)
+
+	// 6. Assemble the TUI model (final step before tea.NewProgram).
+	model := tui.New(engine, th, km, nil).
+		WithConfig(cfg)
+	assert.NotNil(t, model, "tui.New must produce a non-nil model")
 }

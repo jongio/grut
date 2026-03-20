@@ -383,6 +383,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toggleWelcome()
 
 	// Welcome overlay messages.
+	case welcomepanel.AnimTickMsg:
+		if m.welcomeShown && m.welcomePanel != nil {
+			_, cmd := m.welcomePanel.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 	case welcomepanel.DismissMsg:
 		return m.dismissWelcome(msg)
 
@@ -911,7 +917,9 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 	m.helpPanel.Init(m.ctx)
 
 	// Mark first run as done so the overlay won't auto-show next time.
-	_ = session.MarkFirstRunDone()
+	if err := session.MarkFirstRunDone(); err != nil {
+		slog.Warn("failed to mark first run done", "err", err)
+	}
 	return m, nil
 }
 
@@ -957,22 +965,22 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 	m.welcomePanel.Focus()
 	w, h := m.welcomeOverlayDims()
 	m.welcomePanel.SetSize(w, h)
-	m.welcomePanel.Init(m.ctx)
+	cmd := m.welcomePanel.Init(m.ctx)
 
 	// Mark first run as done so the overlay won't auto-show next time.
-	_ = session.MarkFirstRunDone()
-	return m, nil
+	if err := session.MarkFirstRunDone(); err != nil {
+		slog.Warn("failed to mark first run done", "err", err)
+	}
+	return m, cmd
 }
 
 // dismissWelcome handles the welcome panel dismiss message.
-func (m Model) dismissWelcome(msg welcomepanel.DismissMsg) (tea.Model, tea.Cmd) {
+func (m Model) dismissWelcome(_ welcomepanel.DismissMsg) (tea.Model, tea.Cmd) {
 	m.welcomeShown = false
 	m.welcomePanel = nil
 
-	if msg.DontShowAgain {
-		if err := config.SaveUserSettingBool("general.show_first_run_help", false); err != nil {
-			slog.Warn("failed to persist show_first_run_help", "err", err)
-		}
+	if err := config.SaveUserSettingBool("general.show_first_run_help", false); err != nil {
+		slog.Warn("failed to persist show_first_run_help", "err", err)
 	}
 
 	return m, nil
@@ -1520,11 +1528,9 @@ func (m Model) View() tea.View {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
 			Padding(0, 1).
-			Width(contentW).
 			Height(contentH)
 
 		welcomeRendered := welcomeOverlayStyle.Render(welcomeContent)
-		welcomeRendered = injectBorderTitle(welcomeRendered, "Welcome to grut", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
 
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, welcomeRendered)
 	}
