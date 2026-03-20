@@ -16,18 +16,36 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
     <li><strong>Triple-panel sync</strong> — Selecting a PR updates the file tree to show PR-changed files, the commit list to show PR commits, and the preview to render the PR description</li>
     <li><strong>Diff review</strong> — Navigate PR files and view diffs with syntax highlighting</li>
     <li><strong>Status checks</strong> — See CI/CD status alongside each PR</li>
+    <li><strong>Merge PRs</strong> — Merge pull requests directly from the terminal with merge commit, squash, or rebase strategies</li>
     <li><strong>Quick actions</strong> — Checkout PR branch, open in browser, or copy URL</li>
   </ul>
 
   <h2>Keybindings</h2>
   <KeybindingTable bindings={[
     { key: 'Enter', action: 'Select PR and activate triple-panel sync' },
+    { key: 'm', action: 'Merge PR (strategy picker with delete-branch option)' },
     { key: 'o', action: 'Open PR in browser' },
     { key: 'y', action: 'Copy PR URL to clipboard' },
     { key: 'c', action: 'Checkout PR branch locally' },
     { key: 'f', action: 'Filter pull requests' },
     { key: 'R', action: 'Refresh PR list' },
   ]} />
+
+  <h2>Merging Pull Requests</h2>
+  <p>
+    Press <kbd>m</kbd> on an open pull request (or right-click and select
+    "Merge PR") to open the merge strategy picker. Choose from three strategies:
+  </p>
+  <ul>
+    <li><strong>Merge commit</strong> — Creates a merge commit preserving all individual commits</li>
+    <li><strong>Squash and merge</strong> — Combines all commits into a single commit on the target branch</li>
+    <li><strong>Rebase and merge</strong> — Replays commits on top of the target branch without a merge commit</li>
+  </ul>
+  <p>
+    Optionally check "Delete branch after merge" to clean up the head branch
+    after merging. A confirmation dialog appears before the merge executes.
+    Draft, merged, and closed PRs cannot be merged.
+  </p>
 
   <h2>Context Awareness</h2>
   <p>

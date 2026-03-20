@@ -615,6 +615,19 @@ type PRMergedMsg struct {
 	Number   int
 }
 
+// PRMergeRequestedMsg triggers the merge strategy picker for a pull request.
+type PRMergeRequestedMsg struct {
+	Number     int
+	Title      string
+	HeadBranch string
+}
+
+// PRMergeFailedMsg is sent when a PR merge fails.
+type PRMergeFailedMsg struct {
+	Number int
+	Err    error
+}
+
 // PRFilesLoadedMsg carries the list of files changed in a PR.
 // Sent to the files pane to enter PR-files mode.
 type PRFilesLoadedMsg struct {
