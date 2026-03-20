@@ -217,6 +217,7 @@ var deadcodeAllowlist = []string{
 	// session — public test-support API
 	"IsFirstRunIn",
 	"MarkFirstRunDoneIn",
+	"ResetFirstRunIn",
 
 	// theme — public API
 	"LoadFromFile",

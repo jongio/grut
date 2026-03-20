@@ -67,3 +67,24 @@ func markFirstRunDoneAt(dir, path string) error {
 	}
 	return nil
 }
+
+// ResetFirstRun removes the first-run marker file so the welcome screen
+// auto-shows on next launch. The operation is idempotent — calling it when
+// the marker is already absent is a no-op.
+func ResetFirstRun() error {
+	return resetFirstRunAt(firstRunPath())
+}
+
+// ResetFirstRunIn removes the marker file in the given directory.
+// Used by tests that need to control the marker location.
+func ResetFirstRunIn(dir string) error {
+	return resetFirstRunAt(filepath.Join(dir, firstRunMarker))
+}
+
+// resetFirstRunAt removes the marker file at path.
+func resetFirstRunAt(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove first-run marker: %w", err)
+	}
+	return nil
+}

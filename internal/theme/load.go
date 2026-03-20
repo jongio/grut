@@ -246,7 +246,15 @@ func Load(name string) (*Theme, error) {
 		return parse(name, data)
 	}
 
-	// Unknown name.
+	// Unknown name — fall back to "default" so a stale config value
+	// (e.g. a removed theme) doesn't prevent the app from launching.
+	if name != "default" {
+		slog.Warn("unknown theme, falling back to default",
+			"theme", name,
+			"available", builtinNames,
+		)
+		return Load("default")
+	}
 	return nil, fmt.Errorf("unknown theme %q (available: %s)",
 		name, strings.Join(builtinNames, ", "))
 }

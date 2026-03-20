@@ -27,6 +27,7 @@ import (
 	"github.com/jongio/grut/internal/panels/fuzzyfinder"
 	helppanel "github.com/jongio/grut/internal/panels/help"
 	settingspanel "github.com/jongio/grut/internal/panels/settings"
+	welcomepanel "github.com/jongio/grut/internal/panels/welcome"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -55,6 +56,8 @@ type Model struct {
 	fuzzyFinder        *fuzzyfinder.FuzzyFinder      // overlay fuzzy finder (nil = hidden)
 	helpPanel          *helppanel.Panel              // overlay help panel (nil = hidden)
 	helpShown          bool                          // whether help overlay is visible
+	welcomePanel       *welcomepanel.Panel           // overlay welcome panel (nil = hidden)
+	welcomeShown       bool                          // whether welcome overlay is visible
 	settingsPanel      *settingspanel.Panel          // overlay settings panel (nil = hidden)
 	settingsShown      bool                          // whether settings overlay is visible
 	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
@@ -377,7 +380,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.ToggleHelpMsg:
 		return m.toggleHelp()
 	case panels.FirstRunMsg:
-		return m.toggleHelp()
+		return m.toggleWelcome()
+
+	// Welcome overlay messages.
+	case welcomepanel.AnimTickMsg:
+		if m.welcomeShown && m.welcomePanel != nil {
+			_, cmd := m.welcomePanel.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	case welcomepanel.DismissMsg:
+		return m.dismissWelcome(msg)
 
 	// Settings overlay messages.
 	case settingspanel.ToggleSettingsMsg:
@@ -532,6 +545,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, cmd := m.helpPanel.Update(msg)
 			return m, cmd
 		}
+		if m.welcomeShown && m.welcomePanel != nil {
+			_, cmd := m.welcomePanel.Update(msg)
+			return m, cmd
+		}
 		// Otherwise fall through to the layout engine (default case).
 
 	case tea.KeyPressMsg:
@@ -554,6 +571,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If help overlay is shown, route keys to it.
 		if m.helpShown && m.helpPanel != nil {
 			_, cmd := m.helpPanel.Update(msg)
+			return m, cmd
+		}
+
+		// If welcome overlay is shown, route keys to it.
+		if m.welcomeShown && m.welcomePanel != nil {
+			_, cmd := m.welcomePanel.Update(msg)
 			return m, cmd
 		}
 
@@ -682,6 +705,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("directories"), nil
 	case "help":
 		return m.toggleHelp()
+	case "welcome":
+		return m.toggleWelcome()
 	case "settings":
 		return m.toggleSettings()
 	case "chat_focus":
@@ -892,7 +917,9 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 	m.helpPanel.Init(m.ctx)
 
 	// Mark first run as done so the overlay won't auto-show next time.
-	_ = session.MarkFirstRunDone()
+	if err := session.MarkFirstRunDone(); err != nil {
+		slog.Warn("failed to mark first run done", "err", err)
+	}
 	return m, nil
 }
 
@@ -915,6 +942,68 @@ func (m Model) helpOverlayDims() (int, int) {
 	}
 
 	// Clamp to terminal bounds for tiny terminals.
+	if w > m.width {
+		w = m.width
+	}
+	if h > m.height {
+		h = m.height
+	}
+
+	return w, h
+}
+
+// toggleWelcome shows or hides the welcome overlay panel.
+func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
+	if m.welcomeShown {
+		m.welcomeShown = false
+		m.welcomePanel = nil
+		return m, nil
+	}
+
+	m.welcomeShown = true
+	m.welcomePanel = welcomepanel.New()
+	m.welcomePanel.Focus()
+	w, h := m.welcomeOverlayDims()
+	m.welcomePanel.SetSize(w, h)
+	cmd := m.welcomePanel.Init(m.ctx)
+
+	// Mark first run as done so the overlay won't auto-show next time.
+	if err := session.MarkFirstRunDone(); err != nil {
+		slog.Warn("failed to mark first run done", "err", err)
+	}
+	return m, cmd
+}
+
+// dismissWelcome handles the welcome panel dismiss message.
+func (m Model) dismissWelcome(_ welcomepanel.DismissMsg) (tea.Model, tea.Cmd) {
+	m.welcomeShown = false
+	m.welcomePanel = nil
+
+	if err := config.SaveUserSettingBool("general.show_first_run_help", false); err != nil {
+		slog.Warn("failed to persist show_first_run_help", "err", err)
+	}
+
+	return m, nil
+}
+
+// welcomeOverlayDims returns the content dimensions for the welcome overlay.
+func (m Model) welcomeOverlayDims() (int, int) {
+	w := m.width * 3 / 5
+	if w < 44 {
+		w = 44
+	}
+	if w > m.width-4 {
+		w = m.width - 4
+	}
+
+	h := m.height * 4 / 5
+	if h < 20 {
+		h = 20
+	}
+	if h > m.height-4 {
+		h = m.height - 4
+	}
+
 	if w > m.width {
 		w = m.width
 	}
@@ -1418,6 +1507,32 @@ func (m Model) View() tea.View {
 		settingsRendered = injectBorderTitle(settingsRendered, "Settings", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
 
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, settingsRendered)
+	}
+
+	// Welcome overlay.
+	if m.welcomeShown && m.welcomePanel != nil {
+		w, h := m.welcomeOverlayDims()
+		contentW := w - 4 // subtract border + padding
+		contentH := h - 2 // subtract border
+		if contentW < 1 {
+			contentW = 1
+		}
+		if contentH < 1 {
+			contentH = 1
+		}
+
+		m.welcomePanel.SetSize(contentW, contentH)
+		welcomeContent := m.welcomePanel.View(contentW, contentH)
+
+		welcomeOverlayStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
+			Padding(0, 1).
+			Height(contentH)
+
+		welcomeRendered := welcomeOverlayStyle.Render(welcomeContent)
+
+		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, welcomeRendered)
 	}
 
 	// Help overlay.

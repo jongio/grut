@@ -8,8 +8,15 @@ Instructions for AI coding agents working on this project.
 go build ./...          # Build — run after every change
 go test ./... -count=1  # Test — all packages must pass
 go vet ./...            # Lint
+mage preflight          # Full preflight (fmt, tidy, vet, lint, build, test, race, vulncheck, gofumpt, deadcode)
 mage install            # Full deploy (test + build + install)
 ```
+
+### Preflight Before Push (MANDATORY)
+
+Run `mage preflight` before any commit/push. It executes 12 checks matching CI:
+`fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode`.
+This catches formatting (`gofmt`), linting, and other issues that `go build` and `go vet` alone miss.
 
 ## Project Structure
 

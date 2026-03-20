@@ -16,7 +16,7 @@ import (
 // providers. This does NOT test provider availability (which requires real
 // credentials) — only that registration succeeded.
 func TestInitChatRegistersProviders(t *testing.T) {
-	cfg, err := config.Load()
+	cfg, err := config.LoadDefaults()
 	require.NoError(t, err)
 	// Ensure AI + chat are enabled so initChat does real work.
 	cfg.AI.Enabled = true
@@ -51,7 +51,7 @@ func TestInitChatRegistersProviders(t *testing.T) {
 // the path jail cannot be created (e.g. invalid repoRoot), the registry
 // is still returned so the AI middleware can be wired up independently.
 func TestInitChatReturnsRegistryOnPathJailFailure(t *testing.T) {
-	cfg, err := config.Load()
+	cfg, err := config.LoadDefaults()
 	require.NoError(t, err)
 	cfg.AI.Enabled = true
 	cfg.AI.Chat.Enabled = true

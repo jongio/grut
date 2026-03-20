@@ -1723,7 +1723,7 @@ func TestFirstRunMsgOpensHelp(t *testing.T) {
 	updated, _ = m.Update(panels.FirstRunMsg{})
 	m = updated.(Model)
 
-	assert.True(t, m.helpShown, "FirstRunMsg should open help overlay")
+	assert.True(t, m.welcomeShown, "FirstRunMsg should open welcome overlay")
 }
 
 // ---------------------------------------------------------------------------

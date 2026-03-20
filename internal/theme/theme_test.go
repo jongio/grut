@@ -39,11 +39,10 @@ func TestLoadDefaultThemePreservesHardcodedColors(t *testing.T) {
 // Unknown theme
 // ---------------------------------------------------------------------------
 
-func TestLoadUnknownThemeReturnsError(t *testing.T) {
-	_, err := Load("nonexistent")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown theme")
-	assert.Contains(t, err.Error(), "nonexistent")
+func TestLoadUnknownThemeFallsBackToDefault(t *testing.T) {
+	th, err := Load("nonexistent")
+	require.NoError(t, err, "unknown theme should fall back to default, not error")
+	assert.Equal(t, "default", th.Name)
 }
 
 // ---------------------------------------------------------------------------

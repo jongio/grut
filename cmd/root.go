@@ -41,6 +41,11 @@ operations, tmux-like panes, AI agent integration via MCP, and worktree-first wo
 Environment:
   GRUT_LOG            Path to a log file (enables debug logging)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Handle --reset-welcome: reset first-run state and exit.
+			if resetWelcome, _ := cmd.Flags().GetBool("reset-welcome"); resetWelcome {
+				return resetWelcomeState()
+			}
+
 			// Start background update check early so it can run concurrently
 			// with config loading and TUI startup.
 			updateCh := make(chan *update.UpdateInfo, 1)
@@ -218,6 +223,7 @@ Environment:
 	// Global flags available to all subcommands.
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
+	rootCmd.PersistentFlags().Bool("reset-welcome", false, "Reset first-run state so the welcome screen shows on next launch")
 
 	// Register subcommands via constructors (no init() side effects).
 	rootCmd.AddCommand(newVersionCmd())
@@ -332,6 +338,20 @@ func applyNoAIFlag(cmd *cobra.Command, cfg *config.Config) {
 	if noAI {
 		cfg.AI.Enabled = false
 	}
+}
+
+// resetWelcomeState removes the first-run marker file and sets the
+// show_first_run_help config back to true so the welcome screen
+// auto-shows on next launch.
+func resetWelcomeState() error {
+	if err := session.ResetFirstRun(); err != nil {
+		return fmt.Errorf("reset first-run marker: %w", err)
+	}
+	if err := config.SaveUserSettingBool("general.show_first_run_help", true); err != nil {
+		return fmt.Errorf("reset show_first_run_help config: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "Welcome screen reset. It will show again on next launch.")
+	return nil
 }
 
 // openLogPath validates and opens a log file path for GRUT_LOG.
