@@ -62,16 +62,17 @@ func New() *Panel {
 func (p *Panel) buildLines() {
 	var lines []string
 
-	// Banner.
+	// Banner with umlaut dots above U.
 	lines = append(lines, "")
-	lines = append(lines, "banner:   ┏━━━┓ ┏━━━┓ ┏━┓ ┏━┓ ┏━━━━┓")
-	lines = append(lines, "banner:   ┃┏━┓┃ ┃┏━┓┃ ┃ ┃ ┃ ┃ ┃┏━━━┛")
-	lines = append(lines, "banner:   ┃┃ ┗┛ ┃┗━┛┃ ┃ ┃ ┃ ┃ ┃┗━━━┓")
-	lines = append(lines, "banner:   ┃┃┏━┓ ┃┏┓┏┛ ┃ ┃ ┃ ┃ ┃┏━━━┛")
-	lines = append(lines, "banner:   ┃┗┻━┃ ┃┃┃┗┓ ┃ ┗━┛ ┃ ┃┃    ")
-	lines = append(lines, "banner:   ┗━━━┛ ┗┛┗━┛ ┗━━━━━┛ ┗┛    ")
+	lines = append(lines, "banner:                ·   ·")
+	lines = append(lines, "banner:   ┏━━━┓ ┏━━━┓ ┏━┓ ┏━┓ ┏━━━━━┓")
+	lines = append(lines, "banner:   ┃┏━┓┃ ┃┏━┓┃ ┃ ┃ ┃ ┃ ┗━┓ ┏━┛")
+	lines = append(lines, "banner:   ┃┃ ┗┛ ┃┗━┛┃ ┃ ┃ ┃ ┃   ┃ ┃  ")
+	lines = append(lines, "banner:   ┃┃┏━┓ ┃┏┓┏┛ ┃ ┃ ┃ ┃   ┃ ┃  ")
+	lines = append(lines, "banner:   ┃┗┻━┃ ┃┃┃┗┓ ┃ ┗━┛ ┃   ┃ ┃  ")
+	lines = append(lines, "banner:   ┗━━━┛ ┗┛┗━┛ ┗━━━━━┛   ┗━┛  ")
 	lines = append(lines, "")
-	lines = append(lines, "subtitle:Git Review Utility for Terminals")
+	lines = append(lines, "subtitle:grüt — Git Review Utility for Terminals")
 	lines = append(lines, "")
 
 	// Key feature callout.
@@ -91,12 +92,28 @@ func (p *Panel) buildLines() {
 	lines = append(lines, "bind:W\tShow this welcome screen")
 	lines = append(lines, "")
 
-	// File tree.
+	// Search & Commands.
+	lines = append(lines, "section:Search & Commands")
+	lines = append(lines, "sep:"+strings.Repeat("─", 18))
+	lines = append(lines, "bind:/\tFuzzy finder")
+	lines = append(lines, "bind::\tCommand palette")
+	lines = append(lines, "bind:~\tChange directory")
+	lines = append(lines, "")
+
+	// File Tree.
 	lines = append(lines, "section:File Tree")
 	lines = append(lines, "sep:"+strings.Repeat("─", 9))
 	lines = append(lines, "bind:space\tStage / unstage file")
 	lines = append(lines, "bind:.\tToggle hidden files")
 	lines = append(lines, "bind:o\tOpen in external editor")
+	lines = append(lines, "")
+
+	// Views & Layout.
+	lines = append(lines, "section:Views & Layout")
+	lines = append(lines, "sep:"+strings.Repeat("─", 14))
+	lines = append(lines, "bind:1-5\tFocus panel by number")
+	lines = append(lines, "bind:ctrl+b z\tToggle zoom on panel")
+	lines = append(lines, "bind:ctrl+b p\tCycle preview position")
 	lines = append(lines, "")
 
 	// Git.
@@ -107,8 +124,16 @@ func (p *Panel) buildLines() {
 	lines = append(lines, "bind:ctrl+z\tUndo last git action")
 	lines = append(lines, "")
 
-	// Footer.
-	lines = append(lines, "footer:[Enter] OK    [d] Don't Show Again    [?] Full Help    [W] Reopen Anytime")
+	// Stash (via Git Info panel).
+	lines = append(lines, "section:Stash")
+	lines = append(lines, "sep:"+strings.Repeat("─", 5))
+	lines = append(lines, "bind:s\tStash tab (in Git Info)")
+	lines = append(lines, "bind:n\tPush new stash")
+	lines = append(lines, "bind:x\tDrop stash entry")
+	lines = append(lines, "")
+
+	// Footer — compact single line.
+	lines = append(lines, "footer:[Enter] OK  [d] Don't Show  [?] Help  [W] Show Later")
 
 	p.lines = lines
 }
@@ -184,7 +209,7 @@ func (p *Panel) View(width, height int) string {
 		case strings.HasPrefix(line, "subtitle:"):
 			text := strings.TrimPrefix(line, "subtitle:")
 			// Center the subtitle.
-			pad := (width - len(text)) / 2
+			pad := (width - lipgloss.Width(text)) / 2
 			if pad < 0 {
 				pad = 0
 			}
