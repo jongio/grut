@@ -134,7 +134,7 @@ func (p *Panel) initStyles() {
 
 // buildLines pre-computes the content lines for the welcome overlay.
 func (p *Panel) buildLines() {
-	var lines []string
+	lines := make([]string, 0, 36)
 
 	// Lowercase banner with prominent umlaut dots.
 	// All banner lines are padded to 16 display-columns for consistent centering.
