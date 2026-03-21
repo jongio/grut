@@ -1210,7 +1210,7 @@ func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	p.ghClient = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
-		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Done", State: "merged"}},
+		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Done", State: prStateMerged}},
 	}
 	p.tabCursor[p.activeTab] = 0
 	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
@@ -1288,6 +1288,7 @@ func TestMergeStrategyLabel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.strategy, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, mergeStrategyLabel(tt.strategy))
 		})
 	}
@@ -1412,8 +1413,8 @@ func TestHandlePRMergeResult_Success(t *testing.T) {
 	})
 	assert.NotNil(t, cmd)
 	// Verify local state was updated.
-	assert.Equal(t, "merged", p.allPRs[0].State)
-	assert.Equal(t, "merged", p.tabItems[tabPRs][0].pr.State)
+	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.tabItems[tabPRs][0].pr.State)
 }
 
 func TestHandlePRMergeResult_Error(t *testing.T) {
@@ -1445,7 +1446,7 @@ func TestHandlePRMergeResult_WithDeleteBranch(t *testing.T) {
 		headBranch:   "feature-x",
 	})
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "merged", p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.allPRs[0].State)
 }
 
 // ---------------------------------------------------------------------------

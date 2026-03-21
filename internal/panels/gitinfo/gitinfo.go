@@ -141,6 +141,9 @@ type ghPRItem struct {
 	Number     int
 }
 
+// prStateMerged is the canonical value for a merged pull request state.
+const prStateMerged = "merged"
+
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
 	WorkflowName string
@@ -3146,7 +3149,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 					state = "draft" //nolint:goconst // inline string is more readable here
 				}
 				if pr.GetMerged() {
-					state = "merged"
+					state = prStateMerged
 				}
 				author := ""
 				if pr.User != nil {
@@ -3896,14 +3899,14 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 	// Update local PR state to "merged".
 	for i := range p.allPRs {
 		if p.allPRs[i].Number == msg.number {
-			p.allPRs[i].State = "merged"
+			p.allPRs[i].State = prStateMerged
 			break
 		}
 	}
 	// Also update in the visible tab items.
 	for i := range p.tabItems[tabPRs] {
 		if p.tabItems[tabPRs][i].kind == kindPR && p.tabItems[tabPRs][i].pr.Number == msg.number {
-			p.tabItems[tabPRs][i].pr.State = "merged"
+			p.tabItems[tabPRs][i].pr.State = prStateMerged
 			break
 		}
 	}
@@ -4008,7 +4011,7 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	switch pr.State {
 	case "draft":
 		fg = defaultColors.PRDraft
-	case "merged":
+	case prStateMerged:
 		fg = defaultColors.PRMerged
 	default: // "open", "closed"
 		fg = defaultColors.PR
