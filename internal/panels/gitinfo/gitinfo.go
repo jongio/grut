@@ -311,29 +311,29 @@ func (f PRFilterKind) String() string {
 type pendingOp int
 
 const (
-	opNone                   pendingOp = iota
-	opBranchCreate                     // awaiting new branch name
-	opBranchDelete                     // awaiting delete confirmation
-	opBranchRename                     // awaiting new name
-	opBranchCheckout                   // awaiting checkout confirmation
-	opWorktreeCreate                   // awaiting new branch name for worktree
-	opWorktreeDelete                   // awaiting delete confirmation
-	opRemoteAdd                        // awaiting remote name
-	opRemoteAddURL                     // awaiting remote URL (second step)
-	opRemoteDelete                     // awaiting delete confirmation
-	opStashAction                      // awaiting stash action (apply/pop/drop)
-	opFirstUseConfirm                  // awaiting first-use double-click confirmation
-	opRightClickPick                   // awaiting right-click action picker result
-	opTagCreate                        // awaiting new tag name
-	opTagMessage                       // awaiting optional tag message
-	opTagDelete                        // awaiting tag delete confirmation
-	opTagPush                          // awaiting tag push confirmation
-	opTagCheckout                      // awaiting tag checkout confirmation (detached HEAD)
-	opWorkflowDispatch                 // awaiting workflow dispatch ref input
-	opWorkflowDispatchInputs           // awaiting workflow dispatch inputs (key=value)
-	opPRMergeStrategy                  // awaiting merge strategy selection
-	opPRMergeConfirm                   // awaiting merge confirmation
-	opPRDeleteBranchAfterMerge         // awaiting post-merge branch deletion confirmation
+	opNone                     pendingOp = iota
+	opBranchCreate                       // awaiting new branch name
+	opBranchDelete                       // awaiting delete confirmation
+	opBranchRename                       // awaiting new name
+	opBranchCheckout                     // awaiting checkout confirmation
+	opWorktreeCreate                     // awaiting new branch name for worktree
+	opWorktreeDelete                     // awaiting delete confirmation
+	opRemoteAdd                          // awaiting remote name
+	opRemoteAddURL                       // awaiting remote URL (second step)
+	opRemoteDelete                       // awaiting delete confirmation
+	opStashAction                        // awaiting stash action (apply/pop/drop)
+	opFirstUseConfirm                    // awaiting first-use double-click confirmation
+	opRightClickPick                     // awaiting right-click action picker result
+	opTagCreate                          // awaiting new tag name
+	opTagMessage                         // awaiting optional tag message
+	opTagDelete                          // awaiting tag delete confirmation
+	opTagPush                            // awaiting tag push confirmation
+	opTagCheckout                        // awaiting tag checkout confirmation (detached HEAD)
+	opWorkflowDispatch                   // awaiting workflow dispatch ref input
+	opWorkflowDispatchInputs             // awaiting workflow dispatch inputs (key=value)
+	opPRMergeStrategy                    // awaiting merge strategy selection
+	opPRMergeConfirm                     // awaiting merge confirmation
+	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
 )
 
 // ---------------------------------------------------------------------------
