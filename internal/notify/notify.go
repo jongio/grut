@@ -154,7 +154,7 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 			kind:          msg.Kind,
 			input:         msg.Value,
 			cursor:        len([]rune(msg.Value)),
-			selected:      msg.Kind == ModalConfirmWithCheckbox,
+			selected:      msg.Kind == ModalConfirm || msg.Kind == ModalConfirmWithCheckbox,
 			checkboxLabel: msg.CheckboxLabel,
 			actions:       msg.Actions,
 			actionCursor:  0,
