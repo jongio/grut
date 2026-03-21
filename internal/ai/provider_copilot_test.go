@@ -364,15 +364,19 @@ func TestSerializeGitContext_FullContext(t *testing.T) {
 func TestEnsureStarted_SetsStartedFlag(t *testing.T) {
 	// We cannot call ensureStarted without a real CLI server, but we
 	// can verify the initial state and the mutex-protected flag.
+	// Use a fake CLIPath so the SDK fails immediately without
+	// spawning a real Copilot CLI process.
 	p := &CopilotProvider{
-		client: copilot.NewClient(nil),
+		client: copilot.NewClient(&copilot.ClientOptions{
+			CLIPath: "/nonexistent/copilot-cli",
+		}),
 	}
 
 	// Calling ensureStarted will fail (no CLI installed in test env).
 	// sync.Once ensures Start is called exactly once.
 	_ = p.ensureStarted(context.Background())
-	// If Start failed, startErr should be non-nil.
-	// Either way is valid — the important thing is no panic.
+	// Start failed, so startErr should be non-nil.
+	assert.Error(t, p.startErr)
 }
 
 // ---------------------------------------------------------------------------

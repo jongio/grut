@@ -67,9 +67,10 @@ func ValidateBrowserURL(rawURL string) error {
 	return nil
 }
 
-// startDetached starts a command and reaps it in the background to prevent
+// startDetachedFn starts a command and reaps it in the background to prevent
 // zombie processes. The caller does not wait for the process to exit.
-func startDetached(cmd *exec.Cmd) error {
+// It is a variable so tests can replace it with a no-op stub.
+var startDetachedFn = func(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -86,26 +87,26 @@ func OpenInEditor(path string) error {
 	}
 	// Check VISUAL first (GUI editor preference).
 	if editor := os.Getenv("VISUAL"); editor != "" {
-		return startDetached(exec.CommandContext(context.Background(), editor, path))
+		return startDetachedFn(exec.CommandContext(context.Background(), editor, path))
 	}
 	// Check EDITOR (terminal editor preference).
 	if editor := os.Getenv("EDITOR"); editor != "" {
-		return startDetached(exec.CommandContext(context.Background(), editor, path))
+		return startDetachedFn(exec.CommandContext(context.Background(), editor, path))
 	}
 	// Try common developer editors in preference order.
 	for _, editor := range []string{"code", "code-insiders", "cursor"} {
 		if _, err := exec.LookPath(editor); err == nil {
-			return startDetached(exec.CommandContext(context.Background(), editor, path))
+			return startDetachedFn(exec.CommandContext(context.Background(), editor, path))
 		}
 	}
 	// Platform defaults.
 	switch runtime.GOOS {
 	case "windows":
-		return startDetached(exec.CommandContext(context.Background(), "cmd", "/c", "start", "", path))
+		return startDetachedFn(exec.CommandContext(context.Background(), "cmd", "/c", "start", "", path))
 	case "darwin":
-		return startDetached(exec.CommandContext(context.Background(), "open", path))
+		return startDetachedFn(exec.CommandContext(context.Background(), "open", path))
 	default:
-		return startDetached(exec.CommandContext(context.Background(), "xdg-open", path))
+		return startDetachedFn(exec.CommandContext(context.Background(), "xdg-open", path))
 	}
 }
 
@@ -116,11 +117,11 @@ func OpenInBrowser(rawURL string) error {
 	}
 	switch runtime.GOOS {
 	case "windows":
-		return startDetached(exec.CommandContext(context.Background(), "rundll32", "url.dll,FileProtocolHandler", rawURL))
+		return startDetachedFn(exec.CommandContext(context.Background(), "rundll32", "url.dll,FileProtocolHandler", rawURL))
 	case "darwin":
-		return startDetached(exec.CommandContext(context.Background(), "open", rawURL))
+		return startDetachedFn(exec.CommandContext(context.Background(), "open", rawURL))
 	default:
-		return startDetached(exec.CommandContext(context.Background(), "xdg-open", rawURL))
+		return startDetachedFn(exec.CommandContext(context.Background(), "xdg-open", rawURL))
 	}
 }
 
@@ -152,5 +153,5 @@ func OpenInTerminal(dir string) error {
 	if cmd == nil {
 		return fmt.Errorf("no terminal emulator found")
 	}
-	return startDetached(cmd)
+	return startDetachedFn(cmd)
 }
