@@ -381,14 +381,14 @@ func TestModalConfirmEnterDefault(t *testing.T) {
 		Kind:  ModalConfirm,
 	})
 
-	// Default selection is false (No), so enter should reject
+	// Default selection is true (Yes), so enter should accept
 	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.NotNil(t, cmd)
 
 	msg := cmd()
 	result, ok := msg.(ModalResultMsg)
 	require.True(t, ok)
-	assert.False(t, result.Accept, "default selection should be No")
+	assert.True(t, result.Accept, "default selection should be Yes")
 }
 
 func TestModalConfirmArrowKeys(t *testing.T) {
@@ -398,7 +398,8 @@ func TestModalConfirmArrowKeys(t *testing.T) {
 		Kind:  ModalConfirm,
 	})
 
-	// Select Yes with left arrow
+	// Default is Yes. Select No with right arrow, then back to Yes with left.
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 
 	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1099,14 +1100,14 @@ func TestModalConfirmTab(t *testing.T) {
 		Kind:  ModalConfirm,
 	})
 
-	// Default selection is No (selected = false).
-	// Tab should toggle to Yes.
+	// Default selection is Yes (selected = true).
+	// Tab should toggle to No.
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 
 	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.NotNil(t, cmd)
 	result := cmd().(ModalResultMsg)
-	assert.True(t, result.Accept, "Tab should have toggled to Yes")
+	assert.False(t, result.Accept, "Tab should have toggled to No")
 }
 
 func TestModalConfirmTabToggle(t *testing.T) {
@@ -1116,14 +1117,14 @@ func TestModalConfirmTabToggle(t *testing.T) {
 		Kind:  ModalConfirm,
 	})
 
-	// Tab twice should return to original (No).
+	// Tab twice should return to original (Yes).
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 
 	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.NotNil(t, cmd)
 	result := cmd().(ModalResultMsg)
-	assert.False(t, result.Accept, "Two tabs should toggle back to No")
+	assert.True(t, result.Accept, "Two tabs should toggle back to Yes")
 }
 
 func TestModalConfirmWithCheckboxTab(t *testing.T) {
@@ -1506,13 +1507,13 @@ func TestModalConfirmShiftTab(t *testing.T) {
 		Kind:  ModalConfirm,
 	})
 
-	// Default is No. Shift+Tab should toggle to Yes (same as Tab).
+	// Default is Yes. Shift+Tab should toggle to No (same as Tab).
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 
 	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.NotNil(t, cmd)
 	result := cmd().(ModalResultMsg)
-	assert.True(t, result.Accept, "Shift+Tab should toggle to Yes")
+	assert.False(t, result.Accept, "Shift+Tab should toggle to No")
 }
 
 func TestModalCheckboxMouseClickSetsFocusIdx(t *testing.T) {
