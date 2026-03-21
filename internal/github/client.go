@@ -368,6 +368,14 @@ func (c *clientImpl) MergePR(ctx context.Context, owner, repo string, number int
 	return nil
 }
 
+func (c *clientImpl) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
+	_, err := c.gh.Git.DeleteRef(ctx, owner, repo, "heads/"+branch)
+	if err != nil {
+		return fmt.Errorf("delete branch %q: %w", branch, err)
+	}
+	return nil
+}
+
 func (c *clientImpl) CommentOnPR(ctx context.Context, owner, repo string, number int, body string, path string, line int) error {
 	comment := &gh.PullRequestComment{
 		Body: gh.Ptr(body),

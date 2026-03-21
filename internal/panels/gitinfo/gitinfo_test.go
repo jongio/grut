@@ -2177,6 +2177,7 @@ type mockGHClientFull struct {
 	jobLogErr  error
 	rerunErr   error
 	cancelErr  error
+	mergeErr   error
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2241,6 +2242,10 @@ func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, _ *gh.NewPul
 }
 
 func (m *mockGHClientFull) MergePR(_ context.Context, _, _ string, _ int, _ string, _ *gh.PullRequestOptions) error {
+	return m.mergeErr
+}
+
+func (m *mockGHClientFull) DeleteBranch(_ context.Context, _, _, _ string) error {
 	return nil
 }
 

@@ -65,7 +65,7 @@ func TestAllActions(t *testing.T) {
 		},
 		{
 			ItemPR,
-			[]ActionID{ActionOpenInBrowser, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch},
+			[]ActionID{ActionOpenInBrowser, ActionMergePR, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch},
 		},
 		{
 			ItemStashEntry,

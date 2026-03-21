@@ -1,12 +1,16 @@
 package gitinfo
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
 )
@@ -1140,4 +1144,360 @@ func TestDoFetch_MultipleRemotes(t *testing.T) {
 	p.tabCursor[tabRemotes] = 0
 	_, cmd := p.doFetch()
 	assert.NotNil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// ActionMergePR — registry tests
+// ---------------------------------------------------------------------------
+
+func TestActionMergePR_InRegistry(t *testing.T) {
+	t.Parallel()
+	allActs := actions.AllActions(actions.ItemPR)
+	found := false
+	for _, a := range allActs {
+		if a == actions.ActionMergePR {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ActionMergePR should be in ItemPR actions")
+}
+
+func TestActionMergePR_Label(t *testing.T) {
+	t.Parallel()
+	label := actions.ActionLabel(actions.ActionMergePR)
+	assert.Equal(t, "merge PR", label)
+}
+
+func TestActionMergePR_IsValid(t *testing.T) {
+	t.Parallel()
+	assert.True(t, actions.IsValidAction(actions.ItemPR, actions.ActionMergePR))
+}
+
+// ---------------------------------------------------------------------------
+// executeRightClickAction — ActionMergePR
+// ---------------------------------------------------------------------------
+
+func TestExecuteRightClickAction_PR_MergePR_Open(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.tabItems[p.activeTab] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"}},
+	}
+	p.tabCursor[p.activeTab] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
+	assert.NotNil(t, cmd, "should show merge strategy picker for open PR")
+	assert.Equal(t, opPRMergeStrategy, p.pending)
+	assert.Contains(t, p.pendingName, "42:")
+}
+
+func TestExecuteRightClickAction_PR_MergePR_Draft(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.tabItems[p.activeTab] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "WIP", State: "draft", HeadBranch: "wip"}},
+	}
+	p.tabCursor[p.activeTab] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
+	assert.NotNil(t, cmd, "should return a warning toast command for draft PR")
+	assert.Equal(t, opNone, p.pending, "should not set pending for draft PR")
+}
+
+func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.tabItems[p.activeTab] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Done", State: prStateMerged}},
+	}
+	p.tabCursor[p.activeTab] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
+	assert.NotNil(t, cmd, "should return a warning toast for already-merged PR")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestExecuteRightClickAction_PR_MergePR_Closed(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.tabItems[p.activeTab] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 5, Title: "Closed", State: "closed"}},
+	}
+	p.tabCursor[p.activeTab] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opNone, p.pending, "should not set pending for closed PR")
+}
+
+func TestExecuteRightClickAction_PR_MergePR_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	// ghClient is nil
+	p.tabItems[p.activeTab] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[p.activeTab] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionMergePR)
+	assert.Nil(t, cmd, "should return nil when ghClient is nil")
+}
+
+// ---------------------------------------------------------------------------
+// doMergePR — guard rails
+// ---------------------------------------------------------------------------
+
+func TestDoMergePR_WrongTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.activeTab = tabBranches
+	p.tabItems[tabBranches] = []listItem{
+		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}},
+	}
+	p.tabCursor[tabBranches] = 0
+	_, cmd := p.doMergePR()
+	assert.Nil(t, cmd)
+}
+
+func TestDoMergePR_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{} // empty
+	_, cmd := p.doMergePR()
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// mergeStrategyLabel
+// ---------------------------------------------------------------------------
+
+func TestMergeStrategyLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		strategy string
+		want     string
+	}{
+		{"merge", "merge commit"},
+		{"squash", "squash and merge"},
+		{"rebase", "rebase and merge"},
+		{"unknown", "merge commit"},
+		{"", "merge commit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.strategy, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, mergeStrategyLabel(tt.strategy))
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handleModalResult — opPRMergeStrategy
+// ---------------------------------------------------------------------------
+
+func TestHandleModalResult_PRMergeStrategy_Accept(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.pending = opPRMergeStrategy
+	p.pendingName = "42:feature-auth:Add authentication"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{
+		Accept:   true,
+		Value:    "squash",
+		Remember: false,
+	})
+	assert.NotNil(t, cmd, "should produce confirmation dialog")
+	assert.Equal(t, opPRMergeConfirm, p.pending)
+	assert.Contains(t, p.pendingName, "42:squash:false:feature-auth")
+}
+
+func TestHandleModalResult_PRMergeStrategy_WithDeleteBranch(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.pending = opPRMergeStrategy
+	p.pendingName = "42:feature-auth:Add authentication"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{
+		Accept:   true,
+		Value:    "rebase",
+		Remember: true, // delete branch after merge
+	})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opPRMergeConfirm, p.pending)
+	assert.Contains(t, p.pendingName, "42:rebase:true:feature-auth")
+}
+
+func TestHandleModalResult_PRMergeStrategy_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.pending = opPRMergeStrategy
+	p.pendingName = "42:feature-auth:Add auth"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancel should produce nil cmd")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_PRMergeStrategy_BadPendingName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.pending = opPRMergeStrategy
+	p.pendingName = "bad" // not enough parts
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "merge"})
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// handleModalResult — opPRMergeConfirm
+// ---------------------------------------------------------------------------
+
+func TestHandleModalResult_PRMergeConfirm_Accept(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.ctx = context.Background()
+	p.pending = opPRMergeConfirm
+	p.pendingName = "42:squash:false:feature-auth"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "should produce merge command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_PRMergeConfirm_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.pending = opPRMergeConfirm
+	p.pendingName = "42:squash:false:feature-auth"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd)
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_PRMergeConfirm_BadPendingName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.pending = opPRMergeConfirm
+	p.pendingName = "bad"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// handlePRMergeResult
+// ---------------------------------------------------------------------------
+
+func TestHandlePRMergeResult_Success(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.allPRs = []ghPRItem{
+		{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"},
+	}
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: p.allPRs[0]},
+	}
+
+	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
+		number:   42,
+		strategy: "squash",
+	})
+	assert.NotNil(t, cmd)
+	// Verify local state was updated.
+	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.tabItems[tabPRs][0].pr.State)
+}
+
+func TestHandlePRMergeResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+
+	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
+		number:   42,
+		strategy: "merge",
+		err:      errors.New("merge conflict"),
+	})
+	assert.NotNil(t, cmd, "should produce error toast")
+}
+
+func TestHandlePRMergeResult_WithDeleteBranch(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.allPRs = []ghPRItem{
+		{Number: 42, Title: "Test", State: "open", HeadBranch: "feature-x"},
+	}
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: p.allPRs[0]},
+	}
+
+	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
+		number:       42,
+		strategy:     "rebase",
+		deleteBranch: true,
+		headBranch:   "feature-x",
+	})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+}
+
+// ---------------------------------------------------------------------------
+// Key binding — 'm' triggers merge on PRs tab
+// ---------------------------------------------------------------------------
+
+func TestHandleKey_M_PRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.ghClient = &mockGHClientFull{}
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Test", State: "open", HeadBranch: "test-branch"}},
+	}
+	p.tabCursor[tabPRs] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'm'})
+	assert.NotNil(t, cmd, "pressing 'm' on PRs tab should trigger merge flow")
+	assert.Equal(t, opPRMergeStrategy, p.pending)
+}
+
+func TestHandleKey_M_NotPRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabBranches
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'm'})
+	assert.Nil(t, cmd, "pressing 'm' outside PRs tab should be no-op")
+}
+
+func TestHandleKey_M_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.Focused = true
+	p.activeTab = tabPRs
+	// ghClient is nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'm'})
+	assert.Nil(t, cmd, "pressing 'm' without ghClient should be no-op")
+}
+
+// ---------------------------------------------------------------------------
+// PRMergeRequestedMsg / PRMergeFailedMsg message types exist
+// ---------------------------------------------------------------------------
+
+func TestPRMessageTypes(t *testing.T) {
+	t.Parallel()
+	// Compile-time check that message types exist and have correct fields.
+	_ = panels.PRMergeRequestedMsg{Number: 1, Title: "test", HeadBranch: "main"}
+	_ = panels.PRMergeFailedMsg{Number: 1, Err: errors.New("fail")}
+	_ = panels.PRMergedMsg{Number: 1, Strategy: "squash"}
 }

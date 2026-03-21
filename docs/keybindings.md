@@ -127,6 +127,7 @@ Always active regardless of focused panel.
 | `Enter` | Select (show in preview) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
+| `m` | Merge PR (PRs tab only) |
 | `r` | Rerun (Actions tab only) |
 | `x` | Cancel (Actions tab only) |
 | `D` | Dispatch workflow (Workflows tab only) |

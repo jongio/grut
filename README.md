@@ -48,6 +48,7 @@ Files, Git, GitHub, and preview — all in one terminal, all aware of each other
 
 ### GitHub
 - **Issues, Pull Requests, Actions, Workflows, Releases** — Each as a tab with filters and preview integration.
+- **Merge PRs** — Merge pull requests with merge commit, squash, or rebase strategies and optional branch cleanup.
 - **Workflow Dispatch** — Trigger CI/CD workflows with parameters from the TUI.
 
 ### AI Chat

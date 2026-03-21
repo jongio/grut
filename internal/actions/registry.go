@@ -72,6 +72,7 @@ const (
 	ActionDispatch        ActionID = "dispatch"
 	ActionDownloadAssets  ActionID = "download_assets"
 	ActionCheckoutBranch  ActionID = "checkout_branch"
+	ActionMergePR         ActionID = "merge_pr"
 	ActionShowContextMenu ActionID = "context_menu"
 	ActionPush            ActionID = "push"
 )
@@ -92,7 +93,7 @@ var Registry = map[ItemType]ItemActions{
 	ItemRemote:       {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL}, Description: "open this remote in your browser"},
 	ItemStashEntry:   {Default: ActionPromptAction, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionApply, ActionPop, ActionDrop}, Description: "choose a stash action (apply/pop/drop)"},
 	ItemIssue:        {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL, ActionCopyNumber}, Description: "open this issue in your browser"},
-	ItemPR:           {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch}, Description: "open this pull request in your browser"},
+	ItemPR:           {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionMergePR, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch}, Description: "open this pull request in your browser"},
 	ItemActionRun:    {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionRerun, ActionCopyURL}, Description: "open this workflow run in your browser"},
 	ItemWorkflow:     {Default: ActionDispatch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenInBrowser, ActionCopyURL}, Description: "dispatch this workflow"},
 	ItemRelease:      {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionDownloadAssets, ActionCopyURL, ActionCopyName}, Description: "open this release in your browser"},
@@ -158,6 +159,7 @@ var actionLabels = map[ActionID]string{
 	ActionDispatch:        "dispatch",
 	ActionDownloadAssets:  "download assets",
 	ActionCheckoutBranch:  "checkout branch",
+	ActionMergePR:         "merge PR",
 	ActionShowContextMenu: "context menu",
 	ActionPush:            "push",
 }

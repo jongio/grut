@@ -33,6 +33,7 @@ A reactive terminal UI for Git and GitHub where every panel talks to every other
 - **Issues, Pull Requests, Actions, Workflows, Releases** — Each as a dedicated tab with filters, status tracking, and preview integration.
 - **Workflow Dispatch** — Trigger CI/CD workflows with input parameters directly from the TUI.
 - **PR Triple-Panel Sync** — Select a PR and file tree, commits, and preview all update simultaneously.
+- **Merge PRs** — Merge pull requests directly from the PRs tab with merge commit, squash, or rebase strategies, optional branch cleanup, and confirmation dialogs.
 
 ### AI Chat
 - Built-in chat powered by GitHub Copilot that understands your repo.

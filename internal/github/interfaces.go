@@ -37,6 +37,7 @@ type PRReader interface {
 type PRWriter interface {
 	CreatePR(ctx context.Context, owner, repo string, req *gh.NewPullRequest) (*gh.PullRequest, error)
 	MergePR(ctx context.Context, owner, repo string, number int, msg string, opts *gh.PullRequestOptions) error
+	DeleteBranch(ctx context.Context, owner, repo, branch string) error
 	CommentOnPR(ctx context.Context, owner, repo string, number int, body string, path string, line int) error
 	SubmitReview(ctx context.Context, owner, repo string, number int, review *gh.PullRequestReviewRequest) error
 	RequestReviewers(ctx context.Context, owner, repo string, number int, reviewers []string) error

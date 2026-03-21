@@ -141,6 +141,9 @@ type ghPRItem struct {
 	Number     int
 }
 
+// prStateMerged is the canonical value for a merged pull request state.
+const prStateMerged = "merged"
+
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
 	WorkflowName string
@@ -215,6 +218,15 @@ type actionCancelResultMsg struct {
 type workflowDispatchResultMsg struct {
 	err          error
 	workflowName string
+}
+
+// prMergeResultMsg carries the result of a PR merge operation.
+type prMergeResultMsg struct {
+	number       int
+	strategy     string
+	deleteBranch bool
+	headBranch   string
+	err          error
 }
 
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
@@ -313,6 +325,8 @@ const (
 	opTagCheckout                      // awaiting tag checkout confirmation (detached HEAD)
 	opWorkflowDispatch                 // awaiting workflow dispatch ref input
 	opWorkflowDispatchInputs           // awaiting workflow dispatch inputs (key=value)
+	opPRMergeStrategy                  // awaiting merge strategy selection
+	opPRMergeConfirm                   // awaiting merge confirmation
 )
 
 // ---------------------------------------------------------------------------
@@ -760,6 +774,10 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleWorkflowDispatchResult(msg)
 	case workflowInputsFetchedMsg:
 		return p.handleWorkflowInputsFetched(msg)
+
+	case prMergeResultMsg:
+		return p.handlePRMergeResult(msg)
+
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !p.Focused {
@@ -1104,6 +1122,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "D":
 		if p.activeTab == tabWorkflows && p.ghClient != nil {
 			return p.doWorkflowDispatch()
+		}
+	case "m":
+		if p.activeTab == tabPRs && p.ghClient != nil {
+			return p.doMergePR()
 		}
 	case "d":
 		p.pageDown()
@@ -1853,6 +1875,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			p.pending = opBranchCheckout
 			p.pendingName = ref
 			return p, notify.ShowConfirm("Checkout PR Branch", fmt.Sprintf("Switch to branch %q?", ref))
+		case actions.ActionMergePR:
+			return p.doMergePR()
 		}
 	case kindActionRun:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -2423,6 +2447,54 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
 			return workflowDispatchResultMsg{workflowName: workflowName, err: err}
 		}
+
+	case opPRMergeStrategy:
+		// User selected a merge strategy from the picker.
+		// pendingName format: "number:headBranch:title"
+		parts := strings.SplitN(name, ":", 3)
+		if len(parts) < 3 {
+			return p, nil
+		}
+		prNumber, _ := strconv.Atoi(parts[0])
+		headBranch := parts[1]
+		prTitle := parts[2]
+		if prNumber == 0 {
+			return p, nil
+		}
+
+		strategy := msg.Value // "merge", "squash", or "rebase"
+		deleteBranch := msg.Remember
+
+		// Store merge details for the confirmation step.
+		deleteFlag := "false"
+		if deleteBranch {
+			deleteFlag = "true"
+		}
+		p.pending = opPRMergeConfirm
+		p.pendingName = fmt.Sprintf("%d:%s:%s:%s", prNumber, strategy, deleteFlag, headBranch)
+
+		label := mergeStrategyLabel(strategy)
+		confirmMsg := fmt.Sprintf("Merge PR #%d %q using %s?", prNumber, prTitle, label)
+		if deleteBranch {
+			confirmMsg += "\nBranch " + headBranch + " will be deleted."
+		}
+		return p, notify.ShowConfirm("Confirm Merge", confirmMsg)
+
+	case opPRMergeConfirm:
+		// User confirmed the merge. Execute it.
+		// pendingName format: "number:strategy:deleteBranch:headBranch"
+		parts := strings.SplitN(name, ":", 4)
+		if len(parts) < 4 {
+			return p, nil
+		}
+		prNumber, _ := strconv.Atoi(parts[0])
+		strategy := parts[1]
+		deleteBranch := parts[2] == "true"
+		headBranch := parts[3]
+		if prNumber == 0 {
+			return p, nil
+		}
+		return p, p.mergePRCmd(prNumber, strategy, deleteBranch, headBranch)
 	}
 	return p, nil
 }
@@ -3077,7 +3149,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 					state = "draft" //nolint:goconst // inline string is more readable here
 				}
 				if pr.GetMerged() {
-					state = "merged"
+					state = prStateMerged
 				}
 				author := ""
 				if pr.User != nil {
@@ -3727,6 +3799,142 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 }
 
 // ---------------------------------------------------------------------------
+// PR merge
+// ---------------------------------------------------------------------------
+
+// mergeStrategyLabel returns a human-readable label for a merge strategy ID.
+func mergeStrategyLabel(strategy string) string {
+	switch strategy {
+	case "squash":
+		return "squash and merge"
+	case "rebase":
+		return "rebase and merge"
+	default:
+		return "merge commit"
+	}
+}
+
+// doMergePR initiates the merge flow for the selected PR.
+// Shows an action picker with three merge strategies and a "delete branch" checkbox.
+// Only enabled for open (non-draft) PRs.
+func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindPR {
+		return p, nil
+	}
+	pr := items[cursor].pr
+
+	// Guard: only allow merge on open PRs.
+	if pr.State != "open" {
+		stateLabel := pr.State
+		if stateLabel == "" {
+			stateLabel = "unknown"
+		}
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Cannot merge PR #%d: state is %s", pr.Number, stateLabel),
+				Level:   notify.Warn,
+			}
+		}
+	}
+
+	if p.ghClient == nil {
+		return p, nil
+	}
+
+	// Store PR details for multi-step flow.
+	p.pending = opPRMergeStrategy
+	p.pendingName = fmt.Sprintf("%d:%s:%s", pr.Number, pr.HeadBranch, pr.Title)
+
+	mergeActions := []notify.ActionOption{
+		{ID: "merge", Label: "Merge commit"},
+		{ID: "squash", Label: "Squash and merge"},
+		{ID: "rebase", Label: "Rebase and merge"},
+	}
+
+	title := fmt.Sprintf("Merge PR #%d", pr.Number)
+	message := pr.Title
+	return p, notify.ShowActionPickerWithCheckbox(title, message, "Delete branch after merge", mergeActions)
+}
+
+// mergePRCmd returns a tea.Cmd that executes the merge asynchronously.
+func (p *Panel) mergePRCmd(number int, strategy string, deleteBranch bool, headBranch string) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	return func() tea.Msg {
+		opts := &gh.PullRequestOptions{MergeMethod: strategy}
+		err := client.MergePR(ctx, owner, repo, number, "", opts)
+		if err != nil {
+			return prMergeResultMsg{number: number, strategy: strategy, err: err}
+		}
+
+		// If requested, delete the head branch after successful merge.
+		if deleteBranch && headBranch != "" {
+			_ = client.DeleteBranch(ctx, owner, repo, headBranch)
+		}
+
+		return prMergeResultMsg{
+			number:       number,
+			strategy:     strategy,
+			deleteBranch: deleteBranch,
+			headBranch:   headBranch,
+		}
+	}
+}
+
+// handlePRMergeResult processes the async result of a PR merge operation.
+func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Merge PR #%d failed: %s", msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	// Update local PR state to "merged".
+	for i := range p.allPRs {
+		if p.allPRs[i].Number == msg.number {
+			p.allPRs[i].State = prStateMerged
+			break
+		}
+	}
+	// Also update in the visible tab items.
+	for i := range p.tabItems[tabPRs] {
+		if p.tabItems[tabPRs][i].kind == kindPR && p.tabItems[tabPRs][i].pr.Number == msg.number {
+			p.tabItems[tabPRs][i].pr.State = prStateMerged
+			break
+		}
+	}
+
+	label := mergeStrategyLabel(msg.strategy)
+	toastMsg := fmt.Sprintf("PR #%d merged (%s)", msg.number, label)
+	if msg.deleteBranch && msg.headBranch != "" {
+		toastMsg += " — branch " + msg.headBranch + " deleted"
+	}
+
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: toastMsg,
+				Level:   notify.Success,
+			}
+		},
+		func() tea.Msg {
+			return panels.PRMergedMsg{
+				Number:   msg.number,
+				Strategy: msg.strategy,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
+// ---------------------------------------------------------------------------
 // GitHub item rendering
 // ---------------------------------------------------------------------------
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
@@ -3803,7 +4011,7 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	switch pr.State {
 	case "draft":
 		fg = defaultColors.PRDraft
-	case "merged":
+	case prStateMerged:
 		fg = defaultColors.PRMerged
 	default: // "open", "closed"
 		fg = defaultColors.PR
