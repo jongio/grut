@@ -222,11 +222,17 @@ type workflowDispatchResultMsg struct {
 
 // prMergeResultMsg carries the result of a PR merge operation.
 type prMergeResultMsg struct {
-	number       int
-	strategy     string
-	deleteBranch bool
-	headBranch   string
-	err          error
+	number     int
+	strategy   string
+	headBranch string
+	err        error
+}
+
+// prBranchDeleteResultMsg carries the result of deleting a branch after PR merge.
+type prBranchDeleteResultMsg struct {
+	branch    string
+	remoteErr error
+	localErr  error
 }
 
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
@@ -305,28 +311,29 @@ func (f PRFilterKind) String() string {
 type pendingOp int
 
 const (
-	opNone                   pendingOp = iota
-	opBranchCreate                     // awaiting new branch name
-	opBranchDelete                     // awaiting delete confirmation
-	opBranchRename                     // awaiting new name
-	opBranchCheckout                   // awaiting checkout confirmation
-	opWorktreeCreate                   // awaiting new branch name for worktree
-	opWorktreeDelete                   // awaiting delete confirmation
-	opRemoteAdd                        // awaiting remote name
-	opRemoteAddURL                     // awaiting remote URL (second step)
-	opRemoteDelete                     // awaiting delete confirmation
-	opStashAction                      // awaiting stash action (apply/pop/drop)
-	opFirstUseConfirm                  // awaiting first-use double-click confirmation
-	opRightClickPick                   // awaiting right-click action picker result
-	opTagCreate                        // awaiting new tag name
-	opTagMessage                       // awaiting optional tag message
-	opTagDelete                        // awaiting tag delete confirmation
-	opTagPush                          // awaiting tag push confirmation
-	opTagCheckout                      // awaiting tag checkout confirmation (detached HEAD)
-	opWorkflowDispatch                 // awaiting workflow dispatch ref input
-	opWorkflowDispatchInputs           // awaiting workflow dispatch inputs (key=value)
-	opPRMergeStrategy                  // awaiting merge strategy selection
-	opPRMergeConfirm                   // awaiting merge confirmation
+	opNone                     pendingOp = iota
+	opBranchCreate                       // awaiting new branch name
+	opBranchDelete                       // awaiting delete confirmation
+	opBranchRename                       // awaiting new name
+	opBranchCheckout                     // awaiting checkout confirmation
+	opWorktreeCreate                     // awaiting new branch name for worktree
+	opWorktreeDelete                     // awaiting delete confirmation
+	opRemoteAdd                          // awaiting remote name
+	opRemoteAddURL                       // awaiting remote URL (second step)
+	opRemoteDelete                       // awaiting delete confirmation
+	opStashAction                        // awaiting stash action (apply/pop/drop)
+	opFirstUseConfirm                    // awaiting first-use double-click confirmation
+	opRightClickPick                     // awaiting right-click action picker result
+	opTagCreate                          // awaiting new tag name
+	opTagMessage                         // awaiting optional tag message
+	opTagDelete                          // awaiting tag delete confirmation
+	opTagPush                            // awaiting tag push confirmation
+	opTagCheckout                        // awaiting tag checkout confirmation (detached HEAD)
+	opWorkflowDispatch                   // awaiting workflow dispatch ref input
+	opWorkflowDispatchInputs             // awaiting workflow dispatch inputs (key=value)
+	opPRMergeStrategy                    // awaiting merge strategy selection
+	opPRMergeConfirm                     // awaiting merge confirmation
+	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
 )
 
 // ---------------------------------------------------------------------------
@@ -777,6 +784,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 
 	case prMergeResultMsg:
 		return p.handlePRMergeResult(msg)
+	case prBranchDeleteResultMsg:
+		return p.handlePRBranchDeleteResult(msg)
 
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
@@ -2463,38 +2472,51 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		}
 
 		strategy := msg.Value // "merge", "squash", or "rebase"
-		deleteBranch := msg.Remember
 
 		// Store merge details for the confirmation step.
-		deleteFlag := "false"
-		if deleteBranch {
-			deleteFlag = "true"
-		}
 		p.pending = opPRMergeConfirm
-		p.pendingName = fmt.Sprintf("%d:%s:%s:%s", prNumber, strategy, deleteFlag, headBranch)
+		p.pendingName = fmt.Sprintf("%d:%s:%s", prNumber, strategy, headBranch)
 
 		label := mergeStrategyLabel(strategy)
 		confirmMsg := fmt.Sprintf("Merge PR #%d %q using %s?", prNumber, prTitle, label)
-		if deleteBranch {
-			confirmMsg += "\nBranch " + headBranch + " will be deleted."
-		}
 		return p, notify.ShowConfirm("Confirm Merge", confirmMsg)
 
 	case opPRMergeConfirm:
 		// User confirmed the merge. Execute it.
-		// pendingName format: "number:strategy:deleteBranch:headBranch"
-		parts := strings.SplitN(name, ":", 4)
-		if len(parts) < 4 {
+		// pendingName format: "number:strategy:headBranch"
+		parts := strings.SplitN(name, ":", 3)
+		if len(parts) < 3 {
 			return p, nil
 		}
 		prNumber, _ := strconv.Atoi(parts[0])
 		strategy := parts[1]
-		deleteBranch := parts[2] == "true"
-		headBranch := parts[3]
+		headBranch := parts[2]
 		if prNumber == 0 {
 			return p, nil
 		}
-		return p, p.mergePRCmd(prNumber, strategy, deleteBranch, headBranch)
+		return p, p.mergePRCmd(prNumber, strategy, headBranch)
+
+	case opPRDeleteBranchAfterMerge:
+		// User confirmed post-merge branch deletion.
+		branch := name
+		if branch == "" {
+			return p, nil
+		}
+		client := p.ghClient
+		owner, repo := p.ghOwner, p.ghRepo
+		g := p.git
+		return p, func() tea.Msg {
+			remoteErr := client.DeleteBranch(ctx, owner, repo, branch)
+			var localErr error
+			if g != nil {
+				localErr = g.BranchDelete(ctx, branch, false)
+			}
+			return prBranchDeleteResultMsg{
+				branch:    branch,
+				remoteErr: remoteErr,
+				localErr:  localErr,
+			}
+		}
 	}
 	return p, nil
 }
@@ -3815,7 +3837,7 @@ func mergeStrategyLabel(strategy string) string {
 }
 
 // doMergePR initiates the merge flow for the selected PR.
-// Shows an action picker with three merge strategies and a "delete branch" checkbox.
+// Shows an action picker with three merge strategies.
 // Only enabled for open (non-draft) PRs.
 func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	items := p.tabItems[p.activeTab]
@@ -3855,11 +3877,11 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 
 	title := fmt.Sprintf("Merge PR #%d", pr.Number)
 	message := pr.Title
-	return p, notify.ShowActionPickerWithCheckbox(title, message, "Delete branch after merge", mergeActions)
+	return p, notify.ShowActionPickerWithMessage(title, message, mergeActions)
 }
 
 // mergePRCmd returns a tea.Cmd that executes the merge asynchronously.
-func (p *Panel) mergePRCmd(number int, strategy string, deleteBranch bool, headBranch string) tea.Cmd {
+func (p *Panel) mergePRCmd(number int, strategy string, headBranch string) tea.Cmd {
 	client := p.ghClient
 	owner, repo := p.ghOwner, p.ghRepo
 	ctx := p.ctx
@@ -3870,16 +3892,10 @@ func (p *Panel) mergePRCmd(number int, strategy string, deleteBranch bool, headB
 			return prMergeResultMsg{number: number, strategy: strategy, err: err}
 		}
 
-		// If requested, delete the head branch after successful merge.
-		if deleteBranch && headBranch != "" {
-			_ = client.DeleteBranch(ctx, owner, repo, headBranch)
-		}
-
 		return prMergeResultMsg{
-			number:       number,
-			strategy:     strategy,
-			deleteBranch: deleteBranch,
-			headBranch:   headBranch,
+			number:     number,
+			strategy:   strategy,
+			headBranch: headBranch,
 		}
 	}
 }
@@ -3913,11 +3929,8 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 
 	label := mergeStrategyLabel(msg.strategy)
 	toastMsg := fmt.Sprintf("PR #%d merged (%s)", msg.number, label)
-	if msg.deleteBranch && msg.headBranch != "" {
-		toastMsg += " — branch " + msg.headBranch + " deleted"
-	}
 
-	return p, tea.Batch(
+	cmds := []tea.Cmd{
 		func() tea.Msg {
 			return notify.ShowToastMsg{
 				Message: toastMsg,
@@ -3931,6 +3944,58 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 			}
 		},
 		p.loadGitHubData(),
+	}
+
+	// Offer to delete branch after successful merge.
+	if msg.headBranch != "" {
+		p.pending = opPRDeleteBranchAfterMerge
+		p.pendingName = msg.headBranch
+		cmds = append(cmds, notify.ShowConfirm(
+			"Delete Branch",
+			fmt.Sprintf("Delete branch %q? (remote + local)", msg.headBranch),
+		))
+	}
+
+	return p, tea.Batch(cmds...)
+}
+
+// handlePRBranchDeleteResult processes the result of a post-merge branch deletion.
+func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.remoteErr != nil && msg.localErr != nil {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Failed to delete branch %s: %s", msg.branch, msg.remoteErr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	if msg.remoteErr != nil {
+		return p, tea.Batch(
+			func() tea.Msg {
+				return notify.ShowToastMsg{
+					Message: fmt.Sprintf("Branch %s deleted locally, remote deletion failed: %s", msg.branch, msg.remoteErr),
+					Level:   notify.Warn,
+				}
+			},
+			p.loadData(),
+		)
+	}
+
+	toastMsg := fmt.Sprintf("Branch %s deleted", msg.branch)
+	level := notify.Success
+	if msg.localErr != nil {
+		// Local deletion failed (branch may not exist locally) — still report success for remote.
+		toastMsg = fmt.Sprintf("Remote branch %s deleted (local not found)", msg.branch)
+	}
+
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: toastMsg,
+				Level:   level,
+			}
+		},
+		p.loadData(),
 	)
 }
 

@@ -1306,30 +1306,33 @@ func TestHandleModalResult_PRMergeStrategy_Accept(t *testing.T) {
 	p.pendingName = "42:feature-auth:Add authentication"
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
-		Accept:   true,
-		Value:    "squash",
-		Remember: false,
+		Accept: true,
+		Value:  "squash",
 	})
 	assert.NotNil(t, cmd, "should produce confirmation dialog")
 	assert.Equal(t, opPRMergeConfirm, p.pending)
-	assert.Contains(t, p.pendingName, "42:squash:false:feature-auth")
+	assert.Contains(t, p.pendingName, "42:squash:feature-auth")
 }
 
-func TestHandleModalResult_PRMergeStrategy_WithDeleteBranch(t *testing.T) {
+func TestHandleModalResult_PRMergeStrategy_AllStrategies(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
-	p.pending = opPRMergeStrategy
-	p.pendingName = "42:feature-auth:Add authentication"
+	for _, strategy := range []string{"merge", "squash", "rebase"} {
+		t.Run(strategy, func(t *testing.T) {
+			t.Parallel()
+			p := newTestPanel(defaultMock())
+			p.ghClient = &mockGHClientFull{}
+			p.pending = opPRMergeStrategy
+			p.pendingName = "42:feature-auth:Add authentication"
 
-	_, cmd := p.handleModalResult(notify.ModalResultMsg{
-		Accept:   true,
-		Value:    "rebase",
-		Remember: true, // delete branch after merge
-	})
-	assert.NotNil(t, cmd)
-	assert.Equal(t, opPRMergeConfirm, p.pending)
-	assert.Contains(t, p.pendingName, "42:rebase:true:feature-auth")
+			_, cmd := p.handleModalResult(notify.ModalResultMsg{
+				Accept: true,
+				Value:  strategy,
+			})
+			assert.NotNil(t, cmd)
+			assert.Equal(t, opPRMergeConfirm, p.pending)
+			assert.Contains(t, p.pendingName, fmt.Sprintf("42:%s:feature-auth", strategy))
+		})
+	}
 }
 
 func TestHandleModalResult_PRMergeStrategy_Cancel(t *testing.T) {
@@ -1365,7 +1368,7 @@ func TestHandleModalResult_PRMergeConfirm_Accept(t *testing.T) {
 	p.ghRepo = "repo"
 	p.ctx = context.Background()
 	p.pending = opPRMergeConfirm
-	p.pendingName = "42:squash:false:feature-auth"
+	p.pendingName = "42:squash:feature-auth"
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
 	assert.NotNil(t, cmd, "should produce merge command")
@@ -1376,7 +1379,7 @@ func TestHandleModalResult_PRMergeConfirm_Cancel(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
 	p.pending = opPRMergeConfirm
-	p.pendingName = "42:squash:false:feature-auth"
+	p.pendingName = "42:squash:feature-auth"
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
 	assert.Nil(t, cmd)
@@ -1429,7 +1432,7 @@ func TestHandlePRMergeResult_Error(t *testing.T) {
 	assert.NotNil(t, cmd, "should produce error toast")
 }
 
-func TestHandlePRMergeResult_WithDeleteBranch(t *testing.T) {
+func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
 	p.allPRs = []ghPRItem{
@@ -1440,13 +1443,125 @@ func TestHandlePRMergeResult_WithDeleteBranch(t *testing.T) {
 	}
 
 	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
-		number:       42,
-		strategy:     "rebase",
-		deleteBranch: true,
-		headBranch:   "feature-x",
+		number:     42,
+		strategy:   "rebase",
+		headBranch: "feature-x",
 	})
 	assert.NotNil(t, cmd)
 	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	// After successful merge with headBranch, the panel should prompt for deletion.
+	assert.Equal(t, opPRDeleteBranchAfterMerge, p.pending)
+	assert.Equal(t, "feature-x", p.pendingName)
+}
+
+func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.allPRs = []ghPRItem{
+		{Number: 42, Title: "Test", State: "open"},
+	}
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: p.allPRs[0]},
+	}
+
+	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
+		number:   42,
+		strategy: "squash",
+	})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	// No headBranch means no deletion prompt — pending should NOT be set.
+	assert.NotEqual(t, opPRDeleteBranchAfterMerge, p.pending)
+}
+
+// ---------------------------------------------------------------------------
+// handleModalResult — opPRDeleteBranchAfterMerge
+// ---------------------------------------------------------------------------
+
+func TestHandleModalResult_PRDeleteBranchAfterMerge_Confirm(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.ctx = context.Background()
+	p.pending = opPRDeleteBranchAfterMerge
+	p.pendingName = "feature-auth"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "confirming branch deletion should produce a command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_PRDeleteBranchAfterMerge_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.pending = opPRDeleteBranchAfterMerge
+	p.pendingName = "feature-auth"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancelling branch deletion should be no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	p.ghClient = &mockGHClientFull{}
+	p.ctx = context.Background()
+	p.pending = opPRDeleteBranchAfterMerge
+	p.pendingName = ""
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd, "empty branch name should produce nil cmd")
+}
+
+// ---------------------------------------------------------------------------
+// handlePRBranchDeleteResult
+// ---------------------------------------------------------------------------
+
+func TestHandlePRBranchDeleteResult_Success(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+
+	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
+		branch: "feature-x",
+	})
+	assert.NotNil(t, cmd, "successful deletion should produce toast + data reload")
+}
+
+func TestHandlePRBranchDeleteResult_RemoteError(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+
+	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
+		branch:    "feature-x",
+		remoteErr: errors.New("forbidden"),
+	})
+	assert.NotNil(t, cmd, "remote-only error should produce warn toast + data reload")
+}
+
+func TestHandlePRBranchDeleteResult_LocalError(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+
+	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
+		branch:   "feature-x",
+		localErr: errors.New("branch not found"),
+	})
+	assert.NotNil(t, cmd, "local-only error should still report remote success")
+}
+
+func TestHandlePRBranchDeleteResult_BothError(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+
+	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
+		branch:    "feature-x",
+		remoteErr: errors.New("forbidden"),
+		localErr:  errors.New("not found"),
+	})
+	assert.NotNil(t, cmd, "both errors should produce error toast")
 }
 
 // ---------------------------------------------------------------------------
