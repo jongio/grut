@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
@@ -10,13 +12,15 @@ import (
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/jongio/grut/internal/tui"
+	"github.com/jongio/grut/internal/update"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNoAIFlagRegistered(t *testing.T) {
-	root := NewRootCommand()
+	root, cleanup := newRootCommand()
+	defer cleanup()
 	flag := root.PersistentFlags().Lookup("no-ai")
 	require.NotNil(t, flag, "--no-ai persistent flag must be registered")
 	assert.Equal(t, "bool", flag.Value.Type())
@@ -25,7 +29,8 @@ func TestNoAIFlagRegistered(t *testing.T) {
 }
 
 func TestNoAIFlagInheritedBySubcommands(t *testing.T) {
-	root := NewRootCommand()
+	root, cleanup := newRootCommand()
+	defer cleanup()
 
 	// Every subcommand should inherit the persistent --no-ai flag.
 	for _, sub := range root.Commands() {
@@ -69,7 +74,8 @@ func TestApplyNoAIFlag_PreservesDisabledState(t *testing.T) {
 }
 
 func TestNoAIFlagParsing(t *testing.T) {
-	root := NewRootCommand()
+	root, cleanup := newRootCommand()
+	defer cleanup()
 
 	// Simulate: grut --no-ai version
 	// Version subcommand doesn't start the TUI so it's safe to execute.
@@ -125,11 +131,307 @@ func TestOpenLogPath_NonexistentDirReturnsNil(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// --reset-welcome flag
+// showUpdateNotification
+// ---------------------------------------------------------------------------
+
+func TestShowUpdateNotification_NilInfo(t *testing.T) {
+	var buf bytes.Buffer
+	ch := make(chan *update.UpdateInfo, 1)
+	ch <- nil
+	showUpdateNotification(&buf, ch)
+	assert.Empty(t, buf.String(), "nil UpdateInfo should produce no output")
+}
+
+func TestShowUpdateNotification_WithUpdate(t *testing.T) {
+	var buf bytes.Buffer
+	ch := make(chan *update.UpdateInfo, 1)
+	ch <- &update.UpdateInfo{
+		CurrentVersion: "1.0.0",
+		LatestVersion:  "2.0.0",
+		ReleaseURL:     "https://github.com/jongio/grut/releases/tag/v2.0.0",
+	}
+	showUpdateNotification(&buf, ch)
+	output := buf.String()
+	assert.Contains(t, output, "1.0.0")
+	assert.Contains(t, output, "2.0.0")
+	assert.Contains(t, output, "grut update")
+}
+
+func TestShowUpdateNotification_EmptyChannel(t *testing.T) {
+	var buf bytes.Buffer
+	ch := make(chan *update.UpdateInfo, 1)
+	// Don't send anything — default branch in select.
+	showUpdateNotification(&buf, ch)
+	assert.Empty(t, buf.String(), "empty channel should produce no output")
+}
+
+func TestShowUpdateNotification_NilWriter(t *testing.T) {
+	ch := make(chan *update.UpdateInfo, 1)
+	ch <- nil
+	// nil writer falls back to os.Stderr; should not panic.
+	assert.NotPanics(t, func() {
+		showUpdateNotification(nil, ch)
+	})
+}
+
+// ---------------------------------------------------------------------------
+// newRootCommand — subcommand registration
+// ---------------------------------------------------------------------------
+
+func TestNewRootCommand_SubcommandsRegistered(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	names := make(map[string]bool)
+	for _, sub := range cmd.Commands() {
+		names[sub.Name()] = true
+	}
+	assert.True(t, names["run"], "run subcommand must be registered")
+	assert.True(t, names["version"], "version subcommand must be registered")
+	assert.True(t, names["update"], "update subcommand must be registered")
+	assert.True(t, names["mcp"], "mcp subcommand must be registered")
+	assert.True(t, names["ext"], "ext subcommand must be registered")
+	assert.True(t, names["report"], "report subcommand must be registered")
+}
+
+func TestNewRootCommand_VersionSet(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	assert.Equal(t, config.AppVersion, cmd.Version)
+}
+
+func TestNewRootCommand_DemoFlagRegistered(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	flag := cmd.PersistentFlags().Lookup("demo")
+	require.NotNil(t, flag, "--demo persistent flag must be registered")
+	assert.Equal(t, "bool", flag.Value.Type())
+	assert.Equal(t, "false", flag.DefValue)
+}
+
+func TestRootCommandHasProfilingFlags(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+
+	cpuFlag := cmd.PersistentFlags().Lookup("cpu-profile")
+	assert.NotNil(t, cpuFlag, "--cpu-profile persistent flag must be registered")
+	assert.Equal(t, "string", cpuFlag.Value.Type())
+	assert.Equal(t, "", cpuFlag.DefValue)
+
+	memFlag := cmd.PersistentFlags().Lookup("mem-profile")
+	assert.NotNil(t, memFlag, "--mem-profile persistent flag must be registered")
+	assert.Equal(t, "string", memFlag.Value.Type())
+	assert.Equal(t, "", memFlag.DefValue)
+}
+
+func TestProfilingFlags_InheritedBySubcommands(t *testing.T) {
+	root, cleanup := newRootCommand()
+	defer cleanup()
+	for _, sub := range root.Commands() {
+		assert.NotNil(t, sub.InheritedFlags().Lookup("cpu-profile"),
+			"subcommand %q must inherit --cpu-profile", sub.Name())
+		assert.NotNil(t, sub.InheritedFlags().Lookup("mem-profile"),
+			"subcommand %q must inherit --mem-profile", sub.Name())
+	}
+}
+
+func TestCPUProfile_WritesFile(t *testing.T) {
+	tmp := t.TempDir()
+	profPath := filepath.Join(tmp, "cpu.prof")
+
+	root, cleanup := buildRootCommand()
+	defer cleanup()
+	root.SetArgs([]string{"--cpu-profile", profPath, "version"})
+	err := root.Execute()
+	assert.NoError(t, err)
+
+	// Run cleanup now so the profile is flushed before we stat the file.
+	cleanup()
+
+	info, err := os.Stat(profPath)
+	require.NoError(t, err, "CPU profile file must be created")
+	assert.Greater(t, info.Size(), int64(0), "CPU profile must contain data")
+}
+
+func TestMemProfile_WritesFile(t *testing.T) {
+	tmp := t.TempDir()
+	profPath := filepath.Join(tmp, "mem.prof")
+
+	root, cleanup := buildRootCommand()
+	defer cleanup()
+	root.SetArgs([]string{"--mem-profile", profPath, "version"})
+	err := root.Execute()
+	assert.NoError(t, err)
+
+	// Run cleanup now so the memory profile is written before we stat.
+	cleanup()
+
+	info, err := os.Stat(profPath)
+	require.NoError(t, err, "memory profile file must be created")
+	assert.Greater(t, info.Size(), int64(0), "memory profile must contain data")
+}
+
+func TestNewRootCommand_UseAndShort(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	assert.Equal(t, "grut", cmd.Use)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
+}
+
+// ---------------------------------------------------------------------------
+// restoreSessionOrDefault
+// ---------------------------------------------------------------------------
+
+func TestRestoreSessionOrDefault_SessionsDisabled(t *testing.T) {
+	mgr := session.NewManager()
+	cfg := &config.Config{}
+	cfg.Session.Enabled = false
+
+	preset := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil)
+	// When sessions are disabled, should return the default ExplorerPreset.
+	expected := layout.ExplorerPreset()
+	assert.Equal(t, expected.Name, preset.Name)
+}
+
+func TestRestoreSessionOrDefault_NoSavedSession(t *testing.T) {
+	mgr := session.NewManager()
+	cfg := &config.Config{}
+	cfg.Session.Enabled = true
+
+	// Use a temp dir where no session file exists.
+	preset := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil)
+	expected := layout.ExplorerPreset()
+	assert.Equal(t, expected.Name, preset.Name)
+}
+
+// ---------------------------------------------------------------------------
+// addRestoredTabs — single-tab mode guard
+// ---------------------------------------------------------------------------
+
+func TestAddRestoredTabs_SingleTabMode(t *testing.T) {
+	// In v1, SingleTabMode is true and addRestoredTabs returns immediately.
+	// This test just verifies it doesn't panic.
+	if !layout.SingleTabMode {
+		t.Skip("SingleTabMode is false; test not applicable")
+	}
+	mgr := session.NewManager()
+	reg := layout.NewRegistry()
+	cfg := &config.Config{}
+	th, err := theme.Load("default")
+	require.NoError(t, err)
+	layout.RegisterDefaults(reg, cfg, nil, th)
+	engine, err := layout.NewEngine(reg, layout.ExplorerPreset())
+	require.NoError(t, err)
+
+	assert.NotPanics(t, func() {
+		addRestoredTabs(mgr, engine, t.TempDir())
+	})
+}
+
+// ---------------------------------------------------------------------------
+// newExtCmd — subcommands
+// ---------------------------------------------------------------------------
+
+func TestNewExtCmd_SubcommandsRegistered(t *testing.T) {
+	cmd := newExtCmd()
+	assert.Equal(t, "ext", cmd.Use)
+	names := make(map[string]bool)
+	for _, sub := range cmd.Commands() {
+		names[sub.Name()] = true
+	}
+	assert.True(t, names["install"], "install subcommand must be registered")
+	assert.True(t, names["remove"], "remove subcommand must be registered")
+	assert.True(t, names["list"], "list subcommand must be registered")
+	assert.True(t, names["enable"], "enable subcommand must be registered")
+	assert.True(t, names["disable"], "disable subcommand must be registered")
+	assert.True(t, names["create"], "create subcommand must be registered")
+	assert.True(t, names["info"], "info subcommand must be registered")
+}
+
+// ---------------------------------------------------------------------------
+// newMCPCmd — structure
+// ---------------------------------------------------------------------------
+
+func TestNewMCPCmd_SocketFlagRegistered(t *testing.T) {
+	cmd := newMCPCmd()
+	assert.Equal(t, "mcp", cmd.Use)
+	flag := cmd.Flags().Lookup("socket")
+	require.NotNil(t, flag, "--socket flag must be registered")
+	assert.Equal(t, "string", flag.Value.Type())
+	assert.Equal(t, "", flag.DefValue)
+}
+
+// ---------------------------------------------------------------------------
+// newVersionCmd / newUpdateCmd — structure
+// ---------------------------------------------------------------------------
+
+func TestNewVersionCmd_Structure(t *testing.T) {
+	cmd := newVersionCmd()
+	assert.Equal(t, "version", cmd.Use)
+	assert.NotEmpty(t, cmd.Short)
+}
+
+func TestNewUpdateCmd_Structure(t *testing.T) {
+	cmd := newUpdateCmd()
+	assert.Equal(t, "update", cmd.Use)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
+}
+
+// ---------------------------------------------------------------------------
+// newMCPCmd — execution paths
+// ---------------------------------------------------------------------------
+
+func TestNewMCPCmd_SocketNotImplemented(t *testing.T) {
+	// mcp --socket <path> should error with "not yet implemented".
+	cmd := newMCPCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--socket", "/tmp/test.sock"})
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// Run subcommand — execution via root
+// ---------------------------------------------------------------------------
+
+func TestRunCmd_NoArgs_RequiresShortcutName(t *testing.T) {
+	// Running "run" with no args should produce an error mentioning
+	// either "shortcut name required" or "shortcuts are disabled"
+	// depending on config. Either way, it exercises the RunE path.
+	root, cleanup := newRootCommand()
+	defer cleanup()
+	root.SetArgs([]string{"run"})
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	err := root.Execute()
+	assert.Error(t, err)
+}
+
+func TestRunCmd_DescribeUnknownShortcut(t *testing.T) {
+	root, cleanup := newRootCommand()
+	defer cleanup()
+	root.SetArgs([]string{"run", "--describe", "nonexistent-shortcut"})
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	err := root.Execute()
+	// This will either fail because shortcuts are disabled, or
+	// because the shortcut is unknown. Both exercise code paths.
+	assert.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// --reset-welcome flag (from main)
 // ---------------------------------------------------------------------------
 
 func TestResetWelcomeFlagRegistered(t *testing.T) {
-	root := NewRootCommand()
+	root, cleanup := newRootCommand()
+	defer cleanup()
 	flag := root.PersistentFlags().Lookup("reset-welcome")
 	require.NotNil(t, flag, "--reset-welcome persistent flag must be registered")
 	assert.Equal(t, "bool", flag.Value.Type())
@@ -137,7 +439,8 @@ func TestResetWelcomeFlagRegistered(t *testing.T) {
 }
 
 func TestResetWelcomeFlagInheritedBySubcommands(t *testing.T) {
-	root := NewRootCommand()
+	root, cleanup := newRootCommand()
+	defer cleanup()
 
 	for _, sub := range root.Commands() {
 		flag := sub.InheritedFlags().Lookup("reset-welcome")
@@ -146,14 +449,12 @@ func TestResetWelcomeFlagInheritedBySubcommands(t *testing.T) {
 }
 
 func TestResetWelcomeState_ResetsMarker(t *testing.T) {
-	// Ensure first-run is marked done, then reset and verify.
 	require.NoError(t, session.MarkFirstRunDone())
 	assert.False(t, session.IsFirstRun(), "precondition: should not be first run")
 
 	require.NoError(t, resetWelcomeState())
 	assert.True(t, session.IsFirstRun(), "should be first run after resetWelcomeState")
 
-	// Re-mark so other tests relying on global state aren't affected.
 	require.NoError(t, session.MarkFirstRunDone())
 }
 
@@ -161,9 +462,6 @@ func TestResetWelcomeState_ResetsMarker(t *testing.T) {
 // Startup smoke tests — exercise the full init chain that RunE performs
 // ---------------------------------------------------------------------------
 
-// TestDefaultConfigThemeIsValid ensures the theme name in embedded defaults
-// resolves to a loadable theme. This prevents a removed/renamed theme in
-// defaults.toml from silently breaking app startup.
 func TestDefaultConfigThemeIsValid(t *testing.T) {
 	cfg, err := config.LoadDefaults()
 	require.NoError(t, err, "LoadDefaults must succeed")
@@ -172,39 +470,28 @@ func TestDefaultConfigThemeIsValid(t *testing.T) {
 	require.NoError(t, err, "theme %q from defaults must load", cfg.Theme.Name)
 	assert.NotNil(t, th)
 
-	// Also verify the name is in the builtin list.
 	builtins := theme.BuiltinNames()
 	assert.Contains(t, builtins, cfg.Theme.Name,
 		"default config theme %q must be a builtin theme", cfg.Theme.Name)
 }
 
-// TestInitChainSucceeds exercises every initialization step that RunE
-// performs before starting the TUI. If this test fails, the app cannot
-// launch — exactly the class of bug where "all tests pass but the app
-// won't start."
 func TestInitChainSucceeds(t *testing.T) {
-	// 1. Load config (using defaults to avoid user-config dependency).
 	cfg, err := config.LoadDefaults()
 	require.NoError(t, err, "config.LoadDefaults")
 
-	// 2. Load theme.
 	th, err := theme.Load(cfg.Theme.Name)
 	require.NoError(t, err, "theme.Load(%q)", cfg.Theme.Name)
 
-	// 3. Create panel registry with defaults.
 	reg := layout.NewRegistry()
-	layout.RegisterDefaults(reg, cfg, nil, th) // nil git client is valid
+	layout.RegisterDefaults(reg, cfg, nil, th)
 
-	// 4. Create layout engine.
 	preset := layout.ExplorerPreset()
 	engine, err := layout.NewEngine(reg, preset)
 	require.NoError(t, err, "layout.NewEngine")
 
-	// 5. Create keymap.
 	km, err := keymap.NewKeymap(cfg.General.KeybindingScheme)
 	require.NoError(t, err, "keymap.NewKeymap(%q)", cfg.General.KeybindingScheme)
 
-	// 6. Assemble the TUI model (final step before tea.NewProgram).
 	model := tui.New(engine, th, km, nil).
 		WithConfig(cfg)
 	assert.NotNil(t, model, "tui.New must produce a non-nil model")

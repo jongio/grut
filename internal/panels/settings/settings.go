@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/layout"
@@ -83,17 +84,17 @@ var colors = struct {
 
 // Panel is the settings overlay. It implements [panels.Panel].
 type Panel struct {
+	actionsCfg          config.ActionsConfig // persisted action overrides
+	actionOverrides     map[string]string    // in-memory copy of current double-click overrides
+	rightClickOverrides map[string]string    // in-memory copy of current right-click overrides
+	themeName           string               // active theme name
+	themeNames          []string             // available theme names
+	configurableItems   []actions.ItemType   // cached from actions.ConfigurableItems()
 	panels.BasePanel
-	cursor              settingField           // which setting row is highlighted
-	offset              int                    // scroll offset for viewport
-	totalLines          int                    // total rendered content lines (updated each View)
-	previewPos          layout.PreviewPosition // active preview position
-	themeName           string                 // active theme name
-	themeNames          []string               // available theme names
-	actionsCfg          config.ActionsConfig   // persisted action overrides
-	configurableItems   []actions.ItemType     // cached from actions.ConfigurableItems()
-	actionOverrides     map[string]string      // in-memory copy of current double-click overrides
-	rightClickOverrides map[string]string      // in-memory copy of current right-click overrides
+	cursor     settingField           // which setting row is highlighted
+	offset     int                    // scroll offset for viewport
+	totalLines int                    // total rendered content lines (updated each View)
+	previewPos layout.PreviewPosition // active preview position
 }
 
 // Compile-time interface check.
@@ -102,7 +103,6 @@ var _ panels.Panel = (*Panel)(nil)
 // New creates a new settings overlay panel.
 func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []string, actionsCfg config.ActionsConfig) *Panel {
 	items := actions.ConfigurableItems()
-
 	// Seed in-memory overrides from persisted config.
 	overrides := make(map[string]string, len(items))
 	for _, it := range items {
@@ -110,7 +110,6 @@ func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []st
 			overrides[string(it)] = a
 		}
 	}
-
 	rcOverrides := make(map[string]string, len(items))
 	if actionsCfg.RightClick != nil {
 		for _, it := range items {
@@ -119,7 +118,6 @@ func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []st
 			}
 		}
 	}
-
 	return &Panel{
 		BasePanel:           panels.BasePanel{PanelTitle: "settings"},
 		cursor:              fieldPreviewPosition,
@@ -136,7 +134,6 @@ func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []st
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(_ context.Context) tea.Cmd {
 	return nil
@@ -159,32 +156,27 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	styles := p.viewStyles()
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	row := func(s string) string {
 		return lipgloss.NewStyle().Width(width).MaxWidth(width).Render(s)
 	}
-
 	previewLabel := positionLabel(p.previewPos)
 	themeLabel := p.themeName
 	if themeLabel == "" {
 		themeLabel = "default"
 	}
-
 	rendered := []string{
 		emptyLine,
 	}
 	rendered = append(rendered, p.renderSection(row, styles, "Preview Position", previewLabel, fieldPreviewPosition)...)
 	rendered = append(rendered, emptyLine)
 	rendered = append(rendered, p.renderSection(row, styles, "Theme", themeLabel, fieldTheme)...)
-
 	// Double-click actions section.
 	if len(p.configurableItems) > 0 {
 		rendered = append(rendered, emptyLine)
 		rendered = append(rendered, row("  "+styles.heading.Render("Double-Click Actions")))
 		rendered = append(rendered, row("  "+styles.sep.Render(strings.Repeat("\u2500", separatorWidth))))
-
 		for i, it := range p.configurableItems {
 			field := fieldActionsStart + settingField(i)
 			currentAction := p.actionOverrides[string(it)]
@@ -193,7 +185,6 @@ func (p *Panel) View(width, height int) string {
 			}
 			label := actions.ItemLabel(it)
 			actionLabel := actions.ActionLabel(actions.ActionID(currentAction))
-
 			line := "  "
 			if p.cursor == field {
 				line += styles.selected.Render("\u25b8 " + label + "  \u25c2 " + actionLabel + " \u25b8")
@@ -203,13 +194,11 @@ func (p *Panel) View(width, height int) string {
 			rendered = append(rendered, row(line))
 		}
 	}
-
 	// Right-click actions section.
 	if len(p.configurableItems) > 0 {
 		rendered = append(rendered, emptyLine)
 		rendered = append(rendered, row("  "+styles.heading.Render("Right-Click Actions")))
 		rendered = append(rendered, row("  "+styles.sep.Render(strings.Repeat("\u2500", separatorWidth))))
-
 		for i, it := range p.configurableItems {
 			field := p.fieldRightClickStart() + settingField(i)
 			currentAction := p.rightClickOverrides[string(it)]
@@ -218,7 +207,6 @@ func (p *Panel) View(width, height int) string {
 			}
 			label := actions.ItemLabel(it)
 			actionLabel := actions.ActionLabel(actions.ActionID(currentAction))
-
 			line := "  "
 			if p.cursor == field {
 				line += styles.selected.Render("\u25b8 " + label + "  \u25c2 " + actionLabel + " \u25b8")
@@ -228,7 +216,6 @@ func (p *Panel) View(width, height int) string {
 			rendered = append(rendered, row(line))
 		}
 	}
-
 	// Confirmations section.
 	rendered = append(rendered, emptyLine)
 	rendered = append(rendered, row("  "+styles.heading.Render("Confirmations")))
@@ -240,18 +227,14 @@ func (p *Panel) View(width, height int) string {
 		resetLine += styles.active.Render("  Reset all prompts")
 	}
 	rendered = append(rendered, row(resetLine))
-
 	rendered = append(rendered, emptyLine)
 	rendered = append(rendered, row("  "+styles.dim.Render("j/k navigate \u00b7 Enter cycle \u00b7 Esc close")))
-
 	// Track total content height for mouse scroll bounds.
 	p.totalLines = len(rendered)
-
 	// Apply scroll offset.
 	if p.offset > 0 && p.offset < len(rendered) {
 		rendered = rendered[p.offset:]
 	}
-
 	// Pad/truncate to exact height.
 	for len(rendered) < height {
 		rendered = append(rendered, emptyLine)
@@ -259,7 +242,6 @@ func (p *Panel) View(width, height int) string {
 	if len(rendered) > height {
 		rendered = rendered[:height]
 	}
-
 	return strings.Join(rendered, "\n")
 }
 
@@ -313,7 +295,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 // fieldCount returns the total number of navigable fields.
 func (p *Panel) fieldCount() settingField {
 	// preview + theme + N double-click items + N right-click items + reset prompts
@@ -396,7 +377,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // cycleAction cycles the double-click action for the item at the given index
 // and returns a command that emits SetDoubleClickActionMsg.
 func (p *Panel) cycleAction(idx int) tea.Cmd {
@@ -405,12 +385,10 @@ func (p *Panel) cycleAction(idx int) tea.Cmd {
 	if len(allActs) == 0 {
 		return nil
 	}
-
 	current := p.actionOverrides[string(it)]
 	if current == "" {
 		current = string(actions.DefaultAction(it))
 	}
-
 	// Find next action in cycle.
 	nextIdx := 0
 	for i, a := range allActs {
@@ -419,10 +397,8 @@ func (p *Panel) cycleAction(idx int) tea.Cmd {
 			break
 		}
 	}
-
 	next := string(allActs[nextIdx])
 	p.actionOverrides[string(it)] = next
-
 	return func() tea.Msg {
 		return SetDoubleClickActionMsg{
 			ItemType: string(it),
@@ -439,12 +415,10 @@ func (p *Panel) cycleRightClickAction(idx int) tea.Cmd {
 	if len(allActs) == 0 {
 		return nil
 	}
-
 	current := p.rightClickOverrides[string(it)]
 	if current == "" {
 		current = string(actions.ActionShowContextMenu)
 	}
-
 	// Find next action in cycle.
 	nextIdx := 0
 	for i, a := range allActs {
@@ -453,10 +427,8 @@ func (p *Panel) cycleRightClickAction(idx int) tea.Cmd {
 			break
 		}
 	}
-
 	next := string(allActs[nextIdx])
 	p.rightClickOverrides[string(it)] = next
-
 	return func() tea.Msg {
 		return SetRightClickActionMsg{
 			ItemType: string(it),
@@ -517,7 +489,6 @@ func (p *Panel) cycleTheme(current string) string {
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)
 // ---------------------------------------------------------------------------
-
 // cursorIndex returns the current cursor position.
 func (p *Panel) cursorIndex() settingField { return p.cursor }
 

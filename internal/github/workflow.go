@@ -14,10 +14,10 @@ import (
 type WorkflowInput struct {
 	Name        string
 	Description string
-	Required    bool
 	Default     string
 	Type        string   // "string", "choice", "boolean", "environment"
 	Options     []string // for "choice" type
+	Required    bool
 }
 
 // GetWorkflowInputs fetches the workflow YAML file from the repository and
@@ -32,12 +32,10 @@ func (c *clientImpl) GetWorkflowInputs(ctx context.Context, owner, repo, path, r
 	if fileContent == nil {
 		return nil, fmt.Errorf("workflow file %s: expected file, got directory", path)
 	}
-
 	content, err := fileContent.GetContent()
 	if err != nil {
 		return nil, fmt.Errorf("decode workflow file %s: %w", path, err)
 	}
-
 	inputs, err := parseWorkflowInputs([]byte(content))
 	if err != nil {
 		slog.Warn("parse workflow inputs", "path", path, "err", err)
@@ -62,14 +60,12 @@ func parseWorkflowInputs(yamlContent []byte) ([]WorkflowInput, error) {
 	if root.Kind != yaml.MappingNode {
 		return nil, nil
 	}
-
 	// Find the "on" key. YAML 1.1 parsers may interpret bare "on" as
 	// boolean true, so we check for both string values.
 	onNode := findMappingValue(root, "on", "true")
 	if onNode == nil || onNode.Kind != yaml.MappingNode {
 		return nil, nil // "on" absent or not a mapping — no dispatch inputs
 	}
-
 	// Find "workflow_dispatch" within "on".
 	dispatchNode := findMappingValue(onNode, "workflow_dispatch")
 	if dispatchNode == nil {
@@ -79,19 +75,16 @@ func parseWorkflowInputs(yamlContent []byte) ([]WorkflowInput, error) {
 	if dispatchNode.Kind != yaml.MappingNode {
 		return nil, nil
 	}
-
 	// Find "inputs" within "workflow_dispatch".
 	inputsNode := findMappingValue(dispatchNode, "inputs")
 	if inputsNode == nil || inputsNode.Kind != yaml.MappingNode {
 		return nil, nil
 	}
-
 	// Parse each input definition.
 	var result []WorkflowInput
 	for i := 0; i < len(inputsNode.Content)-1; i += 2 {
 		inputName := inputsNode.Content[i].Value
 		inputDef := inputsNode.Content[i+1]
-
 		input := WorkflowInput{Name: inputName}
 		if inputDef.Kind == yaml.MappingNode {
 			for j := 0; j < len(inputDef.Content)-1; j += 2 {
@@ -117,7 +110,6 @@ func parseWorkflowInputs(yamlContent []byte) ([]WorkflowInput, error) {
 		}
 		result = append(result, input)
 	}
-
 	return result, nil
 }
 

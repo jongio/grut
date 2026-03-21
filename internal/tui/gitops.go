@@ -18,6 +18,15 @@ const asyncOpPushing = "pushing..."
 // message when it is displayed in a toast notification.
 const toastMsgMaxLen = 40
 
+// pendingActionAmend identifies the amend-commit pending action.
+const pendingActionAmend = "amend"
+
+// pendingActionReword identifies the reword-commit pending action.
+const pendingActionReword = "reword"
+
+// asyncOpFetching is the status label shown during fetch operations.
+const asyncOpFetching = "fetching..."
+
 // ---------------------------------------------------------------------------
 // Commit
 // ---------------------------------------------------------------------------
@@ -94,7 +103,7 @@ func (m Model) handleAmend() (tea.Model, tea.Cmd) {
 	if m.asyncOp != "" || m.notify.HasModal() {
 		return m, nil
 	}
-	m.pendingAction = "amend"
+	m.pendingAction = pendingActionAmend
 
 	if s := m.aiCommitSuggestion; s != nil {
 		prefill := formatCommitSuggestion(s)
@@ -114,7 +123,7 @@ func (m Model) handleReword(oldMessage string) (tea.Model, tea.Cmd) {
 	if m.asyncOp != "" || m.notify.HasModal() {
 		return m, nil
 	}
-	m.pendingAction = "reword"
+	m.pendingAction = pendingActionReword
 	return m, notify.ShowInputWithValue("Reword Commit", "Edit commit message...", oldMessage)
 }
 
@@ -135,12 +144,12 @@ func (m Model) executeAmend(commitMsg string) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		hash, err := gc.Commit(ctx, commitMsg, git.CommitOpts{Amend: true, Sign: sign})
 		if err != nil {
-			return panels.AsyncOpDoneMsg{Description: "amend", Err: err}
+			return panels.AsyncOpDoneMsg{Description: pendingActionAmend, Err: err}
 		}
 
 		if undoMgr != nil {
 			undoMgr.RecordAction(git.UndoAction{
-				Type:      "amend",
+				Type:      pendingActionAmend,
 				RefBefore: hash,
 				Metadata: map[string]string{
 					"message": commitMsg,
@@ -148,7 +157,7 @@ func (m Model) executeAmend(commitMsg string) (tea.Model, tea.Cmd) {
 			})
 		}
 
-		desc := "amend: " + truncateForToast(commitMsg, toastMsgMaxLen)
+		desc := pendingActionAmend + ": " + truncateForToast(commitMsg, toastMsgMaxLen)
 		return panels.AsyncOpDoneMsg{Description: desc, Err: nil}
 	}
 }
@@ -174,12 +183,12 @@ func (m Model) executeReword(commitMsg string) (tea.Model, tea.Cmd) {
 			Sign:       sign,
 		})
 		if err != nil {
-			return panels.AsyncOpDoneMsg{Description: "reword", Err: err}
+			return panels.AsyncOpDoneMsg{Description: pendingActionReword, Err: err}
 		}
 
 		if undoMgr != nil {
 			undoMgr.RecordAction(git.UndoAction{
-				Type:      "amend",
+				Type:      pendingActionAmend,
 				RefBefore: hash,
 				Metadata: map[string]string{
 					"message": commitMsg,
@@ -187,7 +196,7 @@ func (m Model) executeReword(commitMsg string) (tea.Model, tea.Cmd) {
 			})
 		}
 
-		desc := "reword: " + truncateForToast(commitMsg, toastMsgMaxLen)
+		desc := pendingActionReword + ": " + truncateForToast(commitMsg, toastMsgMaxLen)
 		return panels.AsyncOpDoneMsg{Description: desc, Err: nil}
 	}
 }
@@ -245,7 +254,7 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 		return m, showWarnToast("Operation in progress: " + m.asyncOp)
 	}
 
-	m.asyncOp = "fetching..."
+	m.asyncOp = asyncOpFetching
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.asyncCancel = cancel
 	gc := m.gitClient
@@ -312,9 +321,9 @@ func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cm
 	switch action {
 	case "commit":
 		return m.executeCommit(msg.Value)
-	case "amend":
+	case pendingActionAmend:
 		return m.executeAmend(msg.Value)
-	case "reword":
+	case pendingActionReword:
 		return m.executeReword(msg.Value)
 	default:
 		return m, nil

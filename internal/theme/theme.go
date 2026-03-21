@@ -13,10 +13,10 @@ import (
 // for the entire application. It is loaded once at startup and shared
 // across all panels.
 type Theme struct {
+	Styles  Styles
+	Colors  Colors
 	Name    string
 	Variant string
-	Colors  Colors
-	Styles  Styles
 }
 
 // Colors defines every color slot used throughout the TUI.
@@ -29,7 +29,6 @@ type Colors struct {
 	Background string
 	Foreground string
 	Cursor     string
-
 	// ANSI normal palette
 	NormalBlack   string
 	NormalRed     string
@@ -39,7 +38,6 @@ type Colors struct {
 	NormalMagenta string
 	NormalCyan    string
 	NormalWhite   string
-
 	// ANSI bright palette
 	BrightBlack   string
 	BrightRed     string
@@ -49,30 +47,24 @@ type Colors struct {
 	BrightMagenta string
 	BrightCyan    string
 	BrightWhite   string
-
 	// UI — borders
 	BorderFocused   string
 	BorderUnfocused string
-
 	// UI — status bar
 	StatusBarBg string
 	StatusBarFg string
-
 	// UI — tabs
 	TabActiveBg   string
 	TabActiveFg   string
 	TabInactiveBg string
 	TabInactiveFg string
-
 	// UI — titles
 	TitleBg        string
 	TitleFocusedBg string
-
 	// UI — selection / cursor
 	SelectionBg string
 	SelectionFg string
 	CursorLine  string
-
 	// Syntax highlighting
 	SyntaxKeyword  string
 	SyntaxString   string
@@ -81,14 +73,12 @@ type Colors struct {
 	SyntaxFunction string
 	SyntaxType     string
 	SyntaxOperator string
-
 	// Diff
 	DiffAdded   string
 	DiffRemoved string
 	DiffContext string
 	DiffHeader  string
 	DiffHunk    string
-
 	// Git status
 	GitStaged    string
 	GitUnstaged  string
@@ -96,13 +86,11 @@ type Colors struct {
 	GitConflict  string
 	GitBranch    string
 	GitTag       string
-
 	// Notifications
 	NotifyInfo    string
 	NotifyWarn    string
 	NotifyError   string
 	NotifySuccess string
-
 	// File types (for tree icons)
 	FileDirectory  string
 	FileDefault    string
@@ -143,11 +131,9 @@ type Styles struct {
 	TitleFocused lipgloss.Style
 	// Brand is the style for the application brand text in the status bar.
 	Brand lipgloss.Style
-
 	// Tab styles
 	TabActive   lipgloss.Style
 	TabInactive lipgloss.Style
-
 	// Git status styles
 	GitStaged    lipgloss.Style
 	GitUnstaged  lipgloss.Style
@@ -155,20 +141,17 @@ type Styles struct {
 	GitConflict  lipgloss.Style
 	GitBranch    lipgloss.Style
 	GitTag       lipgloss.Style
-
 	// Notification styles
 	NotifyInfo    lipgloss.Style
 	NotifyWarn    lipgloss.Style
 	NotifyError   lipgloss.Style
 	NotifySuccess lipgloss.Style
-
 	// Diff styles
 	DiffAdded   lipgloss.Style
 	DiffRemoved lipgloss.Style
 	DiffContext lipgloss.Style
 	DiffHeader  lipgloss.Style
 	DiffHunk    lipgloss.Style
-
 	// Syntax styles
 	SyntaxKeyword  lipgloss.Style
 	SyntaxString   lipgloss.Style
@@ -177,7 +160,6 @@ type Styles struct {
 	SyntaxFunction lipgloss.Style
 	SyntaxType     lipgloss.Style
 	SyntaxOperator lipgloss.Style
-
 	// Selection styles
 	Selection  lipgloss.Style
 	CursorLine lipgloss.Style
@@ -210,7 +192,6 @@ func buildStyles(c Colors) Styles {
 		Brand: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.BorderFocused)).
 			Bold(true),
-
 		// Tabs
 		TabActive: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.TabActiveFg)).
@@ -219,7 +200,6 @@ func buildStyles(c Colors) Styles {
 		TabInactive: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.TabInactiveFg)).
 			Background(lipgloss.Color(c.TabInactiveBg)),
-
 		// Git
 		GitStaged:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.GitStaged)),
 		GitUnstaged:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.GitUnstaged)),
@@ -227,20 +207,17 @@ func buildStyles(c Colors) Styles {
 		GitConflict:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.GitConflict)),
 		GitBranch:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.GitBranch)),
 		GitTag:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.GitTag)),
-
 		// Notifications
 		NotifyInfo:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.NotifyInfo)),
 		NotifyWarn:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.NotifyWarn)),
 		NotifyError:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.NotifyError)),
 		NotifySuccess: lipgloss.NewStyle().Foreground(lipgloss.Color(c.NotifySuccess)),
-
 		// Diff
 		DiffAdded:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.DiffAdded)),
 		DiffRemoved: lipgloss.NewStyle().Foreground(lipgloss.Color(c.DiffRemoved)),
 		DiffContext: lipgloss.NewStyle().Foreground(lipgloss.Color(c.DiffContext)),
 		DiffHeader:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.DiffHeader)).Bold(true),
 		DiffHunk:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.DiffHunk)),
-
 		// Syntax
 		SyntaxKeyword:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.SyntaxKeyword)),
 		SyntaxString:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.SyntaxString)),
@@ -249,7 +226,6 @@ func buildStyles(c Colors) Styles {
 		SyntaxFunction: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SyntaxFunction)),
 		SyntaxType:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.SyntaxType)),
 		SyntaxOperator: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SyntaxOperator)),
-
 		// Selection
 		Selection: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.SelectionFg)).

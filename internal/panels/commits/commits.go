@@ -15,6 +15,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -75,53 +76,42 @@ var defaultColors = struct {
 
 // Panel is the commits panel. It implements [panels.Panel].
 type Panel struct {
-	gitClient gitOps
-
-	commits []git.Commit
-	cursor  int
-	offset  int
-
-	ref      string // current branch/ref to show commits for
-	refLabel string // display label for the current ref
-
-	// Contextual filter state.
-	filter      filterKind // active filter source
-	filterPath  string     // path filter for file/folder kinds
-	filterLabel string     // display label for filter
-
-	loading   bool
-	allLoaded bool
-	pageSize  int
-
-	// Search state.
-	searchMode  bool
+	actionsCfg  config.ActionsConfig
+	gitClient   gitOps
+	ctx         context.Context
+	ref         string // current branch/ref to show commits for
+	refLabel    string // display label for the current ref
+	filterPath  string // path filter for file/folder kinds
+	filterLabel string // display label for filter
 	searchQuery string
-	filteredIdx []int
-
-	// Detail view state.
-	detailMode   bool
-	detailLines  []string
-	detailOffset int
-
 	// Commit selection state (drives file-tree filtering).
 	selectedHash    string
 	selectedSubject string
-
+	prLabel         string
+	pendingOp       string // operation awaiting modal result
+	pendingName     string // item type name for first-use confirm
+	commits         []git.Commit
+	filteredIdx     []int
+	detailLines     []string
+	prCommits       []panels.PRCommit
+	cursor          int
+	offset          int
+	// Contextual filter state.
+	filter       filterKind // active filter source
+	pageSize     int
+	detailOffset int
+	prNumber     int
+	width        int
+	height       int
+	loading      bool
+	allLoaded    bool
+	// Search state.
+	searchMode bool
+	// Detail view state.
+	detailMode bool
 	// PR-commits mode: shows commits in a pull request.
 	prCommitsMode bool
-	prCommits     []panels.PRCommit
-	prNumber      int
-	prLabel       string
-
-	width   int
-	height  int
-	focused bool
-
-	actionsCfg  config.ActionsConfig
-	pendingOp   string // operation awaiting modal result
-	pendingName string // item type name for first-use confirm
-
-	ctx context.Context
+	focused       bool
 }
 
 // Compile-time interface check.
@@ -138,7 +128,6 @@ func New(client gitOps) *Panel {
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
-
 // commitsLoadedMsg carries loaded commits from the async git log command.
 type commitsLoadedMsg struct {
 	commits []git.Commit
@@ -151,13 +140,11 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 	pageSize := p.pageSize
 	ref := p.ref
 	ctx := p.ctx
-
 	// Pass path filter for file/folder filter kinds.
 	var pathFilter string
 	if (p.filter == filterFile || p.filter == filterFolder) && p.filterPath != "" {
 		pathFilter = p.filterPath
 	}
-
 	return func() tea.Msg {
 		commits, err := client.Log(ctx, git.LogOpts{
 			Ref:      ref,
@@ -178,7 +165,6 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -242,11 +228,9 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.detailMode {
 		return p.renderDetail(width, height)
 	}
-
 	if p.loading && len(p.commits) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -254,7 +238,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(defaultColors.Dim)).
 			Render("Loading commits...")
 	}
-
 	if len(p.commits) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -262,7 +245,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(defaultColors.Dim)).
 			Render("No commits")
 	}
-
 	return p.renderList(width, height)
 }
 
@@ -323,14 +305,11 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Data loading
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleCommitsLoaded(msg commitsLoadedMsg) (panels.Panel, tea.Cmd) {
 	p.loading = false
-
 	if len(msg.commits) < p.pageSize {
 		p.allLoaded = true
 	}
-
 	if msg.append {
 		p.commits = append(p.commits, msg.commits...)
 	} else {
@@ -338,11 +317,9 @@ func (p *Panel) handleCommitsLoaded(msg commitsLoadedMsg) (panels.Panel, tea.Cmd
 		p.cursor = 0
 		p.offset = 0
 	}
-
 	if p.searchMode && p.searchQuery != "" {
 		p.applySearch()
 	}
-
 	return p, nil
 }
 
@@ -427,7 +404,6 @@ func (p *Panel) handleFolderSelected(msg panels.FolderSelectedMsg) (panels.Panel
 	if parent != "." && parent != string(filepath.Separator) {
 		label = parent + "/" + label
 	}
-
 	p.filter = filterFolder
 	p.filterPath = msg.Path
 	p.filterLabel = label
@@ -495,7 +471,6 @@ func (p *Panel) clearFilter() {
 // ---------------------------------------------------------------------------
 // PR-commits mode
 // ---------------------------------------------------------------------------
-
 // handlePRCommitsLoaded switches the panel into PR-commits mode,
 // converting PRCommit values into git.Commit for rendering reuse.
 func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Panel, tea.Cmd) {
@@ -503,7 +478,6 @@ func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Pan
 	p.prCommits = msg.Commits
 	p.prNumber = msg.Number
 	p.prLabel = fmt.Sprintf("PR #%d", msg.Number)
-
 	// Convert PR commits to git.Commit format so the existing list
 	// renderer can display them without any changes.
 	p.commits = nil
@@ -516,7 +490,6 @@ func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Pan
 		if len(short) > git.ShortHashLen {
 			short = short[:git.ShortHashLen]
 		}
-
 		// Best-effort date parse; fall back to zero time.
 		var dt time.Time
 		if c.Date != "" {
@@ -524,7 +497,6 @@ func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Pan
 				dt = t
 			}
 		}
-
 		p.commits = append(p.commits, git.Commit{
 			Hash:      c.SHA,
 			ShortHash: short,
@@ -533,7 +505,6 @@ func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Pan
 			Subject:   subject,
 		})
 	}
-
 	p.cursor = 0
 	p.offset = 0
 	p.selectedHash = ""
@@ -542,7 +513,6 @@ func (p *Panel) handlePRCommitsLoaded(msg panels.PRCommitsLoadedMsg) (panels.Pan
 	p.detailMode = false
 	p.loading = false
 	p.allLoaded = true
-
 	return p, nil
 }
 
@@ -557,7 +527,6 @@ func (p *Panel) exitPRCommitsMode() (panels.Panel, tea.Cmd) {
 	p.prLabel = ""
 	p.selectedHash = ""
 	p.selectedSubject = ""
-
 	// Reload branch commits.
 	p.resetState()
 	return p, p.loadCommitsCmd(0, false)
@@ -575,27 +544,22 @@ func (p *Panel) loadMore() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 func (p *Panel) renderList(width, height int) string {
 	total := p.activeLen()
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > total {
 		end = total
 	}
-
 	for i := p.offset; i < end; i++ {
 		c := p.commitAt(i)
 		lines = append(lines, p.renderCommitLine(c, width, i == p.cursor))
 	}
-
 	// Loading indicator.
 	if p.loading && len(lines) < height {
 		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
 		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
-
 	// Search bar at bottom if in search mode.
 	if p.searchMode {
 		searchLine := p.renderSearchBar(width)
@@ -608,49 +572,40 @@ func (p *Panel) renderList(width, height int) string {
 			lines = append(lines, searchLine)
 		}
 	}
-
 	// Pad remaining height.
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
-
 	return strings.Join(lines, "\n")
 }
 
 func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string {
 	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
 	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Subject))
-
 	// Highlight the selected commit (the one whose files are shown).
 	isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
 	if isSelected {
 		subjectStyle = subjectStyle.Bold(true)
 	}
-
 	hash := hashStyle.Render(c.ShortHash)
 	hashLen := len(c.ShortHash)
-
 	// Subject fills available width, SHA pinned right.
 	gap := 2 // spaces between subject and hash
 	subjectWidth := width - hashLen - gap
 	if subjectWidth < 10 {
 		subjectWidth = 10
 	}
-
 	subject := panels.StripANSI(c.Subject)
 	if len(subject) > subjectWidth {
 		subject = subject[:subjectWidth-1] + "…"
 	}
 	subjectRendered := subjectStyle.Render(subject)
-
 	// Pad between subject and hash so hash is right-aligned.
 	pad := width - lipgloss.Width(subjectRendered) - hashLen
 	if pad < 1 {
 		pad = 1
 	}
-
 	line := subjectRendered + strings.Repeat(" ", pad) + hash
-
 	if isCursor || isSelected {
 		bg := defaultColors.CursorBg
 		if isSelected && !isCursor {
@@ -659,7 +614,6 @@ func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string 
 		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(bg))
 		line = cursorStyle.Render(line)
 	}
-
 	return truncateOrPad(line, width)
 }
 
@@ -667,13 +621,11 @@ func (p *Panel) renderSearchBar(width int) string {
 	searchStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(defaultColors.SearchBg)).
 		Foreground(lipgloss.Color(defaultColors.SearchFg))
-
 	prompt := " /" + p.searchQuery
 	matchCount := len(p.filteredIdx)
 	if p.searchQuery != "" {
 		prompt += fmt.Sprintf("  [%d matches]", matchCount)
 	}
-
 	return searchStyle.Width(width).Render(prompt)
 }
 
@@ -681,28 +633,23 @@ func (p *Panel) renderDetail(width, height int) string {
 	if len(p.detailLines) == 0 {
 		return ""
 	}
-
 	lines := make([]string, 0, height)
 	end := p.detailOffset + height
 	if end > len(p.detailLines) {
 		end = len(p.detailLines)
 	}
-
 	for i := p.detailOffset; i < end; i++ {
 		lines = append(lines, truncateOrPad(p.detailLines[i], width))
 	}
-
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
-
 	return strings.Join(lines, "\n")
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
 	if idx < 0 || idx >= p.activeLen() {
@@ -720,7 +667,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 		return p, nil
 	}
 	p.cursor = idx
-
 	itemType := actions.ItemCommit
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pendingOp = opFirstUseConfirm
@@ -747,10 +693,8 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 		return p, nil
 	}
 	p.cursor = idx
-
 	c := p.commitAt(p.cursor)
 	label := c.ShortHash + " " + panels.StripANSI(c.Subject)
-
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemCommit, label)
 	if cmd != nil {
 		p.pendingOp = opRightClickPick
@@ -797,20 +741,16 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.focused {
 		return p, nil
 	}
-
 	if p.searchMode {
 		return p.handleSearchKey(msg)
 	}
-
 	if p.detailMode {
 		return p.handleDetailKey(msg)
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		return p.moveCursorDown()
@@ -856,7 +796,6 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p, p.loadCommitsCmd(0, false)
 		}
 	}
-
 	return p, nil
 }
 
@@ -916,7 +855,6 @@ func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) maxCursor() int {
 	return max(0, p.activeLen()-1)
 }
@@ -926,7 +864,6 @@ func (p *Panel) moveCursorDown() (panels.Panel, tea.Cmd) {
 		p.cursor++
 		p.ensureCursorVisible()
 	}
-
 	// Trigger pagination when near the bottom.
 	if !p.allLoaded && p.filteredIdx == nil && p.cursor >= len(p.commits)-loadMoreThreshold {
 		return p, p.loadMore()
@@ -971,7 +908,6 @@ func (p *Panel) ensureCursorVisible() {
 	if p.height <= 0 {
 		return
 	}
-
 	if p.cursor < p.offset {
 		p.offset = p.cursor
 	}
@@ -983,16 +919,13 @@ func (p *Panel) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Commit selection (filters file tree without entering detail view)
 // ---------------------------------------------------------------------------
-
 func (p *Panel) selectCommit() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return p, nil
 	}
-
 	c := p.commitAt(p.cursor)
 	p.selectedHash = c.Hash
 	p.selectedSubject = panels.StripANSI(c.Subject)
-
 	hash := c.Hash
 	subject := panels.StripANSI(c.Subject)
 	return p, func() tea.Msg {
@@ -1011,21 +944,17 @@ func (p *Panel) deselectCommit() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Detail view
 // ---------------------------------------------------------------------------
-
 func (p *Panel) showDetail() tea.Cmd {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return nil
 	}
-
 	c := p.commitAt(p.cursor)
-
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
 	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
 	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Author))
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Date))
 	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Refs))
-
 	var lines []string
 	lines = append(lines, headerStyle.Render("Commit Details"))
 	lines = append(lines, dimStyle.Render(strings.Repeat("─", 40)))
@@ -1033,7 +962,6 @@ func (p *Panel) showDetail() tea.Cmd {
 	lines = append(lines, "Commit:  "+hashStyle.Render(c.Hash))
 	lines = append(lines, "Author:  "+authorStyle.Render(panels.StripANSI(c.Author)+" <"+panels.StripANSI(c.AuthorEmail)+">"))
 	lines = append(lines, "Date:    "+dateStyle.Render(c.Date.Format("2006-01-02 15:04:05 -0700")))
-
 	if len(c.Refs) > 0 {
 		sanitizedRefs := make([]string, len(c.Refs))
 		for i, r := range c.Refs {
@@ -1041,12 +969,10 @@ func (p *Panel) showDetail() tea.Cmd {
 		}
 		lines = append(lines, "Refs:    "+refStyle.Render(strings.Join(sanitizedRefs, ", ")))
 	}
-
 	if len(c.Parents) > 0 {
 		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
 	}
-
 	lines = append(lines, "")
 	lines = append(lines, "    "+panels.StripANSI(c.Subject))
 	if c.Body != "" {
@@ -1055,14 +981,11 @@ func (p *Panel) showDetail() tea.Cmd {
 			lines = append(lines, "    "+panels.StripANSI(bodyLine))
 		}
 	}
-
 	lines = append(lines, "")
 	lines = append(lines, dimStyle.Render("Press Enter, Escape, or q to return"))
-
 	p.detailMode = true
 	p.detailLines = lines
 	p.detailOffset = 0
-
 	// Emit CommitSelectedMsg so other panels can react.
 	hash := c.Hash
 	subject := panels.StripANSI(c.Subject)
@@ -1073,15 +996,12 @@ func (p *Panel) showDetail() tea.Cmd {
 
 // ---------------------------------------------------------------------------
 // Clipboard
-
 func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return p, nil
 	}
-
 	c := p.commitAt(p.cursor)
 	hash := c.ShortHash
-
 	if err := panels.CopyToClipboard(p.ctx, hash); err != nil {
 		errMsg := err.Error()
 		return p, func() tea.Msg {
@@ -1091,7 +1011,6 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 			}
 		}
 	}
-
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Copied: " + hash,
@@ -1103,7 +1022,6 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
-
 func (p *Panel) applySearch() {
 	if p.searchQuery == "" {
 		p.filteredIdx = nil
@@ -1111,10 +1029,8 @@ func (p *Panel) applySearch() {
 		p.offset = 0
 		return
 	}
-
 	query := strings.ToLower(p.searchQuery)
 	p.filteredIdx = p.filteredIdx[:0]
-
 	for i, c := range p.commits {
 		if strings.Contains(strings.ToLower(c.Subject), query) ||
 			strings.Contains(strings.ToLower(c.Author), query) ||
@@ -1122,7 +1038,6 @@ func (p *Panel) applySearch() {
 			p.filteredIdx = append(p.filteredIdx, i)
 		}
 	}
-
 	p.cursor = 0
 	p.offset = 0
 }
@@ -1156,7 +1071,6 @@ func (p *Panel) commitAt(idx int) git.Commit {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // relativeDate formats a time.Time as a human-readable relative date.
 func relativeDate(t time.Time) string {
 	d := time.Since(t)

@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -33,9 +34,9 @@ const (
 
 // pendingOp holds state for an operation awaiting a modal result.
 type pendingOp struct {
-	kind  opKind
-	index int    // stash index (for opDrop)
 	name  string // item type name (for opFirstUseConfirm)
+	kind  opKind
+	index int // stash index (for opDrop)
 }
 
 // gitOps defines the git operations needed by the stash panel.
@@ -52,38 +53,36 @@ type gitOps interface {
 
 // stashLoadedMsg carries the result of an asynchronous stash list load.
 type stashLoadedMsg struct {
-	entries []git.StashEntry
 	err     error
+	entries []git.StashEntry
 }
 
 // stashOpDoneMsg is sent after a stash mutation completes.
 type stashOpDoneMsg struct {
-	action string // human-readable action description
 	err    error
+	action string // human-readable action description
 }
 
 // stashShowMsg carries the result of an asynchronous stash show.
 type stashShowMsg struct {
-	diff string
 	err  error
+	diff string
 }
 
 // Panel is the stash management panel. It lists stash entries and provides
 // push/pop/apply/drop operations plus cherry-pick handling.
 type Panel struct {
-	panels.BasePanel
-
-	git        gitOps
-	entries    []git.StashEntry
-	cursor     int
-	offset     int
-	ctx        context.Context
-	pending    *pendingOp
-	actionsCfg config.ActionsConfig
-
-	showingPreview bool
+	actionsCfg     config.ActionsConfig
+	git            gitOps
+	ctx            context.Context
+	pending        *pendingOp
 	previewContent string
+	entries        []git.StashEntry
+	panels.BasePanel
+	cursor         int
+	offset         int
 	previewOffset  int
+	showingPreview bool
 }
 
 // Compile-time interface check.
@@ -166,7 +165,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.entries = msg.entries
 		p.clampCursor()
 		return p, nil
-
 	case stashOpDoneMsg:
 		if msg.err != nil {
 			errMsg := msg.err.Error()
@@ -185,7 +183,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			func() tea.Msg { return panels.StashChangedMsg{} },
 			p.loadStash(),
 		)
-
 	case stashShowMsg:
 		if msg.err != nil {
 			errMsg := msg.err.Error()
@@ -200,33 +197,24 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.previewContent = msg.diff
 		p.previewOffset = 0
 		return p, nil
-
 	case panels.CherryPickMsg:
 		return p.executeCherryPick(msg.Hash)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case tea.KeyPressMsg:
 		if p.Focused {
 			return p.handleKey(msg)
 		}
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
-
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !p.Focused {
@@ -257,11 +245,9 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.showingPreview {
 		return p.renderPreview(width, height)
 	}
-
 	if len(p.entries) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -269,23 +255,19 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("No stash entries")
 	}
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > len(p.entries) {
 		end = len(p.entries)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderEntry(p.entries[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -307,16 +289,13 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 // renderEntry renders a single stash entry line.
 func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 	label := fmt.Sprintf("stash@{%d}: %s", e.Index, e.Message)
-
 	var datePart string
 	if !e.Date.IsZero() {
 		datePart = timeAgo(e.Date)
 	}
-
 	// Calculate available width for the label.
 	maxLabel := width
 	if datePart != "" {
@@ -325,7 +304,6 @@ func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 	if maxLabel < 0 {
 		maxLabel = 0
 	}
-
 	// Truncate label if needed.
 	if len(label) > maxLabel {
 		if maxLabel > 3 {
@@ -336,7 +314,6 @@ func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 			label = ""
 		}
 	}
-
 	// Build the full line with right-aligned date.
 	var line string
 	if datePart != "" && len(label)+len(datePart)+1 <= width {
@@ -348,7 +325,6 @@ func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 	} else {
 		line = label
 	}
-
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
 		style = style.Background(lipgloss.Color("#44475A")).Bold(true)
@@ -365,12 +341,10 @@ func (p *Panel) renderPreview(width, height int) string {
 	if p.previewOffset < 0 {
 		p.previewOffset = 0
 	}
-
 	end := p.previewOffset + height
 	if end > len(lines) {
 		end = len(lines)
 	}
-
 	visible := make([]string, 0, height)
 	for i := p.previewOffset; i < end; i++ {
 		line := lines[i]
@@ -392,13 +366,11 @@ func (p *Panel) renderPreview(width, height int) string {
 		}
 		visible = append(visible, style.Render(line))
 	}
-
 	// Pad remaining height
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(visible) < height {
 		visible = append(visible, emptyLine)
 	}
-
 	return strings.Join(visible, "\n")
 }
 
@@ -432,11 +404,9 @@ func timeAgo(t time.Time) string {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 // handleKey processes key presses when the panel is focused.
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	key := msg.String()
-
 	switch key {
 	case "esc", "q":
 		if p.showingPreview {
@@ -480,14 +450,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "D":
 		return p.requestDropAll()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the stash entry at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	if p.showingPreview {
@@ -513,7 +481,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureVisible()
-
 	itemType := actions.ItemStash
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = &pendingOp{kind: opFirstUseConfirm, name: string(itemType)}
@@ -534,7 +501,6 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.ensureVisible()
-
 	label := fmt.Sprintf("stash@{%d}", p.entries[idx].Index)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemStash, label)
 	if cmd != nil {
@@ -575,7 +541,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Cursor movement
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	if p.cursor < len(p.entries)-1 {
 		p.cursor++
@@ -623,7 +588,6 @@ func (p *Panel) selectedEntry() *git.StashEntry {
 // ---------------------------------------------------------------------------
 // Immediate operations (no modal confirmation needed)
 // ---------------------------------------------------------------------------
-
 // executeApply applies the selected stash entry without removing it.
 func (p *Panel) executeApply() (panels.Panel, tea.Cmd) {
 	e := p.selectedEntry()
@@ -683,7 +647,6 @@ func (p *Panel) executeCherryPick(hash string) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal-gated operations
 // ---------------------------------------------------------------------------
-
 // requestDrop shows a confirmation modal before dropping a stash entry.
 func (p *Panel) requestDrop() (panels.Panel, tea.Cmd) {
 	e := p.selectedEntry()
@@ -766,14 +729,11 @@ func (p *Panel) copyStashRef() (panels.Panel, tea.Cmd) {
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	p.pending = nil
-
 	if op == nil || !msg.Accept {
 		return p, nil
 	}
-
 	gc := p.git
 	ctx := p.safeCtx()
-
 	switch op.kind {
 	case opDrop:
 		index := op.index
@@ -783,7 +743,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			}
 			return stashOpDoneMsg{action: fmt.Sprintf("Dropped stash@{%d}", index)}
 		}
-
 	case opDropAll:
 		entries := make([]git.StashEntry, len(p.entries))
 		copy(entries, p.entries)
@@ -798,7 +757,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 				action: fmt.Sprintf("Dropped all %d stash entries", len(entries)),
 			}
 		}
-
 	case opPush:
 		message := msg.Value
 		return p, func() tea.Msg {
@@ -807,17 +765,14 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			}
 			return stashOpDoneMsg{action: "Changes stashed"}
 		}
-
 	case opRightClickPick:
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opFirstUseConfirm:
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, op.name, msg.Value)
 		}
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	}
-
 	return p, nil
 }
 

@@ -14,10 +14,10 @@ import (
 // a pointer to the same ringBuffer, ensuring a single mutex guards
 // concurrent access.
 type ringBuffer struct {
-	mu      sync.Mutex
 	entries []string
 	size    int
 	pos     int
+	mu      sync.Mutex
 	full    bool
 }
 
@@ -38,13 +38,11 @@ func (rb *ringBuffer) write(entry string) {
 func (rb *ringBuffer) snapshot() []string {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
-
 	if !rb.full {
 		out := make([]string, rb.pos)
 		copy(out, rb.entries[:rb.pos])
 		return out
 	}
-
 	out := make([]string, rb.size)
 	copy(out, rb.entries[rb.pos:])
 	copy(out[rb.size-rb.pos:], rb.entries[:rb.pos])

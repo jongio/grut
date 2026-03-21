@@ -28,50 +28,42 @@ const (
 // GitDiff is the diff viewer panel. It displays file diffs with
 // syntax-highlighted additions/deletions in inline or side-by-side format.
 type GitDiff struct {
-	panels.BasePanel
-
+	// Right-click context menu config
+	actionsCfg config.ActionsConfig
 	// Dependencies
 	gitClient git.StatusReader
-	theme     *theme.Theme
-
 	// Context for async operations (set in Init)
-	ctx context.Context
-
-	// Diff data
-	diffs   []git.FileDiff // all file diffs returned by git
-	fileIdx int            // current file index for multi-file navigation
-
+	ctx   context.Context
+	err   error // last error from diff fetch
+	theme *theme.Theme
 	// Request state
-	path   string // file path being diffed
-	staged bool   // whether viewing staged (index) changes
-
+	path string // file path being diffed
+	// Diff data
+	diffs []git.FileDiff // all file diffs returned by git
+	// Pre-rendered content (rebuilt on data/mode/size change)
+	lines       []string // rendered lines with ANSI styling
+	hunkStarts  []int    // line indices where hunks begin (for n/N)
+	fileStarts  []int    // line indices where files begin (for [/])
+	viewportBuf []string // reusable scratch buffer for renderViewport
+	// AI review annotations
+	reviewFindings []panels.AIReviewFinding // findings for the current file
+	panels.BasePanel
+	fileIdx int // current file index for multi-file navigation
 	// Display state
 	scrollY int      // viewport scroll offset (lines)
 	mode    viewMode // inline or side-by-side
-	loading bool     // true while async diff fetch is in progress
-	err     error    // last error from diff fetch
-
-	// Pre-rendered content (rebuilt on data/mode/size change)
-	lines      []string // rendered lines with ANSI styling
-	hunkStarts []int    // line indices where hunks begin (for n/N)
-	fileStarts []int    // line indices where files begin (for [/])
-
-	// AI review annotations
-	reviewFindings        []panels.AIReviewFinding // findings for the current file
-	showReviewAnnotations bool                     // toggle for inline annotation display
-
-	// Right-click context menu config
-	actionsCfg config.ActionsConfig
-
 	// Generation counter to discard stale async results (CWE-362).
-	diffGen uint64
+	diffGen               uint64
+	staged                bool // whether viewing staged (index) changes
+	loading               bool // true while async diff fetch is in progress
+	showReviewAnnotations bool // toggle for inline annotation display
 }
 
 // diffLoadedMsg is the result of an async diff fetch (F01: no blocking in Update).
 type diffLoadedMsg struct {
+	err        error
 	path       string
 	diffs      []git.FileDiff
-	err        error
 	generation uint64
 }
 
@@ -106,16 +98,13 @@ func (d *GitDiff) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case panels.ShowDiffMsg:
 		return d, d.startDiffLoad(msg.Path, msg.Staged)
-
 	case panels.FileSelectedMsg:
 		// When a file is selected (e.g., from filetree), show its unstaged diff.
 		return d, d.startDiffLoad(msg.Path, false)
-
 	case panels.AIReviewReadyMsg:
 		d.reviewFindings = d.filterFindingsForFile(msg.Findings)
 		d.rebuildLines()
 		return d, nil
-
 	case diffLoadedMsg:
 		// Only apply if the loaded result matches the current request
 		// and is from the latest generation (discard stale results).
@@ -128,14 +117,11 @@ func (d *GitDiff) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			d.rebuildLines()
 		}
 		return d, nil
-
 	case panels.PanelMouseRightClickMsg:
 		// No-op: gitdiff is a viewport panel without individually selectable items.
 		return d, nil
-
 	case panels.RepoChangedMsg:
 		return d.handleRepoChanged(msg)
-
 	case tea.KeyPressMsg:
 		if !d.Focused {
 			return d, nil
@@ -234,7 +220,6 @@ func (d *GitDiff) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if d.loading {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -242,7 +227,6 @@ func (d *GitDiff) View(width, height int) string {
 			Foreground(lipgloss.Color("#888888")).
 			Render("Loading diff...")
 	}
-
 	if d.err != nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -250,7 +234,6 @@ func (d *GitDiff) View(width, height int) string {
 			Foreground(lipgloss.Color("#FF5555")).
 			Render(fmt.Sprintf("Error: %s", d.err))
 	}
-
 	if len(d.diffs) == 0 {
 		msg := "No changes"
 		if d.path == "" {
@@ -262,7 +245,6 @@ func (d *GitDiff) View(width, height int) string {
 			Foreground(lipgloss.Color("#888888")).
 			Render(msg)
 	}
-
 	return d.renderViewport(width, height)
 }
 
@@ -313,7 +295,6 @@ func (d *GitDiff) SetDiffs(diffs []git.FileDiff) {
 }
 
 // --- Async loading ---
-
 // loadDiffCmd returns a tea.Cmd that fetches diff data asynchronously.
 // The git I/O happens in a background goroutine managed by Bubble Tea (F01).
 func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
@@ -323,16 +304,13 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 	ctx := d.ctx
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
-
 		if gitClient == nil {
 			result.err = fmt.Errorf("no git client configured")
 			return result
 		}
-
 		if ctx == nil {
 			ctx = context.Background()
 		}
-
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
 			Staged: staged,
 			Path:   path,
@@ -344,19 +322,17 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 }
 
 // --- Pre-rendering ---
-
 // rebuildLines pre-renders all diff content into d.lines based on the
 // current view mode and panel dimensions. Also populates hunkStarts
-// and fileStarts for navigation.
+// and fileStarts for navigation. Slice resets are handled by the
+// individual build functions to allow direct calls from benchmarks.
 func (d *GitDiff) rebuildLines() {
-	d.lines = nil
-	d.hunkStarts = nil
-	d.fileStarts = nil
-
 	if len(d.diffs) == 0 {
+		d.lines = d.lines[:0]
+		d.hunkStarts = d.hunkStarts[:0]
+		d.fileStarts = d.fileStarts[:0]
 		return
 	}
-
 	switch d.mode {
 	case viewSideBySide:
 		d.buildSideBySideLines()
@@ -373,35 +349,30 @@ func (d *GitDiff) rebuildLines() {
 //	- removed line
 //	+ added line
 func (d *GitDiff) buildInlineLines() {
-	var lines []string
-	var hunkStarts []int
-	var fileStarts []int
-
+	// Reuse struct slices — reset to zero length, keeping backing arrays
+	// so appends avoid heap allocation when capacity is sufficient.
+	d.lines = d.lines[:0]
+	d.hunkStarts = d.hunkStarts[:0]
+	d.fileStarts = d.fileStarts[:0]
 	findingsMap := d.buildFindingsMap()
-
 	for _, fd := range d.diffs {
-		fileStarts = append(fileStarts, len(lines))
-
+		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File header
 		header := d.fileHeader(fd)
-		lines = append(lines, d.headerStyle().Render(header))
-
+		d.lines = append(d.lines, d.headerStyle().Render(header))
 		if fd.IsBinary {
-			lines = append(lines, d.dimStyle().Render("Binary file differs"))
-			lines = append(lines, "") // blank separator
+			d.lines = append(d.lines, d.dimStyle().Render("Binary file differs"))
+			d.lines = append(d.lines, "") // blank separator
 			continue
 		}
-
 		if len(fd.Hunks) == 0 {
-			lines = append(lines, d.dimStyle().Render("No changes"))
-			lines = append(lines, "")
+			d.lines = append(d.lines, d.dimStyle().Render("No changes"))
+			d.lines = append(d.lines, "")
 			continue
 		}
-
 		for _, hunk := range fd.Hunks {
-			hunkStarts = append(hunkStarts, len(lines))
-			lines = append(lines, d.headerStyle().Render(hunk.Header))
-
+			d.hunkStarts = append(d.hunkStarts, len(d.lines))
+			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			for _, line := range hunk.Lines {
 				var rendered string
 				switch line.Type {
@@ -412,8 +383,7 @@ func (d *GitDiff) buildInlineLines() {
 				default:
 					rendered = d.contextStyle().Render("  " + line.Content)
 				}
-				lines = append(lines, rendered)
-
+				d.lines = append(d.lines, rendered)
 				// Inject review annotations for this line number
 				if d.showReviewAnnotations {
 					lineNum := line.NewLine
@@ -422,18 +392,14 @@ func (d *GitDiff) buildInlineLines() {
 					}
 					if findings, ok := findingsMap[lineNum]; ok {
 						for _, f := range findings {
-							lines = append(lines, d.renderAnnotation(f))
+							d.lines = append(d.lines, d.renderAnnotation(f))
 						}
 					}
 				}
 			}
 		}
-		lines = append(lines, "") // blank separator between files
+		d.lines = append(d.lines, "") // blank separator between files
 	}
-
-	d.lines = lines
-	d.hunkStarts = hunkStarts
-	d.fileStarts = fileStarts
 }
 
 // linePair pairs an old-side line with a new-side line for side-by-side display.
@@ -445,59 +411,51 @@ type linePair struct {
 // buildSideBySideLines renders diffs in a two-column format with
 // old content on the left and new content on the right.
 func (d *GitDiff) buildSideBySideLines() {
-	var lines []string
-	var hunkStarts []int
-	var fileStarts []int
-
+	// Reuse struct slices — reset to zero length, keeping backing arrays
+	// so appends avoid heap allocation when capacity is sufficient.
+	d.lines = d.lines[:0]
+	d.hunkStarts = d.hunkStarts[:0]
+	d.fileStarts = d.fileStarts[:0]
 	colWidth := d.Width / 2
 	if colWidth < 10 {
 		colWidth = 10
 	}
-
 	const numWidth = 4                      // line number width
 	contentWidth := colWidth - numWidth - 3 // "NNNN │ "
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
-
 	findingsMap := d.buildFindingsMap()
-
 	for _, fd := range d.diffs {
-		fileStarts = append(fileStarts, len(lines))
-
+		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File headers (side-by-side)
 		leftHeader := fmt.Sprintf("── %s (old) ", fd.Path)
 		rightHeader := fmt.Sprintf("── %s (new) ", fd.Path)
 		leftHeader = d.padOrTruncate(leftHeader, colWidth, '─')
 		rightHeader = d.padOrTruncate(rightHeader, colWidth, '─')
-		lines = append(lines, d.headerStyle().Render(leftHeader+" "+rightHeader))
-
+		d.lines = append(d.lines, d.headerStyle().Render(leftHeader+" "+rightHeader))
 		if fd.IsBinary {
 			left := padRight("Binary file differs", colWidth)
 			right := padRight("Binary file differs", colWidth)
-			lines = append(lines, d.dimStyle().Render(left+" "+right))
-			lines = append(lines, "")
+			d.lines = append(d.lines, d.dimStyle().Render(left+" "+right))
+			d.lines = append(d.lines, "")
 			continue
 		}
-
 		if len(fd.Hunks) == 0 {
 			left := padRight("No changes", colWidth)
 			right := padRight("No changes", colWidth)
-			lines = append(lines, d.dimStyle().Render(left+" "+right))
-			lines = append(lines, "")
+			d.lines = append(d.lines, d.dimStyle().Render(left+" "+right))
+			d.lines = append(d.lines, "")
 			continue
 		}
-
 		for _, hunk := range fd.Hunks {
-			hunkStarts = append(hunkStarts, len(lines))
-			lines = append(lines, d.headerStyle().Render(hunk.Header))
-
+			d.hunkStarts = append(d.hunkStarts, len(d.lines))
+			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			pairs := pairDiffLines(hunk.Lines)
 			for _, pair := range pairs {
 				leftStr := d.formatSideColumn(pair.old, numWidth, contentWidth, false)
 				rightStr := d.formatSideColumn(pair.new, numWidth, contentWidth, true)
-				lines = append(lines, leftStr+" │ "+rightStr)
-
+				d.lines = append(d.lines, leftStr+" │ "+rightStr)
 				// Inject review annotations for lines in this pair
 				if d.showReviewAnnotations {
 					annotated := make(map[int]bool)
@@ -515,19 +473,15 @@ func (d *GitDiff) buildSideBySideLines() {
 						if findings, ok := findingsMap[lineNum]; ok {
 							annotated[lineNum] = true
 							for _, f := range findings {
-								lines = append(lines, d.renderAnnotation(f))
+								d.lines = append(d.lines, d.renderAnnotation(f))
 							}
 						}
 					}
 				}
 			}
 		}
-		lines = append(lines, "") // blank separator
+		d.lines = append(d.lines, "") // blank separator
 	}
-
-	d.lines = lines
-	d.hunkStarts = hunkStarts
-	d.fileStarts = fileStarts
 }
 
 // pairDiffLines aligns removed/added line blocks for side-by-side display.
@@ -536,7 +490,6 @@ func (d *GitDiff) buildSideBySideLines() {
 func pairDiffLines(lines []git.DiffLine) []linePair {
 	var pairs []linePair
 	var removed, added []git.DiffLine
-
 	flush := func() {
 		maxLen := len(removed)
 		if len(added) > maxLen {
@@ -555,7 +508,6 @@ func pairDiffLines(lines []git.DiffLine) []linePair {
 		removed = nil
 		added = nil
 	}
-
 	for i := range lines {
 		line := lines[i]
 		switch line.Type {
@@ -572,7 +524,6 @@ func pairDiffLines(lines []git.DiffLine) []linePair {
 		}
 	}
 	flush()
-
 	return pairs
 }
 
@@ -582,17 +533,14 @@ func (d *GitDiff) formatSideColumn(line *git.DiffLine, numWidth, contentWidth in
 		// Empty column (no corresponding line on this side)
 		return strings.Repeat(" ", numWidth+3+contentWidth)
 	}
-
 	lineNum := line.OldLine
 	if isNew {
 		lineNum = line.NewLine
 	}
-
 	numStr := fmt.Sprintf("%*d", numWidth, lineNum)
 	content := truncate(line.Content, contentWidth)
 	content = padRight(content, contentWidth)
 	full := numStr + " │ " + content
-
 	switch line.Type {
 	case git.DiffLineAdded:
 		return d.addedStyle().Render(full)
@@ -604,40 +552,32 @@ func (d *GitDiff) formatSideColumn(line *git.DiffLine, numWidth, contentWidth in
 }
 
 // --- Viewport rendering ---
-
 // renderViewport renders the visible portion of pre-rendered lines
 // into the given width×height area with a scroll indicator.
 func (d *GitDiff) renderViewport(_ int, height int) string {
 	if len(d.lines) == 0 {
 		return ""
 	}
-
 	d.clampScroll()
-
 	contentHeight := height - 1 // reserve one line for scroll indicator
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
-
 	start := d.scrollY
 	end := start + contentHeight
 	if end > len(d.lines) {
 		end = len(d.lines)
 	}
-
-	visible := append(make([]string, 0, contentHeight), d.lines[start:end]...)
-
+	visible := append(d.viewportBuf[:0], d.lines[start:end]...)
 	// Pad with empty lines to fill height
 	for len(visible) < contentHeight {
 		visible = append(visible, "")
 	}
-
+	d.viewportBuf = visible // retain backing array for next frame
 	content := strings.Join(visible, "\n")
-
 	// Add scroll indicator
 	indicator := d.scrollIndicator(len(d.lines), height)
 	content += "\n" + d.dimStyle().Render(indicator)
-
 	return content
 }
 
@@ -655,7 +595,6 @@ func (d *GitDiff) fileHeader(fd git.FileDiff) string {
 }
 
 // --- Scrolling ---
-
 func (d *GitDiff) scrollDown(n int) {
 	d.scrollY += n
 	d.clampScroll()
@@ -702,7 +641,6 @@ func (d *GitDiff) pageSize() int {
 }
 
 // --- Hunk/file navigation ---
-
 func (d *GitDiff) toggleViewMode() {
 	if d.mode == viewInline {
 		d.mode = viewSideBySide
@@ -754,7 +692,6 @@ func (d *GitDiff) prevFile() {
 }
 
 // --- Review annotations ---
-
 // toggleReviewAnnotations toggles inline annotation display and rebuilds lines.
 func (d *GitDiff) toggleReviewAnnotations() {
 	d.showReviewAnnotations = !d.showReviewAnnotations
@@ -836,7 +773,6 @@ func (d *GitDiff) severityStyle(severity string) lipgloss.Style {
 }
 
 // --- Theme-aware styles ---
-
 func (d *GitDiff) addedStyle() lipgloss.Style {
 	if d.theme != nil {
 		return d.theme.Styles.DiffAdded
@@ -870,7 +806,6 @@ func (d *GitDiff) dimStyle() lipgloss.Style {
 }
 
 // --- Helpers ---
-
 func (d *GitDiff) scrollIndicator(totalLines, viewHeight int) string {
 	contentHeight := viewHeight - 1
 	if contentHeight < 1 {

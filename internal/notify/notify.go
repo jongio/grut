@@ -44,9 +44,9 @@ const DefaultToastDuration = 3 * time.Second
 
 // Notification holds the data for a single notification.
 type Notification struct {
+	CreatedAt time.Time
 	Message   string
 	Level     Level
-	CreatedAt time.Time
 	Duration  time.Duration
 }
 
@@ -54,13 +54,13 @@ type Notification struct {
 // toasts (auto-dismiss), inline (persistent), and modals (blocking).
 // It lives in the root app model and is not owned by individual panels.
 type Manager struct {
-	mu           sync.RWMutex
-	toasts       []toast
 	inlines      map[string]*inlineNotification
 	modal        *modalState
+	toasts       []toast
 	nextID       int64
 	screenWidth  int // terminal width (set via SetSize)
 	screenHeight int // terminal height (set via SetSize)
+	mu           sync.RWMutex
 }
 
 // NewManager creates a new notification manager with no active notifications.
@@ -82,10 +82,8 @@ func (m *Manager) AddToast(msg string, level Level) tea.Cmd {
 func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration) tea.Cmd {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	id := m.nextID
 	m.nextID++
-
 	t := toast{
 		id: id,
 		notification: Notification{
@@ -96,7 +94,6 @@ func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration)
 		},
 	}
 	m.toasts = append(m.toasts, t)
-
 	return tea.Tick(d, func(_ time.Time) tea.Msg {
 		return ToastExpiredMsg{ID: id}
 	})
@@ -108,7 +105,6 @@ func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration)
 func (m *Manager) AddInline(id, msg string, level Level) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.inlines[id] = &inlineNotification{
 		id: id,
 		notification: Notification{
@@ -123,7 +119,6 @@ func (m *Manager) AddInline(id, msg string, level Level) {
 func (m *Manager) DismissInline(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	delete(m.inlines, id)
 }
 
@@ -144,14 +139,12 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 		m.removeToast(msg.ID)
 		m.mu.Unlock()
 		return nil
-
 	case ShowToastMsg:
 		d := msg.Duration
 		if d == 0 {
 			d = DefaultToastDuration
 		}
 		return m.AddToastWithDuration(msg.Message, msg.Level, d)
-
 	case ShowModalMsg:
 		m.mu.Lock()
 		m.modal = &modalState{
@@ -168,14 +161,11 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.mu.Unlock()
 		return nil
-
 	case tea.KeyPressMsg:
 		return m.updateModal(msg)
-
 	case tea.MouseClickMsg:
 		return m.updateModalMouseClick(msg)
 	}
-
 	return nil
 }
 
@@ -184,11 +174,9 @@ func (m *Manager) updateModal(msg tea.KeyPressMsg) tea.Cmd {
 	m.mu.Lock()
 	md := m.modal
 	m.mu.Unlock()
-
 	if md == nil {
 		return nil
 	}
-
 	return md.handleKey(m, msg)
 }
 
@@ -201,16 +189,13 @@ func (m *Manager) updateModalMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	w := m.screenWidth
 	h := m.screenHeight
 	m.mu.Unlock()
-
 	if md == nil || w <= 0 || h <= 0 {
 		return nil
 	}
-
 	mouse := msg.Mouse()
 	if mouse.Button != tea.MouseLeft {
 		return nil
 	}
-
 	return md.handleMouseClick(m, mouse.X, mouse.Y, w, h)
 }
 
@@ -247,27 +232,21 @@ func (m *Manager) dismissModal() {
 func (m *Manager) View(width int) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	if width <= 0 {
 		return ""
 	}
-
 	var parts []string
-
 	// Render toasts
 	for _, t := range m.toasts {
 		parts = append(parts, t.view(width))
 	}
-
 	// Render inline notifications
 	for _, inl := range m.inlines {
 		parts = append(parts, inl.view(width))
 	}
-
 	if len(parts) == 0 {
 		return ""
 	}
-
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
@@ -278,11 +257,9 @@ func (m *Manager) ModalView(width, height int) string {
 	m.mu.Lock()
 	md := m.modal
 	m.mu.Unlock()
-
 	if md == nil {
 		return ""
 	}
-
 	return md.view(width, height)
 }
 
@@ -304,7 +281,6 @@ func (m *Manager) InlineCount() int {
 // Test helpers (unexported; used by in-package tests to avoid direct mutex
 // access — F16)
 // ---------------------------------------------------------------------------
-
 // toastDuration returns the duration of the i-th toast.
 func (m *Manager) toastDuration(i int) time.Duration {
 	m.mu.RLock()

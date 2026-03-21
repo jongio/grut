@@ -12,11 +12,10 @@ type cacheEntry struct {
 	value     any
 	expiresAt time.Time
 }
-
 type cache struct {
-	mu      sync.RWMutex
 	entries map[string]cacheEntry
 	ttl     time.Duration
+	mu      sync.RWMutex
 }
 
 func newCache() *cache {
@@ -53,12 +52,10 @@ func cloneCacheValue(value any) any {
 	if value == nil {
 		return nil
 	}
-
 	rv := reflect.ValueOf(value)
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return value
 	}
-
 	clone := reflect.New(rv.Elem().Type())
 	clone.Elem().Set(rv.Elem())
 	return clone.Interface()

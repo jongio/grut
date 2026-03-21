@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 	term "github.com/jongio/grut/internal/terminal"
@@ -36,18 +37,16 @@ type tickMsg struct {
 //   - Insert mode: keystrokes are collected and sent to the shell on Enter.
 //     The configured prefix key (default ctrl+b) exits insert mode.
 type Panel struct {
-	panels.BasePanel
-
 	runner term.Runner
-	cfg    config.TerminalConfig
 	ctx    context.Context
-	shell  string // display name for status bar
-
+	cfg    config.TerminalConfig
+	shell  string   // display name for status bar
+	input  []rune   // input buffer in insert mode
+	lines  []string // latest snapshot of output lines
+	panels.BasePanel
 	mode    mode
-	input   []rune   // input buffer in insert mode
-	offset  int      // scroll offset from bottom (0 = latest)
-	lines   []string // latest snapshot of output lines
-	ticking bool     // whether the tick timer is active
+	offset  int  // scroll offset from bottom (0 = latest)
+	ticking bool // whether the tick timer is active
 }
 
 // Compile-time interface checks.
@@ -70,7 +69,6 @@ func New(cfg config.TerminalConfig, runner term.Runner, shell string) *Panel {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -85,7 +83,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
 		return p.handleTick()
-
 	case tea.KeyPressMsg:
 		if !p.Focused {
 			return p, nil
@@ -100,7 +97,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.runner == nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -108,7 +104,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("No terminal")
 	}
-
 	// Reserve space for status bar and (optionally) input prompt.
 	statusHeight := 1
 	inputHeight := 0
@@ -119,20 +114,15 @@ func (p *Panel) View(width, height int) string {
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
-
 	var sections []string
-
 	// --- Output content ---
 	sections = append(sections, p.renderContent(width, contentHeight))
-
 	// --- Input prompt (insert mode only) ---
 	if inputHeight > 0 {
 		sections = append(sections, p.renderInput(width))
 	}
-
 	// --- Status bar ---
 	sections = append(sections, p.renderStatus(width))
-
 	return strings.Join(sections, "\n")
 }
 
@@ -177,7 +167,6 @@ func (p *Panel) Offset() int {
 // ---------------------------------------------------------------------------
 // Tick handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) scheduleTick() tea.Cmd {
 	p.ticking = true
 	fps := p.cfg.RenderFPS
@@ -195,10 +184,8 @@ func (p *Panel) handleTick() (panels.Panel, tea.Cmd) {
 		p.ticking = false
 		return p, nil
 	}
-
 	// Refresh the line snapshot from the runner.
 	p.lines = p.runner.Lines()
-
 	// Check if the process has exited.
 	select {
 	case <-p.runner.Done():
@@ -209,7 +196,6 @@ func (p *Panel) handleTick() (panels.Panel, tea.Cmd) {
 		}
 	default:
 	}
-
 	// Schedule next tick.
 	return p, p.scheduleTick()
 }
@@ -217,7 +203,6 @@ func (p *Panel) handleTick() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch p.mode {
 	case modeNormal:
@@ -248,7 +233,6 @@ func (p *Panel) handleNormalKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleInsertKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	key := msg.String()
-
 	// Check prefix key to exit insert mode.
 	prefixKey := p.cfg.PrefixKey
 	if prefixKey == "" {
@@ -258,11 +242,9 @@ func (p *Panel) handleInsertKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.mode = modeNormal
 		return p, nil
 	}
-
 	if p.runner == nil {
 		return p, nil
 	}
-
 	switch key {
 	case "enter":
 		// Send the accumulated input + newline to the shell.
@@ -293,7 +275,6 @@ func (p *Panel) handleInsertKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Scroll logic
 // ---------------------------------------------------------------------------
-
 func (p *Panel) scrollUp() {
 	maxOffset := p.maxOffset()
 	if p.offset < maxOffset {
@@ -336,12 +317,10 @@ func (p *Panel) contentHeight() int {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 func (p *Panel) renderContent(width, contentHeight int) string {
 	if contentHeight <= 0 {
 		return ""
 	}
-
 	totalLines := len(p.lines)
 	if totalLines == 0 {
 		// Show empty area.
@@ -352,7 +331,6 @@ func (p *Panel) renderContent(width, contentHeight int) string {
 		}
 		return strings.Join(empty, "\n")
 	}
-
 	// Calculate the visible window. offset=0 means latest lines visible.
 	end := totalLines - p.offset
 	if end < 0 {
@@ -362,9 +340,7 @@ func (p *Panel) renderContent(width, contentHeight int) string {
 	if start < 0 {
 		start = 0
 	}
-
 	visible := p.lines[start:end]
-
 	lineStyle := lipgloss.NewStyle().Width(width)
 	rendered := make([]string, 0, contentHeight)
 	for _, line := range visible {
@@ -374,13 +350,11 @@ func (p *Panel) renderContent(width, contentHeight int) string {
 		}
 		rendered = append(rendered, lineStyle.Render(line))
 	}
-
 	// Pad with empty lines if fewer lines than height.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(rendered) < contentHeight {
 		rendered = append([]string{emptyLine}, rendered...)
 	}
-
 	return strings.Join(rendered, "\n")
 }
 
@@ -389,7 +363,6 @@ func (p *Panel) renderInput(width int) string {
 	if len(prompt) > width && width > 3 {
 		prompt = prompt[:width-3] + "..."
 	}
-
 	return lipgloss.NewStyle().
 		Width(width).
 		Foreground(lipgloss.Color("#F8F8F2")).
@@ -402,16 +375,13 @@ func (p *Panel) renderStatus(width int) string {
 	if p.mode == modeInsert {
 		modeStr = "INSERT"
 	}
-
 	// Shell name.
 	shellName := p.shell
 	if shellName == "" {
 		shellName = "shell"
 	}
-
 	// Line count.
 	lineCount := len(p.lines)
-
 	// Process status.
 	processStatus := ""
 	if p.runner != nil {
@@ -421,14 +391,11 @@ func (p *Panel) renderStatus(width int) string {
 		default:
 		}
 	}
-
 	status := fmt.Sprintf(" %s │ %s │ %d lines%s", shellName, modeStr, lineCount, processStatus)
-
 	// Truncate if needed.
 	if len(status) > width && width > 3 {
 		status = status[:width-3] + "..."
 	}
-
 	return lipgloss.NewStyle().
 		Width(width).
 		Background(lipgloss.Color("#44475A")).

@@ -22,13 +22,13 @@ const (
 // Server wraps an MCP protocol server with grut git and file tools,
 // rate limiting, path jailing, and audit logging.
 type Server struct {
-	mcp      *mcpserver.MCPServer
 	git      git.GitClient
-	repoRoot string
+	mcp      *mcpserver.MCPServer
 	cfg      *config.Config
 	jail     *PathJail
 	limiter  *RateLimiter
 	audit    *AuditLogger
+	repoRoot string
 }
 
 // Default rate limits (calls per minute) when not configured.
@@ -44,7 +44,6 @@ func NewServer(gitClient git.GitClient, repoRoot string, cfg *config.Config) (*S
 	if err != nil {
 		return nil, fmt.Errorf("create path jail: %w", err)
 	}
-
 	readRate := cfg.MCP.Security.RateLimitRead
 	if readRate <= 0 {
 		readRate = defaultReadRatePerMin
@@ -54,18 +53,15 @@ func NewServer(gitClient git.GitClient, repoRoot string, cfg *config.Config) (*S
 		writeRate = defaultWriteRatePerMin
 	}
 	limiter := NewRateLimiter(readRate, writeRate)
-
 	audit, err := NewAuditLogger(cfg.MCP.Security)
 	if err != nil {
 		return nil, fmt.Errorf("create audit logger: %w", err)
 	}
-
 	mcpSrv := mcpserver.NewMCPServer(
 		"grut",
 		config.AppVersion,
 		mcpserver.WithToolCapabilities(false),
 	)
-
 	s := &Server{
 		mcp:      mcpSrv,
 		git:      gitClient,
@@ -75,12 +71,10 @@ func NewServer(gitClient git.GitClient, repoRoot string, cfg *config.Config) (*S
 		limiter:  limiter,
 		audit:    audit,
 	}
-
 	registerGitReadTools(s)
 	registerGitWriteTools(s)
 	registerGitOpsTools(s)
 	registerFileTools(s)
-
 	return s, nil
 }
 
@@ -104,14 +98,11 @@ func (s *Server) addTool(name string, category string, tool mcplib.Tool, handler
 func (s *Server) wrapHandler(name string, category string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		start := time.Now()
-
 		if !s.limiter.Allow(category) {
 			s.audit.Log(name, req.GetArguments(), "rate_limited", time.Since(start))
 			return mcplib.NewToolResultError("rate limit exceeded"), nil
 		}
-
 		result, err := handler(ctx, req)
-
 		status := "success"
 		if err != nil {
 			status = "error"
@@ -119,7 +110,6 @@ func (s *Server) wrapHandler(name string, category string, handler mcpserver.Too
 			status = "tool_error"
 		}
 		s.audit.Log(name, req.GetArguments(), status, time.Since(start))
-
 		return result, err
 	}
 }

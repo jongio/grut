@@ -2,6 +2,7 @@ package gitdiff
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/jongio/grut/internal/git"
@@ -250,5 +251,77 @@ func BenchmarkRenderViewport(b *testing.B) {
 		for range b.N {
 			benchResultStr = d.renderViewport(120, 40)
 		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Benchmark: memory growth across repeated renders
+//
+// benchMemoryGrowth measures heap-inuse delta and GC cycles per render
+// operation using runtime.ReadMemStats before and after the benchmark loop.
+// This is a CUSTOM metric (not a standard benchstat metric) that must be
+// interpreted alongside the standard B/op and allocs/op values.
+//
+// Key interpretation:
+//   - heap-inuse-b/op > 0: heap grew — possible retained allocations / leak.
+//   - heap-inuse-b/op ~ 0: steady state — memory correctly reclaimed.
+//   - heap-inuse-b/op < 0: heap shrank — memory is being freed correctly
+//     (e.g. GC reclaimed warmup allocations during the measured loop).
+//   - gc-cycles/op: GC runs per render op; < 1.0 means GC fires less than
+//     once per render, which is healthy for a TUI frame budget.
+// ---------------------------------------------------------------------------
+
+func benchMemoryGrowth(b *testing.B, mode viewMode, width, totalLines int) {
+	b.Helper()
+	diffs := genFileDiffs(totalLines)
+	d := newBenchDiff(diffs, mode, width)
+
+	// Warmup: reach steady-state allocator behaviour before measuring.
+	for range 5 {
+		if mode == viewInline {
+			d.buildInlineLines()
+		} else {
+			d.buildSideBySideLines()
+		}
+	}
+
+	runtime.GC()
+	var memBefore, memAfter runtime.MemStats
+	runtime.ReadMemStats(&memBefore)
+
+	b.ResetTimer()
+	for range b.N {
+		if mode == viewInline {
+			d.buildInlineLines()
+		} else {
+			d.buildSideBySideLines()
+		}
+	}
+	b.StopTimer()
+
+	runtime.GC()
+	runtime.ReadMemStats(&memAfter)
+
+	// HeapInuse delta: positive means the heap grew (retained allocations).
+	// Near-zero means memory is being reclaimed correctly between renders.
+	heapDelta := int64(memAfter.HeapInuse) - int64(memBefore.HeapInuse)
+	gcCycles := memAfter.NumGC - memBefore.NumGC
+
+	b.ReportMetric(float64(heapDelta)/float64(b.N), "heap-inuse-b/op")
+	b.ReportMetric(float64(gcCycles)/float64(b.N), "gc-cycles/op")
+}
+
+func BenchmarkMemoryGrowth(b *testing.B) {
+	b.Run("inline_100_lines", func(b *testing.B) {
+		benchMemoryGrowth(b, viewInline, 120, 100)
+	})
+	b.Run("inline_1000_lines", func(b *testing.B) {
+		benchMemoryGrowth(b, viewInline, 120, 1000)
+	})
+	b.Run("sidebyside_100_lines", func(b *testing.B) {
+		benchMemoryGrowth(b, viewSideBySide, 160, 100)
+	})
+	b.Run("sidebyside_1000_lines", func(b *testing.B) {
+		benchMemoryGrowth(b, viewSideBySide, 160, 1000)
 	})
 }

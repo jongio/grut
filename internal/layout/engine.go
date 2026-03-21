@@ -6,32 +6,26 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/jongio/grut/internal/panels"
 )
 
 const (
 	// resizeStep is the ratio increment/decrement when resizing splits.
 	resizeStep = 0.05
-
 	// minRatio is the minimum split ratio to prevent panels from disappearing.
 	minRatio = 0.1
-
 	// maxRatio is the maximum split ratio to prevent panels from disappearing.
 	maxRatio = 0.9
-
 	// statusBarHeight is the number of rows reserved for the status bar.
 	statusBarHeight = 1
-
 	// hintsBarHeight is the number of rows reserved for the keybinding hints bar.
 	hintsBarHeight = 1
-
 	// tabBarHeight is the number of rows reserved for the tab bar when
 	// multiple tabs are open.
 	tabBarReservedHeight = 1
-
 	// borderSize is the number of characters a border occupies on each side.
 	borderSize = 1
-
 	// PanelPadH is the horizontal padding (in characters) added inside each
 	// panel's left and right edges to keep content away from the border.
 	PanelPadH = 1
@@ -40,28 +34,26 @@ const (
 // Engine manages the layout state: the active layout tree, instantiated
 // panels, focus tracking, and zoom state.
 type Engine struct {
-	registry   *Registry
-	tabs       *TabManager
-	panels     map[string]panels.Panel
-	panelOrder []string // ordered list of panel names for focus cycling
-	focusIdx   int      // index into panelOrder
-	zoomed     bool     // true when focused panel is full-screen
-	width      int
-	height     int
-	ctx        context.Context // stored from Init for late panel creation
-	nextID     int             // counter for generating unique panel names
-
-	// Drag-resize state: tracks an in-progress mouse drag on a split border.
-	dragging  bool       // true while dragging a split border
-	dragSplit *SplitNode // the split being resized
-	dragDir   Direction  // direction of the split being dragged
-	dragArea  Rect       // the area the split occupies (for ratio computation)
-
 	// Double-click detection: tracks the last click for double-click detection.
-	lastClickTime  time.Time // timestamp of the last click
+	lastClickTime  time.Time       // timestamp of the last click
+	ctx            context.Context // stored from Init for late panel creation
+	registry       *Registry
+	tabs           *TabManager
+	panels         map[string]panels.Panel
+	dragSplit      *SplitNode // the split being resized
+	lastClickPanel string     // panel name that received the last click
+	panelOrder     []string   // ordered list of panel names for focus cycling
+	dragArea       Rect       // the area the split occupies (for ratio computation)
+	focusIdx       int        // index into panelOrder
+	width          int
+	height         int
+	nextID         int       // counter for generating unique panel names
+	dragDir        Direction // direction of the split being dragged
 	lastClickRow   int       // content-relative row of the last click
 	lastClickCol   int       // content-relative column of the last click
-	lastClickPanel string    // panel name that received the last click
+	zoomed         bool      // true when focused panel is full-screen
+	// Drag-resize state: tracks an in-progress mouse drag on a split border.
+	dragging bool // true while dragging a split border
 }
 
 // NewEngine creates a layout engine with the given registry and initial preset.
@@ -71,11 +63,9 @@ func NewEngine(reg *Registry, preset Preset) (*Engine, error) {
 		tabs:     NewTabManager(preset.Name, preset.Tree.Clone()),
 		panels:   make(map[string]panels.Panel),
 	}
-
 	if err := e.instantiatePanels(preset.Panels); err != nil {
 		return nil, err
 	}
-
 	e.panelOrder = preset.Panels
 	return e, nil
 }
@@ -99,7 +89,6 @@ func (e *Engine) instantiatePanels(names []string) error {
 // Init initializes all panels. Must be called after NewEngine.
 func (e *Engine) Init(ctx context.Context) tea.Cmd {
 	e.ctx = ctx
-
 	var cmds []tea.Cmd
 	for _, name := range e.panelOrder {
 		p := e.panels[name]
@@ -107,12 +96,10 @@ func (e *Engine) Init(ctx context.Context) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
-
 	// Focus the first panel
 	if len(e.panelOrder) > 0 {
 		e.panels[e.panelOrder[0]].Focus()
 	}
-
 	// Emit TabActivatedMsg for the initial tab so panels can react to
 	// the starting preset (e.g. filetree auto-enables git filter on
 	// the git tab).
@@ -121,7 +108,6 @@ func (e *Engine) Init(ctx context.Context) tea.Cmd {
 		activateMsg := panels.TabActivatedMsg{PresetName: tab.Name}
 		cmds = append(cmds, func() tea.Msg { return activateMsg })
 	}
-
 	return tea.Batch(cmds...)
 }
 
@@ -137,18 +123,15 @@ func (e *Engine) recalcPanelSizes() {
 	if e.width <= 0 || e.height <= 0 {
 		return
 	}
-
 	tab := e.tabs.ActiveTab()
 	if tab == nil {
 		return
 	}
-
 	// Reserve space for status bar, hints bar, and (optionally) tab bar
 	panelHeight := e.height - statusBarHeight - hintsBarHeight - e.tabBarHeight()
 	if panelHeight < 1 {
 		panelHeight = 1
 	}
-
 	// The outer border consumes 2 columns (left+right) and 2 rows
 	// (top+bottom). Panels fill the remaining inner area.
 	innerW := e.width - 2*borderSize
@@ -159,10 +142,8 @@ func (e *Engine) recalcPanelSizes() {
 	if innerH < 1 {
 		innerH = 1
 	}
-
 	area := Rect{X: 0, Y: 0, Width: innerW, Height: innerH}
 	rects := Resolve(tab.Tree, area)
-
 	for name, rect := range rects {
 		if p, ok := e.panels[name]; ok {
 			// Panels no longer have individual borders; the rect IS
@@ -256,7 +237,6 @@ func (e *Engine) Update(msg tea.Msg) tea.Cmd {
 		return e.updateFocused(msg)
 	case tea.KeyMsg, tea.MouseMsg:
 		return e.updateFocused(msg)
-
 	case panels.TargetedPanelMsg:
 		if p, ok := e.panels[msg.Target]; ok {
 			updated, cmd := p.Update(msg.Inner)
@@ -265,7 +245,6 @@ func (e *Engine) Update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
-
 	// All other messages broadcast to all panels in the active tab.
 	var cmds []tea.Cmd
 	for _, name := range e.panelOrder {
@@ -292,7 +271,6 @@ func (e *Engine) updatePanelAtMouse(msg tea.Msg) tea.Cmd {
 	// subtracting the outer border (1 left, 1 top) and tab bar offset.
 	innerX := m.X - borderSize
 	innerY := m.Y - e.tabBarHeight() - borderSize
-
 	rects := e.PanelRects()
 	for name, r := range rects {
 		if innerX >= r.X && innerX < r.X+r.Width && innerY >= r.Y && innerY < r.Y+r.Height {
@@ -318,21 +296,17 @@ const doubleClickThreshold = 500 * time.Millisecond
 // treated as a double-click.
 func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	m := msg.Mouse()
-
 	// Handle right-click: route to panel without double-click detection.
 	if m.Button == tea.MouseRight {
 		return e.handleMouseRightClick(m)
 	}
-
 	if m.Button != tea.MouseLeft {
 		return nil
 	}
-
 	// Convert terminal coordinates to inner-content coordinates.
 	innerX := m.X - borderSize
 	innerY := m.Y - e.tabBarHeight() - borderSize
 	rects := e.PanelRects()
-
 	// Find the panel directly under the click, or the nearest panel if
 	// the click landed on a separator or border title.
 	hitName := ""
@@ -342,7 +316,6 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 			break
 		}
 	}
-
 	// Fallback: if the click landed on a separator or border, find the
 	// nearest panel by minimum distance to the panel rect.
 	if hitName == "" {
@@ -366,13 +339,10 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 			}
 		}
 	}
-
 	if hitName == "" {
 		return nil
 	}
-
 	r := rects[hitName]
-
 	// Focus the clicked panel.
 	for i, pn := range e.panelOrder {
 		if pn == hitName && i != e.focusIdx {
@@ -391,19 +361,16 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	if contentCol < 0 {
 		contentCol = 0
 	}
-
 	// Detect double-click: same panel, same row, within threshold.
 	now := time.Now()
 	isDouble := e.lastClickPanel == hitName &&
 		e.lastClickRow == contentRow &&
 		now.Sub(e.lastClickTime) <= doubleClickThreshold
-
 	// Record this click for next comparison.
 	e.lastClickTime = now
 	e.lastClickRow = contentRow
 	e.lastClickCol = contentCol
 	e.lastClickPanel = hitName
-
 	if p, ok := e.panels[hitName]; ok {
 		var clickMsg tea.Msg
 		if isDouble {
@@ -435,7 +402,6 @@ func (e *Engine) handleMouseRightClick(m tea.Mouse) tea.Cmd {
 	innerX := m.X - borderSize
 	innerY := m.Y - e.tabBarHeight() - borderSize
 	rects := e.PanelRects()
-
 	hitName := ""
 	for name, r := range rects {
 		if innerX >= r.X && innerX < r.X+r.Width && innerY >= r.Y && innerY < r.Y+r.Height {
@@ -443,7 +409,6 @@ func (e *Engine) handleMouseRightClick(m tea.Mouse) tea.Cmd {
 			break
 		}
 	}
-
 	// Fallback: find nearest panel within 1 cell (separator/border).
 	if hitName == "" {
 		bestDist := int(^uint(0) >> 1)
@@ -466,13 +431,10 @@ func (e *Engine) handleMouseRightClick(m tea.Mouse) tea.Cmd {
 			}
 		}
 	}
-
 	if hitName == "" {
 		return nil
 	}
-
 	r := rects[hitName]
-
 	// Focus the clicked panel.
 	for i, pn := range e.panelOrder {
 		if pn == hitName && i != e.focusIdx {
@@ -491,7 +453,6 @@ func (e *Engine) handleMouseRightClick(m tea.Mouse) tea.Cmd {
 	if contentCol < 0 {
 		contentCol = 0
 	}
-
 	if p, ok := e.panels[hitName]; ok {
 		updated, cmd := p.Update(panels.PanelMouseRightClickMsg{
 			ContentRow: contentRow,
@@ -528,12 +489,10 @@ func (e *Engine) PanelRects() map[string]Rect {
 	if tab == nil {
 		return nil
 	}
-
 	panelHeight := e.height - statusBarHeight - hintsBarHeight - e.tabBarHeight()
 	if panelHeight < 1 {
 		panelHeight = 1
 	}
-
 	// Inner area inside the single outer border.
 	innerW := e.width - 2*borderSize
 	innerH := panelHeight - 2*borderSize
@@ -543,16 +502,13 @@ func (e *Engine) PanelRects() map[string]Rect {
 	if innerH < 1 {
 		innerH = 1
 	}
-
 	area := Rect{X: 0, Y: 0, Width: innerW, Height: innerH}
-
 	if e.zoomed {
 		// Zoomed: only the focused panel fills the entire area
 		return map[string]Rect{
 			e.FocusedName(): area,
 		}
 	}
-
 	return Resolve(tab.Tree, area)
 }
 
@@ -584,20 +540,17 @@ func (e *Engine) adjustFocusedRatio(delta float64) {
 	if tab == nil {
 		return
 	}
-
 	focusedName := e.FocusedName()
 	split, side := FindSplitContaining(tab.Tree, focusedName)
 	if split == nil {
 		return
 	}
-
 	switch side {
 	case "first":
 		split.Ratio += delta
 	case "second":
 		split.Ratio -= delta
 	}
-
 	// Clamp
 	if split.Ratio < minRatio {
 		split.Ratio = minRatio
@@ -605,7 +558,6 @@ func (e *Engine) adjustFocusedRatio(delta float64) {
 	if split.Ratio > maxRatio {
 		split.Ratio = maxRatio
 	}
-
 	e.recalcPanelSizes()
 }
 
@@ -617,7 +569,6 @@ func (e *Engine) IsDragging() bool {
 // ---------------------------------------------------------------------------
 // Mouse drag resize
 // ---------------------------------------------------------------------------
-
 // handleDragStart checks whether a left-click is on a split border.
 // If so, it initiates a drag-resize operation and returns true.
 func (e *Engine) handleDragStart(msg tea.MouseClickMsg) bool {
@@ -625,12 +576,10 @@ func (e *Engine) handleDragStart(msg tea.MouseClickMsg) bool {
 	if m.Button != tea.MouseLeft {
 		return false
 	}
-
 	tab := e.tabs.ActiveTab()
 	if tab == nil || e.zoomed {
 		return false
 	}
-
 	// Convert terminal coordinates to inner-content coordinates.
 	innerX := m.X - borderSize
 	innerY := m.Y - e.tabBarHeight() - borderSize
@@ -647,12 +596,10 @@ func (e *Engine) handleDragStart(msg tea.MouseClickMsg) bool {
 		innerH = 1
 	}
 	area := Rect{X: 0, Y: 0, Width: innerW, Height: innerH}
-
 	split, dir, splitArea := FindSplitAtBorder(tab.Tree, innerX, innerY, area, 0)
 	if split == nil {
 		return false
 	}
-
 	e.dragging = true
 	e.dragSplit = split
 	e.dragDir = dir
@@ -666,7 +613,6 @@ func (e *Engine) handleDragMotion(msg tea.MouseMotionMsg) tea.Cmd {
 	// Convert terminal coordinates to inner-content coordinates.
 	innerX := m.X - borderSize
 	innerY := m.Y - e.tabBarHeight() - borderSize
-
 	var ratio float64
 	switch e.dragDir {
 	case Horizontal:
@@ -682,14 +628,12 @@ func (e *Engine) handleDragMotion(msg tea.MouseMotionMsg) tea.Cmd {
 	default:
 		return nil
 	}
-
 	if ratio < minRatio {
 		ratio = minRatio
 	}
 	if ratio > maxRatio {
 		ratio = maxRatio
 	}
-
 	e.dragSplit.Ratio = ratio
 	e.recalcPanelSizes()
 	return nil
@@ -773,13 +717,11 @@ func (e *Engine) InnerArea() Rect {
 // ---------------------------------------------------------------------------
 // Tab operations
 // ---------------------------------------------------------------------------
-
 // AddTab creates a new tab from a preset, instantiating any panels not
 // already present. Returns a tea.Cmd from initializing new panels.
 func (e *Engine) AddTab(preset Preset) (tea.Cmd, error) {
 	// Blur the current panel before switching.
 	e.blurCurrent()
-
 	// Track which panels are new so we can Init them.
 	var newPanels []string
 	for _, name := range preset.Panels {
@@ -787,16 +729,13 @@ func (e *Engine) AddTab(preset Preset) (tea.Cmd, error) {
 			newPanels = append(newPanels, name)
 		}
 	}
-
 	if err := e.instantiatePanels(preset.Panels); err != nil {
 		return nil, err
 	}
-
 	e.tabs.Add(preset.Name, preset.Tree.Clone())
 	e.panelOrder = preset.Panels
 	e.focusIdx = 0
 	e.zoomed = false
-
 	// Init new panels.
 	var cmds []tea.Cmd
 	for _, name := range newPanels {
@@ -806,11 +745,9 @@ func (e *Engine) AddTab(preset Preset) (tea.Cmd, error) {
 			}
 		}
 	}
-
 	if len(e.panelOrder) > 0 {
 		e.panels[e.panelOrder[0]].Focus()
 	}
-
 	e.recalcPanelSizes()
 	return tea.Batch(cmds...), nil
 }
@@ -874,7 +811,6 @@ func (e *Engine) MoveTabRight() {
 // ---------------------------------------------------------------------------
 // Split / panel operations
 // ---------------------------------------------------------------------------
-
 // SplitFocusedHorizontal splits the focused panel with a horizontal divider,
 // placing a new panel of the given type below.
 func (e *Engine) SplitFocusedHorizontal(newPanelType string) (tea.Cmd, error) {
@@ -898,29 +834,23 @@ func (e *Engine) splitFocused(dir Direction, newPanelType string) (tea.Cmd, erro
 	if tab == nil {
 		return nil, fmt.Errorf("no active tab")
 	}
-
 	// Generate a unique name for the new panel instance.
 	newName := e.uniqueName(newPanelType)
-
 	// Create the new panel via the registry (using the base type).
 	p, err := e.registry.Create(newPanelType)
 	if err != nil {
 		return nil, fmt.Errorf("create panel %q: %w", newPanelType, err)
 	}
 	e.panels[newName] = p
-
 	// Init the panel if we have a context.
 	var cmd tea.Cmd
 	if e.ctx != nil {
 		cmd = p.Init(e.ctx)
 	}
-
 	// Modify the tree.
 	tab.Tree = SplitLeaf(tab.Tree, focusedName, dir, newName)
-
 	// Rebuild panel order from the tree.
 	e.panelOrder = tab.Tree.PanelNames()
-
 	// Keep focus on the original panel.
 	for i, name := range e.panelOrder {
 		if name == focusedName {
@@ -928,7 +858,6 @@ func (e *Engine) splitFocused(dir Direction, newPanelType string) (tea.Cmd, erro
 			break
 		}
 	}
-
 	e.recalcPanelSizes()
 	return cmd, nil
 }
@@ -945,40 +874,32 @@ func (e *Engine) CloseFocusedPanel() error {
 	if tab == nil {
 		return fmt.Errorf("no active tab")
 	}
-
 	names := tab.Tree.PanelNames()
 	if len(names) <= 1 {
 		return fmt.Errorf("cannot close the last panel")
 	}
-
 	e.panels[focusedName].Blur()
-
 	newTree, found := RemoveLeaf(tab.Tree, focusedName)
 	if !found {
 		return fmt.Errorf("panel %q not found in tree", focusedName)
 	}
 	tab.Tree = newTree
-
 	// Note: we keep the panel instance in e.panels because another tab
 	// may still reference it. Only uniquely-named split panels (e.g.
 	// "preview:2") are safe to remove.
 	if isUniqueInstanceName(focusedName) {
 		delete(e.panels, focusedName)
 	}
-
 	e.panelOrder = tab.Tree.PanelNames()
-
 	if e.focusIdx >= len(e.panelOrder) {
 		e.focusIdx = len(e.panelOrder) - 1
 	}
 	if e.focusIdx < 0 {
 		e.focusIdx = 0
 	}
-
 	if len(e.panelOrder) > 0 {
 		e.panels[e.panelOrder[e.focusIdx]].Focus()
 	}
-
 	e.recalcPanelSizes()
 	return nil
 }
@@ -986,7 +907,6 @@ func (e *Engine) CloseFocusedPanel() error {
 // ---------------------------------------------------------------------------
 // Preview position cycling
 // ---------------------------------------------------------------------------
-
 // PreviewPosition represents where the preview panel sits relative to
 // the filetree.
 type PreviewPosition int
@@ -1048,19 +968,15 @@ func (e *Engine) CurrentPreviewPosition() PreviewPosition {
 	if tab == nil {
 		return PreviewRight
 	}
-
 	split, ok := tab.Tree.(*SplitNode)
 	if !ok {
 		return PreviewRight
 	}
-
 	previewIsFirst := isPreviewLeaf(split.First)
 	previewIsSecond := isPreviewLeaf(split.Second)
-
 	if !previewIsFirst && !previewIsSecond {
 		return PreviewRight
 	}
-
 	if split.Direction == Horizontal {
 		if previewIsFirst {
 			return PreviewLeft
@@ -1089,7 +1005,6 @@ func (e *Engine) SetPreviewPosition(pos PreviewPosition) {
 	if !modified {
 		return
 	}
-
 	// Sync engine state (panelOrder, focusIdx, sizes) to the active tab.
 	tab := e.tabs.ActiveTab()
 	if tab == nil {
@@ -1114,11 +1029,9 @@ func applyPreviewPositionToTree(tree Node, pos PreviewPosition) bool {
 	if !ok {
 		return false
 	}
-
 	// Find preview as a direct child of the root split.
 	var preview *LeafNode
 	var rest Node
-
 	if isPreviewLeaf(split.First) {
 		leaf, ok := split.First.(*LeafNode)
 		if !ok {
@@ -1134,15 +1047,12 @@ func applyPreviewPositionToTree(tree Node, pos PreviewPosition) bool {
 		preview = leaf
 		rest = split.First
 	}
-
 	if preview == nil {
 		return false
 	}
-
 	// For complex trees (rest is a subtree with multiple panels), vertical
 	// splits give more space to the rest since it contains stacked panels.
 	_, simpleRest := rest.(*LeafNode)
-
 	switch pos {
 	case PreviewRight:
 		split.Direction = Horizontal
@@ -1185,7 +1095,6 @@ func isPreviewLeaf(n Node) bool {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
 // blurCurrent blurs the currently focused panel, if any.
 func (e *Engine) blurCurrent() {
 	if fp := e.FocusedPanel(); fp != nil {
@@ -1200,20 +1109,16 @@ func (e *Engine) syncToActiveTab() {
 	if tab == nil {
 		return
 	}
-
 	// Instantiate any panels referenced by the new tab that haven't
 	// been created yet (possible if presets reference different panels).
 	newNames := tab.Tree.PanelNames()
 	_ = e.instantiatePanels(newNames)
-
 	e.panelOrder = newNames
 	e.focusIdx = 0
 	e.zoomed = false
-
 	if len(e.panelOrder) > 0 {
 		e.panels[e.panelOrder[0]].Focus()
 	}
-
 	e.recalcPanelSizes()
 }
 

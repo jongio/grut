@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	ctxbuilder "github.com/jongio/grut/internal/context"
@@ -43,13 +44,13 @@ const (
 
 // Panel is the context builder panel. It implements [panels.Panel].
 type Panel struct {
-	panels.BasePanel
-	builder     *ctxbuilder.Builder
-	cursor      int
-	offset      int
 	actionsCfg  config.ActionsConfig
+	builder     *ctxbuilder.Builder
 	pendingOp   string
 	pendingName string
+	panels.BasePanel
+	cursor int
+	offset int
 }
 
 // Compile-time interface check.
@@ -100,46 +101,37 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	files := p.builder.Files()
-
 	// Reserve 1 line for the status bar at the bottom.
 	listHeight := height - 1
 	if listHeight < 0 {
 		listHeight = 0
 	}
-
 	if len(files) == 0 {
 		emptyMsg := lipgloss.NewStyle().
 			Width(width).Height(listHeight).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(lipgloss.Color(colors.Dim)).
 			Render("No files in context\n\nPress C in filetree to add files")
-
 		statusBar := p.renderStatusBar(width, 0, 0)
 		return emptyMsg + "\n" + statusBar
 	}
-
 	// Render file list.
 	lines := make([]string, 0, listHeight)
 	end := p.offset + listHeight
 	if end > len(files) {
 		end = len(files)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderLine(files[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < listHeight {
 		lines = append(lines, emptyLine)
 	}
-
 	statusBar := p.renderStatusBar(width, len(files), p.builder.TotalTokens())
 	lines = append(lines, statusBar)
-
 	return strings.Join(lines, "\n")
 }
 
@@ -158,12 +150,10 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		p.moveCursorDown()
@@ -182,14 +172,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "enter":
 		return p.previewCurrent()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	files := p.builder.Files()
 	if p.cursor < len(files)-1 {
@@ -234,7 +222,6 @@ func (p *Panel) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the context file at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	files := p.builder.Files()
@@ -256,7 +243,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := actions.ItemContextFile
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pendingOp = opFirstUseConfirm
@@ -274,7 +260,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 	if viewHeight <= 0 {
 		viewHeight = 1
 	}
-
 	files := p.builder.Files()
 	switch m.Button {
 	case tea.MouseWheelUp:
@@ -307,9 +292,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	label := files[idx].Path
-
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemContextFile, label)
 	if cmd != nil {
 		p.pendingOp = opRightClickPick
@@ -380,7 +363,6 @@ func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
 }
 
 // ---------------------------------------------------------------------------
-
 func (p *Panel) addFile(path string) (panels.Panel, tea.Cmd) {
 	if err := p.builder.Add(path); err != nil {
 		errMsg := err.Error()
@@ -388,7 +370,6 @@ func (p *Panel) addFile(path string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Context: " + errMsg, Level: notify.Error}
 		}
 	}
-
 	files := p.builder.Files()
 	totalTokens := p.builder.TotalTokens()
 	fileCount := len(files)
@@ -400,7 +381,6 @@ func (p *Panel) addFile(path string) (panels.Panel, tea.Cmd) {
 func (p *Panel) removeFile(path string) (panels.Panel, tea.Cmd) {
 	p.builder.Remove(path)
 	p.clampCursor()
-
 	files := p.builder.Files()
 	totalTokens := p.builder.TotalTokens()
 	fileCount := len(files)
@@ -414,11 +394,9 @@ func (p *Panel) removeCurrent() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(files) {
 		return p, nil
 	}
-
 	path := files[p.cursor].Path
 	p.builder.Remove(path)
 	p.clampCursor()
-
 	files = p.builder.Files()
 	totalTokens := p.builder.TotalTokens()
 	fileCount := len(files)
@@ -431,7 +409,6 @@ func (p *Panel) clearAll() (panels.Panel, tea.Cmd) {
 	p.builder.Clear()
 	p.cursor = 0
 	p.offset = 0
-
 	return p, func() tea.Msg {
 		return panels.ContextUpdatedMsg{FileCount: 0, TokenCount: 0}
 	}
@@ -444,10 +421,8 @@ func (p *Panel) export() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Nothing to export", Level: notify.Warn}
 		}
 	}
-
 	// Print to stdout as fallback (clipboard integration can be added later).
 	fmt.Print(exported)
-
 	files := p.builder.Files()
 	tokenCount := p.builder.TotalTokens()
 	return p, func() tea.Msg {
@@ -463,7 +438,6 @@ func (p *Panel) previewCurrent() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(files) {
 		return p, nil
 	}
-
 	path := files[p.cursor].Path
 	return p, func() tea.Msg {
 		return panels.FileSelectedMsg{Path: path}
@@ -473,7 +447,6 @@ func (p *Panel) previewCurrent() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
-
 func (p *Panel) clampCursor() {
 	files := p.builder.Files()
 	if p.cursor >= len(files) {
@@ -486,27 +459,19 @@ func (p *Panel) clampCursor() {
 
 func (p *Panel) renderLine(f ctxbuilder.ContextFile, width int, isCursor bool) string {
 	var b strings.Builder
-
 	b.WriteString("  ")
-
 	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Path))
 	b.WriteString(pathStyle.Render(f.Path))
-
 	b.WriteString("  ")
-
 	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Tokens))
 	b.WriteString(tokenStyle.Render(fmt.Sprintf("%d tokens", f.Tokens)))
-
 	content := b.String()
-
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width)
-
 	if isCursor && p.Focused {
 		style = style.Background(lipgloss.Color(colors.CursorBg))
 	}
-
 	return style.Render(content)
 }
 
@@ -517,19 +482,16 @@ func (p *Panel) renderStatusBar(width, fileCount, tokenCount int) string {
 	} else {
 		text = fmt.Sprintf(" %d files │ %d tokens", fileCount, tokenCount)
 	}
-
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width).
 		Foreground(lipgloss.Color(colors.Accent)).
 		Bold(true)
-
 	return style.Render(text)
 }
 
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)
 // ---------------------------------------------------------------------------
-
 func (p *Panel) cursorIndex() int { return p.cursor }
 func (p *Panel) fileCount() int   { return len(p.builder.Files()) }

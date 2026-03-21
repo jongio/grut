@@ -23,11 +23,11 @@ const currentVersion = 1
 
 // SessionState is the top-level structure persisted to a TOML file.
 type SessionState struct {
-	Version   int        `toml:"version"`
-	WorkDir   string     `toml:"work_dir"`
-	ActiveTab int        `toml:"active_tab"`
-	Tabs      []TabState `toml:"tabs"`
 	SavedAt   time.Time  `toml:"saved_at"`
+	WorkDir   string     `toml:"work_dir"`
+	Tabs      []TabState `toml:"tabs"`
+	Version   int        `toml:"version"`
+	ActiveTab int        `toml:"active_tab"`
 }
 
 // TabState captures the minimal state needed to restore a single tab.
@@ -71,22 +71,18 @@ func (m *Manager) SessionPath(workDir string) string {
 func (m *Manager) Save(state SessionState) error {
 	state.Version = currentVersion
 	state.SavedAt = time.Now()
-
 	if err := os.MkdirAll(m.dataDir, 0o700); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
 	}
-
 	f := sessionFile{Session: state}
 	b, err := toml.Marshal(f)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
-
 	path := m.SessionPath(state.WorkDir)
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		return fmt.Errorf("write session %s: %w", path, err)
 	}
-
 	return nil
 }
 
@@ -95,7 +91,6 @@ func (m *Manager) Save(state SessionState) error {
 // callers to fall back to the default layout without error handling.
 func (m *Manager) Load(workDir string) (*SessionState, error) {
 	path := m.SessionPath(workDir)
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -103,17 +98,14 @@ func (m *Manager) Load(workDir string) (*SessionState, error) {
 		}
 		return nil, fmt.Errorf("read session %s: %w", path, err)
 	}
-
 	var f sessionFile
 	if err := toml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse session %s: %w", path, err)
 	}
-
 	// Reject sessions with an incompatible schema version.
 	if f.Session.Version != currentVersion {
 		return nil, nil
 	}
-
 	return &f.Session, nil
 }
 

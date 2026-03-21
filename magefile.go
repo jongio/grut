@@ -10,10 +10,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -42,6 +45,9 @@ func init() {
 var deadcodeAllowlist = []string{
 	// config — test-only accessor (used in app_test.go, engine_test.go)
 	"LoadDefaults",
+
+	// cmd — test-only accessor (returns root command + cleanup for tests)
+	"newRootCommand",
 
 	// crashlog — test-only accessors
 	"CollectDiagnostics",
@@ -404,27 +410,27 @@ func Build() error {
 // race detection, vulnerability scan, strict formatting, and dead code detection.
 // If preflight passes, CI will pass.
 func Preflight() error {
-	fmt.Println("\n=== 1/12 Formatting ===")
+	fmt.Println("\n=== 1/14 Formatting ===")
 	if err := fmtSources(); err != nil {
 		return fmt.Errorf("format: %w", err)
 	}
 
-	fmt.Println("\n=== 2/12 Tidying modules ===")
+	fmt.Println("\n=== 2/14 Tidying modules ===")
 	if err := run("go", "mod", "tidy"); err != nil {
 		return fmt.Errorf("mod tidy: %w", err)
 	}
 
-	fmt.Println("\n=== 3/12 Verifying module checksums ===")
+	fmt.Println("\n=== 3/14 Verifying module checksums ===")
 	if err := run("go", "mod", "verify"); err != nil {
 		return fmt.Errorf("mod verify: %w", err)
 	}
 
-	fmt.Println("\n=== 4/12 Vetting ===")
+	fmt.Println("\n=== 4/14 Vetting ===")
 	if err := run("go", "vet", "./..."); err != nil {
 		return fmt.Errorf("vet: %w", err)
 	}
 
-	fmt.Println("\n=== 5/12 Linting ===")
+	fmt.Println("\n=== 5/14 Linting ===")
 	if _, err := exec.LookPath("golangci-lint"); err == nil {
 		if err := run("golangci-lint", "run"); err != nil {
 			return fmt.Errorf("lint: %w", err)
@@ -433,22 +439,34 @@ func Preflight() error {
 		fmt.Println("   Skipped (install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)")
 	}
 
-	fmt.Println("\n=== 6/12 Building ===")
+	fmt.Println("\n=== 6/14 Building ===")
 	if err := run("go", "build", "./..."); err != nil {
 		return fmt.Errorf("build: %w", err)
 	}
 
-	fmt.Println("\n=== 7/12 Testing ===")
+	fmt.Println("\n=== 7/14 Testing ===")
 	if err := run("go", "test", "./...", "-count=1"); err != nil {
 		return fmt.Errorf("test: %w", err)
 	}
 
-	fmt.Println("\n=== 8/12 Testing (race detector) ===")
+	fmt.Println("\n=== 8/14 Testing (race detector) ===")
+	// Race-instrumented binaries are very large; redirect linker temp to
+	// GOTMPDIR (if set) to avoid filling a small C: drive on Windows.
+	if tmpDir := os.Getenv("GOTMPDIR"); tmpDir != "" && runtime.GOOS == "windows" {
+		origTemp := os.Getenv("TEMP")
+		origTmp := os.Getenv("TMP")
+		os.Setenv("TEMP", tmpDir)
+		os.Setenv("TMP", tmpDir)
+		defer func() {
+			os.Setenv("TEMP", origTemp)
+			os.Setenv("TMP", origTmp)
+		}()
+	}
 	if err := run("go", "test", "-race", "./...", "-count=1"); err != nil {
 		return fmt.Errorf("race test: %w", err)
 	}
 
-	fmt.Println("\n=== 9/12 Testing (WSL) ===")
+	fmt.Println("\n=== 9/14 Testing (WSL) ===")
 	if runtime.GOOS == "windows" {
 		if _, err := exec.LookPath("wsl"); err == nil {
 			if err := TestWSL(); err != nil {
@@ -461,7 +479,7 @@ func Preflight() error {
 		fmt.Println("   Skipped (only available on Windows)")
 	}
 
-	fmt.Println("\n=== 10/12 Vulnerability scan ===")
+	fmt.Println("\n=== 10/14 Vulnerability scan ===")
 	if _, err := exec.LookPath("govulncheck"); err == nil {
 		if err := run("govulncheck", "./..."); err != nil {
 			return fmt.Errorf("vulncheck: %w", err)
@@ -470,7 +488,7 @@ func Preflight() error {
 		fmt.Println("   Skipped (install: go install golang.org/x/vuln/cmd/govulncheck@latest)")
 	}
 
-	fmt.Println("\n=== 11/12 Strict formatting (gofumpt) ===")
+	fmt.Println("\n=== 11/14 Strict formatting (gofumpt) ===")
 	if _, err := exec.LookPath("gofumpt"); err == nil {
 		out, _ := cmdOutput("gofumpt", "-l", ".")
 		if files := strings.TrimSpace(out); files != "" {
@@ -480,13 +498,75 @@ func Preflight() error {
 		fmt.Println("   Skipped (install: go install mvdan.cc/gofumpt@latest)")
 	}
 
-	fmt.Println("\n=== 12/12 Dead code detection ===")
+	fmt.Println("\n=== 12/14 Dead code detection ===")
 	if _, err := exec.LookPath("deadcode"); err == nil {
 		if err := runDeadcode(); err != nil {
 			return err
 		}
 	} else {
 		fmt.Println("   Skipped (install: go install golang.org/x/tools/cmd/deadcode@latest)")
+	}
+
+	fmt.Println("\n=== 13/14 Benchmark smoke test ===")
+	// Quick single-iteration run to verify all benchmarks compile and execute.
+	if err := run("go", "test", "-bench=.", "-benchmem", "-run=^$", "-count=1", "-timeout=5m",
+		"./internal/git/",
+		"./internal/ai/",
+		"./internal/config/",
+		"./internal/crashlog/",
+		"./internal/panels/gitdiff/",
+		"./internal/panels/filetree/",
+	); err != nil {
+		return fmt.Errorf("benchmark smoke: %w", err)
+	}
+
+	fmt.Println("\n=== 14/14 Benchmark regression check ===")
+	platform := benchPlatform()
+	baseline := filepath.Join(projectDir(), "perf", "baselines", platform, "main.txt")
+	if _, err := os.Stat(baseline); err == nil {
+		// Baseline exists -- run benchmarks and check for regressions.
+		current := filepath.Join(projectDir(), "perf", "bench-preflight.txt")
+		if err := runBenchmarks(projectDir(), current, 3); err != nil {
+			return fmt.Errorf("benchmark regression run: %w", err)
+		}
+		regressScript := filepath.Join(projectDir(), "scripts", "bench-regress.sh")
+		if _, err := os.Stat(regressScript); err == nil {
+			var bashErr error
+			if runtime.GOOS == "windows" {
+				// On Windows, run benchstat natively and analyze output
+				// in Go (avoids bash/awk/WSL dependency issues).
+				benchstatPath, benchstatErr := exec.LookPath("benchstat")
+				if benchstatErr != nil {
+					fmt.Println("   Skipped regression analysis (benchstat not in PATH)")
+				} else {
+					benchOut, err := cmdOutput(benchstatPath, baseline, current)
+					if err != nil {
+						os.Remove(current)
+						return fmt.Errorf("benchstat: %w", err)
+					}
+					fmt.Println(benchOut)
+					// Preflight uses count=3 for speed; lower sample count
+					// means wider variance. Use generous thresholds here —
+					// the CI workflow (count=6) enforces tighter gates.
+					bashErr = checkBenchRegressions(benchOut, 50, 25)
+				}
+			} else {
+				scriptArg := strings.ReplaceAll(regressScript, `\`, `/`)
+				baselineArg := strings.ReplaceAll(baseline, `\`, `/`)
+				currentArg := strings.ReplaceAll(current, `\`, `/`)
+				bashErr = run("bash", scriptArg, baselineArg, currentArg)
+			}
+			if bashErr != nil {
+				os.Remove(current)
+				return fmt.Errorf("benchmark regression detected: %w", bashErr)
+			}
+		} else {
+			fmt.Println("   Skipped regression analysis (bench-regress.sh not found)")
+		}
+		// Clean up temporary file.
+		os.Remove(current)
+	} else {
+		fmt.Printf("   Skipped (no baseline for %s -- run 'mage benchbaseline' to create one)\n", platform)
 	}
 
 	fmt.Println("\n=== Preflight passed — ready to commit ===")
@@ -513,6 +593,134 @@ func Lint() error {
 func Bench() error {
 	fmt.Println("\n=== Running benchmarks ===")
 	return run("go", "test", "-bench=.", "-benchmem", "-run=^$", "-count=3", "./...")
+}
+
+// BenchBaseline captures a benchmark baseline for the current platform and saves
+// it to perf/baselines/{goos-goarch}/main.txt.
+// Use this after merging improvements to record the new performance baseline.
+//
+//	mage benchbaseline
+func BenchBaseline() error {
+	fmt.Println("\n=== Capturing benchmark baseline ===")
+	dir := projectDir()
+	platform := benchPlatform()
+	outDir := filepath.Join(dir, "perf", "baselines", platform)
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return err
+	}
+	out := filepath.Join(outDir, "main.txt")
+	fmt.Printf("   Platform: %s\n", platform)
+	if err := runBenchmarks(dir, out); err != nil {
+		return err
+	}
+	fmt.Printf("\n   Baseline saved: %s\n", out)
+	return nil
+}
+
+// BenchCompare runs benchmarks and compares against the current platform's
+// perf/baselines/{goos-goarch}/main.txt using benchstat.
+// Requires benchstat: go install golang.org/x/perf/cmd/benchstat@latest
+//
+//	mage benchcompare
+func BenchCompare() error {
+	fmt.Println("\n=== Running benchmark comparison ===")
+	dir := projectDir()
+	platform := benchPlatform()
+	baseline := filepath.Join(dir, "perf", "baselines", platform, "main.txt")
+	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+		return fmt.Errorf("no baseline for %s at %s — run 'mage benchbaseline' first", platform, baseline)
+	}
+	fmt.Printf("   Platform: %s\n   Baseline: %s\n", platform, baseline)
+	current := filepath.Join(dir, "perf", "bench-current.txt")
+	if err := runBenchmarks(dir, current); err != nil {
+		return err
+	}
+	fmt.Println("\n=== benchstat comparison ===")
+	return run("benchstat", baseline, current)
+}
+
+// BenchWSL runs benchmarks under WSL (Linux) and compares against the
+// perf/baselines/linux-amd64/main.txt baseline. Useful on Windows for
+// getting Linux performance numbers without leaving the terminal.
+// Requires WSL and Go installed inside WSL.
+//
+//	mage benchwsl
+func BenchWSL() error {
+	fmt.Println("\n=== Running WSL benchmark comparison ===")
+	if runtime.GOOS != "windows" {
+		fmt.Println("   Skipped (BenchWSL only runs on Windows with WSL)")
+		return nil
+	}
+	if _, err := exec.LookPath("wsl"); err != nil {
+		fmt.Println("   Skipped (WSL not installed)")
+		return nil
+	}
+
+	dir := projectDir()
+	wslPath := winToWSLPath(dir)
+	// Single-quote for bash to prevent injection via directory names.
+	escapedPath := "'" + strings.ReplaceAll(wslPath, "'", "'\\''") + "'"
+
+	baselineDir := filepath.Join(dir, "perf", "baselines", "linux-amd64")
+	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
+		return err
+	}
+
+	pkgs := "./internal/git/ ./internal/ai/ ./internal/config/ ./internal/crashlog/ ./internal/panels/gitdiff/ ./internal/panels/filetree/"
+	currentTxt := escapedPath + "/perf/bench-wsl-current.txt"
+	benchCmd := fmt.Sprintf(
+		"cd %s && go test -bench=. -benchmem -count=6 -run='^$' -timeout=20m %s | tee %s",
+		escapedPath, pkgs, currentTxt,
+	)
+
+	fmt.Printf("   Project (WSL): %s\n", wslPath)
+	fmt.Println("   Running benchmarks under WSL...")
+	cmd := exec.Command("wsl", "bash", "-lc", benchCmd)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("wsl benchmarks: %w", err)
+	}
+
+	baseline := filepath.Join(baselineDir, "main.txt")
+	wslBaseline := escapedPath + "/perf/baselines/linux-amd64/main.txt"
+	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+		fmt.Printf("\n   No linux-amd64 baseline yet — saving current run as baseline.\n")
+		saveCmd := fmt.Sprintf("cp %s %s", currentTxt, wslBaseline)
+		save := exec.Command("wsl", "bash", "-lc", saveCmd)
+		save.Stdout = os.Stdout
+		save.Stderr = os.Stderr
+		if err := save.Run(); err != nil {
+			return fmt.Errorf("save baseline: %w", err)
+		}
+		fmt.Printf("   Baseline saved: %s\n", baseline)
+		return nil
+	}
+
+	fmt.Println("\n=== benchstat comparison (linux-amd64) ===")
+	compareCmd := fmt.Sprintf(
+		"cd %s && benchstat perf/baselines/linux-amd64/main.txt perf/bench-wsl-current.txt",
+		escapedPath,
+	)
+	cmp := exec.Command("wsl", "bash", "-lc", compareCmd)
+	cmp.Stdout = os.Stdout
+	cmp.Stderr = os.Stderr
+	if err := cmp.Run(); err != nil {
+		return fmt.Errorf("benchstat: %w", err)
+	}
+	return nil
+}
+
+// winToWSLPath converts a Windows absolute path to its WSL /mnt/... equivalent.
+// E.g. E:\code\grut -> /mnt/e/code/grut
+func winToWSLPath(winPath string) string {
+	p := strings.ReplaceAll(winPath, `\`, `/`)
+	if len(p) >= 2 && p[1] == ':' {
+		drive := strings.ToLower(string(p[0]))
+		p = "/mnt/" + drive + p[2:]
+	}
+	return p
 }
 
 // Clean removes the bin/ directory.
@@ -569,6 +777,41 @@ func isAllowlisted(line string) bool {
 	return false
 }
 
+// checkBenchRegressions parses benchstat output for significant regressions.
+// Mirrors the logic in scripts/bench-regress.sh but in pure Go (no bash/awk
+// dependency). Returns an error if any regression exceeds the thresholds.
+func checkBenchRegressions(benchstatOutput string, timingThreshold, memThreshold float64) error {
+	// Match lines like: +17.89% (p=0.008 n=6)
+	re := regexp.MustCompile(`\+(\d+\.\d+)%\s+\(p=`)
+	var regressions []string
+	for _, line := range strings.Split(benchstatOutput, "\n") {
+		m := re.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		pct, err := strconv.ParseFloat(m[1], 64)
+		if err != nil {
+			continue
+		}
+		isMem := strings.Contains(line, "heap-inuse") || strings.Contains(line, "gc-cycles")
+		threshold := timingThreshold
+		if isMem {
+			threshold = memThreshold
+		}
+		if pct > threshold {
+			regressions = append(regressions, "  REGRESSION: "+strings.TrimSpace(line))
+		}
+	}
+	if len(regressions) > 0 {
+		for _, r := range regressions {
+			fmt.Println(r)
+		}
+		return fmt.Errorf("%d regression(s) exceed threshold", len(regressions))
+	}
+	fmt.Println("   No significant regressions detected")
+	return nil
+}
+
 func fmtSources() error {
 	out, _ := cmdOutput("gofmt", "-l", ".")
 	files := strings.TrimSpace(out)
@@ -600,6 +843,43 @@ func binaryName() string {
 func projectDir() string {
 	dir, _ := os.Getwd()
 	return dir
+}
+
+// benchPlatform returns the current platform as "goos-goarch" (e.g. linux-amd64, darwin-arm64).
+func benchPlatform() string {
+	goos, _ := cmdOutput("go", "env", "GOOS")
+	goarch, _ := cmdOutput("go", "env", "GOARCH")
+	return strings.TrimSpace(goos) + "-" + strings.TrimSpace(goarch)
+}
+
+// runBenchmarks runs the benchmark suite and tees output to outFile.
+func runBenchmarks(dir, outFile string, opts ...int) error {
+	count := 6
+	if len(opts) > 0 && opts[0] > 0 {
+		count = opts[0]
+	}
+	pkgs := []string{
+		"./internal/git/",
+		"./internal/ai/",
+		"./internal/config/",
+		"./internal/crashlog/",
+		"./internal/panels/gitdiff/",
+		"./internal/panels/filetree/",
+	}
+	args := append([]string{
+		"test", "-bench=.", "-benchmem", "-run=^$",
+		fmt.Sprintf("-count=%d", count), "-timeout=15m",
+	}, pkgs...)
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	f, err := os.Create(outFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	cmd.Stdout = io.MultiWriter(os.Stdout, f)
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func devVersion() string {

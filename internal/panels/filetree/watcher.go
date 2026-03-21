@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -28,15 +29,15 @@ const defaultPollInterval = 5 * time.Second
 // Bubble Tea command. It debounces rapid events and falls back to polling
 // when fsnotify cannot be used.
 type watcher struct {
-	mu       sync.Mutex
 	fsw      *fsnotify.Watcher
 	dirs     map[string]bool // currently watched directories
-	debounce time.Duration
-	polling  bool // true if using fallback polling
-	pollInt  time.Duration
 	cancel   context.CancelFunc
 	done     chan struct{}
+	debounce time.Duration
+	pollInt  time.Duration
 	stopOnce sync.Once // ensures stop() cleanup runs exactly once (F29)
+	mu       sync.Mutex
+	polling  bool // true if using fallback polling
 }
 
 // newWatcher creates a filesystem watcher. If fsnotify initialisation
@@ -48,14 +49,12 @@ func newWatcher(debounce, pollInterval time.Duration) *watcher {
 	if pollInterval <= 0 {
 		pollInterval = defaultPollInterval
 	}
-
 	w := &watcher{
 		dirs:     make(map[string]bool),
 		debounce: debounce,
 		pollInt:  pollInterval,
 		done:     make(chan struct{}),
 	}
-
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		// fsnotify unavailable — will use polling fallback.
@@ -73,7 +72,6 @@ func (w *watcher) start(ctx context.Context) tea.Cmd {
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.done = make(chan struct{}) // fresh channel per start (F28)
 	w.mu.Unlock()
-
 	// F29: Spawn a shutdown goroutine that invokes stop() when the context
 	// is cancelled. This ensures resources are freed even when the
 	// application shuts down via context cancellation alone. The stop()
@@ -83,7 +81,6 @@ func (w *watcher) start(ctx context.Context) tea.Cmd {
 		<-ctx.Done()
 		w.stop()
 	}()
-
 	if w.polling {
 		return w.startPolling(ctx)
 	}
@@ -94,10 +91,8 @@ func (w *watcher) start(ctx context.Context) tea.Cmd {
 func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
 		defer close(w.done)
-
 		var timer *time.Timer
 		var timerC <-chan time.Time
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -105,7 +100,6 @@ func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 					timer.Stop()
 				}
 				return nil
-
 			case event, ok := <-w.fsw.Events:
 				if !ok {
 					return nil
@@ -128,13 +122,11 @@ func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 					timer.Reset(w.debounce)
 					timerC = timer.C
 				}
-
 			case fsErr, ok := <-w.fsw.Errors:
 				if !ok {
 					return nil
 				}
 				slog.Warn("fsnotify: watcher error", "error", fsErr)
-
 			case <-timerC:
 				return RefreshMsg{}
 			}
@@ -146,10 +138,8 @@ func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 func (w *watcher) startPolling(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
 		defer close(w.done)
-
 		ticker := time.NewTicker(w.pollInt)
 		defer ticker.Stop()
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -169,15 +159,12 @@ func (w *watcher) addDir(dir string) {
 	if isGitInternalDir(dir) {
 		return
 	}
-
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	if w.dirs[dir] {
 		return
 	}
 	w.dirs[dir] = true
-
 	if w.fsw != nil {
 		if err := w.fsw.Add(dir); err != nil {
 			slog.Warn("fsnotify: failed to add directory", "dir", dir, "error", err)
@@ -189,12 +176,10 @@ func (w *watcher) addDir(dir string) {
 func (w *watcher) removeDir(dir string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	if !w.dirs[dir] {
 		return
 	}
 	delete(w.dirs, dir)
-
 	if w.fsw != nil {
 		if err := w.fsw.Remove(dir); err != nil {
 			slog.Warn("fsnotify: failed to remove directory", "dir", dir, "error", err)
@@ -209,7 +194,6 @@ func (w *watcher) stop() {
 		w.mu.Lock()
 		cancelFn := w.cancel
 		w.mu.Unlock()
-
 		if cancelFn != nil {
 			cancelFn()
 		}

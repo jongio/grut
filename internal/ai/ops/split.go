@@ -24,9 +24,9 @@ type SplitPlan struct {
 
 // SplitPiece is one logical grouping of changes.
 type SplitPiece struct {
-	Files         []string `json:"files"`          // Files in this piece
 	CommitMessage string   `json:"commit_message"` // Suggested commit message
 	Reason        string   `json:"reason"`         // Why these files are grouped
+	Files         []string `json:"files"`          // Files in this piece
 	Order         int      `json:"order"`          // Suggested commit order
 }
 
@@ -72,13 +72,11 @@ func (s *CommitSplitter) Suggest(ctx context.Context, commitHash string) (*Split
 	if err != nil {
 		return nil, fmt.Errorf("building split context: %w", err)
 	}
-
 	// Resolve an available AI provider.
 	provider, err := s.registry.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting AI provider: %w", err)
 	}
-
 	// Send the completion request.
 	resp, err := provider.Complete(ctx, ai.CompletionRequest{
 		Operation:    "split",
@@ -89,13 +87,11 @@ func (s *CommitSplitter) Suggest(ctx context.Context, commitHash string) (*Split
 	if err != nil {
 		return nil, fmt.Errorf("AI completion for split: %w", err)
 	}
-
 	// Parse the JSON response.
 	plan, err := parseSplitResponse(resp.Content, commitHash)
 	if err != nil {
 		return nil, fmt.Errorf("parsing split response: %w", err)
 	}
-
 	return plan, nil
 }
 
@@ -103,7 +99,6 @@ func (s *CommitSplitter) Suggest(ctx context.Context, commitHash string) (*Split
 func parseSplitResponse(content, commitHash string) (*SplitPlan, error) {
 	content = strings.TrimSpace(content)
 	content = stripCodeFences(content)
-
 	// The AI returns an object with a "pieces" key.
 	var raw struct {
 		Pieces []SplitPiece `json:"pieces"`
@@ -111,18 +106,15 @@ func parseSplitResponse(content, commitHash string) (*SplitPlan, error) {
 	if err := json.Unmarshal([]byte(content), &raw); err != nil {
 		return nil, fmt.Errorf("unmarshaling split JSON: %w", err)
 	}
-
 	if len(raw.Pieces) == 0 {
 		return nil, fmt.Errorf("split plan contains no pieces")
 	}
-
 	// Validate that each piece has at least one file.
 	for i, p := range raw.Pieces {
 		if len(p.Files) == 0 {
 			return nil, fmt.Errorf("piece %d has no files", i)
 		}
 	}
-
 	return &SplitPlan{
 		OriginalHash: commitHash,
 		Pieces:       raw.Pieces,

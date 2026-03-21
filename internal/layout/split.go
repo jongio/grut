@@ -38,10 +38,8 @@ type Rect struct {
 type Node interface {
 	// PanelNames returns all panel names contained in this subtree.
 	PanelNames() []string
-
 	// Clone returns a deep copy of the node.
 	Clone() Node
-
 	// isNode is a sealed interface marker.
 	isNode()
 }
@@ -50,10 +48,10 @@ type Node interface {
 // and ratio. Ratio is the fraction of space allocated to the first (left/top)
 // child, in the range (0, 1).
 type SplitNode struct {
-	Direction Direction
-	Ratio     float64
 	First     Node // left or top child
 	Second    Node // right or bottom child
+	Direction Direction
+	Ratio     float64
 }
 
 // PanelNames implements Node.
@@ -72,7 +70,6 @@ func (s *SplitNode) Clone() Node {
 		Second:    s.Second.Clone(),
 	}
 }
-
 func (*SplitNode) isNode() {}
 
 // LeafNode is a terminal node in the layout tree, holding a panel name.
@@ -89,7 +86,6 @@ func (l *LeafNode) PanelNames() []string {
 func (l *LeafNode) Clone() Node {
 	return &LeafNode{Panel: l.Panel}
 }
-
 func (*LeafNode) isNode() {}
 
 // FirstPanelOf returns the name of the first (top-left-most) panel
@@ -249,7 +245,6 @@ func FindSplitContaining(root Node, panelName string) (*SplitNode, string) {
 	if !ok {
 		return nil, ""
 	}
-
 	// Recurse into children first to find deeper (more specific) matches.
 	if s, side := FindSplitContaining(split.First, panelName); s != nil {
 		return s, side
@@ -257,7 +252,6 @@ func FindSplitContaining(root Node, panelName string) (*SplitNode, string) {
 	if s, side := FindSplitContaining(split.Second, panelName); s != nil {
 		return s, side
 	}
-
 	// Check current level
 	for _, name := range split.First.PanelNames() {
 		if name == panelName {
@@ -269,7 +263,6 @@ func FindSplitContaining(root Node, panelName string) (*SplitNode, string) {
 			return split, "second"
 		}
 	}
-
 	return nil, ""
 }
 
@@ -283,9 +276,7 @@ func FindSplitAtBorder(root Node, x, y int, area Rect, hitZone int) (*SplitNode,
 	if !ok {
 		return nil, 0, Rect{}
 	}
-
 	firstArea, secondArea := SplitRect(area, split.Direction, split.Ratio)
-
 	// Recurse into children first — deeper splits take precedence.
 	if s, d, a := FindSplitAtBorder(split.First, x, y, firstArea, hitZone); s != nil {
 		return s, d, a
@@ -293,7 +284,6 @@ func FindSplitAtBorder(root Node, x, y int, area Rect, hitZone int) (*SplitNode,
 	if s, d, a := FindSplitAtBorder(split.Second, x, y, secondArea, hitZone); s != nil {
 		return s, d, a
 	}
-
 	// Check if (x, y) is near this split's border.
 	switch split.Direction {
 	case Horizontal:
@@ -307,7 +297,6 @@ func FindSplitAtBorder(root Node, x, y int, area Rect, hitZone int) (*SplitNode,
 			return split, Vertical, area
 		}
 	}
-
 	return nil, 0, Rect{}
 }
 

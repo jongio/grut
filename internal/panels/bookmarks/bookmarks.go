@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	bm "github.com/jongio/grut/internal/bookmarks"
 	"github.com/jongio/grut/internal/config"
@@ -42,14 +43,14 @@ const (
 
 // Panel is the bookmarks overlay. It implements [panels.Panel].
 type Panel struct {
-	panels.BasePanel
-	manager     *bm.Manager
-	items       []bm.Bookmark
-	cursor      int
-	offset      int
 	actionsCfg  config.ActionsConfig
+	manager     *bm.Manager
 	pendingOp   string
 	pendingName string
+	items       []bm.Bookmark
+	panels.BasePanel
+	cursor int
+	offset int
 }
 
 // Compile-time interface check.
@@ -74,19 +75,14 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
 	}
@@ -98,7 +94,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if len(p.items) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -106,23 +101,19 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(colors.Dim)).
 			Render("No bookmarks\n\nPress b in filetree to add one")
 	}
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > len(p.items) {
 		end = len(p.items)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderLine(p.items[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -148,12 +139,10 @@ func (p *Panel) SetActionsCfg(cfg config.ActionsConfig) { p.actionsCfg = cfg }
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		p.moveCursorDown()
@@ -170,14 +159,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "escape", "esc":
 		return p, func() tea.Msg { return panels.ToggleBookmarksMsg{} }
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	if p.cursor < len(p.items)-1 {
 		p.cursor++
@@ -219,7 +206,6 @@ func (p *Panel) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the bookmark at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -239,7 +225,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := actions.ItemBookmark
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pendingOp = opFirstUseConfirm
@@ -258,9 +243,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	label := p.items[p.cursor].Path
-
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemBookmark, label)
 	if cmd != nil {
 		p.pendingOp = opRightClickPick
@@ -354,12 +337,10 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
 func (p *Panel) selectBookmark() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.items) {
 		return p, nil
 	}
-
 	path := p.items[p.cursor].Path
 	return p, func() tea.Msg { return panels.NavigateToPathMsg{Path: path} }
 }
@@ -368,7 +349,6 @@ func (p *Panel) deleteBookmark() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.items) {
 		return p, nil
 	}
-
 	bk := p.items[p.cursor]
 	if err := p.manager.Remove(bk.Path); err != nil {
 		errMsg := err.Error()
@@ -376,7 +356,6 @@ func (p *Panel) deleteBookmark() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-
 	// Persist and refresh.
 	if err := p.manager.Save(); err != nil {
 		errMsg := err.Error()
@@ -385,7 +364,6 @@ func (p *Panel) deleteBookmark() (panels.Panel, tea.Cmd) {
 		}
 	}
 	p.refresh()
-
 	name := bk.Name
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{
@@ -398,7 +376,6 @@ func (p *Panel) deleteBookmark() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
-
 func (p *Panel) refresh() {
 	p.items = p.manager.List()
 	if p.cursor >= len(p.items) {
@@ -411,34 +388,25 @@ func (p *Panel) refresh() {
 
 func (p *Panel) renderLine(bk bm.Bookmark, width int, isCursor bool) string {
 	var b strings.Builder
-
 	// "  name  path" format.
 	b.WriteString("  ")
-
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Name)).Bold(true)
 	b.WriteString(nameStyle.Render(bk.Name))
-
 	b.WriteString("  ")
-
 	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Path))
 	b.WriteString(pathStyle.Render(bk.Path))
-
 	content := b.String()
-
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width)
-
 	if isCursor && p.Focused {
 		style = style.Background(lipgloss.Color(colors.CursorBg))
 	}
-
 	return style.Render(content)
 }
 
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)
 // ---------------------------------------------------------------------------
-
 func (p *Panel) cursorIndex() int { return p.cursor }
 func (p *Panel) itemCount() int   { return len(p.items) }

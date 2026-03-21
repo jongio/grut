@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -21,7 +22,6 @@ import (
 )
 
 // Messages emitted by the filetree panel.
-
 // DirChangedMsg is sent when a directory is expanded.
 type DirChangedMsg struct{ Path string }
 
@@ -47,80 +47,69 @@ var defaultColors = struct {
 
 // node represents a single entry (file or directory) in the file tree.
 type node struct {
+	loadErr       error // non-nil if directory loading failed (F06)
 	name          string
 	path          string
+	symlinkTarget string // raw readlink value for display
+	children      []*node
+	depth         int
 	isDir         bool
 	isSymlink     bool
 	isExecutable  bool
-	symlinkTarget string // raw readlink value for display
-	children      []*node
 	loaded        bool // true after first loadChildren call
 	expanded      bool
-	depth         int
-	loadErr       error // non-nil if directory loading failed (F06)
 }
 
 // FileTree is the file explorer panel. It implements [panels.Panel].
 type FileTree struct {
-	cfg      config.FileTreeConfig
-	rootPath string
-
-	root    *node   // root directory node (not rendered; depth = -1)
-	visible []*node // flattened list of currently visible nodes
-	cursor  int     // index into visible
-	offset  int     // viewport scroll offset
-
-	selected   map[string]bool // multi-select state keyed by path
-	focused    bool
-	width      int
-	height     int
-	showHidden bool
-	listMode   bool // true = flat list with relative paths, false = tree view
-
-	// Git-aware filtering state.
-	gitFilter       bool             // when true, only show git-changed files
-	gitChangedPaths map[string]bool  // absolute paths of changed files
-	gitChangedDirs  map[string]bool  // directories containing changed files
-	gitClient       git.StatusReader // git client for fetching status (nil = no git)
-
-	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
-	gitFileStatus map[string]string
-
-	// Git-ignored paths (from .gitignore) keyed by absolute path.
-	ignoreChecker   git.IgnoreChecker
-	gitIgnoredPaths map[string]bool
-
-	// Per-mode expand/collapse state preservation (Change 3).
-	explorerExpanded map[string]bool // saved expand state for explorer mode
-	gitModeExpanded  map[string]bool // saved expand state for git mode
-
-	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
-	savedCursorPath string
-
-	// File operation state.
-	clip    clipboard         // cut/copy clipboard
-	pending *pendingOperation // operation awaiting modal confirmation
-	watcher *watcher          // filesystem watcher
-	ctx     context.Context   // stored from Init for watcher lifecycle
-
-	// Commit-files mode: shows files changed by a specific commit.
-	commitFilesMode    bool            // when true, view shows commit-changed files
-	commitFiles        []string        // relative paths from diff-tree
-	commitHash         string          // short hash for display
-	commitLabel        string          // e.g. "abc1234 Fix auth bug"
-	commitChangedPaths map[string]bool // absolute paths of commit-changed files
-	commitChangedDirs  map[string]bool // directories containing commit-changed files
-
-	// PR-files mode: shows files changed in a pull request.
-	prFilesMode    bool
-	prFiles        []panels.PRFile
-	prNumber       int
-	prLabel        string
-	prChangedPaths map[string]bool // absolute paths of PR-changed files
-	prChangedDirs  map[string]bool // directories containing PR-changed files
-
 	// Right-click action configuration.
 	actionsCfg config.ActionsConfig
+	gitClient  git.StatusReader // git client for fetching status (nil = no git)
+	// Git-ignored paths (from .gitignore) keyed by absolute path.
+	ignoreChecker   git.IgnoreChecker
+	ctx             context.Context // stored from Init for watcher lifecycle
+	root            *node           // root directory node (not rendered; depth = -1)
+	selected        map[string]bool // multi-select state keyed by path
+	gitChangedPaths map[string]bool // absolute paths of changed files
+	gitChangedDirs  map[string]bool // directories containing changed files
+	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
+	gitFileStatus   map[string]string
+	gitIgnoredPaths map[string]bool
+	// Per-mode expand/collapse state preservation (Change 3).
+	explorerExpanded   map[string]bool   // saved expand state for explorer mode
+	gitModeExpanded    map[string]bool   // saved expand state for git mode
+	pending            *pendingOperation // operation awaiting modal confirmation
+	watcher            *watcher          // filesystem watcher
+	commitChangedPaths map[string]bool   // absolute paths of commit-changed files
+	commitChangedDirs  map[string]bool   // directories containing commit-changed files
+	prChangedPaths     map[string]bool   // absolute paths of PR-changed files
+	prChangedDirs      map[string]bool   // directories containing PR-changed files
+	rootPath           string
+	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
+	savedCursorPath string
+	commitHash      string // short hash for display
+	commitLabel     string // e.g. "abc1234 Fix auth bug"
+	prLabel         string
+	visible         []*node  // flattened list of currently visible nodes
+	commitFiles     []string // relative paths from diff-tree
+	prFiles         []panels.PRFile
+	cfg             config.FileTreeConfig
+	// File operation state.
+	clip       clipboard // cut/copy clipboard
+	cursor     int       // index into visible
+	offset     int       // viewport scroll offset
+	width      int
+	height     int
+	prNumber   int
+	focused    bool
+	showHidden bool
+	listMode   bool // true = flat list with relative paths, false = tree view
+	// Git-aware filtering state.
+	gitFilter bool // when true, only show git-changed files
+	// Commit-files mode: shows files changed by a specific commit.
+	commitFilesMode bool // when true, view shows commit-changed files
+	// PR-files mode: shows files changed in a pull request.
+	prFilesMode bool
 }
 
 // Compile-time interface check.
@@ -135,7 +124,6 @@ func New(cfg config.FileTreeConfig, rootPath string) *FileTree {
 	if err != nil {
 		absRoot = rootPath
 	}
-
 	ft := &FileTree{
 		cfg:      cfg,
 		rootPath: filepath.Clean(absRoot),
@@ -148,7 +136,6 @@ func New(cfg config.FileTreeConfig, rootPath string) *FileTree {
 		selected:   make(map[string]bool),
 		showHidden: cfg.ShowHidden,
 	}
-
 	// No directory I/O here — deferred to Init() (F05).
 	return ft
 }
@@ -193,22 +180,20 @@ type rootLoadedMsg struct {
 
 // commitFilesLoadedMsg carries the result of an async DiffTreeFiles call.
 type commitFilesLoadedMsg struct {
-	files []string
+	err   error
 	hash  string
 	label string
-	err   error
+	files []string
 }
 
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (ft *FileTree) Init(ctx context.Context) tea.Cmd {
 	ft.ctx = ctx
 	ft.watcher = newWatcher(defaultDebounce, defaultPollInterval)
 	ft.watcher.addDir(ft.rootPath)
-
 	// Load root children asynchronously (F05).
 	rootPath := ft.rootPath
 	cfg := ft.cfg
@@ -358,7 +343,6 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.PRDeselectedMsg:
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
-
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !ft.focused {
@@ -394,7 +378,6 @@ func (ft *FileTree) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if len(ft.visible) == 0 {
 		label := "Empty"
 		if !ft.root.loaded {
@@ -408,23 +391,19 @@ func (ft *FileTree) View(width, height int) string {
 			Foreground(lipgloss.Color(defaultColors.Dim)).
 			Render(label)
 	}
-
 	lines := make([]string, 0, height)
 	end := ft.offset + height
 	if end > len(ft.visible) {
 		end = len(ft.visible)
 	}
-
 	for i := ft.offset; i < end; i++ {
 		lines = append(lines, ft.renderLine(ft.visible[i], width, i == ft.cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := strings.Repeat(" ", width)
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -496,18 +475,15 @@ func (ft *FileTree) Close() {
 // ---------------------------------------------------------------------------
 // Commit-files mode
 // ---------------------------------------------------------------------------
-
 // handleCommitSelected starts loading files changed by the selected commit.
 func (ft *FileTree) handleCommitSelected(msg panels.CommitSelectedMsg) (panels.Panel, tea.Cmd) {
 	if ft.gitClient == nil {
 		return ft, nil
 	}
-
 	gc := ft.gitClient
 	ctx := ft.ctx
 	hash := msg.Hash
 	subject := msg.Subject
-
 	// Build a short label: "abc1234 Fix auth bug"
 	shortHash := hash
 	if len(shortHash) > git.ShortHashLen {
@@ -517,7 +493,6 @@ func (ft *FileTree) handleCommitSelected(msg panels.CommitSelectedMsg) (panels.P
 	if subject != "" {
 		label += " " + subject
 	}
-
 	return ft, func() tea.Msg {
 		files, err := gc.DiffTreeFiles(ctx, hash)
 		return commitFilesLoadedMsg{files: files, hash: shortHash, label: label, err: err}
@@ -532,17 +507,14 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 			return notify.ShowToastMsg{Message: "diff-tree: " + errMsg, Level: notify.Error}
 		}
 	}
-
 	ft.commitFilesMode = true
 	ft.commitFiles = msg.files
 	ft.commitHash = msg.hash
 	ft.commitLabel = msg.label
-
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
 	}
-
 	// Build filter sets from commit file paths (analogous to gitFilter approach).
 	ft.commitChangedPaths = make(map[string]bool, len(msg.files))
 	for _, f := range msg.files {
@@ -550,15 +522,12 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 		ft.commitChangedPaths[abs] = true
 	}
 	ft.commitChangedDirs = buildChangedDirSet(ft.commitChangedPaths, ft.rootPath)
-
 	// Expand directories containing commit-changed files so the tree
 	// shows the full hierarchy immediately.
 	ft.expandDirsInSet(ft.root, ft.commitChangedDirs)
-
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
-
 	return ft, ft.emitCursorFileSelected()
 }
 
@@ -578,14 +547,12 @@ func (ft *FileTree) exitCommitFilesMode() {
 // ---------------------------------------------------------------------------
 // PR-files mode
 // ---------------------------------------------------------------------------
-
 // handlePRFilesLoaded enters PR-files mode with the loaded file list.
 func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Panel, tea.Cmd) {
 	ft.prFilesMode = true
 	ft.prFiles = msg.Files
 	ft.prNumber = msg.Number
 	ft.prLabel = fmt.Sprintf("PR #%d", msg.Number)
-
 	// Exit commit-files mode if active.
 	if ft.commitFilesMode {
 		ft.commitFilesMode = false
@@ -593,12 +560,10 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		ft.commitChangedPaths = nil
 		ft.commitChangedDirs = nil
 	}
-
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
 	}
-
 	// Build filter sets from PR file paths (analogous to gitFilter approach).
 	ft.prChangedPaths = make(map[string]bool, len(msg.Files))
 	for _, f := range msg.Files {
@@ -606,15 +571,12 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		ft.prChangedPaths[abs] = true
 	}
 	ft.prChangedDirs = buildChangedDirSet(ft.prChangedPaths, ft.rootPath)
-
 	// Expand directories containing PR-changed files so the tree
 	// shows the full hierarchy immediately.
 	ft.expandDirsInSet(ft.root, ft.prChangedDirs)
-
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
-
 	return ft, ft.emitCursorFileSelected()
 }
 
@@ -634,24 +596,20 @@ func (ft *FileTree) exitPRFilesMode() {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !ft.focused {
 		return ft, nil
 	}
-
 	// In commit-files mode, Escape returns to normal tree view.
 	if ft.commitFilesMode && msg.String() == "esc" {
 		ft.exitCommitFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
-
 	// In PR-files mode, Escape returns to normal tree view.
 	if ft.prFilesMode && msg.String() == "esc" {
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		ft.moveCursorDown()
@@ -701,7 +659,6 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "K":
 		return ft, func() tea.Msg { return panels.PreviewScrollMsg{Delta: -1} }
 	}
-
 	return ft, nil
 }
 
@@ -732,7 +689,6 @@ func (ft *FileTree) handleMouseDoubleClick(_ panels.PanelMouseDoubleClickMsg) (p
 	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-
 	n := ft.visible[ft.cursor]
 	if !n.isDir {
 		itemType := actions.ItemFile
@@ -743,7 +699,6 @@ func (ft *FileTree) handleMouseDoubleClick(_ panels.PanelMouseDoubleClickMsg) (p
 		action := actions.ActionID(ft.actionsCfg.GetDoubleClickAction(string(itemType)))
 		return ft.executeRightClickAction(action)
 	}
-
 	itemType := actions.ItemDirectory
 	if !ft.actionsCfg.IsConfirmed(string(itemType)) {
 		ft.pending = &pendingOperation{kind: opFirstUseConfirm, name: string(itemType)}
@@ -764,13 +719,11 @@ func (ft *FileTree) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (p
 	}
 	ft.cursor = idx
 	ft.ensureCursorVisible()
-
 	n := ft.visible[idx]
 	itemType := actions.ItemFile
 	if n.isDir {
 		itemType = actions.ItemDirectory
 	}
-
 	cmd, directAction := rightclick.Cmd(ft.actionsCfg, itemType, n.name)
 	if cmd != nil {
 		ft.pending = &pendingOperation{kind: opRightClickPick}
@@ -801,7 +754,6 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 			ft.offset = maxOffset
 		}
 	}
-
 	// Keep cursor within the visible viewport so that background events
 	// (filesystem watcher refresh, git status updates) calling
 	// ensureCursorVisible() don't snap the viewport back to the old
@@ -815,7 +767,6 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 		ft.cursor = ft.offset + ft.height - 1
 		cursorMoved = true
 	}
-
 	if cursorMoved {
 		return ft, ft.emitCursorFileSelected()
 	}
@@ -825,7 +776,6 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (ft *FileTree) moveCursorDown() {
 	if ft.cursor < len(ft.visible)-1 {
 		ft.cursor++
@@ -910,14 +860,11 @@ func (ft *FileTree) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Selection & expand/collapse
 // ---------------------------------------------------------------------------
-
 func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
 	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-
 	n := ft.visible[ft.cursor]
-
 	if n.isDir {
 		// Guard symlink expansion.
 		if n.isSymlink {
@@ -928,20 +875,17 @@ func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
 				return ft, nil
 			}
 		}
-
 		// Toggle expand/collapse.
 		n.expanded = !n.expanded
 		if n.expanded {
 			ft.loadChildren(n)
 		}
 		ft.rebuildVisible()
-
 		if n.expanded {
 			return ft, func() tea.Msg { return DirChangedMsg{Path: n.path} }
 		}
 		return ft, nil
 	}
-
 	// File: emit selection message.
 	path := n.path
 	return ft, func() tea.Msg { return panels.FileSelectedMsg{Path: path} }
@@ -951,16 +895,13 @@ func (ft *FileTree) collapseOrParent() (panels.Panel, tea.Cmd) {
 	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-
 	n := ft.visible[ft.cursor]
-
 	// Collapse if the node is an expanded directory.
 	if n.isDir && n.expanded {
 		n.expanded = false
 		ft.rebuildVisible()
 		return ft, nil
 	}
-
 	// Otherwise navigate to the parent directory.
 	targetDepth := n.depth - 1
 	for i := ft.cursor - 1; i >= 0; i-- {
@@ -970,7 +911,6 @@ func (ft *FileTree) collapseOrParent() (panels.Panel, tea.Cmd) {
 			break
 		}
 	}
-
 	return ft, nil
 }
 
@@ -998,7 +938,6 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 	}
 	// Save cursor path before switching modes.
 	cursorPath := ft.cursorPath()
-
 	ft.gitFilter = !ft.gitFilter
 	if ft.gitFilter {
 		// Save cursor path across the async boundary so
@@ -1093,7 +1032,6 @@ func (ft *FileTree) buildGitChangedDirs() {
 func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel, tea.Cmd) {
 	// Save cursor path before any mode switch so it can be restored.
 	cursorPath := ft.cursorPath()
-
 	if msg.PresetName == "git" {
 		if !ft.gitFilter {
 			// Save explorer expand state.
@@ -1101,7 +1039,6 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 			ft.gitFilter = true
 			// Save cursor across the async boundary.
 			ft.savedCursorPath = cursorPath
-
 			// If we have a saved git-mode state, restore it.
 			if ft.gitModeExpanded != nil {
 				ft.collapseAll(ft.root)
@@ -1120,7 +1057,6 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 		}
 		return ft, nil
 	}
-
 	// Switching away from git mode.
 	if ft.gitFilter {
 		// Save git-mode expand state.
@@ -1128,7 +1064,6 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 		ft.gitFilter = false
 		ft.gitChangedPaths = nil
 		ft.gitChangedDirs = nil
-
 		// Restore explorer expand state.
 		ft.collapseAll(ft.root)
 		if ft.explorerExpanded != nil {
@@ -1205,7 +1140,6 @@ func (ft *FileTree) collapseAll(n *node) {
 // ---------------------------------------------------------------------------
 // Git file status indicators
 // ---------------------------------------------------------------------------
-
 // gitFileStatusMsg carries per-file git status indicators loaded
 // asynchronously.
 type gitFileStatusMsg struct {
@@ -1260,7 +1194,6 @@ func fileStatusIndicator(f git.FileStatus) string {
 // ---------------------------------------------------------------------------
 // Git-ignored path detection
 // ---------------------------------------------------------------------------
-
 // gitIgnoredMsg carries paths ignored by .gitignore loaded asynchronously.
 type gitIgnoredMsg struct {
 	paths map[string]bool

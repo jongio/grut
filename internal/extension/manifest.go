@@ -19,8 +19,8 @@ type Manifest struct {
 	License     string   `toml:"license"`
 	Runtime     string   `toml:"runtime"`
 	EntryPoint  string   `toml:"entry_point"`
-	Permissions []string `toml:"permissions"`
 	MinGrut     string   `toml:"min_grut"`
+	Permissions []string `toml:"permissions"`
 }
 
 // manifestFileName is the expected manifest file inside an extension directory.

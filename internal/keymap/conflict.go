@@ -9,9 +9,9 @@ import (
 // multiple actions are bound to the same key.
 type Conflict struct {
 	Key     string
-	Mode    KeyMode
 	Context string
 	Actions []string
+	Mode    KeyMode
 }
 
 // String returns a human-readable description of the conflict.
@@ -29,14 +29,12 @@ func (c Conflict) String() string {
 // context but map to different actions.
 func DetectConflicts(bindings []Binding) []Conflict {
 	type entry struct {
-		mode    KeyMode
 		context string
 		key     string
+		mode    KeyMode
 	}
-
 	seen := make(map[string][]string) // indexKey → actions
 	order := make([]entry, 0)         // preserve discovery order
-
 	for _, b := range bindings {
 		ik := indexKey(b.Mode, b.Context, b.Key)
 		if _, exists := seen[ik]; !exists {
@@ -44,7 +42,6 @@ func DetectConflicts(bindings []Binding) []Conflict {
 		}
 		seen[ik] = append(seen[ik], b.Action)
 	}
-
 	var conflicts []Conflict
 	for _, e := range order {
 		ik := indexKey(e.mode, e.context, e.key)
@@ -58,7 +55,6 @@ func DetectConflicts(bindings []Binding) []Conflict {
 			})
 		}
 	}
-
 	return conflicts
 }
 

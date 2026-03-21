@@ -252,7 +252,7 @@ func TestFetchAction(t *testing.T) {
 	updated, cmd := m.handleAction("fetch", tea.KeyPressMsg{})
 	m = updated.(Model)
 
-	assert.Equal(t, "fetching...", m.asyncOp)
+	assert.Equal(t, asyncOpFetching, m.asyncOp)
 	assert.NotNil(t, m.asyncCancel)
 	assert.NotNil(t, cmd)
 }
@@ -266,7 +266,7 @@ func TestFetchRequestMsg(t *testing.T) {
 	updated, cmd := m.Update(panels.FetchRequestMsg{})
 	m = updated.(Model)
 
-	assert.Equal(t, "fetching...", m.asyncOp)
+	assert.Equal(t, asyncOpFetching, m.asyncOp)
 	assert.NotNil(t, cmd)
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -27,7 +28,6 @@ func (ft *FileTree) safeCtx() context.Context {
 // ---------------------------------------------------------------------------
 // Cursor & selection helpers
 // ---------------------------------------------------------------------------
-
 // selectedPaths returns paths of all selected items, or the cursor item if
 // nothing is explicitly selected.
 func (ft *FileTree) selectedPaths() []string {
@@ -69,26 +69,22 @@ func (ft *FileTree) cursorDir() string {
 // ---------------------------------------------------------------------------
 // Request operations (show modals)
 // ---------------------------------------------------------------------------
-
 // requestDelete initiates a delete operation with confirmation modal.
 func (ft *FileTree) requestDelete() (panels.Panel, tea.Cmd) {
 	paths := ft.selectedPaths()
 	if len(paths) == 0 {
 		return ft, nil
 	}
-
 	ft.pending = &pendingOperation{
 		kind:  opDelete,
 		paths: paths,
 	}
-
 	var msg string
 	if len(paths) == 1 {
 		msg = fmt.Sprintf("Delete %s?", filepath.Base(paths[0]))
 	} else {
 		msg = fmt.Sprintf("Delete %d items?", len(paths))
 	}
-
 	return ft, func() tea.Msg {
 		return notify.ShowModalMsg{
 			Kind:    notify.ModalConfirm,
@@ -104,12 +100,10 @@ func (ft *FileTree) requestRename() (panels.Panel, tea.Cmd) {
 	if n == nil {
 		return ft, nil
 	}
-
 	ft.pending = &pendingOperation{
 		kind:  opRename,
 		paths: []string{n.path},
 	}
-
 	return ft, func() tea.Msg {
 		return notify.ShowModalMsg{
 			Kind:        notify.ModalInput,
@@ -126,7 +120,6 @@ func (ft *FileTree) requestNewFile() (panels.Panel, tea.Cmd) {
 		kind:    opNewFile,
 		destDir: ft.cursorDir(),
 	}
-
 	return ft, func() tea.Msg {
 		return notify.ShowModalMsg{
 			Kind:        notify.ModalInput,
@@ -143,7 +136,6 @@ func (ft *FileTree) requestNewDir() (panels.Panel, tea.Cmd) {
 		kind:    opNewDir,
 		destDir: ft.cursorDir(),
 	}
-
 	return ft, func() tea.Msg {
 		return notify.ShowModalMsg{
 			Kind:        notify.ModalInput,
@@ -157,16 +149,13 @@ func (ft *FileTree) requestNewDir() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Clipboard operations
 // ---------------------------------------------------------------------------
-
 // copyToClipboard copies selected paths to the internal clipboard.
 func (ft *FileTree) copyToClipboard() (panels.Panel, tea.Cmd) {
 	paths := ft.selectedPaths()
 	if len(paths) == 0 {
 		return ft, nil
 	}
-
 	ft.clip = clipboard{paths: paths, cut: false}
-
 	return ft, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: fmt.Sprintf("Copied %d item(s)", len(paths)),
@@ -178,8 +167,8 @@ func (ft *FileTree) copyToClipboard() (panels.Panel, tea.Cmd) {
 // pasteResultMsg is sent when an async paste operation completes (F13).
 type pasteResultMsg struct {
 	action string // "Copied" or "Moved"
-	count  int
 	errs   []string
+	count  int
 	wasCut bool
 }
 
@@ -189,7 +178,6 @@ func (ft *FileTree) pasteFromClipboard() (panels.Panel, tea.Cmd) {
 	if len(ft.clip.paths) == 0 {
 		return ft, nil
 	}
-
 	// Capture operation details for the async goroutine (F13).
 	isCut := ft.clip.cut
 	paths := make([]string, len(ft.clip.paths))
@@ -197,7 +185,6 @@ func (ft *FileTree) pasteFromClipboard() (panels.Panel, tea.Cmd) {
 	destDir := ft.cursorDir()
 	rootPath := ft.rootPath
 	ctx := ft.safeCtx()
-
 	return ft, func() tea.Msg {
 		var errs []string
 		for _, src := range paths {
@@ -223,7 +210,6 @@ func (ft *FileTree) pasteFromClipboard() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Bookmark operations
 // ---------------------------------------------------------------------------
-
 // bookmarkCurrent emits a BookmarkAddMsg for the current cursor directory.
 func (ft *FileTree) bookmarkCurrent() (panels.Panel, tea.Cmd) {
 	path := ft.cursorDir()
@@ -259,7 +245,6 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 		absPath = path
 	}
 	absPath = filepath.Clean(absPath)
-
 	info, statErr := os.Stat(absPath)
 	if statErr != nil || !info.IsDir() {
 		errMsg := fmt.Sprintf("Cannot navigate to %s", filepath.Base(absPath))
@@ -267,7 +252,6 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-
 	ft.rootPath = absPath
 	ft.root = &node{
 		name:  filepath.Base(absPath),
@@ -277,12 +261,10 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 	}
 	ft.loadChildren(ft.root)
 	ft.rebuildVisible()
-
 	// Update watcher to watch new root.
 	if ft.watcher != nil {
 		ft.watcher.addDir(absPath)
 	}
-
 	return ft, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Navigated to " + filepath.Base(absPath),
@@ -294,16 +276,13 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handler
 // ---------------------------------------------------------------------------
-
 // handleModalResult processes the result from a confirmation or input modal.
 func (ft *FileTree) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := ft.pending
 	ft.pending = nil
-
 	if op == nil || !msg.Accept {
 		return ft, nil
 	}
-
 	switch op.kind { //nolint:exhaustive // only relevant cases handled
 	case opDelete:
 		return ft.executeDelete(op.paths)
@@ -321,19 +300,17 @@ func (ft *FileTree) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, 
 		}
 		return ft.executeRightClickAction(actions.ActionID(msg.Value))
 	}
-
 	return ft, nil
 }
 
 // ---------------------------------------------------------------------------
 // Execute operations (async I/O in tea.Cmd — F13)
 // ---------------------------------------------------------------------------
-
 // deleteResultMsg is sent when an async delete operation completes (F13).
 type deleteResultMsg struct {
-	count int
 	errs  []string
 	paths []string // deleted paths, for selection cleanup
+	count int
 }
 
 // renameResultMsg is sent when an async rename operation completes (F13).
@@ -349,7 +326,6 @@ func (ft *FileTree) executeDelete(paths []string) (panels.Panel, tea.Cmd) {
 	pathsCopy := make([]string, len(paths))
 	copy(pathsCopy, paths)
 	ctx := ft.safeCtx()
-
 	return ft, func() tea.Msg {
 		var errs []string
 		for _, p := range pathsCopy {
@@ -366,7 +342,6 @@ func (ft *FileTree) executeRename(oldPath, newName string) (panels.Panel, tea.Cm
 	if newName == "" {
 		return ft, nil
 	}
-
 	rootPath := ft.rootPath
 	ctx := ft.safeCtx()
 	return ft, func() tea.Msg {
@@ -382,7 +357,6 @@ func (ft *FileTree) executeNewFile(dir, name string) (panels.Panel, tea.Cmd) {
 	if name == "" {
 		return ft, nil
 	}
-
 	path := filepath.Join(dir, name)
 	ctx := ft.safeCtx()
 	if err := createFile(ctx, ft.rootPath, path); err != nil {
@@ -391,9 +365,7 @@ func (ft *FileTree) executeNewFile(dir, name string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-
 	ft.reloadTree()
-
 	return ft, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Created " + name,
@@ -407,7 +379,6 @@ func (ft *FileTree) executeNewDir(dir, name string) (panels.Panel, tea.Cmd) {
 	if name == "" {
 		return ft, nil
 	}
-
 	path := filepath.Join(dir, name)
 	ctx := ft.safeCtx()
 	if err := createDir(ctx, ft.rootPath, path); err != nil {
@@ -416,9 +387,7 @@ func (ft *FileTree) executeNewDir(dir, name string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-
 	ft.reloadTree()
-
 	return ft, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Created " + name + "/",
@@ -430,7 +399,6 @@ func (ft *FileTree) executeNewDir(dir, name string) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Right-click action execution
 // ---------------------------------------------------------------------------
-
 // executeRightClickAction dispatches a right-click action to the appropriate method.
 func (ft *FileTree) executeRightClickAction(action actions.ActionID) (panels.Panel, tea.Cmd) {
 	switch action { //nolint:exhaustive // only relevant cases handled

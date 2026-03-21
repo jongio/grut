@@ -4,9 +4,9 @@ import "strings"
 
 // InputHistory provides terminal-style input history with Up/Down navigation.
 type InputHistory struct {
+	draft   string   // in-progress text saved when user starts browsing
 	entries []string // past inputs, oldest first
 	index   int      // current position (-1 = not browsing)
-	draft   string   // in-progress text saved when user starts browsing
 }
 
 // Push adds a sent message to history. It trims whitespace, skips empty

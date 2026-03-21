@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -29,60 +30,53 @@ import (
 // Preview is the file preview panel. It displays syntax-highlighted source
 // code, rendered markdown, or file metadata for binary/oversized files.
 type Preview struct {
-	cfg config.PreviewConfig
-
+	err error
+	// Git integration
+	gitClient git.StatusReader
 	// File state
-	filePath string
-	lines    []string // rendered lines (with ANSI for syntax highlighting)
-	scrollY  int
-	err      error
-	loading  bool // true while async file load is in progress
-
-	// Display flags
-	isBinary bool
-	isLarge  bool
-
+	filePath   string
+	ghTitle    string   // title for GitHub content (e.g., "#42 Fix auth")
+	ghContent  string   // raw markdown body
+	lines      []string // rendered lines (with ANSI for syntax highlighting)
+	blameLines []git.BlameLine
+	diffLines  []string // pre-rendered diff lines for current file
+	cfg        config.PreviewConfig
+	scrollY    int
 	// Panel state
 	width   int
 	height  int
-	focused bool
-
+	loading bool // true while async file load is in progress
+	// Display flags
+	isBinary bool
+	isLarge  bool
+	focused  bool
 	// Toggleable settings (initialized from config, toggled at runtime)
 	lineNumbers    bool
 	wordWrap       bool
 	renderMarkdown bool
-
 	// Blame mode
-	blameMode  bool
-	blameLines []git.BlameLine
-
+	blameMode bool
 	// GitHub content mode – when a GitHub item (issue/PR/action run) is
 	// selected, the preview shows the item detail instead of a file.
-	ghMode      bool   // true when showing GitHub content instead of file
-	ghTitle     string // title for GitHub content (e.g., "#42 Fix auth")
-	ghContent   string // raw markdown body
-	ghPlainText bool   // true when ghContent is pre-formatted (not markdown)
-
-	// Git integration
-	gitClient   git.StatusReader
-	diffLines   []string // pre-rendered diff lines for current file
-	gitDiffOnly bool     // when true, show only diff (not file content)
+	ghMode      bool // true when showing GitHub content instead of file
+	ghPlainText bool // true when ghContent is pre-formatted (not markdown)
+	gitDiffOnly bool // when true, show only diff (not file content)
 }
 
 // fileLoadedMsg is the result of an async file load operation (F01).
 type fileLoadedMsg struct {
+	err      error
 	path     string
 	lines    []string
-	err      error
 	isBinary bool
 	isLarge  bool
 }
 
 // diffLoadedMsg is the result of an async diff load for the current file.
 type diffLoadedMsg struct {
+	err   error
 	path  string
 	lines []string
-	err   error
 }
 
 // Compile-time check that *Preview implements panels.Panel.
@@ -161,7 +155,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			cmds = append(cmds, p.loadDiffCmd(msg.Path))
 		}
 		return p, tea.Batch(cmds...)
-
 	case fileLoadedMsg:
 		// Only apply if the loaded file matches current request.
 		if msg.path == p.filePath {
@@ -172,14 +165,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.isLarge = msg.isLarge
 		}
 		return p, nil
-
 	case diffLoadedMsg:
 		// Only apply if the loaded diff matches current request.
 		if msg.path == p.filePath && msg.err == nil {
 			p.diffLines = msg.lines
 		}
 		return p, nil
-
 	case panels.IssueSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
@@ -191,7 +182,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(p.ghContent, p.width)
 		return p, nil
-
 	case panels.IssueDeselectedMsg:
 		p.ghMode = false
 		p.ghTitle = ""
@@ -201,7 +191,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, p.loadFileCmd(p.filePath)
 		}
 		return p, nil
-
 	case panels.PRSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
@@ -211,7 +200,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
-
 	case panels.PRDeselectedMsg:
 		p.ghMode = false
 		p.ghTitle = ""
@@ -221,7 +209,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, p.loadFileCmd(p.filePath)
 		}
 		return p, nil
-
 	case panels.ActionRunSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
@@ -231,7 +218,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
-
 	case panels.ActionRunDeselectedMsg:
 		p.ghMode = false
 		p.ghTitle = ""
@@ -241,7 +227,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, p.loadFileCmd(p.filePath)
 		}
 		return p, nil
-
 	case panels.WorkflowSelectedMsg:
 		// Show the workflow definition file in the preview pane.
 		p.ghMode = false
@@ -259,7 +244,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.blameLines = nil
 		p.diffLines = nil
 		return p, p.loadFileCmd(msg.Path)
-
 	case panels.ActionJobsLoadedMsg:
 		p.ghMode = true
 		p.ghPlainText = true
@@ -267,7 +251,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghContent = renderActionJobs(msg.Jobs)
 		p.lines = strings.Split(p.ghContent, "\n")
 		return p, nil
-
 	case panels.ActionLogMsg:
 		if p.ghMode && msg.Log != "" {
 			p.ghPlainText = true
@@ -276,11 +259,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.lines = strings.Split(p.ghContent, "\n")
 		}
 		return p, nil
-
 	case panels.GitFilterActiveMsg:
 		p.gitDiffOnly = msg.Active
 		return p, nil
-
 	case panels.RefreshPreviewMsg:
 		// Re-render whatever is currently showing without changing content type.
 		if p.ghMode {
@@ -303,10 +284,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, tea.Batch(cmds...)
 		}
 		return p, nil
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
-
 	case panels.PreviewScrollMsg:
 		if msg.Delta > 0 {
 			p.scrollDown(msg.Delta)
@@ -314,7 +293,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollUp(-msg.Delta)
 		}
 		return p, nil
-
 	case tea.MouseWheelMsg:
 		m := msg.Mouse()
 		switch m.Button {
@@ -324,7 +302,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollDown(3)
 		}
 		return p, nil
-
 	case panels.BlameLoadedMsg:
 		if msg.Err != nil {
 			p.blameMode = false
@@ -333,7 +310,6 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.blameLines = msg.Lines
 		}
 		return p, nil
-
 	case tea.KeyPressMsg:
 		if !p.focused {
 			return p, nil
@@ -381,7 +357,6 @@ func (p *Preview) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	// Loading state
 	if p.loading {
 		return lipgloss.NewStyle().
@@ -390,27 +365,22 @@ func (p *Preview) View(width, height int) string {
 			Foreground(lipgloss.Color("#888888")).
 			Render("Loading...")
 	}
-
 	// Empty state — skip when in GitHub content mode (ghMode has its own lines).
 	if p.filePath == "" && !p.ghMode {
 		return p.renderEmptyState(width, height)
 	}
-
 	// Error state
 	if p.err != nil {
 		return p.renderError(width, height)
 	}
-
 	// Binary or large file
 	if p.isBinary || p.isLarge {
 		return p.renderMetadata(width, height)
 	}
-
 	// Blame mode
 	if p.blameMode && len(p.blameLines) > 0 {
 		return p.renderBlameContent(width, height)
 	}
-
 	return p.renderContent(width, height)
 }
 
@@ -464,7 +434,6 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 }
 
 // --- File loading ---
-
 // loadFileCmd returns a tea.Cmd that loads a file asynchronously (F01).
 // The file I/O, MIME detection, and syntax highlighting all happen in the
 // background goroutine managed by Bubble Tea's command system.
@@ -474,49 +443,41 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 	renderMD := p.renderMarkdown
 	return func() tea.Msg {
 		result := fileLoadedMsg{path: path}
-
 		info, err := os.Stat(path)
 		if err != nil {
 			result.err = err
 			return result
 		}
-
 		// Reject directories
 		if info.IsDir() {
 			result.lines = []string{fmt.Sprintf("Directory: %s", path)}
 			return result
 		}
-
 		// Check max file size
 		if cfg.MaxFileSize > 0 && info.Size() > int64(cfg.MaxFileSize) {
 			result.isLarge = true
 			result.lines = buildMetadataLines(path, info)
 			return result
 		}
-
 		// Detect binary content via MIME type
 		mime, err := mimetype.DetectFile(path)
 		if err != nil {
 			result.err = err
 			return result
 		}
-
 		if !isTextMIME(mime.String()) {
 			result.isBinary = true
 			result.lines = append(buildMetadataLines(path, info), "", "Type: "+mime.String())
 			return result
 		}
-
 		// Read file content
 		data, err := os.ReadFile(path)
 		if err != nil {
 			result.err = err
 			return result
 		}
-
 		source := string(data)
 		ext := strings.ToLower(filepath.Ext(path))
-
 		// Render based on file type
 		switch ext {
 		case ".md", ".markdown", ".mdown", ".mkd":
@@ -534,7 +495,6 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 				result.lines = strings.Split(source, "\n")
 			}
 		}
-
 		return result
 	}
 }
@@ -546,7 +506,6 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 	gc := p.gitClient
 	return func() tea.Msg {
 		ctx := context.Background()
-
 		// Try unstaged diff first, then staged.
 		diffs, err := gc.Diff(ctx, git.DiffOpts{Path: path})
 		if err != nil || len(diffs) == 0 {
@@ -555,11 +514,9 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-
 		addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
 		removedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
 		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-
 		var lines []string
 		for _, d := range diffs {
 			for _, h := range d.Hunks {
@@ -588,7 +545,6 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 		lexer = lexers.Fallback
 	}
 	lexer = chroma.Coalesce(lexer)
-
 	if theme == "" {
 		theme = "dracula"
 	}
@@ -596,7 +552,6 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 	if style == nil {
 		style = styles.Fallback
 	}
-
 	// Use truecolor (24-bit) for rich, accurate colors.
 	formatter := formatters.Get("terminal16m")
 	if formatter == nil {
@@ -605,17 +560,14 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 	if formatter == nil {
 		return strings.Split(source, "\n")
 	}
-
 	iterator, err := lexer.Tokenise(nil, source)
 	if err != nil {
 		return strings.Split(source, "\n")
 	}
-
 	var buf bytes.Buffer
 	if err := formatter.Format(&buf, style, iterator); err != nil {
 		return strings.Split(source, "\n")
 	}
-
 	highlighted := buf.String()
 	// Remove trailing newline to avoid an extra empty line
 	highlighted = strings.TrimRight(highlighted, "\n")
@@ -625,7 +577,6 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 // ---------------------------------------------------------------------------
 // Action run job/step rendering
 // ---------------------------------------------------------------------------
-
 // statusIcon returns a clean Unicode icon for a job or step status/conclusion.
 func statusIcon(status, conclusion string) string {
 	switch conclusion {
@@ -688,23 +639,19 @@ func renderActionJobs(jobs []panels.ActionJob) string {
 	if len(jobs) == 0 {
 		return "  No jobs found."
 	}
-
 	var b strings.Builder
 	b.WriteString("Jobs\n")
 	b.WriteString(strings.Repeat("─", 40))
 	b.WriteString("\n")
-
 	for _, job := range jobs {
 		icon := statusIcon(job.Status, job.Conclusion)
 		dur := formatDuration(job.StartedAt, job.CompletedAt)
-
 		line := fmt.Sprintf("  %s %s", icon, job.Name)
 		if dur != "" {
 			line += "  " + dur
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
-
 		// Render steps indented under the job.
 		for _, step := range job.Steps {
 			sIcon := statusIcon(step.Status, step.Conclusion)
@@ -713,14 +660,12 @@ func renderActionJobs(jobs []panels.ActionJob) string {
 			b.WriteString("\n")
 		}
 	}
-
 	return b.String()
 }
 
 // renderActionLog formats raw job log output, truncating to the last 100 lines.
 func renderActionLog(log string) string {
 	const maxLines = 100
-
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", 40))
@@ -730,7 +675,6 @@ func renderActionLog(log string) string {
 	b.WriteString(" lines)\n")
 	b.WriteString(strings.Repeat("─", 40))
 	b.WriteString("\n")
-
 	lines := strings.Split(strings.TrimRight(log, "\n"), "\n")
 	if len(lines) > maxLines {
 		lines = lines[len(lines)-maxLines:]
@@ -741,7 +685,6 @@ func renderActionLog(log string) string {
 		b.WriteString(l)
 		b.WriteString("\n")
 	}
-
 	return b.String()
 }
 
@@ -755,7 +698,6 @@ func buildMetadataLines(path string, info os.FileInfo) []string {
 }
 
 // --- Scrolling ---
-
 func (p *Preview) scrollDown(n int) {
 	p.scrollY += n
 	p.clampScroll()
@@ -819,7 +761,6 @@ func (p *Preview) viewportHeight() int {
 }
 
 // --- Rendering ---
-
 // newDimStyle creates the dim style for line numbers and indicators.
 // Created as a local value to avoid package-level mutable state (F23).
 func newDimStyle() lipgloss.Style {
@@ -853,10 +794,8 @@ func (p *Preview) renderMetadata(width, height int) string {
 	} else {
 		header = "File too large"
 	}
-
 	metaLines := append([]string{header, ""}, p.lines...)
 	content := strings.Join(metaLines, "\n")
-
 	style := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
@@ -884,31 +823,24 @@ func (p *Preview) renderContent(width, height int) string {
 			displayLines = combined
 		}
 	}
-
 	if len(displayLines) == 0 {
 		return p.renderEmptyState(width, height)
 	}
-
 	p.clampScroll()
-
 	totalLines := len(displayLines)
-
 	// Reserve one line for scroll indicator
 	contentHeight := height - 1
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
-
 	// Calculate visible range
 	start := p.scrollY
 	end := start + contentHeight
 	if end > totalLines {
 		end = totalLines
 	}
-
 	visible := make([]string, end-start)
 	copy(visible, displayLines[start:end])
-
 	// Calculate line number width
 	numWidth := 0
 	if p.lineNumbers {
@@ -917,7 +849,6 @@ func (p *Preview) renderContent(width, height int) string {
 			numWidth = 3
 		}
 	}
-
 	// Content width for wrapping
 	contentWidth := width
 	if p.lineNumbers {
@@ -926,33 +857,26 @@ func (p *Preview) renderContent(width, height int) string {
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
-
 	// Build rendered lines
 	rendered := make([]string, 0, len(visible))
 	for i, line := range visible {
 		lineNum := start + i + 1
-
 		// Expand tabs so truncation measures display width correctly.
 		line = strings.ReplaceAll(line, "\t", "    ")
-
 		if p.wordWrap && contentWidth > 0 {
 			line = lipgloss.NewStyle().Width(contentWidth).Render(line)
 		} else {
 			line = ansi.Truncate(line, contentWidth, "")
 		}
-
 		if p.lineNumbers {
 			numStr := fmt.Sprintf("%*d │ ", numWidth, lineNum)
 			line = newDimStyle().Render(numStr) + line
 		}
-
 		// Final hard-truncate to panel width so lipgloss Width() in the
 		// outer container never wraps any line.
 		line = ansi.Truncate(line, width, "")
-
 		rendered = append(rendered, line)
 	}
-
 	// Pad with empty lines if needed
 	for len(rendered) < contentHeight {
 		if p.lineNumbers {
@@ -961,14 +885,11 @@ func (p *Preview) renderContent(width, height int) string {
 			rendered = append(rendered, "")
 		}
 	}
-
 	content := strings.Join(rendered, "\n")
-
 	// Add scroll indicator
 	scrollInfo := p.scrollIndicator(totalLines, height)
 	scrollLine := ansi.Truncate(newDimStyle().Render(scrollInfo), width, "")
 	content += "\n" + scrollLine
-
 	return content
 }
 
@@ -977,23 +898,19 @@ func (p *Preview) scrollIndicator(totalLines, viewHeight int) string {
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
-
 	if totalLines <= contentHeight {
 		return ""
 	}
-
 	maxScroll := totalLines - contentHeight
 	if maxScroll <= 0 {
 		return "100%"
 	}
-
 	if p.scrollY == 0 {
 		return "Top"
 	}
 	if p.scrollY >= maxScroll {
 		return "Bot"
 	}
-
 	pct := p.scrollY * 100 / maxScroll
 	if pct > 100 {
 		pct = 100
@@ -1002,7 +919,6 @@ func (p *Preview) scrollIndicator(totalLines, viewHeight int) string {
 }
 
 // --- Helpers ---
-
 // isMarkdownExt returns true if the file extension indicates a markdown file.
 func isMarkdownExt(ext string) bool {
 	switch strings.ToLower(ext) {

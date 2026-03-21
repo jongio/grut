@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,11 +27,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewRootCommand creates and returns the fully-configured root cobra command
-// with all subcommands and flags registered. This replaces the previous
-// init()-based registration for better testability.
-func NewRootCommand() *cobra.Command {
-	rootCmd := &cobra.Command{
+// newRootCommand creates and returns the fully-configured root cobra command
+// with all subcommands and flags registered, along with a cleanup function
+// that flushes profiling resources. Callers must defer the cleanup function
+// after invoking cmd.Execute() to guarantee CPU/memory profiles are written
+// even when RunE returns an error.
+//
+// This is intentionally unexported — external callers should use Execute().
+func newRootCommand() (*cobra.Command, func()) {
+	return buildRootCommand()
+}
+
+// buildRootCommand creates the root command and returns a cleanup function
+// that must be deferred after cmd.Execute(). This guarantees profiling
+// resources are released even when RunE returns an error (Cobra does not
+// call PersistentPostRunE on RunE failure).
+func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
+	// cpuProfileFile is scoped to this function, not package-level,
+	// eliminating shared mutable state (CR-008).
+	var cpuProfileFile *os.File
+
+	rootCmd = &cobra.Command{
 		Use:   "grut",
 		Short: "AI-native terminal file explorer, git client, and agent orchestrator",
 		Long: `grut is an AI-native terminal file explorer, git client, and agent orchestrator
@@ -230,7 +248,35 @@ Environment:
 	rootCmd.Version = config.AppVersion
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
+	// ---------------------------------------------------------------------------
+	// Performance profiling hooks (pprof)
+	// ---------------------------------------------------------------------------
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		cpuPath, _ := cmd.Flags().GetString("cpu-profile")
+		if cpuPath != "" {
+			f, err := os.Create(cpuPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not create CPU profile %q: %v\n", cpuPath, err)
+				return nil
+			}
+			if err := pprof.StartCPUProfile(f); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not start CPU profile: %v\n", err)
+				f.Close()
+				return nil
+			}
+			cpuProfileFile = f
+		}
+		return nil
+	}
+
+	// PersistentPostRunE is intentionally omitted: Cobra skips it when RunE
+	// returns an error, so profiling cleanup would be lost on failure. The
+	// returned cleanup function (deferred in Execute) handles it instead.
+
 	// Global flags available to all subcommands.
+	rootCmd.PersistentFlags().String("cpu-profile", "", "write CPU profile to `file`")
+	rootCmd.PersistentFlags().String("mem-profile", "", "write memory profile to `file`")
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
 	rootCmd.PersistentFlags().Bool("reset-welcome", false, "Reset first-run state so the welcome screen shows on next launch")
@@ -243,7 +289,36 @@ Environment:
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newReportCmd())
 
-	return rootCmd
+	// cleanup releases profiling resources. It is idempotent — safe to call
+	// multiple times (subsequent calls are no-ops).
+	var cleanupDone bool
+	cleanup = func() {
+		if cleanupDone {
+			return
+		}
+		cleanupDone = true
+
+		if cpuProfileFile != nil {
+			pprof.StopCPUProfile()
+			cpuProfileFile.Close()
+		}
+
+		memPath, _ := rootCmd.Flags().GetString("mem-profile")
+		if memPath != "" {
+			f, err := os.Create(memPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not create memory profile %q: %v\n", memPath, err)
+				return
+			}
+			defer f.Close()
+			runtime.GC()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not write memory profile: %v\n", err)
+			}
+		}
+	}
+
+	return rootCmd, cleanup
 }
 
 // restoreSessionOrDefault attempts to load a saved session for the given
@@ -319,9 +394,12 @@ func addRestoredTabs(mgr *session.Manager, engine *layout.Engine, workDir string
 }
 
 // Execute creates the root command and runs it. Returns an error on failure;
-// the caller (main) is responsible for os.Exit.
+// the caller (main) is responsible for os.Exit. Profiling cleanup is deferred
+// so it runs even when RunE returns an error.
 func Execute() error {
-	return NewRootCommand().Execute()
+	rootCmd, cleanup := buildRootCommand()
+	defer cleanup()
+	return rootCmd.Execute()
 }
 
 // showUpdateNotification prints an update notification to the given writer

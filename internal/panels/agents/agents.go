@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/mcp"
@@ -22,7 +23,6 @@ import (
 // ---------------------------------------------------------------------------
 // Internal message types (async result messages)
 // ---------------------------------------------------------------------------
-
 // agentsLoadedMsg carries the result of an async agent list refresh.
 type agentsLoadedMsg struct {
 	agents []mcp.AgentInfo
@@ -30,15 +30,15 @@ type agentsLoadedMsg struct {
 
 // agentKilledMsg carries the result of a kill operation.
 type agentKilledMsg struct {
-	pid int
 	err error
+	pid int
 }
 
 // agentOutputLoadedMsg carries captured output for an expanded agent.
 type agentOutputLoadedMsg struct {
-	pid    int
 	stdout []string
 	stderr []string
+	pid    int
 }
 
 // tickMsg drives the auto-refresh timer while the panel is focused.
@@ -49,7 +49,6 @@ type tickMsg struct {
 // ---------------------------------------------------------------------------
 // Tracker interface (for testability)
 // ---------------------------------------------------------------------------
-
 // Tracker is the subset of mcp.AgentTracker used by this panel.
 type Tracker interface {
 	List() []mcp.AgentInfo
@@ -61,32 +60,25 @@ type Tracker interface {
 // ---------------------------------------------------------------------------
 // Agents panel
 // ---------------------------------------------------------------------------
-
 const opRightClickPick = "right_click_pick"
 
 // Agents is the agent monitor panel. It implements [panels.Panel] and
 // [panels.Closer].
 type Agents struct {
-	panels.BasePanel
-
-	tracker Tracker
-	ctx     context.Context
-
-	agents []mcp.AgentInfo // latest snapshot
-	err    error           // last error
-
-	cursor   int          // index into agents list
-	offset   int          // viewport scroll offset
-	expanded map[int]bool // PIDs with output expanded
-
+	actionsCfg config.ActionsConfig
+	tracker    Tracker
+	ctx        context.Context
+	err        error        // last error
+	expanded   map[int]bool // PIDs with output expanded
 	// Cached output for expanded agents.
 	outputCache map[int]agentOutput
-
-	loading    bool // true while a refresh is in flight
-	actionsCfg config.ActionsConfig
-	pendingOp  string
+	pendingOp   string
+	agents      []mcp.AgentInfo // latest snapshot
+	panels.BasePanel
+	cursor  int  // index into agents list
+	offset  int  // viewport scroll offset
+	loading bool // true while a refresh is in flight
 }
-
 type agentOutput struct {
 	stdout []string
 	stderr []string
@@ -111,7 +103,6 @@ func New(tracker Tracker) *Agents {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Agents) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -127,7 +118,6 @@ func (p *Agents) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.agents = msg.agents
 		p.clampCursor()
 		return p, nil
-
 	case agentKilledMsg:
 		if msg.err != nil {
 			p.err = msg.err
@@ -136,32 +126,25 @@ func (p *Agents) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.err = nil
 		p.loading = true
 		return p, p.loadAgentsCmd()
-
 	case agentOutputLoadedMsg:
 		p.outputCache[msg.pid] = agentOutput{
 			stdout: msg.stdout,
 			stderr: msg.stderr,
 		}
 		return p, nil
-
 	case tickMsg:
 		if p.Focused {
 			return p, tea.Batch(p.loadAgentsCmd(), p.tickCmd())
 		}
 		return p, nil
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
 	}
@@ -178,7 +161,6 @@ func (p *Agents) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.loading && len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -186,7 +168,6 @@ func (p *Agents) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("Loading agents...")
 	}
-
 	if p.err != nil && len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -194,7 +175,6 @@ func (p *Agents) View(width, height int) string {
 			Foreground(lipgloss.Color("#FF5555")).
 			Render(fmt.Sprintf("Error: %v", p.err))
 	}
-
 	if len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -202,10 +182,8 @@ func (p *Agents) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("No agents tracked")
 	}
-
 	// Build visible rows.
 	rows := p.buildVisibleRows(width)
-
 	// Apply viewport offset.
 	end := p.offset + height
 	if end > len(rows) {
@@ -215,18 +193,15 @@ func (p *Agents) View(width, height int) string {
 	if start > len(rows) {
 		start = len(rows)
 	}
-
 	lines := make([]string, 0, height)
 	for i := start; i < end; i++ {
 		lines = append(lines, rows[i])
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -256,7 +231,6 @@ func (p *Agents) Close() {
 // ---------------------------------------------------------------------------
 // Async commands
 // ---------------------------------------------------------------------------
-
 func (p *Agents) loadAgentsCmd() tea.Cmd {
 	tracker := p.tracker
 	return func() tea.Msg {
@@ -289,12 +263,10 @@ func (p *Agents) tickCmd() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Agents) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	key := msg.String()
 	switch key {
 	case "j", "down":
@@ -310,14 +282,12 @@ func (p *Agents) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.err = nil
 		return p, p.loadAgentsCmd()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the agent at the clicked row.
 func (p *Agents) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -337,9 +307,7 @@ func (p *Agents) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (pane
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	label := fmt.Sprintf("PID:%d %s", p.agents[p.cursor].PID, p.agents[p.cursor].Command)
-
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemAgent, label)
 	if cmd != nil {
 		p.pendingOp = opRightClickPick
@@ -397,7 +365,6 @@ func (p *Agents) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd)
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Agents) moveCursorDown() {
 	if p.cursor < len(p.agents)-1 {
 		p.cursor++
@@ -436,19 +403,16 @@ func (p *Agents) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
 func (p *Agents) toggleExpand() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.agents) {
 		return p, nil
 	}
-
 	pid := p.agents[p.cursor].PID
 	if p.expanded[pid] {
 		delete(p.expanded, pid)
 		delete(p.outputCache, pid)
 		return p, nil
 	}
-
 	p.expanded[pid] = true
 	return p, p.loadOutputCmd(pid)
 }
@@ -457,26 +421,21 @@ func (p *Agents) killSelected() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.agents) {
 		return p, nil
 	}
-
 	agent := p.agents[p.cursor]
 	if agent.Status != mcp.AgentRunning {
 		return p, nil // nothing to kill
 	}
-
 	return p, p.killAgentCmd(agent.PID)
 }
 
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 func (p *Agents) buildVisibleRows(width int) []string {
 	var rows []string
-
 	for i, agent := range p.agents {
 		isCursor := i == p.cursor
 		rows = append(rows, p.renderAgentRow(agent, width, isCursor))
-
 		// If expanded, append output lines.
 		if p.expanded[agent.PID] {
 			if out, ok := p.outputCache[agent.PID]; ok {
@@ -484,7 +443,6 @@ func (p *Agents) buildVisibleRows(width int) []string {
 			}
 		}
 	}
-
 	return rows
 }
 
@@ -503,31 +461,25 @@ func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) s
 		statusIcon = "✗"
 		statusColor = "#FF5555" // red
 	}
-
 	// Duration.
 	dur := formatDuration(agent.Duration)
-
 	// Exit code (only shown for non-running).
 	exitStr := ""
 	if agent.Status != mcp.AgentRunning {
 		exitStr = fmt.Sprintf(" exit=%d", agent.ExitCode)
 	}
-
 	// Build the command string (truncate if needed).
 	cmdStr := agent.Command
 	if len(agent.Args) > 0 {
 		cmdStr += " " + strings.Join(agent.Args, " ")
 	}
-
 	// Compose the line.
 	line := fmt.Sprintf(" %s PID:%-6d %s  %s%s",
 		statusIcon, agent.PID, dur, cmdStr, exitStr)
-
 	// Truncate to width.
 	if len(line) > width && width > 3 {
 		line = line[:width-3] + "..."
 	}
-
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
@@ -536,7 +488,6 @@ func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) s
 	} else {
 		style = style.Foreground(lipgloss.Color(statusColor))
 	}
-
 	return style.Render(line)
 }
 
@@ -544,15 +495,12 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 	var rows []string
 	indent := "    "
 	maxLines := 10 // cap visible output lines per stream
-
 	outputStyle := lipgloss.NewStyle().
 		Width(width).
 		Foreground(lipgloss.Color("#6272A4")) // muted
-
 	stderrStyle := lipgloss.NewStyle().
 		Width(width).
 		Foreground(lipgloss.Color("#FF79C6")) // pink for stderr
-
 	if len(out.stdout) > 0 {
 		rows = append(rows, outputStyle.Render(indent+"── stdout ──"))
 		lines := out.stdout
@@ -569,7 +517,6 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 			rows = append(rows, outputStyle.Render(text))
 		}
 	}
-
 	if len(out.stderr) > 0 {
 		rows = append(rows, stderrStyle.Render(indent+"── stderr ──"))
 		lines := out.stderr
@@ -586,11 +533,9 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 			rows = append(rows, stderrStyle.Render(text))
 		}
 	}
-
 	if len(out.stdout) == 0 && len(out.stderr) == 0 {
 		rows = append(rows, outputStyle.Render(indent+"(no output)"))
 	}
-
 	return rows
 }
 

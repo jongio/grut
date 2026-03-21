@@ -1,0 +1,347 @@
+goos: windows
+goarch: amd64
+pkg: github.com/jongio/grut/internal/ai
+cpu: 13th Gen Intel(R) Core(TM) i9-13900K
+                                        Γöé perf\bench_before.txt Γöé        perf\bench_after_final.txt        Γöé
+                                        Γöé        sec/op         Γöé     sec/op      vs base                  Γöé
+RedactContent/small_500B-32                        154.3┬╡ ┬▒ Γê₧ ┬╣    188.1┬╡ ┬▒  51%         ~ (p=0.429 n=5+6)
+RedactContent/medium_5KB-32                        2.617m ┬▒ Γê₧ ┬╣    3.110m ┬▒   4%   +18.87% (p=0.004 n=5+6)
+RedactContent/large_50KB-32                        25.26m ┬▒ Γê₧ ┬╣    33.83m ┬▒   7%   +33.89% (p=0.004 n=5+6)
+RedactContent_NoMatch/small_500B-32                124.6┬╡ ┬▒ Γê₧ ┬╣    150.8┬╡ ┬▒   8%         ~ (p=0.126 n=5+6)
+RedactContent_NoMatch/medium_5KB-32                1.162m ┬▒ Γê₧ ┬╣    1.596m ┬▒  10%   +37.28% (p=0.004 n=5+6)
+RedactContent_NoMatch/large_50KB-32                12.53m ┬▒ Γê₧ ┬╣    16.37m ┬▒  28%   +30.66% (p=0.004 n=5+6)
+ShouldExcludeFile/match_builtin-32                 52.77n ┬▒ Γê₧ ┬╣    83.22n ┬▒  18%   +57.70% (p=0.004 n=5+6)
+ShouldExcludeFile/match_user_pattern-32            1.447┬╡ ┬▒ Γê₧ ┬╣    2.514┬╡ ┬▒  11%   +73.70% (p=0.004 n=5+6)
+ShouldExcludeFile/no_match-32                      949.1n ┬▒ Γê₧ ┬╣   1838.5n ┬▒  10%   +93.71% (p=0.004 n=5+6)
+NewRedactor-32                                     102.4┬╡ ┬▒ Γê₧ ┬╣    212.3┬╡ ┬▒ 168%  +107.21% (p=0.004 n=5+6)
+geomean                                            103.2┬╡          151.5┬╡          +46.75%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                        Γöé perf\bench_before.txt Γöé        perf\bench_after_final.txt        Γöé
+                                        Γöé         B/op          Γöé     B/op       vs base                   Γöé
+RedactContent/small_500B-32                       5.958Ki ┬▒ Γê₧ ┬╣   5.949Ki ┬▒  0%        ~ (p=0.195 n=5+6)
+RedactContent/medium_5KB-32                       124.4Ki ┬▒ Γê₧ ┬╣   123.9Ki ┬▒  1%        ~ (p=0.052 n=5+6)
+RedactContent/large_50KB-32                       1.574Mi ┬▒ Γê₧ ┬╣   1.574Mi ┬▒  0%        ~ (p=0.792 n=5+6)
+RedactContent_NoMatch/small_500B-32                 4.000 ┬▒ Γê₧ ┬╣     4.000 ┬▒   ?        ~ (p=0.697 n=5+6)
+RedactContent_NoMatch/medium_5KB-32                 80.00 ┬▒ Γê₧ ┬╣    150.50 ┬▒ 41%  +88.13% (p=0.009 n=5+6)
+RedactContent_NoMatch/large_50KB-32                 116.0 ┬▒ Γê₧ ┬╣     166.5 ┬▒ 60%  +43.53% (p=0.043 n=5+6)
+ShouldExcludeFile/match_builtin-32                  0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒  0%        ~ (p=1.000 n=5+6) ┬▓
+ShouldExcludeFile/match_user_pattern-32             0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒  0%        ~ (p=1.000 n=5+6) ┬▓
+ShouldExcludeFile/no_match-32                       0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒  0%        ~ (p=1.000 n=5+6) ┬▓
+NewRedactor-32                                    111.6Ki ┬▒ Γê₧ ┬╣   111.6Ki ┬▒  0%        ~ (p=0.255 n=5+6)
+geomean                                                       ┬│                  +10.38%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+                                        Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt      Γöé
+                                        Γöé       allocs/op       Γöé allocs/op   vs base                  Γöé
+RedactContent/small_500B-32                         25.00 ┬▒ Γê₧ ┬╣   25.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RedactContent/medium_5KB-32                         105.0 ┬▒ Γê₧ ┬╣   105.0 ┬▒ 1%       ~ (p=0.242 n=5+6)
+RedactContent/large_50KB-32                         589.0 ┬▒ Γê₧ ┬╣   591.0 ┬▒ 1%       ~ (p=0.078 n=5+6)
+RedactContent_NoMatch/small_500B-32                 0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RedactContent_NoMatch/medium_5KB-32                 0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RedactContent_NoMatch/large_50KB-32                 0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ShouldExcludeFile/match_builtin-32                  0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ShouldExcludeFile/match_user_pattern-32             0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ShouldExcludeFile/no_match-32                       0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+NewRedactor-32                                      699.0 ┬▒ Γê₧ ┬╣   699.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+geomean                                                       ┬│               +0.03%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/config
+                                    Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt       Γöé
+                                    Γöé        sec/op         Γöé    sec/op     vs base                 Γöé
+Validate/valid_defaults-32                     2.808┬╡ ┬▒ Γê₧ ┬╣   2.744┬╡ ┬▒ 76%        ~ (p=0.792 n=5+6)
+Validate/with_arrays-32                        5.896┬╡ ┬▒ Γê₧ ┬╣   9.530┬╡ ┬▒ 17%  +61.64% (p=0.004 n=5+6)
+Validate/invalid_multi_error-32                4.470┬╡ ┬▒ Γê₧ ┬╣   5.522┬╡ ┬▒ 23%        ~ (p=0.052 n=5+6)
+ParseDefaultsTOML-32                           45.05┬╡ ┬▒ Γê₧ ┬╣   47.47┬╡ ┬▒ 31%        ~ (p=0.329 n=5+6)
+RejectEmbeddedKeys/clean_config-32             1.119┬╡ ┬▒ Γê₧ ┬╣   1.279┬╡ ┬▒  8%  +14.25% (p=0.009 n=5+6)
+RejectEmbeddedKeys/with_patterns-32            6.469┬╡ ┬▒ Γê₧ ┬╣   7.938┬╡ ┬▒ 16%  +22.70% (p=0.004 n=5+6)
+AppendEnumErr/match_first-32                   55.60n ┬▒ Γê₧ ┬╣   55.58n ┬▒ 14%        ~ (p=1.000 n=5+6)
+AppendEnumErr/match_last-32                    47.36n ┬▒ Γê₧ ┬╣   53.90n ┬▒  6%        ~ (p=0.126 n=5+6)
+AppendEnumErr/no_match-32                      484.2n ┬▒ Γê₧ ┬╣   659.8n ┬▒  7%  +36.26% (p=0.004 n=5+6)
+geomean                                        1.463┬╡         1.728┬╡        +18.09%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                    Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt       Γöé
+                                    Γöé         B/op          Γöé     B/op      vs base                  Γöé
+Validate/valid_defaults-32                      777.0 ┬▒ Γê₧ ┬╣     776.0 ┬▒ 0%       ~ (p=0.281 n=5+6)
+Validate/with_arrays-32                         775.0 ┬▒ Γê₧ ┬╣     773.5 ┬▒ 0%       ~ (p=0.082 n=5+6)
+Validate/invalid_multi_error-32               1.944Ki ┬▒ Γê₧ ┬╣   1.946Ki ┬▒ 0%  +0.08% (p=0.017 n=5+6)
+ParseDefaultsTOML-32                          21.14Ki ┬▒ Γê₧ ┬╣   21.14Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RejectEmbeddedKeys/clean_config-32              0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RejectEmbeddedKeys/with_patterns-32             0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/match_first-32                    48.00 ┬▒ Γê₧ ┬╣     48.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/match_last-32                     48.00 ┬▒ Γê₧ ┬╣     48.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/no_match-32                       344.0 ┬▒ Γê₧ ┬╣     344.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+geomean                                                   ┬│                 -0.03%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+                                    Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt      Γöé
+                                    Γöé       allocs/op       Γöé allocs/op   vs base                  Γöé
+Validate/valid_defaults-32                      16.00 ┬▒ Γê₧ ┬╣   16.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+Validate/with_arrays-32                         16.00 ┬▒ Γê₧ ┬╣   16.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+Validate/invalid_multi_error-32                 55.00 ┬▒ Γê₧ ┬╣   55.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDefaultsTOML-32                            105.0 ┬▒ Γê₧ ┬╣   105.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RejectEmbeddedKeys/clean_config-32              0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RejectEmbeddedKeys/with_patterns-32             0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/match_first-32                    1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/match_last-32                     1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+AppendEnumErr/no_match-32                       12.00 ┬▒ Γê₧ ┬╣   12.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+geomean                                                   ┬│               +0.00%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/crashlog
+                                  Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt        Γöé
+                                  Γöé        sec/op         Γöé    sec/op      vs base                  Γöé
+ScrubPII/small_100B-32                       7.699┬╡ ┬▒ Γê₧ ┬╣   14.757┬╡ ┬▒ 37%   +91.67% (p=0.004 n=5+6)
+ScrubPII/medium_1KB-32                       121.8┬╡ ┬▒ Γê₧ ┬╣    300.3┬╡ ┬▒ 17%  +146.66% (p=0.004 n=5+6)
+ScrubPII/large_10KB-32                       1.818m ┬▒ Γê₧ ┬╣    5.591m ┬▒ 67%  +207.62% (p=0.004 n=5+6)
+ScrubPII_NoSecrets/100B-32                   14.06┬╡ ┬▒ Γê₧ ┬╣    31.63┬╡ ┬▒  2%  +124.93% (p=0.004 n=5+6)
+ScrubPII_NoSecrets/1KB-32                    149.5┬╡ ┬▒ Γê₧ ┬╣    287.1┬╡ ┬▒ 10%   +91.97% (p=0.004 n=5+6)
+ScrubPII_NoSecrets/10KB-32                   2.002m ┬▒ Γê₧ ┬╣    3.501m ┬▒  2%   +74.90% (p=0.004 n=5+6)
+ScrubLogTail/10_entries-32                   100.7┬╡ ┬▒ Γê₧ ┬╣    159.3┬╡ ┬▒  6%   +58.27% (p=0.004 n=5+6)
+ScrubLogTail/50_entries-32                   432.7┬╡ ┬▒ Γê₧ ┬╣    769.1┬╡ ┬▒  3%   +77.73% (p=0.004 n=5+6)
+ScrubLogTail/100_entries_mixed-32            6.637m ┬▒ Γê₧ ┬╣   11.948m ┬▒  5%   +80.03% (p=0.004 n=5+6)
+geomean                                      233.6┬╡          471.6┬╡        +101.85%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                  Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt      Γöé
+                                  Γöé         B/op          Γöé     B/op      vs base                Γöé
+ScrubPII/small_100B-32                      1.160Ki ┬▒ Γê₧ ┬╣   1.160Ki ┬▒ 0%       ~ (p=0.758 n=5+6)
+ScrubPII/medium_1KB-32                      12.19Ki ┬▒ Γê₧ ┬╣   12.19Ki ┬▒ 0%       ~ (p=0.398 n=5+6)
+ScrubPII/large_10KB-32                      230.2Ki ┬▒ Γê₧ ┬╣   230.2Ki ┬▒ 1%       ~ (p=0.792 n=5+6)
+ScrubPII_NoSecrets/100B-32                  1.442Ki ┬▒ Γê₧ ┬╣   1.437Ki ┬▒ 0%  -0.37% (p=0.017 n=5+6)
+ScrubPII_NoSecrets/1KB-32                   10.38Ki ┬▒ Γê₧ ┬╣   10.38Ki ┬▒ 0%       ~ (p=0.697 n=5+6)
+ScrubPII_NoSecrets/10KB-32                  101.9Ki ┬▒ Γê₧ ┬╣   102.0Ki ┬▒ 0%       ~ (p=0.082 n=5+6)
+ScrubLogTail/10_entries-32                  11.76Ki ┬▒ Γê₧ ┬╣   11.75Ki ┬▒ 0%       ~ (p=0.459 n=5+6)
+ScrubLogTail/50_entries-32                  59.03Ki ┬▒ Γê₧ ┬╣   58.95Ki ┬▒ 0%       ~ (p=0.247 n=5+6)
+ScrubLogTail/100_entries_mixed-32           573.9Ki ┬▒ Γê₧ ┬╣   573.8Ki ┬▒ 0%       ~ (p=0.662 n=5+6)
+geomean                                     23.24Ki         23.23Ki       -0.05%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                  Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt       Γöé
+                                  Γöé       allocs/op       Γöé  allocs/op   vs base                  Γöé
+ScrubPII/small_100B-32                        21.00 ┬▒ Γê₧ ┬╣    21.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubPII/medium_1KB-32                        31.00 ┬▒ Γê₧ ┬╣    31.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubPII/large_10KB-32                        84.00 ┬▒ Γê₧ ┬╣    84.00 ┬▒ 1%       ~ (p=0.970 n=5+6)
+ScrubPII_NoSecrets/100B-32                    19.00 ┬▒ Γê₧ ┬╣    19.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubPII_NoSecrets/1KB-32                     19.00 ┬▒ Γê₧ ┬╣    19.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubPII_NoSecrets/10KB-32                    19.00 ┬▒ Γê₧ ┬╣    19.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubLogTail/10_entries-32                    211.0 ┬▒ Γê₧ ┬╣    211.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubLogTail/50_entries-32                   1.051k ┬▒ Γê₧ ┬╣   1.051k ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ScrubLogTail/100_entries_mixed-32            2.310k ┬▒ Γê₧ ┬╣   2.309k ┬▒ 0%       ~ (p=0.351 n=5+6)
+geomean                                       83.25          83.25       -0.00%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+
+pkg: github.com/jongio/grut/internal/git
+                                Γöé perf\bench_before.txt Γöé        perf\bench_after_final.txt        Γöé
+                                Γöé        sec/op         Γöé     sec/op      vs base                  Γöé
+ParseStatus/10_files-32                    2.127┬╡ ┬▒ Γê₧ ┬╣    2.546┬╡ ┬▒ 131%         ~ (p=0.429 n=5+6)
+ParseStatus/100_files-32                   20.06┬╡ ┬▒ Γê₧ ┬╣    21.62┬╡ ┬▒  10%    +7.79% (p=0.004 n=5+6)
+ParseStatus/500_files-32                   93.85┬╡ ┬▒ Γê₧ ┬╣   115.98┬╡ ┬▒   7%   +23.57% (p=0.004 n=5+6)
+ParseStatus/100_renamed-32                 27.01┬╡ ┬▒ Γê₧ ┬╣    38.22┬╡ ┬▒  11%   +41.54% (p=0.004 n=5+6)
+ParseStatusBranch-32                       1.596┬╡ ┬▒ Γê₧ ┬╣    2.158┬╡ ┬▒  13%   +35.21% (p=0.004 n=5+6)
+ParseDiff/10_lines-32                      1.504┬╡ ┬▒ Γê₧ ┬╣    1.974┬╡ ┬▒  27%   +31.25% (p=0.004 n=5+6)
+ParseDiff/100_lines-32                     9.515┬╡ ┬▒ Γê₧ ┬╣   11.232┬╡ ┬▒  14%         ~ (p=0.126 n=5+6)
+ParseDiff/1000_lines-32                    189.9┬╡ ┬▒ Γê₧ ┬╣    137.6┬╡ ┬▒  13%         ~ (p=0.662 n=5+6)
+ParseHunkHeader/simple-32                 119.60n ┬▒ Γê₧ ┬╣    85.36n ┬▒   9%   -28.63% (p=0.004 n=5+6)
+ParseHunkHeader/with_context-32           124.80n ┬▒ Γê₧ ┬╣    91.38n ┬▒  15%   -26.78% (p=0.004 n=5+6)
+ParseHunkHeader/large_range-32            160.10n ┬▒ Γê₧ ┬╣    95.88n ┬▒   9%   -40.11% (p=0.004 n=5+6)
+UndoStack/record_50-32                     23.27┬╡ ┬▒ Γê₧ ┬╣    28.75┬╡ ┬▒   6%         ~ (p=0.126 n=5+6)
+UndoStack/record_overflow-32               91.43┬╡ ┬▒ Γê₧ ┬╣   116.34┬╡ ┬▒   9%   +27.25% (p=0.004 n=5+6)
+UndoStack/peek_undo-32                     14.85n ┬▒ Γê₧ ┬╣    12.48n ┬▒  10%   -15.96% (p=0.004 n=5+6)
+UndoStack/can_undo_redo-32                 26.99n ┬▒ Γê₧ ┬╣    22.12n ┬▒   2%   -18.06% (p=0.004 n=5+6)
+JoinPaths-32                               1.512┬╡ ┬▒ Γê₧ ┬╣    3.352┬╡ ┬▒   6%  +121.66% (p=0.004 n=5+6)
+SplitPaths-32                              3.291┬╡ ┬▒ Γê₧ ┬╣    6.879┬╡ ┬▒   6%  +109.02% (p=0.004 n=5+6)
+geomean                                    2.470┬╡          2.727┬╡          +10.40%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt       Γöé
+                                Γöé         B/op          Γöé     B/op      vs base                  Γöé
+ParseStatus/10_files-32                   2.641Ki ┬▒ Γê₧ ┬╣   2.641Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/100_files-32                  24.66Ki ┬▒ Γê₧ ┬╣   24.66Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/500_files-32                  111.9Ki ┬▒ Γê₧ ┬╣   111.9Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/100_renamed-32                32.16Ki ┬▒ Γê₧ ┬╣   32.16Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatusBranch-32                        928.0 ┬▒ Γê₧ ┬╣     928.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/10_lines-32                     1.703Ki ┬▒ Γê₧ ┬╣   1.703Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/100_lines-32                    11.02Ki ┬▒ Γê₧ ┬╣   11.02Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/1000_lines-32                   116.5Ki ┬▒ Γê₧ ┬╣   116.5Ki ┬▒ 0%  -0.00% (n=5+6)
+ParseHunkHeader/simple-32                   32.00 ┬▒ Γê₧ ┬╣     32.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseHunkHeader/with_context-32             32.00 ┬▒ Γê₧ ┬╣     32.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseHunkHeader/large_range-32              32.00 ┬▒ Γê₧ ┬╣     32.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/record_50-32                    22.96Ki ┬▒ Γê₧ ┬╣   22.95Ki ┬▒ 0%  -0.06% (n=5+6)
+UndoStack/record_overflow-32              87.46Ki ┬▒ Γê₧ ┬╣   87.41Ki ┬▒ 0%  -0.06% (p=0.004 n=5+6)
+UndoStack/peek_undo-32                      0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/can_undo_redo-32                  0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+JoinPaths-32                              2.625Ki ┬▒ Γê₧ ┬╣   2.625Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+SplitPaths-32                             6.062Ki ┬▒ Γê₧ ┬╣   6.062Ki ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+geomean                                               ┬│                 -0.01%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+                                Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt      Γöé
+                                Γöé       allocs/op       Γöé allocs/op   vs base                  Γöé
+ParseStatus/10_files-32                     14.00 ┬▒ Γê₧ ┬╣   14.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/100_files-32                    89.00 ┬▒ Γê₧ ┬╣   89.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/500_files-32                    411.0 ┬▒ Γê₧ ┬╣   411.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatus/100_renamed-32                  209.0 ┬▒ Γê₧ ┬╣   209.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseStatusBranch-32                        2.000 ┬▒ Γê₧ ┬╣   2.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/10_lines-32                       9.000 ┬▒ Γê₧ ┬╣   9.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/100_lines-32                      46.00 ┬▒ Γê₧ ┬╣   46.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseDiff/1000_lines-32                     448.0 ┬▒ Γê₧ ┬╣   448.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseHunkHeader/simple-32                   1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseHunkHeader/with_context-32             1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+ParseHunkHeader/large_range-32              1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/record_50-32                      208.0 ┬▒ Γê₧ ┬╣   208.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/record_overflow-32                811.0 ┬▒ Γê₧ ┬╣   811.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/peek_undo-32                      0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+UndoStack/can_undo_redo-32                  0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+JoinPaths-32                                1.000 ┬▒ Γê₧ ┬╣   1.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+SplitPaths-32                               7.000 ┬▒ Γê₧ ┬╣   7.000 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+geomean                                               ┬│               +0.00%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/filetree
+                                              Γöé perf\bench_before.txt Γöé        perf\bench_after_final.txt        Γöé
+                                              Γöé        sec/op         Γöé     sec/op      vs base                  Γöé
+TreeRebuildVisible/flat_50_files-32                      80.23n ┬▒ Γê₧ ┬╣    95.71n ┬▒  43%         ~ (p=0.177 n=5+6)
+TreeRebuildVisible/nested_5_deep_200_nodes-32            1.255┬╡ ┬▒ Γê₧ ┬╣    1.252┬╡ ┬▒  15%         ~ (p=0.429 n=5+6)
+TreeRebuildVisible/large_1000_nodes-32                   1.975┬╡ ┬▒ Γê₧ ┬╣    1.934┬╡ ┬▒   9%         ~ (p=0.662 n=5+6)
+RenderLine/file_node-32                                  3.408┬╡ ┬▒ Γê₧ ┬╣    3.103┬╡ ┬▒   5%    -8.95% (p=0.004 n=5+6)
+RenderLine/dir_node_cursor-32                            3.707┬╡ ┬▒ Γê₧ ┬╣    3.308┬╡ ┬▒   4%   -10.76% (p=0.004 n=5+6)
+RenderLine/with_icons-32                                 3.240┬╡ ┬▒ Γê₧ ┬╣    3.013┬╡ ┬▒   3%    -7.01% (p=0.004 n=5+6)
+LazyLoad/50_entries-32                                  1039.2┬╡ ┬▒ Γê₧ ┬╣    185.8┬╡ ┬▒  29%   -82.13% (p=0.004 n=5+6)
+LazyLoad/200_entries_nested-32                           389.8┬╡ ┬▒ Γê₧ ┬╣    237.3┬╡ ┬▒  59%   -39.12% (p=0.004 n=5+6)
+DisplayWidth/ascii-32                                    494.3n ┬▒ Γê₧ ┬╣   1377.0n ┬▒  36%  +178.58% (p=0.004 n=5+6)
+DisplayWidth/mixed_unicode-32                            387.5n ┬▒ Γê₧ ┬╣    843.1n ┬▒   6%  +117.59% (p=0.004 n=5+6)
+TruncateToWidth/no_truncation-32                         107.1n ┬▒ Γê₧ ┬╣    228.2n ┬▒   5%  +113.07% (p=0.004 n=5+6)
+TruncateToWidth/needs_truncation-32                      2.348┬╡ ┬▒ Γê₧ ┬╣    5.835┬╡ ┬▒ 229%  +148.51% (p=0.004 n=5+6)
+geomean                                                  2.713┬╡          2.979┬╡           +9.81%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                              Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt        Γöé
+                                              Γöé         B/op          Γöé     B/op      vs base                   Γöé
+TreeRebuildVisible/flat_50_files-32                       0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TreeRebuildVisible/nested_5_deep_200_nodes-32             0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TreeRebuildVisible/large_1000_nodes-32                    0.000 ┬▒ Γê₧ ┬╣     0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/file_node-32                                   824.0 ┬▒ Γê₧ ┬╣     824.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/dir_node_cursor-32                            1008.0 ┬▒ Γê₧ ┬╣    1008.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/with_icons-32                                  824.0 ┬▒ Γê₧ ┬╣     824.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+LazyLoad/50_entries-32                                  41.93Ki ┬▒ Γê₧ ┬╣   29.97Ki ┬▒ 0%  -28.54% (p=0.004 n=5+6)
+LazyLoad/200_entries_nested-32                          16.79Ki ┬▒ Γê₧ ┬╣   17.38Ki ┬▒ 2%   +3.54% (p=0.004 n=5+6)
+DisplayWidth/ascii-32                                     156.0 ┬▒ Γê₧ ┬╣     156.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+DisplayWidth/mixed_unicode-32                             108.0 ┬▒ Γê₧ ┬╣     108.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TruncateToWidth/no_truncation-32                          32.00 ┬▒ Γê₧ ┬╣     32.00 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TruncateToWidth/needs_truncation-32                     1.102Ki ┬▒ Γê₧ ┬╣   1.102Ki ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+geomean                                                             ┬│                  -2.48%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+                                              Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt       Γöé
+                                              Γöé       allocs/op       Γöé allocs/op   vs base                   Γöé
+TreeRebuildVisible/flat_50_files-32                       0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TreeRebuildVisible/nested_5_deep_200_nodes-32             0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TreeRebuildVisible/large_1000_nodes-32                    0.000 ┬▒ Γê₧ ┬╣   0.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/file_node-32                                   120.0 ┬▒ Γê₧ ┬╣   120.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/dir_node_cursor-32                             116.0 ┬▒ Γê₧ ┬╣   116.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderLine/with_icons-32                                  120.0 ┬▒ Γê₧ ┬╣   120.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+LazyLoad/50_entries-32                                    362.0 ┬▒ Γê₧ ┬╣   312.0 ┬▒ 0%  -13.81% (p=0.026 n=5+6)
+LazyLoad/200_entries_nested-32                            149.0 ┬▒ Γê₧ ┬╣   172.0 ┬▒ 0%  +15.44% (p=0.004 n=5+6)
+DisplayWidth/ascii-32                                     39.00 ┬▒ Γê₧ ┬╣   39.00 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+DisplayWidth/mixed_unicode-32                             27.00 ┬▒ Γê₧ ┬╣   27.00 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TruncateToWidth/no_truncation-32                          8.000 ┬▒ Γê₧ ┬╣   8.000 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+TruncateToWidth/needs_truncation-32                       149.0 ┬▒ Γê₧ ┬╣   149.0 ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+geomean                                                             ┬│                -0.04%                 ┬│
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+┬│ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/gitdiff
+                                      Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt        Γöé
+                                      Γöé        sec/op         Γöé     sec/op      vs base                 Γöé
+InlineDiffRender/10_lines-32                     21.56┬╡ ┬▒ Γê₧ ┬╣    27.82┬╡ ┬▒  19%        ~ (p=0.052 n=5+6)
+InlineDiffRender/100_lines-32                    181.0┬╡ ┬▒ Γê₧ ┬╣    228.4┬╡ ┬▒  49%  +26.21% (p=0.004 n=5+6)
+InlineDiffRender/1000_lines-32                   1.798m ┬▒ Γê₧ ┬╣    2.097m ┬▒   3%  +16.64% (p=0.004 n=5+6)
+SideBySideDiffRender/10_lines-32                 43.85┬╡ ┬▒ Γê₧ ┬╣    45.28┬╡ ┬▒   9%        ~ (p=0.429 n=5+6)
+SideBySideDiffRender/100_lines-32                427.0┬╡ ┬▒ Γê₧ ┬╣    368.0┬╡ ┬▒   6%        ~ (p=0.126 n=5+6)
+SideBySideDiffRender/1000_lines-32               5.114m ┬▒ Γê₧ ┬╣    5.029m ┬▒  32%        ~ (p=0.792 n=5+6)
+PairDiffLines/20_lines_mixed-32                  932.1n ┬▒ Γê₧ ┬╣   1589.0n ┬▒ 179%  +70.48% (p=0.017 n=5+6)
+PairDiffLines/200_lines_mixed-32                 8.663┬╡ ┬▒ Γê₧ ┬╣   11.088┬╡ ┬▒  72%  +27.99% (p=0.004 n=5+6)
+RenderViewport/small-32                          4.700┬╡ ┬▒ Γê₧ ┬╣    7.379┬╡ ┬▒  20%  +56.99% (p=0.004 n=5+6)
+RenderViewport/large_scrolled-32                 4.731┬╡ ┬▒ Γê₧ ┬╣    5.878┬╡ ┬▒  13%  +24.25% (p=0.004 n=5+6)
+MemoryGrowth/inline_100_lines-32                                 241.4┬╡ ┬▒  90%
+MemoryGrowth/inline_1000_lines-32                                2.532m ┬▒  75%
+MemoryGrowth/sidebyside_100_lines-32                             484.1┬╡ ┬▒  50%
+MemoryGrowth/sidebyside_1000_lines-32                            4.691m ┬▒   9%
+geomean                                          51.07┬╡          140.6┬╡         +21.61%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+
+                                      Γöé perf\bench_before.txt Γöé       perf\bench_after_final.txt        Γöé
+                                      Γöé         B/op          Γöé     B/op      vs base                   Γöé
+InlineDiffRender/10_lines-32                    4.469Ki ┬▒ Γê₧ ┬╣   4.016Ki ┬▒ 0%  -10.14% (p=0.026 n=5+6)
+InlineDiffRender/100_lines-32                   37.47Ki ┬▒ Γê₧ ┬╣   33.07Ki ┬▒ 0%  -11.74% (p=0.004 n=5+6)
+InlineDiffRender/1000_lines-32                  381.9Ki ┬▒ Γê₧ ┬╣   322.3Ki ┬▒ 0%  -15.60% (p=0.004 n=5+6)
+SideBySideDiffRender/10_lines-32                16.11Ki ┬▒ Γê₧ ┬╣   15.66Ki ┬▒ 0%   -2.82% (p=0.004 n=5+6)
+SideBySideDiffRender/100_lines-32               149.8Ki ┬▒ Γê₧ ┬╣   145.4Ki ┬▒ 0%   -2.95% (p=0.004 n=5+6)
+SideBySideDiffRender/1000_lines-32              1.398Mi ┬▒ Γê₧ ┬╣   1.363Mi ┬▒ 0%   -2.50% (p=0.004 n=5+6)
+PairDiffLines/20_lines_mixed-32                 1.094Ki ┬▒ Γê₧ ┬╣   1.094Ki ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+PairDiffLines/200_lines_mixed-32                10.59Ki ┬▒ Γê₧ ┬╣   10.59Ki ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderViewport/small-32                         6.750Ki ┬▒ Γê₧ ┬╣   6.750Ki ┬▒ 0%        ~ (p=1.000 n=5+6) ┬▓
+RenderViewport/large_scrolled-32                6.762Ki ┬▒ Γê₧ ┬╣   6.762Ki ┬▒ 0%        ~ (p=0.909 n=5+6)
+MemoryGrowth/inline_100_lines-32                                33.07Ki ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                               322.2Ki ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                            145.4Ki ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                           1.363Mi ┬▒ 0%
+geomean                                         25.51Ki         45.35Ki        -4.74%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+
+                                      Γöé perf\bench_before.txt Γöé      perf\bench_after_final.txt       Γöé
+                                      Γöé       allocs/op       Γöé  allocs/op   vs base                  Γöé
+InlineDiffRender/10_lines-32                      127.0 ┬▒ Γê₧ ┬╣    122.0 ┬▒ 0%  -3.94% (p=0.026 n=5+6)
+InlineDiffRender/100_lines-32                    1.079k ┬▒ Γê₧ ┬╣   1.071k ┬▒ 0%  -0.74% (p=0.026 n=5+6)
+InlineDiffRender/1000_lines-32                   10.45k ┬▒ Γê₧ ┬╣   10.44k ┬▒ 0%  -0.16% (p=0.026 n=5+6)
+SideBySideDiffRender/10_lines-32                  243.0 ┬▒ Γê₧ ┬╣    238.0 ┬▒ 0%  -2.06% (p=0.026 n=5+6)
+SideBySideDiffRender/100_lines-32                2.225k ┬▒ Γê₧ ┬╣   2.217k ┬▒ 0%  -0.36% (p=0.026 n=5+6)
+SideBySideDiffRender/1000_lines-32               21.21k ┬▒ Γê₧ ┬╣   21.19k ┬▒ 0%  -0.08% (n=5+6)
+PairDiffLines/20_lines_mixed-32                   18.00 ┬▒ Γê₧ ┬╣    18.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+PairDiffLines/200_lines_mixed-32                  141.0 ┬▒ Γê₧ ┬╣    141.0 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RenderViewport/small-32                           12.00 ┬▒ Γê₧ ┬╣    12.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+RenderViewport/large_scrolled-32                  13.00 ┬▒ Γê₧ ┬╣    13.00 ┬▒ 0%       ~ (p=1.000 n=5+6) ┬▓
+MemoryGrowth/inline_100_lines-32                                1.071k ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                               10.44k ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                            2.217k ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                           21.19k ┬▒ 0%
+geomean                                           302.9          663.0       -0.74%
+┬╣ need >= 6 samples for confidence interval at level 0.95
+┬▓ all samples are equal
+
+                                      Γöé perf\bench_after_final.txt Γöé
+                                      Γöé        gc-cycles/op        Γöé
+MemoryGrowth/inline_100_lines-32                      11.26m ┬▒  4%
+MemoryGrowth/inline_1000_lines-32                     115.5m ┬▒ 13%
+MemoryGrowth/sidebyside_100_lines-32                  52.28m ┬▒  3%
+MemoryGrowth/sidebyside_1000_lines-32                 544.8m ┬▒  3%
+geomean                                               78.01m
+
+                                      Γöé perf\bench_after_final.txt Γöé
+                                      Γöé      heap-inuse-b/op       Γöé
+MemoryGrowth/inline_100_lines-32                   -16.41 ┬▒ -19%
+MemoryGrowth/inline_1000_lines-32                  -796.3 ┬▒ -30%
+MemoryGrowth/sidebyside_100_lines-32               -18.33 ┬▒ -21%
+MemoryGrowth/sidebyside_1000_lines-32             -1.694k ┬▒ -12%
+geomean                                                          ┬╣
+┬╣ summaries must be >0 to compute geomean

@@ -21,6 +21,7 @@ func TestInitChatRegistersProviders(t *testing.T) {
 	// Ensure AI + chat are enabled so initChat does real work.
 	cfg.AI.Enabled = true
 	cfg.AI.Chat.Enabled = true
+	cfg.Theme.Name = "default" // use a stable built-in theme regardless of user config
 
 	th, err := theme.Load(cfg.Theme.Name)
 	require.NoError(t, err)
@@ -55,6 +56,7 @@ func TestInitChatReturnsRegistryOnPathJailFailure(t *testing.T) {
 	require.NoError(t, err)
 	cfg.AI.Enabled = true
 	cfg.AI.Chat.Enabled = true
+	cfg.Theme.Name = "default" // use a stable built-in theme regardless of user config
 
 	th, err := theme.Load(cfg.Theme.Name)
 	require.NoError(t, err)

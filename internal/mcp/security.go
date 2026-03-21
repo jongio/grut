@@ -50,7 +50,6 @@ func (j *PathJail) Validate(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path must not be empty")
 	}
-
 	// Windows-specific: reject UNC paths and reserved device names.
 	if runtime.GOOS == "windows" {
 		if strings.HasPrefix(path, `\\`) {
@@ -60,12 +59,10 @@ func (j *PathJail) Validate(path string) (string, error) {
 			return "", fmt.Errorf("windows reserved device name not allowed: %s", filepath.Base(path))
 		}
 	}
-
 	// Reject paths containing ".." components before any resolution.
 	if containsDotDot(path) {
 		return "", fmt.Errorf("path contains '..': %s", path)
 	}
-
 	// Build absolute path.
 	var absPath string
 	if filepath.IsAbs(path) {
@@ -73,7 +70,6 @@ func (j *PathJail) Validate(path string) (string, error) {
 	} else {
 		absPath = filepath.Clean(filepath.Join(j.root, path))
 	}
-
 	// Resolve symlinks to get canonical path.
 	resolved, err := filepath.EvalSymlinks(absPath)
 	if err != nil {
@@ -88,7 +84,6 @@ func (j *PathJail) Validate(path string) (string, error) {
 			return "", fmt.Errorf("resolve path: %w", err)
 		}
 	}
-
 	// When followSymlinks is false, reject any path that resolved differently
 	// from its cleaned absolute form (meaning it traversed a symlink).
 	if !j.followSymlinks && resolved != absPath {
@@ -99,7 +94,6 @@ func (j *PathJail) Validate(path string) (string, error) {
 			return "", fmt.Errorf("symlinks not allowed: %s", path)
 		}
 	}
-
 	// Verify the resolved path is within the jail root.
 	// Use filepath.Rel to compute relative path from root to resolved.
 	rel, err := filepath.Rel(j.root, resolved)
@@ -112,7 +106,6 @@ func (j *PathJail) Validate(path string) (string, error) {
 	if strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("path escapes repository root: %s", path)
 	}
-
 	return resolved, nil
 }
 
@@ -159,16 +152,15 @@ func resolveNewPath(absPath string) (string, error) {
 // Categories are "read" and "write" with independently configurable
 // rates expressed as calls per minute.
 type RateLimiter struct {
-	mu      sync.Mutex
 	buckets map[string]*tokenBucket
 	rates   map[string]int // calls per minute by category
+	mu      sync.Mutex
 }
-
 type tokenBucket struct {
+	lastRefill time.Time
 	tokens     float64
 	maxTokens  float64
 	refillRate float64 // tokens per second
-	lastRefill time.Time
 }
 
 // NewRateLimiter creates a rate limiter with separate read and write rates
@@ -189,7 +181,6 @@ func NewRateLimiter(readPerMin, writePerMin int) *RateLimiter {
 func (rl *RateLimiter) Allow(category string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-
 	b, ok := rl.buckets[category]
 	if !ok {
 		rate, exists := rl.rates[category]
@@ -205,12 +196,10 @@ func (rl *RateLimiter) Allow(category string) bool {
 		}
 		rl.buckets[category] = b
 	}
-
 	now := time.Now()
 	elapsed := now.Sub(b.lastRefill).Seconds()
 	b.tokens = min(b.maxTokens, b.tokens+elapsed*b.refillRate)
 	b.lastRefill = now
-
 	if b.tokens >= 1 {
 		b.tokens--
 		return true
@@ -244,21 +233,17 @@ func NewAuditLogger(cfg config.MCPSecurityConfig) (*AuditLogger, error) {
 	if !cfg.AuditLog {
 		return &AuditLogger{enabled: false}, nil
 	}
-
 	logPath := cfg.AuditLogPath
 	if logPath == "" {
 		logPath = filepath.Join(config.DataDir(), "mcp-audit.log")
 	}
-
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return nil, fmt.Errorf("create audit log dir: %w", err)
 	}
-
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
-
 	handler := slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo})
 	return &AuditLogger{
 		logger:  slog.New(handler),
@@ -281,7 +266,6 @@ func (al *AuditLogger) Log(tool string, params map[string]any, status string, du
 	if !al.enabled {
 		return
 	}
-
 	sanitized := make(map[string]any, len(params))
 	for k, v := range params {
 		if isSensitiveAuditField(k) {
@@ -290,7 +274,6 @@ func (al *AuditLogger) Log(tool string, params map[string]any, status string, du
 			sanitized[k] = v
 		}
 	}
-
 	al.logger.Info("mcp_tool_call",
 		"tool", tool,
 		"params", sanitized,

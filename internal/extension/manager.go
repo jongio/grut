@@ -23,16 +23,16 @@ import (
 
 // ExtensionInfo holds runtime state for an installed extension.
 type ExtensionInfo struct {
+	InstalledAt time.Time `toml:"installed_at"`
 	Manifest    Manifest  `toml:"manifest"`
 	Dir         string    `toml:"-"`
 	Enabled     bool      `toml:"enabled"`
-	InstalledAt time.Time `toml:"installed_at"`
 }
 
 // Manager handles extension installation, removal, and state tracking.
 type Manager struct {
-	extDir    string
 	installed map[string]*ExtensionInfo
+	extDir    string
 	mu        sync.RWMutex
 }
 
@@ -43,11 +43,10 @@ const stateFileName = "extensions.toml"
 type extensionState struct {
 	Extensions []extensionEntry `toml:"extensions"`
 }
-
 type extensionEntry struct {
+	InstalledAt time.Time `toml:"installed_at"`
 	Name        string    `toml:"name"`
 	Enabled     bool      `toml:"enabled"`
-	InstalledAt time.Time `toml:"installed_at"`
 }
 
 // NewManager creates a Manager rooted at extDir, creating the directory if
@@ -72,7 +71,6 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 	if strings.HasPrefix(source, "git@") {
 		return fmt.Errorf("install: only https:// URLs are allowed")
 	}
-
 	// Determine destination by cloning/copying into a temp dir first so we
 	// can read the manifest before deciding the final directory name.
 	tmpDir, err := os.MkdirTemp(m.extDir, ".install-*")
@@ -80,7 +78,6 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 		return fmt.Errorf("install: create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }() // clean up on any error path
-
 	if isURL {
 		cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", "--no-recurse-submodules", source, tmpDir)
 		cmd.Env = safeGitCloneEnv()
@@ -93,7 +90,6 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 			return fmt.Errorf("install: copy local: %w", err)
 		}
 	}
-
 	manifest, err := LoadManifest(tmpDir)
 	if err != nil {
 		return fmt.Errorf("install: %w", err)
@@ -104,14 +100,11 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 	if !isValidExtensionName(manifest.Name) {
 		return fmt.Errorf("install: invalid extension name %q: must be 1-128 alphanumeric, dash, or underscore characters", manifest.Name)
 	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	if _, exists := m.installed[manifest.Name]; exists {
 		return fmt.Errorf("install: extension %q is already installed", manifest.Name)
 	}
-
 	destDir := filepath.Join(m.extDir, manifest.Name)
 	if err := os.Rename(tmpDir, destDir); err != nil {
 		// Cross-device rename; fall back to copy + remove.
@@ -119,7 +112,6 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 			return fmt.Errorf("install: move to final dir: %w", err)
 		}
 	}
-
 	info := &ExtensionInfo{
 		Manifest:    *manifest,
 		Dir:         destDir,
@@ -127,7 +119,6 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 		InstalledAt: time.Now().UTC(),
 	}
 	m.installed[manifest.Name] = info
-
 	return m.saveStateLocked()
 }
 
@@ -135,12 +126,10 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 func (m *Manager) Remove(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	info, ok := m.installed[name]
 	if !ok {
 		return fmt.Errorf("remove: extension %q not found", name)
 	}
-
 	if err := os.RemoveAll(info.Dir); err != nil {
 		return fmt.Errorf("remove: delete dir: %w", err)
 	}
@@ -152,7 +141,6 @@ func (m *Manager) Remove(name string) error {
 func (m *Manager) Enable(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	info, ok := m.installed[name]
 	if !ok {
 		return fmt.Errorf("enable: extension %q not found", name)
@@ -165,7 +153,6 @@ func (m *Manager) Enable(name string) error {
 func (m *Manager) Disable(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	info, ok := m.installed[name]
 	if !ok {
 		return fmt.Errorf("disable: extension %q not found", name)
@@ -179,7 +166,6 @@ func (m *Manager) Disable(name string) error {
 func (m *Manager) List() []ExtensionInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	out := make([]ExtensionInfo, 0, len(m.installed))
 	for _, info := range m.installed {
 		out = append(out, *info)
@@ -191,7 +177,6 @@ func (m *Manager) List() []ExtensionInfo {
 func (m *Manager) Get(name string) (*ExtensionInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	info, ok := m.installed[name]
 	if !ok {
 		return nil, fmt.Errorf("get: extension %q not found", name)
@@ -207,12 +192,9 @@ func (m *Manager) LoadAll() error {
 	if err != nil {
 		return fmt.Errorf("load extensions: %w", err)
 	}
-
 	saved := m.loadState()
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	for _, entry := range entries {
 		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
@@ -251,7 +233,6 @@ func (m *Manager) saveStateLocked() error {
 			InstalledAt: info.InstalledAt,
 		})
 	}
-
 	data, err := toml.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
@@ -285,22 +266,18 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return fmt.Errorf("walking %s: %w", path, err)
 		}
-
 		// Reject symlinks to prevent traversal outside the source directory.
 		if d.Type()&fs.ModeSymlink != 0 {
 			return fmt.Errorf("symlinks not allowed in extension: %s", path)
 		}
-
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return fmt.Errorf("computing relative path for %s: %w", path, err)
 		}
 		target := filepath.Join(dst, rel)
-
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-
 		// Double-check the entry is a regular file (not a symlink that was
 		// not caught by WalkDir's type — defensive check).
 		info, err := os.Lstat(path)
@@ -310,7 +287,6 @@ func copyDir(src, dst string) error {
 		if info.Mode()&fs.ModeSymlink != 0 {
 			return fmt.Errorf("symlinks not allowed in extension: %s", path)
 		}
-
 		return copyFile(path, target)
 	})
 }
@@ -322,17 +298,14 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("opening source %s: %w", src, err)
 	}
 	defer func() { _ = in.Close() }()
-
 	info, err := in.Stat()
 	if err != nil {
 		return fmt.Errorf("stat source %s: %w", src, err)
 	}
-
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 	if err != nil {
 		return fmt.Errorf("creating destination %s: %w", dst, err)
 	}
-
 	_, copyErr := io.Copy(out, in)
 	closeErr := out.Close()
 	if copyErr != nil {

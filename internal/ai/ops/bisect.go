@@ -17,16 +17,16 @@ type BisectAnalyzer struct {
 
 // BisectAnalysis holds the AI's analysis of commits in a bisect range.
 type BisectAnalysis struct {
-	Candidates []BisectCandidate `json:"candidates"`
 	Summary    string            `json:"summary"`
+	Candidates []BisectCandidate `json:"candidates"`
 }
 
 // BisectCandidate is a commit with a probability of being the culprit.
 type BisectCandidate struct {
 	Hash        string  `json:"hash"`
 	Subject     string  `json:"subject"`
-	Probability float64 `json:"probability"` // 0.0-1.0
 	Reason      string  `json:"reason"`
+	Probability float64 `json:"probability"` // 0.0-1.0
 }
 
 // NewBisectAnalyzer creates a BisectAnalyzer backed by the given registry
@@ -70,12 +70,10 @@ func (a *BisectAnalyzer) Analyze(ctx context.Context, good, bad string) (*Bisect
 	if err != nil {
 		return nil, fmt.Errorf("building bisect context: %w", err)
 	}
-
 	provider, err := a.registry.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving AI provider: %w", err)
 	}
-
 	resp, err := provider.Complete(ctx, ai.CompletionRequest{
 		Operation:    "bisect_analyze",
 		SystemPrompt: bisectSystemPrompt,
@@ -86,11 +84,9 @@ func (a *BisectAnalyzer) Analyze(ctx context.Context, good, bad string) (*Bisect
 	if err != nil {
 		return nil, fmt.Errorf("AI completion: %w", err)
 	}
-
 	var analysis BisectAnalysis
 	if err := json.Unmarshal([]byte(resp.Content), &analysis); err != nil {
 		return nil, fmt.Errorf("parsing AI response: %w", err)
 	}
-
 	return &analysis, nil
 }

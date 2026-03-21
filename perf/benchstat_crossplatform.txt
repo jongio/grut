@@ -1,0 +1,635 @@
+goos: linux
+goarch: amd64
+pkg: github.com/jongio/grut/internal/ai
+cpu: 13th Gen Intel(R) Core(TM) i9-13900K
+                                        Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                        Γöé               sec/op                Γöé
+RedactContent/small_500B-32                                      88.91┬╡ ┬▒  2%
+RedactContent/medium_5KB-32                                      1.629m ┬▒  2%
+RedactContent/large_50KB-32                                      18.20m ┬▒  3%
+RedactContent_NoMatch/small_500B-32                              86.19┬╡ ┬▒ 20%
+RedactContent_NoMatch/medium_5KB-32                              965.3┬╡ ┬▒  2%
+RedactContent_NoMatch/large_50KB-32                              11.01m ┬▒  3%
+ShouldExcludeFile/match_builtin-32                               45.06n ┬▒  3%
+ShouldExcludeFile/match_user_pattern-32                          1.678┬╡ ┬▒  7%
+ShouldExcludeFile/no_match-32                                    1.061┬╡ ┬▒  3%
+NewRedactor-32                                                   59.92┬╡ ┬▒  3%
+geomean                                                          80.63┬╡
+
+                                        Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                        Γöé                B/op                 Γöé
+RedactContent/small_500B-32                                   5.988Ki ┬▒  0%
+RedactContent/medium_5KB-32                                   124.4Ki ┬▒  0%
+RedactContent/large_50KB-32                                   1.576Mi ┬▒  0%
+RedactContent_NoMatch/small_500B-32                             1.000 ┬▒   ?
+RedactContent_NoMatch/medium_5KB-32                             64.00 ┬▒ 89%
+RedactContent_NoMatch/large_50KB-32                             116.0 ┬▒ 59%
+ShouldExcludeFile/match_builtin-32                              0.000 ┬▒  0%
+ShouldExcludeFile/match_user_pattern-32                         0.000 ┬▒  0%
+ShouldExcludeFile/no_match-32                                   0.000 ┬▒  0%
+NewRedactor-32                                                111.6Ki ┬▒  0%
+geomean                                                                     ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                        Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                        Γöé              allocs/op              Γöé
+RedactContent/small_500B-32                                      25.00 ┬▒ 0%
+RedactContent/medium_5KB-32                                      106.0 ┬▒ 0%
+RedactContent/large_50KB-32                                      604.0 ┬▒ 1%
+RedactContent_NoMatch/small_500B-32                              0.000 ┬▒ 0%
+RedactContent_NoMatch/medium_5KB-32                              0.000 ┬▒ 0%
+RedactContent_NoMatch/large_50KB-32                              0.000 ┬▒ 0%
+ShouldExcludeFile/match_builtin-32                               0.000 ┬▒ 0%
+ShouldExcludeFile/match_user_pattern-32                          0.000 ┬▒ 0%
+ShouldExcludeFile/no_match-32                                    0.000 ┬▒ 0%
+NewRedactor-32                                                   699.0 ┬▒ 0%
+geomean                                                                     ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/config
+                                    Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                    Γöé               sec/op                Γöé
+Validate/valid_defaults-32                                  1.230┬╡ ┬▒ 163%
+Validate/with_arrays-32                                     12.05┬╡ ┬▒  30%
+Validate/invalid_multi_error-32                             7.226┬╡ ┬▒   6%
+ParseDefaultsTOML-32                                        29.53┬╡ ┬▒   7%
+RejectEmbeddedKeys/clean_config-32                          804.2n ┬▒  19%
+RejectEmbeddedKeys/with_patterns-32                         5.212┬╡ ┬▒   7%
+AppendEnumErr/match_first-32                                23.27n ┬▒  13%
+AppendEnumErr/match_last-32                                 24.18n ┬▒   9%
+AppendEnumErr/no_match-32                                   480.0n ┬▒   4%
+geomean                                                     1.152┬╡
+
+                                    Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                    Γöé                B/op                 Γöé
+Validate/valid_defaults-32                                   780.0 ┬▒ 0%
+Validate/with_arrays-32                                      780.0 ┬▒ 0%
+Validate/invalid_multi_error-32                            1.956Ki ┬▒ 0%
+ParseDefaultsTOML-32                                       21.14Ki ┬▒ 0%
+RejectEmbeddedKeys/clean_config-32                           0.000 ┬▒ 0%
+RejectEmbeddedKeys/with_patterns-32                          0.000 ┬▒ 0%
+AppendEnumErr/match_first-32                                 48.00 ┬▒ 0%
+AppendEnumErr/match_last-32                                  48.00 ┬▒ 0%
+AppendEnumErr/no_match-32                                    344.0 ┬▒ 0%
+geomean                                                                 ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                    Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                    Γöé              allocs/op              Γöé
+Validate/valid_defaults-32                                   16.00 ┬▒ 0%
+Validate/with_arrays-32                                      16.00 ┬▒ 0%
+Validate/invalid_multi_error-32                              55.00 ┬▒ 0%
+ParseDefaultsTOML-32                                         105.0 ┬▒ 0%
+RejectEmbeddedKeys/clean_config-32                           0.000 ┬▒ 0%
+RejectEmbeddedKeys/with_patterns-32                          0.000 ┬▒ 0%
+AppendEnumErr/match_first-32                                 1.000 ┬▒ 0%
+AppendEnumErr/match_last-32                                  1.000 ┬▒ 0%
+AppendEnumErr/no_match-32                                    12.00 ┬▒ 0%
+geomean                                                                 ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/crashlog
+                                  Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                  Γöé               sec/op                Γöé
+ScrubPII/small_100B-32                                      7.916┬╡ ┬▒ 2%
+ScrubPII/medium_1KB-32                                      134.2┬╡ ┬▒ 5%
+ScrubPII/large_10KB-32                                      1.905m ┬▒ 3%
+ScrubPII_NoSecrets/100B-32                                  13.86┬╡ ┬▒ 3%
+ScrubPII_NoSecrets/1KB-32                                   135.2┬╡ ┬▒ 4%
+ScrubPII_NoSecrets/10KB-32                                  1.699m ┬▒ 3%
+ScrubLogTail/10_entries-32                                  74.25┬╡ ┬▒ 2%
+ScrubLogTail/50_entries-32                                  372.3┬╡ ┬▒ 3%
+ScrubLogTail/100_entries_mixed-32                           6.136m ┬▒ 3%
+geomean                                                     217.6┬╡
+
+                                  Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                  Γöé                B/op                 Γöé
+ScrubPII/small_100B-32                                       923.5 ┬▒ 0%
+ScrubPII/medium_1KB-32                                     12.03Ki ┬▒ 0%
+ScrubPII/large_10KB-32                                     231.2Ki ┬▒ 0%
+ScrubPII_NoSecrets/100B-32                                 1.186Ki ┬▒ 0%
+ScrubPII_NoSecrets/1KB-32                                  10.20Ki ┬▒ 0%
+ScrubPII_NoSecrets/10KB-32                                 102.2Ki ┬▒ 0%
+ScrubLogTail/10_entries-32                                 9.170Ki ┬▒ 0%
+ScrubLogTail/50_entries-32                                 45.98Ki ┬▒ 0%
+ScrubLogTail/100_entries_mixed-32                          551.7Ki ┬▒ 0%
+geomean                                                    20.78Ki
+
+                                  Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                  Γöé              allocs/op              Γöé
+ScrubPII/small_100B-32                                       17.00 ┬▒ 0%
+ScrubPII/medium_1KB-32                                       27.00 ┬▒ 0%
+ScrubPII/large_10KB-32                                       82.00 ┬▒ 1%
+ScrubPII_NoSecrets/100B-32                                   15.00 ┬▒ 0%
+ScrubPII_NoSecrets/1KB-32                                    15.00 ┬▒ 0%
+ScrubPII_NoSecrets/10KB-32                                   16.00 ┬▒ 0%
+ScrubLogTail/10_entries-32                                   171.0 ┬▒ 0%
+ScrubLogTail/50_entries-32                                   851.0 ┬▒ 0%
+ScrubLogTail/100_entries_mixed-32                           1.910k ┬▒ 0%
+geomean                                                      69.46
+
+pkg: github.com/jongio/grut/internal/git
+                                Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                Γöé               sec/op                Γöé
+ParseStatus/10_files-32                                  1.347┬╡ ┬▒  1%
+ParseStatus/100_files-32                                 12.49┬╡ ┬▒  8%
+ParseStatus/500_files-32                                 63.08┬╡ ┬▒ 21%
+ParseStatus/100_renamed-32                               21.87┬╡ ┬▒  4%
+ParseStatusBranch-32                                     1.358┬╡ ┬▒  3%
+ParseDiff/10_lines-32                                    995.4n ┬▒ 10%
+ParseDiff/100_lines-32                                   6.809┬╡ ┬▒ 10%
+ParseDiff/1000_lines-32                                  76.01┬╡ ┬▒ 30%
+ParseHunkHeader/simple-32                                77.42n ┬▒ 84%
+ParseHunkHeader/with_context-32                          85.60n ┬▒  9%
+ParseHunkHeader/large_range-32                           83.06n ┬▒  3%
+UndoStack/record_50-32                                   14.61┬╡ ┬▒  6%
+UndoStack/record_overflow-32                             52.71┬╡ ┬▒ 11%
+UndoStack/peek_undo-32                                   10.44n ┬▒  8%
+UndoStack/can_undo_redo-32                               20.41n ┬▒  2%
+JoinPaths-32                                             1.031┬╡ ┬▒ 15%
+SplitPaths-32                                            2.315┬╡ ┬▒ 73%
+geomean                                                  1.616┬╡
+
+                                Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                Γöé                B/op                 Γöé
+ParseStatus/10_files-32                                2.641Ki ┬▒ 0%
+ParseStatus/100_files-32                               24.66Ki ┬▒ 0%
+ParseStatus/500_files-32                               111.9Ki ┬▒ 0%
+ParseStatus/100_renamed-32                             32.16Ki ┬▒ 0%
+ParseStatusBranch-32                                     928.0 ┬▒ 0%
+ParseDiff/10_lines-32                                  1.703Ki ┬▒ 0%
+ParseDiff/100_lines-32                                 11.02Ki ┬▒ 0%
+ParseDiff/1000_lines-32                                116.5Ki ┬▒ 0%
+ParseHunkHeader/simple-32                                32.00 ┬▒ 0%
+ParseHunkHeader/with_context-32                          32.00 ┬▒ 0%
+ParseHunkHeader/large_range-32                           32.00 ┬▒ 0%
+UndoStack/record_50-32                                 22.95Ki ┬▒ 0%
+UndoStack/record_overflow-32                           87.42Ki ┬▒ 0%
+UndoStack/peek_undo-32                                   0.000 ┬▒ 0%
+UndoStack/can_undo_redo-32                               0.000 ┬▒ 0%
+JoinPaths-32                                           2.625Ki ┬▒ 0%
+SplitPaths-32                                          6.062Ki ┬▒ 0%
+geomean                                                             ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                Γöé              allocs/op              Γöé
+ParseStatus/10_files-32                                  14.00 ┬▒ 0%
+ParseStatus/100_files-32                                 89.00 ┬▒ 0%
+ParseStatus/500_files-32                                 411.0 ┬▒ 0%
+ParseStatus/100_renamed-32                               209.0 ┬▒ 0%
+ParseStatusBranch-32                                     2.000 ┬▒ 0%
+ParseDiff/10_lines-32                                    9.000 ┬▒ 0%
+ParseDiff/100_lines-32                                   46.00 ┬▒ 0%
+ParseDiff/1000_lines-32                                  448.0 ┬▒ 0%
+ParseHunkHeader/simple-32                                1.000 ┬▒ 0%
+ParseHunkHeader/with_context-32                          1.000 ┬▒ 0%
+ParseHunkHeader/large_range-32                           1.000 ┬▒ 0%
+UndoStack/record_50-32                                   208.0 ┬▒ 0%
+UndoStack/record_overflow-32                             811.0 ┬▒ 0%
+UndoStack/peek_undo-32                                   0.000 ┬▒ 0%
+UndoStack/can_undo_redo-32                               0.000 ┬▒ 0%
+JoinPaths-32                                             1.000 ┬▒ 0%
+SplitPaths-32                                            7.000 ┬▒ 0%
+geomean                                                             ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/filetree
+                                              Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                              Γöé               sec/op                Γöé
+TreeRebuildVisible/flat_50_files-32                                    76.18n ┬▒  4%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                          1.257┬╡ ┬▒ 22%
+TreeRebuildVisible/large_1000_nodes-32                                 1.841┬╡ ┬▒  6%
+RenderLine/file_node-32                                                3.254┬╡ ┬▒  3%
+RenderLine/dir_node_cursor-32                                          3.730┬╡ ┬▒  5%
+RenderLine/with_icons-32                                               3.286┬╡ ┬▒  4%
+LazyLoad/50_entries-32                                                 40.58┬╡ ┬▒  4%
+LazyLoad/200_entries_nested-32                                         20.01┬╡ ┬▒  8%
+DisplayWidth/ascii-32                                                  505.5n ┬▒ 17%
+DisplayWidth/mixed_unicode-32                                          390.7n ┬▒  5%
+TruncateToWidth/no_truncation-32                                       101.6n ┬▒  3%
+TruncateToWidth/needs_truncation-32                                    2.155┬╡ ┬▒  6%
+geomean                                                                1.583┬╡
+
+                                              Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                              Γöé                B/op                 Γöé
+TreeRebuildVisible/flat_50_files-32                                    0.000 ┬▒ 0%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                          0.000 ┬▒ 0%
+TreeRebuildVisible/large_1000_nodes-32                                 0.000 ┬▒ 0%
+RenderLine/file_node-32                                                824.0 ┬▒ 0%
+RenderLine/dir_node_cursor-32                                         1008.0 ┬▒ 0%
+RenderLine/with_icons-32                                               824.0 ┬▒ 0%
+LazyLoad/50_entries-32                                               28.60Ki ┬▒ 0%
+LazyLoad/200_entries_nested-32                                       13.89Ki ┬▒ 0%
+DisplayWidth/ascii-32                                                  156.0 ┬▒ 0%
+DisplayWidth/mixed_unicode-32                                          108.0 ┬▒ 0%
+TruncateToWidth/no_truncation-32                                       32.00 ┬▒ 0%
+TruncateToWidth/needs_truncation-32                                  1.102Ki ┬▒ 0%
+geomean                                                                           ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                              Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                              Γöé              allocs/op              Γöé
+TreeRebuildVisible/flat_50_files-32                                    0.000 ┬▒ 0%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                          0.000 ┬▒ 0%
+TreeRebuildVisible/large_1000_nodes-32                                 0.000 ┬▒ 0%
+RenderLine/file_node-32                                                120.0 ┬▒ 0%
+RenderLine/dir_node_cursor-32                                          116.0 ┬▒ 0%
+RenderLine/with_icons-32                                               120.0 ┬▒ 0%
+LazyLoad/50_entries-32                                                 312.0 ┬▒ 0%
+LazyLoad/200_entries_nested-32                                         149.0 ┬▒ 0%
+DisplayWidth/ascii-32                                                  39.00 ┬▒ 0%
+DisplayWidth/mixed_unicode-32                                          27.00 ┬▒ 0%
+TruncateToWidth/no_truncation-32                                       8.000 ┬▒ 0%
+TruncateToWidth/needs_truncation-32                                    149.0 ┬▒ 0%
+geomean                                                                           ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/gitdiff
+                                      Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                      Γöé               sec/op                Γöé
+InlineDiffRender/10_lines-32                                   20.89┬╡ ┬▒  3%
+InlineDiffRender/100_lines-32                                  170.9┬╡ ┬▒  3%
+InlineDiffRender/1000_lines-32                                 1.615m ┬▒  2%
+SideBySideDiffRender/10_lines-32                               34.26┬╡ ┬▒  6%
+SideBySideDiffRender/100_lines-32                              319.9┬╡ ┬▒ 91%
+SideBySideDiffRender/1000_lines-32                             7.169m ┬▒ 46%
+PairDiffLines/20_lines_mixed-32                                1.173┬╡ ┬▒ 26%
+PairDiffLines/200_lines_mixed-32                               10.01┬╡ ┬▒ 21%
+RenderViewport/small-32                                        6.388┬╡ ┬▒  5%
+RenderViewport/large_scrolled-32                               6.260┬╡ ┬▒ 10%
+MemoryGrowth/inline_100_lines-32                               194.5┬╡ ┬▒ 38%
+MemoryGrowth/inline_1000_lines-32                              1.805m ┬▒  4%
+MemoryGrowth/sidebyside_100_lines-32                           344.2┬╡ ┬▒  6%
+MemoryGrowth/sidebyside_1000_lines-32                          3.208m ┬▒  3%
+geomean                                                        116.3┬╡
+
+                                      Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                      Γöé                B/op                 Γöé
+InlineDiffRender/10_lines-32                                   4.016Ki ┬▒ 0%
+InlineDiffRender/100_lines-32                                  33.07Ki ┬▒ 0%
+InlineDiffRender/1000_lines-32                                 322.3Ki ┬▒ 0%
+SideBySideDiffRender/10_lines-32                               15.66Ki ┬▒ 0%
+SideBySideDiffRender/100_lines-32                              145.4Ki ┬▒ 0%
+SideBySideDiffRender/1000_lines-32                             1.364Mi ┬▒ 0%
+PairDiffLines/20_lines_mixed-32                                1.094Ki ┬▒ 0%
+PairDiffLines/200_lines_mixed-32                               10.59Ki ┬▒ 0%
+RenderViewport/small-32                                        6.750Ki ┬▒ 0%
+RenderViewport/large_scrolled-32                               6.762Ki ┬▒ 0%
+MemoryGrowth/inline_100_lines-32                               33.07Ki ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                              322.2Ki ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                           145.4Ki ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                          1.363Mi ┬▒ 0%
+geomean                                                        45.35Ki
+
+                                      Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                      Γöé              allocs/op              Γöé
+InlineDiffRender/10_lines-32                                     122.0 ┬▒ 0%
+InlineDiffRender/100_lines-32                                   1.071k ┬▒ 0%
+InlineDiffRender/1000_lines-32                                  10.44k ┬▒ 0%
+SideBySideDiffRender/10_lines-32                                 238.0 ┬▒ 0%
+SideBySideDiffRender/100_lines-32                               2.217k ┬▒ 0%
+SideBySideDiffRender/1000_lines-32                              21.19k ┬▒ 0%
+PairDiffLines/20_lines_mixed-32                                  18.00 ┬▒ 0%
+PairDiffLines/200_lines_mixed-32                                 141.0 ┬▒ 0%
+RenderViewport/small-32                                          12.00 ┬▒ 0%
+RenderViewport/large_scrolled-32                                 13.00 ┬▒ 0%
+MemoryGrowth/inline_100_lines-32                                1.071k ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                               10.44k ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                            2.217k ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                           21.19k ┬▒ 0%
+geomean                                                          663.0
+
+                                      Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                      Γöé            gc-cycles/op             Γöé
+MemoryGrowth/inline_100_lines-32                                11.20m ┬▒ 1%
+MemoryGrowth/inline_1000_lines-32                               114.9m ┬▒ 2%
+MemoryGrowth/sidebyside_100_lines-32                            52.48m ┬▒ 1%
+MemoryGrowth/sidebyside_1000_lines-32                           560.2m ┬▒ 1%
+geomean                                                         78.44m
+
+                                      Γöé perf\baselines\linux-amd64\main.txt Γöé
+                                      Γöé           heap-inuse-b/op           Γöé
+MemoryGrowth/inline_100_lines-32                             -13.68 ┬▒ -9%
+MemoryGrowth/inline_1000_lines-32                            -530.5 ┬▒ -4%
+MemoryGrowth/sidebyside_100_lines-32                         -13.05 ┬▒ -8%
+MemoryGrowth/sidebyside_1000_lines-32                       -1.163k ┬▒ -8%
+geomean                                                                   ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+goos: windows
+pkg: github.com/jongio/grut/internal/ai
+                                        Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                        Γöé                sec/op                 Γöé
+RedactContent/small_500B-32                                       188.1┬╡ ┬▒  51%
+RedactContent/medium_5KB-32                                       3.110m ┬▒   4%
+RedactContent/large_50KB-32                                       33.83m ┬▒   7%
+RedactContent_NoMatch/small_500B-32                               150.8┬╡ ┬▒   8%
+RedactContent_NoMatch/medium_5KB-32                               1.596m ┬▒  10%
+RedactContent_NoMatch/large_50KB-32                               16.37m ┬▒  28%
+ShouldExcludeFile/match_builtin-32                                83.22n ┬▒  18%
+ShouldExcludeFile/match_user_pattern-32                           2.514┬╡ ┬▒  11%
+ShouldExcludeFile/no_match-32                                     1.839┬╡ ┬▒  10%
+NewRedactor-32                                                    212.3┬╡ ┬▒ 168%
+geomean                                                           151.5┬╡
+
+                                        Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                        Γöé                 B/op                  Γöé
+RedactContent/small_500B-32                                     5.949Ki ┬▒  0%
+RedactContent/medium_5KB-32                                     123.9Ki ┬▒  1%
+RedactContent/large_50KB-32                                     1.574Mi ┬▒  0%
+RedactContent_NoMatch/small_500B-32                               4.000 ┬▒   ?
+RedactContent_NoMatch/medium_5KB-32                               150.5 ┬▒ 41%
+RedactContent_NoMatch/large_50KB-32                               166.5 ┬▒ 60%
+ShouldExcludeFile/match_builtin-32                                0.000 ┬▒  0%
+ShouldExcludeFile/match_user_pattern-32                           0.000 ┬▒  0%
+ShouldExcludeFile/no_match-32                                     0.000 ┬▒  0%
+NewRedactor-32                                                  111.6Ki ┬▒  0%
+geomean                                                                       ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                        Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                        Γöé               allocs/op               Γöé
+RedactContent/small_500B-32                                        25.00 ┬▒ 0%
+RedactContent/medium_5KB-32                                        105.0 ┬▒ 1%
+RedactContent/large_50KB-32                                        591.0 ┬▒ 1%
+RedactContent_NoMatch/small_500B-32                                0.000 ┬▒ 0%
+RedactContent_NoMatch/medium_5KB-32                                0.000 ┬▒ 0%
+RedactContent_NoMatch/large_50KB-32                                0.000 ┬▒ 0%
+ShouldExcludeFile/match_builtin-32                                 0.000 ┬▒ 0%
+ShouldExcludeFile/match_user_pattern-32                            0.000 ┬▒ 0%
+ShouldExcludeFile/no_match-32                                      0.000 ┬▒ 0%
+NewRedactor-32                                                     699.0 ┬▒ 0%
+geomean                                                                       ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/config
+                                    Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                    Γöé                sec/op                 Γöé
+Validate/valid_defaults-32                                     2.744┬╡ ┬▒ 76%
+Validate/with_arrays-32                                        9.530┬╡ ┬▒ 17%
+Validate/invalid_multi_error-32                                5.522┬╡ ┬▒ 23%
+ParseDefaultsTOML-32                                           47.47┬╡ ┬▒ 31%
+RejectEmbeddedKeys/clean_config-32                             1.279┬╡ ┬▒  8%
+RejectEmbeddedKeys/with_patterns-32                            7.938┬╡ ┬▒ 16%
+AppendEnumErr/match_first-32                                   55.58n ┬▒ 14%
+AppendEnumErr/match_last-32                                    53.90n ┬▒  6%
+AppendEnumErr/no_match-32                                      659.8n ┬▒  7%
+geomean                                                        1.728┬╡
+
+                                    Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                    Γöé                 B/op                  Γöé
+Validate/valid_defaults-32                                     776.0 ┬▒ 0%
+Validate/with_arrays-32                                        773.5 ┬▒ 0%
+Validate/invalid_multi_error-32                              1.946Ki ┬▒ 0%
+ParseDefaultsTOML-32                                         21.14Ki ┬▒ 0%
+RejectEmbeddedKeys/clean_config-32                             0.000 ┬▒ 0%
+RejectEmbeddedKeys/with_patterns-32                            0.000 ┬▒ 0%
+AppendEnumErr/match_first-32                                   48.00 ┬▒ 0%
+AppendEnumErr/match_last-32                                    48.00 ┬▒ 0%
+AppendEnumErr/no_match-32                                      344.0 ┬▒ 0%
+geomean                                                                   ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                    Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                    Γöé               allocs/op               Γöé
+Validate/valid_defaults-32                                     16.00 ┬▒ 0%
+Validate/with_arrays-32                                        16.00 ┬▒ 0%
+Validate/invalid_multi_error-32                                55.00 ┬▒ 0%
+ParseDefaultsTOML-32                                           105.0 ┬▒ 0%
+RejectEmbeddedKeys/clean_config-32                             0.000 ┬▒ 0%
+RejectEmbeddedKeys/with_patterns-32                            0.000 ┬▒ 0%
+AppendEnumErr/match_first-32                                   1.000 ┬▒ 0%
+AppendEnumErr/match_last-32                                    1.000 ┬▒ 0%
+AppendEnumErr/no_match-32                                      12.00 ┬▒ 0%
+geomean                                                                   ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/crashlog
+                                  Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                  Γöé                sec/op                 Γöé
+ScrubPII/small_100B-32                                       14.76┬╡ ┬▒ 37%
+ScrubPII/medium_1KB-32                                       300.3┬╡ ┬▒ 17%
+ScrubPII/large_10KB-32                                       5.591m ┬▒ 67%
+ScrubPII_NoSecrets/100B-32                                   31.63┬╡ ┬▒  2%
+ScrubPII_NoSecrets/1KB-32                                    287.1┬╡ ┬▒ 10%
+ScrubPII_NoSecrets/10KB-32                                   3.501m ┬▒  2%
+ScrubLogTail/10_entries-32                                   159.3┬╡ ┬▒  6%
+ScrubLogTail/50_entries-32                                   769.1┬╡ ┬▒  3%
+ScrubLogTail/100_entries_mixed-32                            11.95m ┬▒  5%
+geomean                                                      471.6┬╡
+
+                                  Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                  Γöé                 B/op                  Γöé
+ScrubPII/small_100B-32                                       1.160Ki ┬▒ 0%
+ScrubPII/medium_1KB-32                                       12.19Ki ┬▒ 0%
+ScrubPII/large_10KB-32                                       230.2Ki ┬▒ 1%
+ScrubPII_NoSecrets/100B-32                                   1.437Ki ┬▒ 0%
+ScrubPII_NoSecrets/1KB-32                                    10.38Ki ┬▒ 0%
+ScrubPII_NoSecrets/10KB-32                                   102.0Ki ┬▒ 0%
+ScrubLogTail/10_entries-32                                   11.75Ki ┬▒ 0%
+ScrubLogTail/50_entries-32                                   58.95Ki ┬▒ 0%
+ScrubLogTail/100_entries_mixed-32                            573.8Ki ┬▒ 0%
+geomean                                                      23.23Ki
+
+                                  Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                  Γöé               allocs/op               Γöé
+ScrubPII/small_100B-32                                         21.00 ┬▒ 0%
+ScrubPII/medium_1KB-32                                         31.00 ┬▒ 0%
+ScrubPII/large_10KB-32                                         84.00 ┬▒ 1%
+ScrubPII_NoSecrets/100B-32                                     19.00 ┬▒ 0%
+ScrubPII_NoSecrets/1KB-32                                      19.00 ┬▒ 0%
+ScrubPII_NoSecrets/10KB-32                                     19.00 ┬▒ 0%
+ScrubLogTail/10_entries-32                                     211.0 ┬▒ 0%
+ScrubLogTail/50_entries-32                                    1.051k ┬▒ 0%
+ScrubLogTail/100_entries_mixed-32                             2.309k ┬▒ 0%
+geomean                                                        83.25
+
+pkg: github.com/jongio/grut/internal/git
+                                Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                Γöé                sec/op                 Γöé
+ParseStatus/10_files-32                                   2.546┬╡ ┬▒ 131%
+ParseStatus/100_files-32                                  21.62┬╡ ┬▒  10%
+ParseStatus/500_files-32                                  116.0┬╡ ┬▒   7%
+ParseStatus/100_renamed-32                                38.22┬╡ ┬▒  11%
+ParseStatusBranch-32                                      2.158┬╡ ┬▒  13%
+ParseDiff/10_lines-32                                     1.974┬╡ ┬▒  27%
+ParseDiff/100_lines-32                                    11.23┬╡ ┬▒  14%
+ParseDiff/1000_lines-32                                   137.6┬╡ ┬▒  13%
+ParseHunkHeader/simple-32                                 85.36n ┬▒   9%
+ParseHunkHeader/with_context-32                           91.38n ┬▒  15%
+ParseHunkHeader/large_range-32                            95.88n ┬▒   9%
+UndoStack/record_50-32                                    28.75┬╡ ┬▒   6%
+UndoStack/record_overflow-32                              116.3┬╡ ┬▒   9%
+UndoStack/peek_undo-32                                    12.48n ┬▒  10%
+UndoStack/can_undo_redo-32                                22.12n ┬▒   2%
+JoinPaths-32                                              3.352┬╡ ┬▒   6%
+SplitPaths-32                                             6.879┬╡ ┬▒   6%
+geomean                                                   2.727┬╡
+
+                                Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                Γöé                 B/op                  Γöé
+ParseStatus/10_files-32                                  2.641Ki ┬▒ 0%
+ParseStatus/100_files-32                                 24.66Ki ┬▒ 0%
+ParseStatus/500_files-32                                 111.9Ki ┬▒ 0%
+ParseStatus/100_renamed-32                               32.16Ki ┬▒ 0%
+ParseStatusBranch-32                                       928.0 ┬▒ 0%
+ParseDiff/10_lines-32                                    1.703Ki ┬▒ 0%
+ParseDiff/100_lines-32                                   11.02Ki ┬▒ 0%
+ParseDiff/1000_lines-32                                  116.5Ki ┬▒ 0%
+ParseHunkHeader/simple-32                                  32.00 ┬▒ 0%
+ParseHunkHeader/with_context-32                            32.00 ┬▒ 0%
+ParseHunkHeader/large_range-32                             32.00 ┬▒ 0%
+UndoStack/record_50-32                                   22.95Ki ┬▒ 0%
+UndoStack/record_overflow-32                             87.41Ki ┬▒ 0%
+UndoStack/peek_undo-32                                     0.000 ┬▒ 0%
+UndoStack/can_undo_redo-32                                 0.000 ┬▒ 0%
+JoinPaths-32                                             2.625Ki ┬▒ 0%
+SplitPaths-32                                            6.062Ki ┬▒ 0%
+geomean                                                               ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                Γöé               allocs/op               Γöé
+ParseStatus/10_files-32                                    14.00 ┬▒ 0%
+ParseStatus/100_files-32                                   89.00 ┬▒ 0%
+ParseStatus/500_files-32                                   411.0 ┬▒ 0%
+ParseStatus/100_renamed-32                                 209.0 ┬▒ 0%
+ParseStatusBranch-32                                       2.000 ┬▒ 0%
+ParseDiff/10_lines-32                                      9.000 ┬▒ 0%
+ParseDiff/100_lines-32                                     46.00 ┬▒ 0%
+ParseDiff/1000_lines-32                                    448.0 ┬▒ 0%
+ParseHunkHeader/simple-32                                  1.000 ┬▒ 0%
+ParseHunkHeader/with_context-32                            1.000 ┬▒ 0%
+ParseHunkHeader/large_range-32                             1.000 ┬▒ 0%
+UndoStack/record_50-32                                     208.0 ┬▒ 0%
+UndoStack/record_overflow-32                               811.0 ┬▒ 0%
+UndoStack/peek_undo-32                                     0.000 ┬▒ 0%
+UndoStack/can_undo_redo-32                                 0.000 ┬▒ 0%
+JoinPaths-32                                               1.000 ┬▒ 0%
+SplitPaths-32                                              7.000 ┬▒ 0%
+geomean                                                               ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/filetree
+                                              Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                              Γöé                sec/op                 Γöé
+TreeRebuildVisible/flat_50_files-32                                     95.71n ┬▒  43%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                           1.252┬╡ ┬▒  15%
+TreeRebuildVisible/large_1000_nodes-32                                  1.934┬╡ ┬▒   9%
+RenderLine/file_node-32                                                 3.103┬╡ ┬▒   5%
+RenderLine/dir_node_cursor-32                                           3.308┬╡ ┬▒   4%
+RenderLine/with_icons-32                                                3.013┬╡ ┬▒   3%
+LazyLoad/50_entries-32                                                  185.8┬╡ ┬▒  29%
+LazyLoad/200_entries_nested-32                                          237.3┬╡ ┬▒  59%
+DisplayWidth/ascii-32                                                   1.377┬╡ ┬▒  36%
+DisplayWidth/mixed_unicode-32                                           843.1n ┬▒   6%
+TruncateToWidth/no_truncation-32                                        228.2n ┬▒   5%
+TruncateToWidth/needs_truncation-32                                     5.835┬╡ ┬▒ 229%
+geomean                                                                 2.979┬╡
+
+                                              Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                              Γöé                 B/op                  Γöé
+TreeRebuildVisible/flat_50_files-32                                      0.000 ┬▒ 0%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                            0.000 ┬▒ 0%
+TreeRebuildVisible/large_1000_nodes-32                                   0.000 ┬▒ 0%
+RenderLine/file_node-32                                                  824.0 ┬▒ 0%
+RenderLine/dir_node_cursor-32                                           1008.0 ┬▒ 0%
+RenderLine/with_icons-32                                                 824.0 ┬▒ 0%
+LazyLoad/50_entries-32                                                 29.97Ki ┬▒ 0%
+LazyLoad/200_entries_nested-32                                         17.38Ki ┬▒ 2%
+DisplayWidth/ascii-32                                                    156.0 ┬▒ 0%
+DisplayWidth/mixed_unicode-32                                            108.0 ┬▒ 0%
+TruncateToWidth/no_truncation-32                                         32.00 ┬▒ 0%
+TruncateToWidth/needs_truncation-32                                    1.102Ki ┬▒ 0%
+geomean                                                                             ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+                                              Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                              Γöé               allocs/op               Γöé
+TreeRebuildVisible/flat_50_files-32                                      0.000 ┬▒ 0%
+TreeRebuildVisible/nested_5_deep_200_nodes-32                            0.000 ┬▒ 0%
+TreeRebuildVisible/large_1000_nodes-32                                   0.000 ┬▒ 0%
+RenderLine/file_node-32                                                  120.0 ┬▒ 0%
+RenderLine/dir_node_cursor-32                                            116.0 ┬▒ 0%
+RenderLine/with_icons-32                                                 120.0 ┬▒ 0%
+LazyLoad/50_entries-32                                                   312.0 ┬▒ 0%
+LazyLoad/200_entries_nested-32                                           172.0 ┬▒ 0%
+DisplayWidth/ascii-32                                                    39.00 ┬▒ 0%
+DisplayWidth/mixed_unicode-32                                            27.00 ┬▒ 0%
+TruncateToWidth/no_truncation-32                                         8.000 ┬▒ 0%
+TruncateToWidth/needs_truncation-32                                      149.0 ┬▒ 0%
+geomean                                                                             ┬╣
+┬╣ summaries must be >0 to compute geomean
+
+pkg: github.com/jongio/grut/internal/panels/gitdiff
+                                      Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                      Γöé                sec/op                 Γöé
+InlineDiffRender/10_lines-32                                    27.82┬╡ ┬▒  19%
+InlineDiffRender/100_lines-32                                   228.4┬╡ ┬▒  49%
+InlineDiffRender/1000_lines-32                                  2.097m ┬▒   3%
+SideBySideDiffRender/10_lines-32                                45.28┬╡ ┬▒   9%
+SideBySideDiffRender/100_lines-32                               368.0┬╡ ┬▒   6%
+SideBySideDiffRender/1000_lines-32                              5.029m ┬▒  32%
+PairDiffLines/20_lines_mixed-32                                 1.589┬╡ ┬▒ 179%
+PairDiffLines/200_lines_mixed-32                                11.09┬╡ ┬▒  72%
+RenderViewport/small-32                                         7.379┬╡ ┬▒  20%
+RenderViewport/large_scrolled-32                                5.878┬╡ ┬▒  13%
+MemoryGrowth/inline_100_lines-32                                241.4┬╡ ┬▒  90%
+MemoryGrowth/inline_1000_lines-32                               2.532m ┬▒  75%
+MemoryGrowth/sidebyside_100_lines-32                            484.1┬╡ ┬▒  50%
+MemoryGrowth/sidebyside_1000_lines-32                           4.691m ┬▒   9%
+geomean                                                         140.6┬╡
+
+                                      Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                      Γöé                 B/op                  Γöé
+InlineDiffRender/10_lines-32                                     4.016Ki ┬▒ 0%
+InlineDiffRender/100_lines-32                                    33.07Ki ┬▒ 0%
+InlineDiffRender/1000_lines-32                                   322.3Ki ┬▒ 0%
+SideBySideDiffRender/10_lines-32                                 15.66Ki ┬▒ 0%
+SideBySideDiffRender/100_lines-32                                145.4Ki ┬▒ 0%
+SideBySideDiffRender/1000_lines-32                               1.363Mi ┬▒ 0%
+PairDiffLines/20_lines_mixed-32                                  1.094Ki ┬▒ 0%
+PairDiffLines/200_lines_mixed-32                                 10.59Ki ┬▒ 0%
+RenderViewport/small-32                                          6.750Ki ┬▒ 0%
+RenderViewport/large_scrolled-32                                 6.762Ki ┬▒ 0%
+MemoryGrowth/inline_100_lines-32                                 33.07Ki ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                                322.2Ki ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                             145.4Ki ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                            1.363Mi ┬▒ 0%
+geomean                                                          45.35Ki
+
+                                      Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                      Γöé               allocs/op               Γöé
+InlineDiffRender/10_lines-32                                       122.0 ┬▒ 0%
+InlineDiffRender/100_lines-32                                     1.071k ┬▒ 0%
+InlineDiffRender/1000_lines-32                                    10.44k ┬▒ 0%
+SideBySideDiffRender/10_lines-32                                   238.0 ┬▒ 0%
+SideBySideDiffRender/100_lines-32                                 2.217k ┬▒ 0%
+SideBySideDiffRender/1000_lines-32                                21.19k ┬▒ 0%
+PairDiffLines/20_lines_mixed-32                                    18.00 ┬▒ 0%
+PairDiffLines/200_lines_mixed-32                                   141.0 ┬▒ 0%
+RenderViewport/small-32                                            12.00 ┬▒ 0%
+RenderViewport/large_scrolled-32                                   13.00 ┬▒ 0%
+MemoryGrowth/inline_100_lines-32                                  1.071k ┬▒ 0%
+MemoryGrowth/inline_1000_lines-32                                 10.44k ┬▒ 0%
+MemoryGrowth/sidebyside_100_lines-32                              2.217k ┬▒ 0%
+MemoryGrowth/sidebyside_1000_lines-32                             21.19k ┬▒ 0%
+geomean                                                            663.0
+
+                                      Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                      Γöé             gc-cycles/op              Γöé
+MemoryGrowth/inline_100_lines-32                                 11.26m ┬▒  4%
+MemoryGrowth/inline_1000_lines-32                                115.5m ┬▒ 13%
+MemoryGrowth/sidebyside_100_lines-32                             52.28m ┬▒  3%
+MemoryGrowth/sidebyside_1000_lines-32                            544.8m ┬▒  3%
+geomean                                                          78.01m
+
+                                      Γöé perf\baselines\windows-amd64\main.txt Γöé
+                                      Γöé            heap-inuse-b/op            Γöé
+MemoryGrowth/inline_100_lines-32                              -16.41 ┬▒ -19%
+MemoryGrowth/inline_1000_lines-32                             -796.3 ┬▒ -30%
+MemoryGrowth/sidebyside_100_lines-32                          -18.33 ┬▒ -21%
+MemoryGrowth/sidebyside_1000_lines-32                        -1.694k ┬▒ -12%
+geomean                                                                     ┬╣
+┬╣ summaries must be >0 to compute geomean

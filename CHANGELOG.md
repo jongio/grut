@@ -49,7 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `go mod verify` integrity check to preflight build gate (now 11 steps)
 
 ### Performance
-- Batch bottom border rendering calls
+- Struct field reordering via `betteralign` across 70+ types, eliminating 800+ bytes of padding
+  (`config.Config` −56 B, `git/types` −200 B, `chat.Model` −24 B, `mcp/agent_tracker` −80 B)
+- `gitdiff` slice reuse: `[:0]` reset on `rebuildLines()` instead of nil — backing arrays
+  persist across frames; benchmarks show **−39% sec/op** (side-by-side, 1000 lines),
+  **−16% B/op** (inline, 1000 lines), **−20% sec/op** (PairDiffLines)
+- `tui/app.go` render loops: replace `+=` string concat with `strings.Builder` + `Reset()`
+  in `renderPanel()` and `buildOuterBorder()` — ~196 fewer allocations per frame (~11,700/sec at 60 fps)
+- Added `--cpu-profile` and `--mem-profile` CLI flags for on-demand `runtime/pprof` profiling
+- Benchmark baseline committed to `perf/baselines/main.txt`; CI tracks regressions on every PR
 
 ## [0.1.0] - 2026-03-09
 

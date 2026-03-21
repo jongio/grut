@@ -15,10 +15,9 @@ const (
 type updateLock struct {
 	path string
 }
-
 type lockMetadata struct {
-	PID       int       `json:"pid"`
 	CreatedAt time.Time `json:"createdAt"`
+	PID       int       `json:"pid"`
 }
 
 // acquireUpdateLock creates an exclusive lock file to prevent concurrent
@@ -28,13 +27,11 @@ func acquireUpdateLock(path string) (*updateLock, error) {
 		PID:       os.Getpid(),
 		CreatedAt: time.Now().UTC(),
 	}
-
 	for range 2 {
 		raw, err := json.Marshal(metadata)
 		if err != nil {
 			return nil, fmt.Errorf("encoding lock metadata: %w", err)
 		}
-
 		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, cacheFilePerm)
 		if err == nil {
 			if _, writeErr := file.Write(raw); writeErr != nil {
@@ -51,7 +48,6 @@ func acquireUpdateLock(path string) (*updateLock, error) {
 		if !os.IsExist(err) {
 			return nil, fmt.Errorf("creating lock file: %w", err)
 		}
-
 		stale, staleErr := isStaleLock(path)
 		if staleErr != nil {
 			return nil, staleErr
@@ -63,7 +59,6 @@ func acquireUpdateLock(path string) (*updateLock, error) {
 			return nil, fmt.Errorf("removing stale lock file: %w", err)
 		}
 	}
-
 	return nil, fmt.Errorf("lock file exists at %s", path)
 }
 
@@ -83,12 +78,10 @@ func isStaleLock(path string) (bool, error) {
 		}
 		return false, fmt.Errorf("reading lock file: %w", err)
 	}
-
 	var metadata lockMetadata
 	if err := json.Unmarshal(raw, &metadata); err == nil && !metadata.CreatedAt.IsZero() {
 		return time.Since(metadata.CreatedAt) > lockStaleDuration, nil
 	}
-
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {

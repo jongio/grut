@@ -60,7 +60,6 @@ func (e *ToolExecutor) Execute(ctx context.Context, call ai.ToolCall) ToolResult
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
 		}
 	}
-
 	// Rate-limit based on tool category.
 	category := e.rateCategory(call.Name)
 	if !e.limiter.Allow(category) {
@@ -69,7 +68,6 @@ func (e *ToolExecutor) Execute(ctx context.Context, call ai.ToolCall) ToolResult
 			Error:  fmt.Sprintf("rate limit exceeded for %s operations", category),
 		}
 	}
-
 	content, err := e.dispatch(ctx, call.Name, call.Arguments)
 	if err != nil {
 		return ToolResult{
@@ -96,7 +94,7 @@ func (e *ToolExecutor) rateCategory(name string) string {
 	// bucket since they are frequent, low-risk operations.
 	switch name {
 	case "file_write", "file_delete", "file_rename", "file_mkdir", //nolint:goconst // inline tool names are easier to scan here
-		"git_push", "git_branch_delete", "git_rebase", "git_reset",
+		"git_push", "git_branch_delete", "git_rebase", "git_reset", //nolint:goconst // inline tool names are easier to scan here
 		"git_tag_delete", "git_discard", //nolint:goconst // inline tool names are easier to scan here
 		"bulk_delete", "bulk_rename": //nolint:goconst // inline tool names are easier to scan here
 		return "write"
@@ -121,7 +119,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.fileList(ctx, args)
 	case "file_mkdir":
 		return e.fileMkdir(ctx, args)
-
 	// ── Git read operations ──────────────────────────────────────────
 	case "git_status":
 		return e.gitStatus(ctx)
@@ -137,7 +134,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.gitStashList(ctx)
 	case "git_worktree_list":
 		return e.gitWorktreeList(ctx)
-
 	// ── Git write operations ─────────────────────────────────────────
 	case "git_stage":
 		return e.gitStage(ctx, args)
@@ -173,7 +169,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.gitTagDelete(ctx, args)
 	case "git_discard":
 		return e.gitDiscard(ctx, args)
-
 	// ── Navigation & search ──────────────────────────────────────────
 	case "navigate_to":
 		return e.navigateTo(args)
@@ -183,7 +178,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.searchContent(ctx, args)
 	case "explain":
 		return e.explain(args)
-
 	// ── Bulk operations ──────────────────────────────────────────────
 	case "bulk_stage":
 		return e.bulkStage(ctx, args)
@@ -191,7 +185,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.bulkDelete(ctx, args)
 	case "bulk_rename":
 		return e.bulkRename(ctx, args)
-
 	// ── GitHub operations ────────────────────────────────────────────
 	case "gh_issues":
 		return e.ghIssues(ctx, args)
@@ -213,7 +206,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 		return e.ghPRReview(ctx, args)
 	case "gh_actions_rerun":
 		return e.ghActionsRerun(ctx, args)
-
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -222,7 +214,6 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 // ---------------------------------------------------------------------------
 // File operation handlers
 // ---------------------------------------------------------------------------
-
 func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string, error) {
 	path := getString(args, "path")
 	if path == "" {
@@ -367,12 +358,10 @@ func (e *ToolExecutor) fileList(_ context.Context, args map[string]any) (string,
 		path = "."
 	}
 	recursive := getBool(args, "recursive")
-
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %s", path)
 	}
-
 	var entries []string
 	if recursive {
 		err = filepath.WalkDir(resolved, func(p string, d fs.DirEntry, walkErr error) error {
@@ -419,7 +408,6 @@ func (e *ToolExecutor) fileList(_ context.Context, args map[string]any) (string,
 			entries = append(entries, d.Name()+suffix)
 		}
 	}
-
 	if len(entries) == 0 {
 		return "(empty directory)", nil
 	}
@@ -447,7 +435,6 @@ func (e *ToolExecutor) fileMkdir(_ context.Context, args map[string]any) (string
 // ---------------------------------------------------------------------------
 // Git read handlers
 // ---------------------------------------------------------------------------
-
 func (e *ToolExecutor) gitStatus(ctx context.Context) (string, error) {
 	statuses, err := e.client.Status(ctx)
 	if err != nil {
@@ -535,7 +522,6 @@ func (e *ToolExecutor) gitWorktreeList(ctx context.Context) (string, error) {
 // ---------------------------------------------------------------------------
 // Git write handlers
 // ---------------------------------------------------------------------------
-
 func (e *ToolExecutor) gitStage(ctx context.Context, args map[string]any) (string, error) {
 	paths := getStringSlice(args, "paths")
 	if len(paths) == 0 {
@@ -730,7 +716,6 @@ func (e *ToolExecutor) gitDiscard(_ context.Context, args map[string]any) (strin
 // ---------------------------------------------------------------------------
 // Navigation & search handlers
 // ---------------------------------------------------------------------------
-
 func (e *ToolExecutor) navigateTo(args map[string]any) (string, error) {
 	path := getString(args, "path")
 	if path == "" {
@@ -757,7 +742,6 @@ func (e *ToolExecutor) searchFiles(ctx context.Context, args map[string]any) (st
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %s", searchPath)
 	}
-
 	var matches []string
 	walkErr := filepath.WalkDir(resolved, func(p string, d fs.DirEntry, walkErr error) error {
 		if ctx.Err() != nil {
@@ -788,7 +772,6 @@ func (e *ToolExecutor) searchFiles(ctx context.Context, args map[string]any) (st
 	if walkErr != nil {
 		return "", fmt.Errorf("search files: %w", walkErr)
 	}
-
 	if len(matches) == 0 {
 		return "no files matched", nil
 	}
@@ -815,21 +798,17 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %s", searchPath)
 	}
-
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", fmt.Errorf("invalid regex: %w", err)
 	}
-
 	type contentMatch struct {
 		File string `json:"file"`
-		Line int    `json:"line"`
 		Text string `json:"text"`
+		Line int    `json:"line"`
 	}
-
 	var matches []contentMatch
 	const maxMatches = 100
-
 	walkErr := filepath.WalkDir(resolved, func(p string, d fs.DirEntry, walkErr error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -843,7 +822,6 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 		if len(matches) >= maxMatches {
 			return filepath.SkipAll
 		}
-
 		// CR-019: Compute relative path early and skip sensitive files
 		// to prevent .env/SSH key contents from appearing in search results.
 		rel, relErr := filepath.Rel(e.jail.Root(), p)
@@ -854,7 +832,6 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 		if err := mcp.IsSensitivePath(rel); err != nil {
 			return nil //nolint:nilerr // skip sensitive files
 		}
-
 		// Skip binary-looking or very large files.
 		info, infoErr := d.Info()
 		if infoErr != nil || info.Size() > 1<<20 { // 1 MiB limit
@@ -864,7 +841,6 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 		if readErr != nil {
 			return nil //nolint:nilerr // error returned as tool result
 		}
-
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
 			if re.MatchString(line) {
@@ -883,7 +859,6 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 	if walkErr != nil {
 		return "", fmt.Errorf("search content: %w", walkErr)
 	}
-
 	if len(matches) == 0 {
 		return "no matches found", nil
 	}
@@ -903,13 +878,11 @@ func (e *ToolExecutor) explain(args map[string]any) (string, error) {
 // ---------------------------------------------------------------------------
 // Bulk operation handlers
 // ---------------------------------------------------------------------------
-
 func (e *ToolExecutor) bulkStage(ctx context.Context, args map[string]any) (string, error) {
 	patterns := getStringSlice(args, "patterns")
 	if len(patterns) == 0 {
 		return "", fmt.Errorf("patterns is required")
 	}
-
 	// Expand glob patterns to matching file paths.
 	var paths []string
 	for _, pattern := range patterns {
@@ -939,7 +912,6 @@ func (e *ToolExecutor) bulkDelete(_ context.Context, args map[string]any) (strin
 	if len(paths) == 0 {
 		return "", fmt.Errorf("paths is required")
 	}
-
 	var deleted int
 	var errs []string
 	for _, p := range paths {
@@ -974,7 +946,6 @@ func (e *ToolExecutor) bulkRename(_ context.Context, args map[string]any) (strin
 	if !ok {
 		return "", fmt.Errorf("renames must be an array")
 	}
-
 	var renamed int
 	var errs []string
 	for _, item := range renameSlice {
@@ -1027,7 +998,6 @@ func (e *ToolExecutor) bulkRename(_ context.Context, args map[string]any) (strin
 // ---------------------------------------------------------------------------
 // Argument extraction helpers
 // ---------------------------------------------------------------------------
-
 // getString safely extracts a string value from the argument map.
 func getString(args map[string]any, key string) string {
 	v, ok := args[key]
@@ -1099,7 +1069,6 @@ func getStringSlice(args map[string]any, key string) []string {
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
-
 // toJSON marshals v to indented JSON for AI-readable output.
 func toJSON(v any) (string, error) {
 	data, err := json.MarshalIndent(v, "", "  ")

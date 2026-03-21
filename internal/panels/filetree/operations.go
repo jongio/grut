@@ -29,10 +29,10 @@ const (
 // pendingOperation holds state for an operation that requires user
 // confirmation (e.g. delete confirmation modal) before execution.
 type pendingOperation struct {
-	kind    opKind
-	paths   []string // source paths
 	destDir string   // destination directory (paste)
 	name    string   // item type name (for opFirstUseConfirm)
+	paths   []string // source paths
+	kind    opKind
 }
 
 // clipboard holds cut/copy state for the filetree panel.
@@ -44,7 +44,6 @@ type clipboard struct {
 // ---------------------------------------------------------------------------
 // Path jailing
 // ---------------------------------------------------------------------------
-
 // isWithinRoot returns true if the given path resolves to a location
 // inside the tree's root directory. This prevents directory-traversal
 // attacks via "../" sequences and symlink escapes (CWE-59).
@@ -57,7 +56,6 @@ func isWithinRoot(root, target string) bool {
 	if err != nil {
 		return false
 	}
-
 	// Resolve symlinks to prevent symlink escape attacks.
 	// If EvalSymlinks fails (target doesn't exist yet for writes),
 	// fall back to lexical check on the cleaned absolute path.
@@ -69,7 +67,6 @@ func isWithinRoot(root, target string) bool {
 	if err != nil {
 		resolvedTarget = filepath.Clean(absTarget)
 	}
-
 	// Target must be under root or equal to root.
 	rel, err := filepath.Rel(resolvedRoot, resolvedTarget)
 	if err != nil {
@@ -81,7 +78,6 @@ func isWithinRoot(root, target string) bool {
 // ---------------------------------------------------------------------------
 // File operations
 // ---------------------------------------------------------------------------
-
 // copyFile copies src to dst. If src is a directory, the copy is recursive.
 // Both src and dst must be within root. The context allows cancellation of
 // long-running copy operations (F20).
@@ -95,12 +91,10 @@ func copyFile(ctx context.Context, root, src, dst string) error {
 	if !isWithinRoot(root, dst) {
 		return fmt.Errorf("destination path %q is outside root", dst)
 	}
-
 	info, err := os.Lstat(src)
 	if err != nil {
 		return fmt.Errorf("stat %q: %w", src, err)
 	}
-
 	if info.IsDir() {
 		return copyDir(ctx, root, src, dst)
 	}
@@ -114,7 +108,6 @@ func copyRegularFile(src, dst string, mode fs.FileMode) error {
 		return fmt.Errorf("open %q: %w", src, err)
 	}
 	defer func() { _ = in.Close() }()
-
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return fmt.Errorf("create %q: %w", dst, err)
@@ -127,7 +120,6 @@ func copyRegularFile(src, dst string, mode fs.FileMode) error {
 			_ = out.Close()
 		}
 	}()
-
 	if _, err := io.Copy(out, in); err != nil {
 		return fmt.Errorf("copy %q → %q: %w", src, dst, err)
 	}
@@ -140,33 +132,26 @@ func copyDir(ctx context.Context, root, src, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return fmt.Errorf("stat %q: %w", src, err)
 	}
-
 	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return fmt.Errorf("mkdir %q: %w", dst, err)
 	}
-
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return fmt.Errorf("readdir %q: %w", src, err)
 	}
-
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-
 		srcChild := filepath.Join(src, entry.Name())
 		dstChild := filepath.Join(dst, entry.Name())
-
 		if !isWithinRoot(root, srcChild) || !isWithinRoot(root, dstChild) {
 			continue // skip anything that escapes root
 		}
-
 		if entry.IsDir() {
 			if err := copyDir(ctx, root, srcChild, dstChild); err != nil {
 				return err
@@ -181,7 +166,6 @@ func copyDir(ctx context.Context, root, src, dst string) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -197,7 +181,6 @@ func moveFile(ctx context.Context, root, src, dst string) error {
 	if !isWithinRoot(root, dst) {
 		return fmt.Errorf("destination path %q is outside root", dst)
 	}
-
 	if err := os.Rename(src, dst); err != nil {
 		return fmt.Errorf("move %q → %q: %w", src, dst, err)
 	}
@@ -214,7 +197,6 @@ func deleteFile(ctx context.Context, root, path string) error {
 	if !isWithinRoot(root, path) {
 		return fmt.Errorf("path %q is outside root", path)
 	}
-
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("delete %q: %w", path, err)
 	}
@@ -231,19 +213,15 @@ func renameFile(ctx context.Context, root, oldPath, newName string) error {
 	if !isWithinRoot(root, oldPath) {
 		return fmt.Errorf("path %q is outside root", oldPath)
 	}
-
 	// newName must be a plain filename — no path separators or traversal.
 	if strings.ContainsAny(newName, `/\`) || newName == ".." || newName == "." || newName == "" {
 		return fmt.Errorf("invalid name %q", newName)
 	}
-
 	dir := filepath.Dir(oldPath)
 	newPath := filepath.Join(dir, newName)
-
 	if !isWithinRoot(root, newPath) {
 		return fmt.Errorf("new path %q is outside root", newPath)
 	}
-
 	if err := os.Rename(oldPath, newPath); err != nil {
 		return fmt.Errorf("rename %q → %q: %w", oldPath, newPath, err)
 	}

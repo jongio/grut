@@ -17,6 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -24,14 +25,12 @@ import (
 // ---------------------------------------------------------------------------
 // View-model types (avoid importing internal/ai to prevent import cycle)
 // ---------------------------------------------------------------------------
-
 // ConflictFileData holds display data for one conflicted file.
 // The caller converts from ai.ConflictFile + ops.ConflictResolution when
 // building the SetConflictsMsg.
 type ConflictFileData struct {
 	// Path is the repository-relative file path.
 	Path string
-
 	// Regions contains the conflict regions within this file.
 	Regions []ConflictRegionData
 }
@@ -39,28 +38,21 @@ type ConflictFileData struct {
 // ConflictRegionData holds display data for a single conflict region,
 // including the AI resolution if available.
 type ConflictRegionData struct {
-	// StartLine is the 1-based line where the conflict begins.
-	StartLine int
-
-	// EndLine is the 1-based line where the conflict ends (inclusive).
-	EndLine int
-
 	// Ours is the text from the current branch.
 	Ours string
-
 	// Theirs is the text from the incoming branch.
 	Theirs string
-
 	// Base is the text from the common ancestor (may be empty).
 	Base string
-
 	// AIResolution is the AI-suggested resolution text. Empty when no AI
 	// resolution is available for this region.
 	AIResolution string
-
 	// Explanation describes why the AI chose this resolution.
 	Explanation string
-
+	// StartLine is the 1-based line where the conflict begins.
+	StartLine int
+	// EndLine is the 1-based line where the conflict ends (inclusive).
+	EndLine int
 	// Confidence is a 0.0–1.0 score for the AI's certainty.
 	Confidence float64
 }
@@ -68,7 +60,6 @@ type ConflictRegionData struct {
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
-
 // SetConflictsMsg delivers conflict data to the panel. The root model
 // converts from ai.ConflictFile / ops.ConflictResolution into these
 // view-model types before sending.
@@ -79,7 +70,6 @@ type SetConflictsMsg struct {
 // ---------------------------------------------------------------------------
 // Resolution choice constants
 // ---------------------------------------------------------------------------
-
 const (
 	choiceAI     = "ai"
 	choiceOurs   = "ours"
@@ -89,25 +79,19 @@ const (
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the AI conflict resolution panel. It shows a three-way diff
 // (base/ours/theirs) with AI-suggested resolutions and lets the user
 // accept or override each region's resolution.
 type Panel struct {
+	ctx   context.Context
+	theme *theme.Theme
+	// resolved tracks user choices: filePath -> regionIndex -> choiceXxx.
+	resolved map[string]map[int]string
+	files    []ConflictFileData
 	panels.BasePanel
-
-	files []ConflictFileData
-
 	currentFile   int // index into files
 	currentRegion int // index into current file's regions
 	scrollY       int // scroll offset within view
-
-	theme *theme.Theme
-
-	// resolved tracks user choices: filePath -> regionIndex -> choiceXxx.
-	resolved map[string]map[int]string
-
-	ctx context.Context
 }
 
 // Compile-time interface check.
@@ -126,7 +110,6 @@ func New(th *theme.Theme) *Panel {
 // ---------------------------------------------------------------------------
 // Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -136,7 +119,6 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
-
 // Update implements panels.Panel.
 func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -162,7 +144,6 @@ func (p *Panel) handleSetConflicts(msg SetConflictsMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.Code {
 	case 'j', tea.KeyDown:
@@ -191,7 +172,6 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 // regionCount returns the number of conflict regions in the current file.
 func (p *Panel) regionCount() int {
 	if len(p.files) == 0 || p.currentFile >= len(p.files) {
@@ -245,7 +225,6 @@ func (p *Panel) prevRegion() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Resolution choices
 // ---------------------------------------------------------------------------
-
 func (p *Panel) storeChoice(choice string) tea.Cmd {
 	if len(p.files) == 0 || p.currentFile >= len(p.files) {
 		return nil
@@ -255,7 +234,6 @@ func (p *Panel) storeChoice(choice string) tea.Cmd {
 		p.resolved[path] = make(map[int]string)
 	}
 	p.resolved[path][p.currentRegion] = choice
-
 	// Check if all regions in this file are resolved.
 	rc := p.regionCount()
 	if rc > 0 && len(p.resolved[path]) == rc {
@@ -298,13 +276,11 @@ func (p *Panel) hasAIResolution() bool {
 // ---------------------------------------------------------------------------
 // View
 // ---------------------------------------------------------------------------
-
 // View implements panels.Panel.
 func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if len(p.files) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -312,15 +288,12 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(p.successHex())).
 			Render("No conflicts")
 	}
-
 	lines := p.buildLines(width)
-
 	// Apply scroll offset.
 	if p.scrollY >= len(lines) {
 		p.scrollY = max(0, len(lines)-1)
 	}
 	visible := lines[p.scrollY:]
-
 	// Reserve 1 line for key hints at bottom.
 	contentHeight := height - 1
 	if contentHeight < 1 {
@@ -329,16 +302,13 @@ func (p *Panel) View(width, height int) string {
 	if len(visible) > contentHeight {
 		visible = visible[:contentHeight]
 	}
-
 	// Pad to fill viewport.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(visible) < contentHeight {
 		visible = append(visible, emptyLine)
 	}
-
 	// Append key hints.
 	visible = append(visible, p.renderKeyHints(width))
-
 	return strings.Join(visible, "\n")
 }
 
@@ -346,10 +316,8 @@ func (p *Panel) View(width, height int) string {
 // file/region, returning one string per line.
 func (p *Panel) buildLines(width int) []string {
 	var lines []string
-
 	cf := p.files[p.currentFile]
 	rc := p.regionCount()
-
 	// Header: file path and file counter.
 	fileHeader := fmt.Sprintf("  File %d/%d: %s",
 		p.currentFile+1, len(p.files), cf.Path)
@@ -357,7 +325,6 @@ func (p *Panel) buildLines(width int) []string {
 		Width(width).Bold(true).
 		Foreground(lipgloss.Color(p.headerHex())).
 		Render(fileHeader))
-
 	// Region indicator.
 	regionLabel := fmt.Sprintf("  Region %d of %d", p.currentRegion+1, rc)
 	// Show resolution status for this region.
@@ -368,37 +335,28 @@ func (p *Panel) buildLines(width int) []string {
 		Width(width).
 		Foreground(lipgloss.Color(p.regionHex())).
 		Render(regionLabel))
-
 	lines = append(lines, "") // blank separator
-
 	// Guard: no regions available.
 	if rc == 0 || p.currentRegion >= rc {
 		lines = append(lines, "  (no conflict regions)")
 		return lines
 	}
-
 	region := cf.Regions[p.currentRegion]
-
 	// --- Ours section ---
 	lines = append(lines, p.renderSectionHeader(width, "OURS", p.oursHex(),
 		p.resolved[cf.Path][p.currentRegion] == choiceOurs))
 	lines = append(lines, p.renderCodeBlock(width, region.Ours, p.oursHex())...)
-
 	lines = append(lines, "") // separator
-
 	// --- Theirs section ---
 	lines = append(lines, p.renderSectionHeader(width, "THEIRS", p.theirsHex(),
 		p.resolved[cf.Path][p.currentRegion] == choiceTheirs))
 	lines = append(lines, p.renderCodeBlock(width, region.Theirs, p.theirsHex())...)
-
 	lines = append(lines, "") // separator
-
 	// --- AI Suggestion section ---
 	if region.AIResolution != "" {
 		isChosen := p.resolved[cf.Path][p.currentRegion] == choiceAI
 		lines = append(lines, p.renderSectionHeader(width, "AI SUGGESTION", p.aiHex(), isChosen))
 		lines = append(lines, p.renderCodeBlock(width, region.AIResolution, p.aiHex())...)
-
 		// Explanation and confidence.
 		if region.Explanation != "" {
 			explLine := fmt.Sprintf("  Explanation: %s", region.Explanation)
@@ -418,14 +376,12 @@ func (p *Panel) buildLines(width int) []string {
 			Foreground(lipgloss.Color(p.dimHex())).
 			Render("  AI SUGGESTION — not available"))
 	}
-
 	return lines
 }
 
 // ---------------------------------------------------------------------------
 // Rendering helpers
 // ---------------------------------------------------------------------------
-
 // renderSectionHeader renders a section header like "▸ OURS" or "● OURS".
 func (p *Panel) renderSectionHeader(width int, title, hex string, chosen bool) string {
 	prefix := "  ▸ "
@@ -474,7 +430,6 @@ func (p *Panel) renderKeyHints(width int) string {
 // ---------------------------------------------------------------------------
 // Color helpers — prefer theme, fall back to hard-coded Dracula palette
 // ---------------------------------------------------------------------------
-
 func (p *Panel) headerHex() string {
 	if p.theme != nil && p.theme.Colors.DiffHeader != "" {
 		return p.theme.Colors.DiffHeader
@@ -541,7 +496,6 @@ func (p *Panel) hintBgHex() string {
 // ---------------------------------------------------------------------------
 // KeyBindings
 // ---------------------------------------------------------------------------
-
 // KeyBindings implements panels.Panel.
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{

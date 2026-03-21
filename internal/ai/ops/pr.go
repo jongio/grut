@@ -40,10 +40,10 @@ type PRDescriptionGenerator struct {
 type PRDescription struct {
 	Title           string   `json:"title"`                      // PR title
 	Summary         string   `json:"summary"`                    // Brief summary
-	Changes         []string `json:"changes"`                    // List of changes made
 	TestingNotes    string   `json:"testing_notes,omitempty"`    // How to test
-	BreakingChanges []string `json:"breaking_changes,omitempty"` // Breaking changes, if any
 	FullMarkdown    string   `json:"-"`                          // Complete PR description in markdown
+	Changes         []string `json:"changes"`                    // List of changes made
+	BreakingChanges []string `json:"breaking_changes,omitempty"` // Breaking changes, if any
 }
 
 // NewPRDescriptionGenerator creates a PRDescriptionGenerator backed by the
@@ -62,13 +62,11 @@ func (g *PRDescriptionGenerator) Generate(ctx context.Context, targetBranch stri
 	if err != nil {
 		return nil, fmt.Errorf("building PR context: %w", err)
 	}
-
 	// Resolve an available provider.
 	provider, err := g.registry.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving AI provider: %w", err)
 	}
-
 	// Send the PR description request.
 	resp, err := provider.Complete(ctx, ai.CompletionRequest{
 		Operation:    "pr_description",
@@ -80,16 +78,13 @@ func (g *PRDescriptionGenerator) Generate(ctx context.Context, targetBranch stri
 	if err != nil {
 		return nil, fmt.Errorf("AI completion: %w", err)
 	}
-
 	// Parse the structured response.
 	desc, err := parsePRResponse(resp.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parsing AI response: %w", err)
 	}
-
 	// Assemble the full markdown from structured fields.
 	desc.FullMarkdown = buildPRMarkdown(desc)
-
 	return desc, nil
 }
 
@@ -97,7 +92,6 @@ func (g *PRDescriptionGenerator) Generate(ctx context.Context, targetBranch stri
 // It tolerates responses wrapped in markdown code fences.
 func parsePRResponse(raw string) (*PRDescription, error) {
 	text := strings.TrimSpace(raw)
-
 	// Strip optional markdown code fences that models sometimes add.
 	if strings.HasPrefix(text, "```") {
 		// Remove opening fence (with optional language tag).
@@ -110,7 +104,6 @@ func parsePRResponse(raw string) (*PRDescription, error) {
 		}
 		text = strings.TrimSpace(text)
 	}
-
 	var desc PRDescription
 	if err := json.Unmarshal([]byte(text), &desc); err != nil {
 		return nil, fmt.Errorf("invalid JSON in AI response: %w", err)
@@ -122,12 +115,10 @@ func parsePRResponse(raw string) (*PRDescription, error) {
 // structured fields.
 func buildPRMarkdown(desc *PRDescription) string {
 	var sb strings.Builder
-
 	// Summary section.
 	sb.WriteString("## Summary\n\n")
 	sb.WriteString(desc.Summary)
 	sb.WriteString("\n")
-
 	// Changes section.
 	if len(desc.Changes) > 0 {
 		sb.WriteString("\n## Changes\n\n")
@@ -137,14 +128,12 @@ func buildPRMarkdown(desc *PRDescription) string {
 			sb.WriteString("\n")
 		}
 	}
-
 	// Testing notes section.
 	if desc.TestingNotes != "" {
 		sb.WriteString("\n## Testing\n\n")
 		sb.WriteString(desc.TestingNotes)
 		sb.WriteString("\n")
 	}
-
 	// Breaking changes section.
 	if len(desc.BreakingChanges) > 0 {
 		sb.WriteString("\n## Breaking Changes\n\n")
@@ -154,6 +143,5 @@ func buildPRMarkdown(desc *PRDescription) string {
 			sb.WriteString("\n")
 		}
 	}
-
 	return sb.String()
 }

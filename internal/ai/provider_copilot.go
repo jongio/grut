@@ -16,7 +16,6 @@ import (
 // ---------------------------------------------------------------------------
 // CopilotProvider
 // ---------------------------------------------------------------------------
-
 // CopilotProvider implements AIProvider using the official GitHub Copilot SDK
 // (github.com/github/copilot-sdk/go). It manages a Copilot CLI client that
 // is lazily started on first use and creates per-request sessions.
@@ -27,11 +26,11 @@ import (
 // forwarded to the SDK. Callers relying on intermediate ToolCalls in the
 // CompletionResponse should be aware this provider does not produce them.
 type CopilotProvider struct {
+	startErr error // cached startup error
 	client   *copilot.Client
 	model    string
-	startMu  sync.Mutex // protects Close while startup is in progress
-	startErr error      // cached startup error
 	once     sync.Once  // ensures client.Start is called exactly once
+	startMu  sync.Mutex // protects Close while startup is in progress
 }
 
 // NewCopilotProvider creates a CopilotProvider backed by the Copilot SDK.
@@ -74,24 +73,20 @@ func (p *CopilotProvider) Complete(ctx context.Context, req CompletionRequest) (
 	if err := p.ensureStarted(ctx); err != nil {
 		return CompletionResponse{}, fmt.Errorf("copilot complete: %w", err)
 	}
-
 	if len(req.Tools) > 0 {
 		slog.Debug("copilot: tool definitions in request are not forwarded to the SDK")
 	}
-
 	session, err := p.client.CreateSession(ctx, p.buildSessionConfig(req))
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("copilot complete: create session: %w", err)
 	}
 	defer func() { _ = session.Disconnect() }()
-
 	event, err := session.SendAndWait(ctx, copilot.MessageOptions{
 		Prompt: p.buildPrompt(req),
 	})
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("copilot complete: send: %w", err)
 	}
-
 	return eventToResponse(event), nil
 }
 
@@ -102,19 +97,15 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 	if err := p.ensureStarted(ctx); err != nil {
 		return nil, fmt.Errorf("copilot stream: %w", err)
 	}
-
 	if len(req.Tools) > 0 {
 		slog.Debug("copilot: tool definitions in streaming request are not forwarded to the SDK")
 	}
-
 	cfg := p.buildSessionConfig(req)
 	cfg.Streaming = true
-
 	session, err := p.client.CreateSession(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("copilot stream: create session: %w", err)
 	}
-
 	ch := make(chan StreamChunk, 64)
 	done := make(chan struct{})
 	var (
@@ -122,7 +113,6 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 		usageMu   sync.Mutex
 		lastUsage *TokenUsage
 	)
-
 	// finish sends the terminal chunk, closes the channel, and tears down
 	// the session. It is safe to call from multiple goroutines.
 	// Uses select/default to prevent blocking on a full channel (CWE-404).
@@ -151,7 +141,6 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 			}()
 		})
 	}
-
 	session.On(func(event copilot.SessionEvent) {
 		switch event.Type { //nolint:exhaustive // only relevant cases handled
 		case copilot.AssistantMessageDelta:
@@ -161,20 +150,17 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 				case <-ctx.Done():
 				}
 			}
-
 		case copilot.AssistantUsage:
 			if u := extractUsage(event.Data); u != nil {
 				usageMu.Lock()
 				lastUsage = u
 				usageMu.Unlock()
 			}
-
 		case copilot.SessionIdle:
 			usageMu.Lock()
 			u := lastUsage
 			usageMu.Unlock()
 			finish(StreamChunk{Done: true, TokensUsed: u})
-
 		case copilot.SessionError:
 			errMsg := "unknown error"
 			if event.Data.ErrorReason != nil {
@@ -185,7 +171,6 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 			finish(StreamChunk{Done: true, Err: fmt.Errorf("copilot stream: %s", errMsg)})
 		}
 	})
-
 	prompt := p.buildPrompt(req)
 	if _, err := session.Send(ctx, copilot.MessageOptions{Prompt: prompt}); err != nil {
 		closeOnce.Do(func() {
@@ -195,7 +180,6 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 		_ = session.Disconnect()
 		return nil, fmt.Errorf("copilot stream: send: %w", err)
 	}
-
 	// Cancel-safety: if the caller's context is cancelled before the
 	// stream completes naturally, emit a final error chunk.
 	go func() {
@@ -206,7 +190,6 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 			// Stream completed normally; nothing to do.
 		}
 	}()
-
 	return ch, nil
 }
 
@@ -227,7 +210,6 @@ func (p *CopilotProvider) Close() error {
 // ---------------------------------------------------------------------------
 // Lazy startup
 // ---------------------------------------------------------------------------
-
 // ensureStarted lazily starts the Copilot CLI client on first use.
 // Uses sync.Once to avoid holding a mutex during the blocking Start
 // call (CWE-667).
@@ -244,7 +226,6 @@ func (p *CopilotProvider) ensureStarted(ctx context.Context) error {
 // ---------------------------------------------------------------------------
 // Session / prompt helpers
 // ---------------------------------------------------------------------------
-
 // buildSessionConfig creates a SessionConfig from a CompletionRequest.
 func (p *CopilotProvider) buildSessionConfig(req CompletionRequest) *copilot.SessionConfig {
 	cfg := &copilot.SessionConfig{
@@ -266,28 +247,23 @@ func (p *CopilotProvider) buildSessionConfig(req CompletionRequest) *copilot.Ses
 // Send method accepts a single prompt string.
 func (p *CopilotProvider) buildPrompt(req CompletionRequest) string {
 	var parts []string
-
 	if gc := serializeGitContext(req.GitContext); gc != "" {
 		parts = append(parts, gc)
 	}
-
 	for _, m := range req.Messages {
 		if m.Content != "" {
 			parts = append(parts, fmt.Sprintf("[%s]: %s", m.Role, m.Content))
 		}
 	}
-
 	if req.UserPrompt != "" {
 		parts = append(parts, req.UserPrompt)
 	}
-
 	return strings.Join(parts, "\n\n")
 }
 
 // ---------------------------------------------------------------------------
 // Response conversion
 // ---------------------------------------------------------------------------
-
 // eventToResponse converts a SDK SessionEvent into a CompletionResponse.
 func eventToResponse(event *copilot.SessionEvent) CompletionResponse {
 	resp := CompletionResponse{
@@ -325,14 +301,12 @@ func extractUsage(data copilot.Data) *TokenUsage {
 // ---------------------------------------------------------------------------
 // GitContext serialisation
 // ---------------------------------------------------------------------------
-
 // serializeGitContext renders structured repository state into a plain-text
 // block suitable for inclusion as model context. All git-sourced content
 // (branch names, commit subjects, diff lines) is wrapped in boundary
 // markers to mitigate prompt injection from malicious repository content.
 func serializeGitContext(gc GitContext) string {
 	var b strings.Builder
-
 	if gc.RepoRoot != "" {
 		fmt.Fprintf(&b, "Repository: %s\n", QuoteUntrusted(SanitizeFilePath(gc.RepoRoot)))
 	}
@@ -342,21 +316,18 @@ func serializeGitContext(gc GitContext) string {
 	if gc.TargetBranch != "" {
 		fmt.Fprintf(&b, "Target Branch: %s\n", QuoteUntrusted(SanitizeBranchName(gc.TargetBranch)))
 	}
-
 	if len(gc.Status) > 0 {
 		b.WriteString("\nFile Status:\n")
 		for _, s := range gc.Status {
 			fmt.Fprintf(&b, "  %c%c %s\n", byte(s.StagedStatus), byte(s.WorktreeStatus), QuoteUntrusted(SanitizeFilePath(s.Path)))
 		}
 	}
-
 	if len(gc.Log) > 0 {
 		b.WriteString("\nRecent Commits:\n")
 		for _, c := range gc.Log {
 			fmt.Fprintf(&b, "  %s %s\n", QuoteUntrusted(stripControlChars(c.ShortHash)), QuoteUntrusted(SanitizeCommitMessage(c.Subject)))
 		}
 	}
-
 	if len(gc.Diffs) > 0 {
 		var diffBuf strings.Builder
 		for _, d := range gc.Diffs {
@@ -387,6 +358,5 @@ func serializeGitContext(gc GitContext) string {
 		b.WriteString("\nDiffs:\n")
 		b.WriteString(SanitizeExternalContent(diffBuf.String()))
 	}
-
 	return strings.TrimSpace(b.String())
 }
