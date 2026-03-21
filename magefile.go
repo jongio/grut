@@ -82,6 +82,11 @@ var deadcodeAllowlist = []string{
 	"MCPRuntime.SendRequest",
 	"resolveCommand",
 	"filterEnvForSubprocess",
+	// mcp_procattr_windows.go — build-tag no-op stubs; called from Load/Close
+	// but unreachable under deadcode's Windows call-graph analysis because
+	// MCPRuntime.Load itself is factory-dispatched (also allowlisted above).
+	"setProcGroup",
+	"killProcGroup",
 
 	// extension/runtime/wasm — loaded via runtime factory; interface impls
 	"NewWASMRuntime",
@@ -306,7 +311,10 @@ func TestWSL() error {
 	}
 
 	// Convert the Windows project directory to a WSL-compatible path.
-	wslPath, err := cmdOutput("wsl", "wslpath", "-u", projectDir())
+	// filepath.ToSlash converts backslashes to forward slashes, which is
+	// required for wslpath on WSL 1 — passing single-backslash Windows paths
+	// causes wslpath to strip the backslashes and return exit status 1.
+	wslPath, err := cmdOutput("wsl", "wslpath", "-u", filepath.ToSlash(projectDir()))
 	if err != nil {
 		return fmt.Errorf("wslpath: %w", err)
 	}
@@ -318,13 +326,51 @@ func TestWSL() error {
 	// containing $(), backticks, or other shell metacharacters.
 	escapedPath := "'" + strings.ReplaceAll(wslPath, "'", "'\\''") + "'"
 
+	// In a git worktree the .git entry is a file containing a Windows-format
+	// "gitdir: <path>" pointer.  WSL cannot resolve that Windows path, which
+	// causes any git command (and tests that call git) to fail with "not a git
+	// repository".  Detect this case, temporarily rewrite .git with the
+	// WSL-compatible path, run the tests, then restore the original file.
+	// This avoids setting GIT_DIR globally (which would break tests that
+	// create their own temporary git repos and inherit the env var).
+	gitFile := filepath.Join(projectDir(), ".git")
+	var origGitContent []byte
+	needsRestore := false
+	if content, readErr := os.ReadFile(gitFile); readErr == nil {
+		line := strings.TrimSpace(string(content))
+		if strings.HasPrefix(line, "gitdir:") {
+			winGitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+			wslGitDir, convErr := cmdOutput("wsl", "wslpath", "-u", filepath.ToSlash(winGitDir))
+			if convErr == nil {
+				wslGitDir = strings.TrimSpace(wslGitDir)
+				newContent := "gitdir: " + wslGitDir + "\n"
+				if writeErr := os.WriteFile(gitFile, []byte(newContent), 0o644); writeErr == nil {
+					origGitContent = content
+					needsRestore = true
+					fmt.Printf("   .git patched:   gitdir: %s\n", wslGitDir)
+				}
+			}
+		}
+	}
+
 	cmd := exec.Command("wsl", "bash", "-lc",
 		fmt.Sprintf("cd %s && go test ./... -count=1", escapedPath))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = projectDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("wsl test: %w", err)
+	runErr := cmd.Run()
+
+	// Always restore the original .git file, even on test failure.
+	if needsRestore {
+		if restoreErr := os.WriteFile(gitFile, origGitContent, 0o644); restoreErr != nil {
+			fmt.Printf("   WARNING: failed to restore .git: %v\n", restoreErr)
+		} else {
+			fmt.Println("   .git restored")
+		}
+	}
+
+	if runErr != nil {
+		return fmt.Errorf("wsl test: %w", runErr)
 	}
 
 	fmt.Println("   WSL tests passed")

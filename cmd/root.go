@@ -39,7 +39,9 @@ Features include a tree-view file explorer with git status markers, full git cli
 operations, tmux-like panes, AI agent integration via MCP, and worktree-first workflows.
 
 Environment:
-  GRUT_LOG            Path to a log file (enables debug logging)`,
+  GRUT_LOG              Path to a log file (enables debug logging)
+  GRUT_FORCE_TERMINAL   Bypass the MinTTY/MSYS compatibility check (set to any
+                        non-empty value, e.g. GRUT_FORCE_TERMINAL=1)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Handle --reset-welcome: reset first-run state and exit.
 			if resetWelcome, _ := cmd.Flags().GetBool("reset-welcome"); resetWelcome {
@@ -108,6 +110,14 @@ Environment:
 			slog.SetDefault(slog.New(slog.NewTextHandler(logWriter, &slog.HandlerOptions{
 				Level: slog.LevelDebug,
 			})))
+
+			// Detect incompatible terminal environments (e.g. MSYS/Git Bash
+			// without a real Windows console handle) and bail out with a
+			// helpful message rather than showing a blank screen.
+			if msg := checkTerminalCompat(); msg != "" {
+				fmt.Fprintln(origStderr, msg)
+				return fmt.Errorf("incompatible terminal")
+			}
 
 			// Load configuration
 			cfg, err := config.Load()
