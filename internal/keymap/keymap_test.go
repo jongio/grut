@@ -469,6 +469,12 @@ func TestCRUDBindingsExistInAllSchemes(t *testing.T) {
 		{"F2", "item_edit", "gitinfo"},
 		{"o", "item_open", "gitinfo"},
 		{"y", "item_copy", "gitinfo"},
+		{"n", "item_create", "github"},
+		{"x", "item_delete", "github"},
+		{"e", "item_edit", "github"},
+		{"F2", "item_edit", "github"},
+		{"o", "item_open", "github"},
+		{"y", "item_copy", "github"},
 		{"n", "item_create", "branches"},
 		{"x", "item_delete", "branches"},
 		{"e", "item_edit", "branches"},
@@ -513,6 +519,11 @@ func TestCRUDContextOverridesVimSearchNext(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "item_create", action)
 
+	// In github context, "n" should be item_create.
+	action, ok = km.Dispatch("n", "github")
+	assert.True(t, ok)
+	assert.Equal(t, "item_create", action)
+
 	// In branches context, "n" should be item_create.
 	action, ok = km.Dispatch("n", "branches")
 	assert.True(t, ok)
@@ -534,9 +545,34 @@ func TestCRUDOpenKeyAvailableEverywhere(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "item_open", action)
 
+	// "o" should resolve to item_open in github context.
+	action, ok = km.Dispatch("o", "github")
+	assert.True(t, ok)
+	assert.Equal(t, "item_open", action)
+
 	// "o" should not be bound in panels without CRUD context.
 	_, ok = km.Dispatch("o", "preview")
 	assert.False(t, ok)
+}
+
+func TestGitHubPanelDeleteDispatch(t *testing.T) {
+	for _, scheme := range []string{"default", "vim", "classic"} {
+		t.Run(scheme, func(t *testing.T) {
+			km, err := NewKeymap(scheme)
+			require.NoError(t, err)
+			km.SetMode(ModePanel)
+
+			// "x" in github context should dispatch to item_delete.
+			action, ok := km.Dispatch("x", "github")
+			assert.True(t, ok, "scheme %q: 'x' should be bound in github context", scheme)
+			assert.Equal(t, "item_delete", action, "scheme %q: 'x' in github should be item_delete", scheme)
+
+			// "x" in gitinfo context should also dispatch to item_delete.
+			action, ok = km.Dispatch("x", "gitinfo")
+			assert.True(t, ok, "scheme %q: 'x' should be bound in gitinfo context", scheme)
+			assert.Equal(t, "item_delete", action)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
