@@ -5,17 +5,16 @@ on:
     branches: [main]
   pull_request:
 
-# One benchmark run per branch per platform — avoids artifact collisions.
-concurrency:
-  group: bench-${{ github.ref }}-${{ matrix.os }}
-  cancel-in-progress: true
-
 permissions:
   contents: write       # commit updated baseline on main pushes
   pull-requests: write  # post benchstat comparison as PR comment
 
 jobs:
   bench:
+    # One benchmark run per branch per platform — avoids artifact collisions.
+    concurrency:
+      group: bench-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false   # let all platforms finish even if one fails
       matrix:
