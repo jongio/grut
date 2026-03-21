@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -43,7 +44,6 @@ func defaultPathChecker(path string) bool {
 // ---------------------------------------------------------------------------
 // Internal types
 // ---------------------------------------------------------------------------
-
 // worktreeItem represents a single row in the worktree list.
 type worktreeItem struct {
 	worktree  git.Worktree
@@ -66,24 +66,22 @@ const (
 // ---------------------------------------------------------------------------
 // Internal messages (async result messages)
 // ---------------------------------------------------------------------------
-
 // worktreesLoadedMsg carries the result of an async worktree-list call.
 type worktreesLoadedMsg struct {
-	worktrees []git.Worktree
 	err       error
+	worktrees []git.Worktree
 }
 
 // worktreeOpResultMsg carries the result of a worktree operation.
 type worktreeOpResultMsg struct {
+	err  error
 	op   string // "created", "removed", "pruned"
 	name string // branch or path involved
-	err  error
 }
 
 // ---------------------------------------------------------------------------
 // Default colors (Dracula-inspired, matching branches panel)
 // ---------------------------------------------------------------------------
-
 var defaultColors = struct {
 	Current  string
 	Normal   string
@@ -105,26 +103,21 @@ var defaultColors = struct {
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the worktree management panel. It implements [panels.Panel].
 type Panel struct {
+	actionsCfg  config.ActionsConfig
+	git         GitOps
+	ctx         context.Context
+	pathCheck   PathChecker
+	repoRoot    string
+	pendingPath string         // worktree path for pending delete
+	pendingName string         // item type name for first-use confirm
+	items       []worktreeItem // flat display list
 	panels.BasePanel
-
-	git       GitOps
-	cfg       config.GitConfig
-	pathCheck PathChecker
-	repoRoot  string
-	ctx       context.Context
-
-	items  []worktreeItem // flat display list
-	cursor int            // index into items
-	offset int            // viewport scroll offset
-
-	pending     pendingOp // operation awaiting modal result
-	pendingPath string    // worktree path for pending delete
-	pendingName string    // item type name for first-use confirm
-
-	actionsCfg config.ActionsConfig
+	cfg     config.GitConfig
+	cursor  int       // index into items
+	offset  int       // viewport scroll offset
+	pending pendingOp // operation awaiting modal result
 }
 
 // Compile-time interface check.
@@ -144,7 +137,6 @@ func New(gitOps GitOps, cfg config.GitConfig, repoRoot string) *Panel {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -185,32 +177,23 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case worktreesLoadedMsg:
 		return p.handleWorktreesLoaded(msg)
-
 	case worktreeOpResultMsg:
 		return p.handleOpResult(msg)
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case panels.WorktreeChangedMsg:
 		return p, p.loadWorktrees()
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
 	}
-
 	return p, nil
 }
 
@@ -219,7 +202,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if len(p.items) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -227,23 +209,19 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(defaultColors.Dim)).
 			Render("No worktrees")
 	}
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > len(p.items) {
 		end = len(p.items)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderLine(p.items[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -263,7 +241,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Message handlers
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleWorktreesLoaded(msg worktreesLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
 		errMsg := msg.err.Error()
@@ -282,11 +259,9 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 			return notify.ShowToastMsg{Message: errText, Level: notify.Error}
 		}
 	}
-
 	op := msg.op
 	name := msg.name
 	cmds := []tea.Cmd{p.loadWorktrees()}
-
 	switch op {
 	case "created":
 		cmds = append(cmds,
@@ -308,19 +283,16 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 			return notify.ShowToastMsg{Message: successMsg, Level: notify.Success}
 		})
 	}
-
 	return p, tea.Batch(cmds...)
 }
 
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		p.moveCursorDown()
@@ -339,14 +311,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "p":
 		return p.requestPrune()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the worktree at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -366,7 +336,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := actions.ItemWorktree
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
@@ -446,7 +415,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	if p.cursor < len(p.items)-1 {
 		p.cursor++
@@ -500,21 +468,17 @@ func (p *Panel) worktreeSelectedCmd() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Worktree operations
 // ---------------------------------------------------------------------------
-
 func (p *Panel) requestSwitch() (panels.Panel, tea.Cmd) {
 	item := p.selectedWorktree()
 	if item == nil {
 		return p, nil
 	}
-
 	if item.isMissing {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot switch: path missing", Level: notify.Warn}
 		}
 	}
-
 	path := item.worktree.Path
-
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
 			if err := panels.OpenInTerminal(path); err != nil {
@@ -524,7 +488,6 @@ func (p *Panel) requestSwitch() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Opened terminal at " + path, Level: notify.Success}
 		}
 	}
-
 	return p, func() tea.Msg {
 		return panels.SwitchWorktreeMsg{Path: path}
 	}
@@ -540,13 +503,11 @@ func (p *Panel) requestDelete() (panels.Panel, tea.Cmd) {
 	if item == nil {
 		return p, nil
 	}
-
 	if item.isMain {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot remove main worktree", Level: notify.Warn}
 		}
 	}
-
 	p.pending = opDelete
 	p.pendingPath = item.worktree.Path
 	displayName := filepath.Base(item.worktree.Path)
@@ -562,13 +523,11 @@ func (p *Panel) requestPrune() (panels.Panel, tea.Cmd) {
 			break
 		}
 	}
-
 	if !hasMissing {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "No missing worktrees to prune", Level: notify.Info}
 		}
 	}
-
 	p.pending = opPrune
 	return p, notify.ShowConfirm("Prune Worktrees", "Force-remove all missing worktrees?")
 }
@@ -576,7 +535,6 @@ func (p *Panel) requestPrune() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	pendingPath := p.pendingPath
@@ -584,14 +542,11 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	p.pending = opNone
 	p.pendingPath = ""
 	p.pendingName = ""
-
 	if !msg.Accept {
 		return p, nil
 	}
-
 	g := p.git
 	ctx := p.ctx
-
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opCreate:
 		branch := strings.TrimSpace(msg.Value)
@@ -603,26 +558,21 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.WorktreeAdd(ctx, wtPath, branch)
 			return worktreeOpResultMsg{op: "created", name: branch, err: err}
 		}
-
 	case opDelete:
 		return p, func() tea.Msg {
 			err := g.WorktreeRemove(ctx, pendingPath, false)
 			return worktreeOpResultMsg{op: "removed", name: filepath.Base(pendingPath), err: err}
 		}
-
 	case opPrune:
 		return p.pruneAllMissing()
-
 	case opFirstUseConfirm:
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, pendingName, msg.Value)
 		}
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opRightClickPick:
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	}
-
 	return p, nil
 }
 
@@ -634,15 +584,12 @@ func (p *Panel) pruneAllMissing() (panels.Panel, tea.Cmd) {
 			missingPaths = append(missingPaths, item.worktree.Path)
 		}
 	}
-
 	if len(missingPaths) == 0 {
 		return p, nil
 	}
-
 	g := p.git
 	ctx := p.ctx
 	paths := missingPaths
-
 	return p, func() tea.Msg {
 		var lastErr error
 		for _, path := range paths {
@@ -659,17 +606,14 @@ func (p *Panel) pruneAllMissing() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Item list building
 // ---------------------------------------------------------------------------
-
 // buildItems constructs the flat display list from worktree data.
 // The first worktree in git's output is always the main worktree.
 func (p *Panel) buildItems(worktrees []git.Worktree) {
 	p.items = nil
-
 	checker := p.pathCheck
 	if checker == nil {
 		checker = defaultPathChecker
 	}
-
 	for i, wt := range worktrees {
 		item := worktreeItem{
 			worktree:  wt,
@@ -678,7 +622,6 @@ func (p *Panel) buildItems(worktrees []git.Worktree) {
 		}
 		p.items = append(p.items, item)
 	}
-
 	// Clamp cursor.
 	if p.cursor >= len(p.items) {
 		p.cursor = len(p.items) - 1
@@ -686,7 +629,6 @@ func (p *Panel) buildItems(worktrees []git.Worktree) {
 	if p.cursor < 0 {
 		p.cursor = 0
 	}
-
 	p.offset = 0
 	p.ensureCursorVisible()
 }
@@ -694,17 +636,14 @@ func (p *Panel) buildItems(worktrees []git.Worktree) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 // renderLine renders a single worktree item.
 func (p *Panel) renderLine(item worktreeItem, width int, isCursor bool) string {
 	wt := item.worktree
-
 	// Prefix: main worktree marker.
 	prefix := "  "
 	if item.isMain {
 		prefix = "* "
 	}
-
 	// Branch name (or "(bare)" for bare worktrees).
 	branch := wt.Branch
 	if branch == "" {
@@ -714,45 +653,36 @@ func (p *Panel) renderLine(item worktreeItem, width int, isCursor bool) string {
 			branch = "(detached)"
 		}
 	}
-
 	// Short hash (first 7 chars).
 	hash := wt.Head
 	if len(hash) > git.ShortHashLen {
 		hash = hash[:git.ShortHashLen]
 	}
-
 	// Missing tag.
 	missingTag := ""
 	if item.isMissing {
 		missingTag = "  [MISSING]"
 	}
-
 	// Build left side: "  /path/to/worktree"
 	leftSide := prefix + wt.Path
-
 	// Build right side: "branch  hash  [MISSING]"
 	rightSide := "  " + branch
 	if hash != "" {
 		rightSide += "  " + hash
 	}
 	rightSide += missingTag
-
 	// Compute gap for right-alignment.
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-
 	line := leftSide + gap + rightSide
-
 	// Apply styles.
 	style := lipgloss.NewStyle().Width(width)
-
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	if item.isMissing {
 		style = style.Foreground(lipgloss.Color(defaultColors.Missing))
 	} else if item.isMain {
@@ -760,14 +690,12 @@ func (p *Panel) renderLine(item worktreeItem, width int, isCursor bool) string {
 	} else {
 		style = style.Foreground(lipgloss.Color(defaultColors.Normal))
 	}
-
 	return style.Render(line)
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // worktreePath is an alias to the canonical implementation in the git package.
 // See git.WorktreePath for the convention details.
 func worktreePath(repoRoot, branch string) string {

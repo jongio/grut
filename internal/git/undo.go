@@ -15,9 +15,9 @@ const maxUndoDepth = 50
 // The Type field determines the undo strategy; Metadata carries type-specific
 // context (e.g., file paths, branch names, commit messages).
 type UndoAction struct {
+	Metadata  map[string]string // Additional context keyed by operation type
 	Type      string            // "commit", "stage", "unstage", "branch_delete", "checkout", "discard", "revert", "reset", "amend"
 	RefBefore string            // Git ref (hash) before the operation
-	Metadata  map[string]string // Additional context keyed by operation type
 }
 
 // UndoManager provides undo/redo functionality for git operations.
@@ -25,10 +25,10 @@ type UndoAction struct {
 // operations on undo. Stacks are not persisted across application restarts.
 // All methods are safe for concurrent use.
 type UndoManager struct {
-	mu        sync.Mutex
 	client    *Client
 	undoStack []UndoAction
 	redoStack []UndoAction
+	mu        sync.Mutex
 }
 
 // NewUndoManager creates a new UndoManager for the given git client.
@@ -128,20 +128,16 @@ func (u *UndoManager) Undo(ctx context.Context) (string, error) {
 		u.mu.Unlock()
 		return "", fmt.Errorf("nothing to undo")
 	}
-
 	action := u.undoStack[len(u.undoStack)-1]
 	u.undoStack = u.undoStack[:len(u.undoStack)-1]
 	u.mu.Unlock()
-
 	desc, err := u.executeUndo(ctx, action)
-
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if err != nil {
 		u.undoStack = append(u.undoStack, action)
 		return "", err
 	}
-
 	u.redoStack = append(u.redoStack, action)
 	return desc, nil
 }
@@ -155,20 +151,16 @@ func (u *UndoManager) Redo(ctx context.Context) (string, error) {
 		u.mu.Unlock()
 		return "", fmt.Errorf("nothing to redo")
 	}
-
 	action := u.redoStack[len(u.redoStack)-1]
 	u.redoStack = u.redoStack[:len(u.redoStack)-1]
 	u.mu.Unlock()
-
 	desc, err := u.executeRedo(ctx, action)
-
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if err != nil {
 		u.redoStack = append(u.redoStack, action)
 		return "", err
 	}
-
 	u.undoStack = append(u.undoStack, action)
 	return desc, nil
 }

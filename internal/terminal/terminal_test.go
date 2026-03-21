@@ -184,7 +184,21 @@ func TestReadStreamCapsLineLength(t *testing.T) {
 		_ = w.Close()
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	// Wait for readStream to finish (pipe close causes reader exit).
+	// Poll with short intervals instead of a single long sleep to avoid
+	// flakiness on slow CI machines.
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for readStream to process lines")
+		default:
+		}
+		if len(term.Lines()) >= 1 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	lines := term.Lines()
 	// At minimum the first line should have been read before scanner

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/panels"
 	"github.com/sahilm/fuzzy"
 )
@@ -18,15 +19,14 @@ import (
 // It implements [panels.Panel] and is rendered as a floating overlay on
 // top of the main layout by the root model.
 type FuzzyFinder struct {
-	panels.BasePanel
-
+	query   string // current search query
 	sources []Source
 	items   []Item        // all items from all sources
 	matches []fuzzy.Match // filtered results
-	cursor  int           // index into matches
-	offset  int           // scroll offset for results
-	query   string        // current search query
-	qCursor int           // cursor position in query
+	panels.BasePanel
+	cursor  int // index into matches
+	offset  int // scroll offset for results
+	qCursor int // cursor position in query
 }
 
 // Compile-time interface check.
@@ -69,7 +69,6 @@ func (ff *FuzzyFinder) filter() {
 		ff.matches = fuzzy.FindFrom(ff.query, itemList(ff.items))
 		rerank(ff.query, ff.matches)
 	}
-
 	// Reset cursor and offset after filtering.
 	ff.cursor = 0
 	ff.offset = 0
@@ -87,29 +86,23 @@ func rerank(query string, matches []fuzzy.Match) {
 	if len(matches) == 0 {
 		return
 	}
-
 	lowerQ := strings.ToLower(query)
-
 	type scored struct {
 		match fuzzy.Match
 		bonus int
 		orig  int // original index for stability
 	}
-
 	entries := make([]scored, len(matches))
 	for i, m := range matches {
 		filename := strings.ToLower(path.Base(m.Str))
 		bonus := 0
-
 		if strings.HasPrefix(filename, lowerQ) {
 			bonus = 200
 		} else if subsequenceMatch(lowerQ, filename) {
 			bonus = 100
 		}
-
 		entries[i] = scored{match: m, bonus: bonus, orig: i}
 	}
-
 	slices.SortStableFunc(entries, func(a, b scored) int {
 		// Higher bonus wins (descending).
 		if c := cmp.Compare(b.bonus, a.bonus); c != 0 {
@@ -122,7 +115,6 @@ func rerank(query string, matches []fuzzy.Match) {
 		// Preserve original order as final tiebreaker (ascending).
 		return cmp.Compare(a.orig, b.orig)
 	})
-
 	for i, e := range entries {
 		matches[i] = e.match
 	}
@@ -150,7 +142,6 @@ func (l itemList) Len() int            { return len(l) }
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (ff *FuzzyFinder) Init(_ context.Context) tea.Cmd {
 	return nil
@@ -161,10 +152,8 @@ func (ff *FuzzyFinder) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return ff.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return ff.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return ff.handleMouseDoubleClick(msg)
 	}
@@ -178,35 +167,28 @@ func (ff *FuzzyFinder) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	var lines []string
-
 	// Input line: "> query"
 	inputLine := ff.renderInput(width)
 	lines = append(lines, inputLine)
-
 	// Separator
 	sep := separatorStyle.Render(strings.Repeat("─", width))
 	lines = append(lines, sep)
-
 	// Results area: total height minus input (1) + separator (1) + status (1).
 	resultH := height - 3
 	if resultH < 1 {
 		resultH = 1
 	}
-
 	end := ff.offset + resultH
 	if end > len(ff.matches) {
 		end = len(ff.matches)
 	}
-
 	for i := ff.offset; i < end; i++ {
 		match := ff.matches[i]
 		item := ff.items[match.Index]
 		line := ff.renderMatch(item, match.MatchedIndexes, width, i == ff.cursor)
 		lines = append(lines, line)
 	}
-
 	// Pad remaining result area with blank lines.
 	rendered := end - ff.offset
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
@@ -214,12 +196,10 @@ func (ff *FuzzyFinder) View(width, height int) string {
 		lines = append(lines, emptyLine)
 		rendered++
 	}
-
 	// Status bar
 	status := fmt.Sprintf(" %d/%d", len(ff.matches), len(ff.items))
 	statusLine := statusStyle.Width(width).Render(status)
 	lines = append(lines, statusLine)
-
 	return strings.Join(lines, "\n")
 }
 
@@ -236,25 +216,19 @@ func (ff *FuzzyFinder) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (ff *FuzzyFinder) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	key := msg.String()
-
 	switch key {
 	case "escape", "esc":
 		return ff, func() tea.Msg { return panels.ToggleFuzzyFinderMsg{} }
-
 	case "enter":
 		return ff, ff.selectCurrent()
-
 	case "up", "ctrl+p":
 		ff.moveCursorUp()
 		return ff, nil
-
 	case "down", "ctrl+n":
 		ff.moveCursorDown()
 		return ff, nil
-
 	case "backspace":
 		if ff.qCursor > 0 {
 			runes := []rune(ff.query)
@@ -263,13 +237,11 @@ func (ff *FuzzyFinder) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			ff.filter()
 		}
 		return ff, nil
-
 	case "ctrl+u":
 		ff.query = ""
 		ff.qCursor = 0
 		ff.filter()
 		return ff, nil
-
 	default:
 		// Insert printable text.
 		text := msg.Text
@@ -294,10 +266,8 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 	if len(ff.matches) == 0 || ff.cursor >= len(ff.matches) {
 		return nil
 	}
-
 	match := ff.matches[ff.cursor]
 	item := ff.items[match.Index]
-
 	return tea.Batch(
 		func() tea.Msg { return panels.ToggleFuzzyFinderMsg{} },
 		func() tea.Msg {
@@ -332,7 +302,6 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the result at the clicked row.
 // Row 0 is the input line, row 1 is the separator, so results start at row 2.
 func (ff *FuzzyFinder) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
@@ -360,7 +329,6 @@ func (ff *FuzzyFinder) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMs
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (ff *FuzzyFinder) moveCursorUp() {
 	if ff.cursor > 0 {
 		ff.cursor--
@@ -391,7 +359,6 @@ func (ff *FuzzyFinder) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 func (ff *FuzzyFinder) renderInput(width int) string {
 	prompt := promptStyle.Render("> ")
 	display := ff.query
@@ -408,10 +375,8 @@ func (ff *FuzzyFinder) renderMatch(item Item, matchedIndexes []int, width int, i
 	for _, idx := range matchedIndexes {
 		matchSet[idx] = true
 	}
-
 	var b strings.Builder
 	b.WriteString("  ") // indent
-
 	for i, ch := range item.Text {
 		if matchSet[i] {
 			b.WriteString(matchHighlight.Render(string(ch)))
@@ -419,19 +384,15 @@ func (ff *FuzzyFinder) renderMatch(item Item, matchedIndexes []int, width int, i
 			b.WriteRune(ch)
 		}
 	}
-
 	if item.Description != "" {
 		b.WriteString("  ")
 		b.WriteString(descStyle.Render(item.Description))
 	}
-
 	content := b.String()
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	if isCursor {
 		style = style.Background(lipgloss.Color(cursorBg)).Bold(true)
 	}
-
 	return style.Render(content)
 }
 
@@ -449,7 +410,6 @@ var (
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)
 // ---------------------------------------------------------------------------
-
 // matchCount returns the number of current matches.
 func (ff *FuzzyFinder) matchCount() int { return len(ff.matches) }
 

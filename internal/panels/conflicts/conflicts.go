@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -21,7 +22,6 @@ import (
 // ---------------------------------------------------------------------------
 // Narrow interface for testability
 // ---------------------------------------------------------------------------
-
 // gitOps defines the git operations used by the conflicts panel.
 type gitOps interface {
 	Status(ctx context.Context) ([]git.FileStatus, error)
@@ -36,7 +36,6 @@ type gitOps interface {
 // ---------------------------------------------------------------------------
 // Operation mode — are we resolving merge or rebase conflicts?
 // ---------------------------------------------------------------------------
-
 // opMode identifies the type of in-progress operation with conflicts.
 type opMode int
 
@@ -66,59 +65,56 @@ func (m opMode) String() string {
 // ---------------------------------------------------------------------------
 // Internal async messages
 // ---------------------------------------------------------------------------
-
 // conflictsLoadedMsg carries the result of an async conflict file scan.
 type conflictsLoadedMsg struct {
-	files []string
 	err   error
+	files []string
 }
 
 // resolveResultMsg carries the result of staging (marking resolved) a file.
 type resolveResultMsg struct {
-	path string
 	err  error
+	path string
 }
 
 // continueResultMsg carries the result of a continue/abort operation.
 type continueResultMsg struct {
-	action string // "continued" or "aborted"
 	err    error
+	action string // "continued" or "aborted"
 }
 
 // mergeResultMsg carries the result of a merge operation.
 type mergeResultMsg struct {
+	err       error
 	branch    string
 	conflicts []string // non-empty if conflicts detected
-	err       error
 }
 
 // rebaseResultMsg carries the result of a rebase operation.
 type rebaseResultMsg struct {
+	err       error
 	onto      string
 	conflicts []string // non-empty if conflicts detected
-	err       error
 }
 
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the conflict resolution panel. It lists conflicted files and
 // provides resolve, continue, and abort actions.
 type Panel struct {
-	panels.BasePanel
-
+	actionsCfg  config.ActionsConfig
 	git         gitOps
 	ctx         context.Context
-	files       []string        // paths of conflicted files
 	resolved    map[string]bool // files marked as resolved (staged)
-	cursor      int
-	offset      int
-	mode        opMode // merge or rebase
-	loading     bool
-	actionsCfg  config.ActionsConfig
 	pendingOp   string
 	pendingName string
+	files       []string // paths of conflicted files
+	panels.BasePanel
+	cursor  int
+	offset  int
+	mode    opMode // merge or rebase
+	loading bool
 }
 
 // Compile-time interface check.
@@ -174,58 +170,41 @@ func (p *Panel) safeCtx() context.Context {
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
-
 // Update implements panels.Panel.
 func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case panels.MergeRequestMsg:
 		return p.startMerge(msg.Branch)
-
 	case panels.RebaseRequestMsg:
 		return p.startRebase(msg.Onto)
-
 	case mergeResultMsg:
 		return p.handleMergeResult(msg)
-
 	case rebaseResultMsg:
 		return p.handleRebaseResult(msg)
-
 	case conflictsLoadedMsg:
 		return p.handleConflictsLoaded(msg)
-
 	case resolveResultMsg:
 		return p.handleResolveResult(msg)
-
 	case continueResultMsg:
 		return p.handleContinueResult(msg)
-
 	case panels.MergeAbortMsg:
 		return p.abortOp()
-
 	case panels.RebaseAbortMsg:
 		return p.abortOp()
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case tea.KeyPressMsg:
 		if p.Focused {
 			return p.handleKey(msg)
 		}
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
 	}
@@ -235,7 +214,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.Code {
 	case 'j', tea.KeyDown:
@@ -302,7 +280,6 @@ func (p *Panel) clampCursor() {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the conflict file at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -322,7 +299,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.adjustOffset()
-
 	itemType := actions.ItemConflictFile
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pendingOp = opFirstUseConfirm
@@ -340,7 +316,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
-
 	switch m.Button {
 	case tea.MouseWheelUp:
 		p.offset -= panels.ScrollDelta
@@ -368,7 +343,6 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.adjustOffset()
-
 	label := p.files[idx]
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemConflictFile, label)
 	if cmd != nil {
@@ -416,7 +390,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 // ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
-
 func (p *Panel) startMerge(branch string) (panels.Panel, tea.Cmd) {
 	p.mode = opMerge
 	p.files = nil
@@ -424,7 +397,6 @@ func (p *Panel) startMerge(branch string) (panels.Panel, tea.Cmd) {
 	p.cursor = 0
 	p.offset = 0
 	p.loading = true
-
 	gc := p.git
 	ctx := p.safeCtx()
 	return p, func() tea.Msg {
@@ -448,7 +420,6 @@ func (p *Panel) startRebase(onto string) (panels.Panel, tea.Cmd) {
 	p.cursor = 0
 	p.offset = 0
 	p.loading = true
-
 	gc := p.git
 	ctx := p.safeCtx()
 	return p, func() tea.Msg {
@@ -555,7 +526,6 @@ func (p *Panel) markResolved() (panels.Panel, tea.Cmd) {
 	if p.resolved[path] {
 		return p, nil // already resolved
 	}
-
 	gc := p.git
 	ctx := p.safeCtx()
 	return p, func() tea.Msg {
@@ -575,7 +545,6 @@ func (p *Panel) handleResolveResult(msg resolveResultMsg) (panels.Panel, tea.Cmd
 		}
 	}
 	p.resolved[msg.path] = true
-
 	// Check if all conflicts are resolved.
 	if p.allResolved() {
 		return p, func() tea.Msg {
@@ -598,7 +567,6 @@ func (p *Panel) continueOp() (panels.Panel, tea.Cmd) {
 			}
 		}
 	}
-
 	gc := p.git
 	ctx := p.safeCtx()
 	mode := p.mode
@@ -623,7 +591,6 @@ func (p *Panel) abortOp() (panels.Panel, tea.Cmd) {
 	if p.mode == opNone {
 		return p, nil
 	}
-
 	gc := p.git
 	ctx := p.safeCtx()
 	mode := p.mode
@@ -653,14 +620,12 @@ func (p *Panel) handleContinueResult(msg continueResultMsg) (panels.Panel, tea.C
 			}
 		}
 	}
-
 	wasMode := p.mode
 	p.mode = opNone
 	p.files = nil
 	p.resolved = make(map[string]bool)
 	p.cursor = 0
 	p.offset = 0
-
 	action := msg.action
 	var modeStr string
 	switch wasMode { //nolint:exhaustive // only relevant cases handled
@@ -669,7 +634,6 @@ func (p *Panel) handleContinueResult(msg continueResultMsg) (panels.Panel, tea.C
 	case opRebase:
 		modeStr = "Rebase"
 	}
-
 	return p, tea.Batch(
 		func() tea.Msg {
 			return notify.ShowToastMsg{
@@ -695,7 +659,6 @@ func (p *Panel) openFile() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // allResolved returns true if every conflicted file has been marked resolved.
 func (p *Panel) allResolved() bool {
 	if len(p.files) == 0 {
@@ -738,13 +701,11 @@ func scanConflicts(ctx context.Context, gc gitOps) []string {
 // ---------------------------------------------------------------------------
 // View
 // ---------------------------------------------------------------------------
-
 // View implements panels.Panel.
 func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.mode == opNone && len(p.files) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -752,32 +713,26 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#50FA7B")).
 			Render("No conflicts")
 	}
-
 	// Reserve 2 lines for the status bar.
 	listHeight := height - 2
 	if listHeight < 1 {
 		listHeight = 1
 	}
-
 	lines := make([]string, 0, listHeight)
 	end := p.offset + listHeight
 	if end > len(p.files) {
 		end = len(p.files)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderFileRow(p.files[i], width, i == p.cursor))
 	}
-
 	// Pad remaining lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < listHeight {
 		lines = append(lines, emptyLine)
 	}
-
 	// Append status bar.
 	lines = append(lines, p.renderStatusBar(width))
-
 	return strings.Join(lines, "\n")
 }
 
@@ -789,10 +744,8 @@ func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 		marker = "✓"
 		markerColor = lipgloss.Color("#50FA7B") // green for resolved
 	}
-
 	markerStyle := lipgloss.NewStyle().Foreground(markerColor)
 	label := markerStyle.Render(marker) + " " + path
-
 	// Truncate if needed. The marker is 2 visible chars + space = 4.
 	maxLen := width
 	if len(path)+4 > maxLen && maxLen > 7 {
@@ -802,14 +755,12 @@ func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 			label = markerStyle.Render(marker) + " " + path[:avail] + "..."
 		}
 	}
-
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
 		style = style.
 			Background(lipgloss.Color("#44475A")).
 			Foreground(lipgloss.Color("#F8F8F2"))
 	}
-
 	return style.Render(label)
 }
 
@@ -818,17 +769,14 @@ func (p *Panel) renderStatusBar(width int) string {
 	if p.mode == opNone {
 		return lipgloss.NewStyle().Width(width).Render("")
 	}
-
 	remaining := p.remainingCount()
 	total := len(p.files)
 	status := fmt.Sprintf(" %s — %d/%d conflicts remaining", p.mode, remaining, total)
-
 	style := lipgloss.NewStyle().
 		Width(width).
 		Background(lipgloss.Color("#FF79C6")).
 		Foreground(lipgloss.Color("#282A36")).
 		Bold(true)
-
 	return style.Render(status)
 }
 

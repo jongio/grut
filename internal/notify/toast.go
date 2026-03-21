@@ -9,8 +9,8 @@ import (
 // toast is an auto-dismissing notification that displays briefly and
 // then disappears. Each toast has a unique ID used for tracking expiry.
 type toast struct {
-	id           int64
 	notification Notification
+	id           int64
 }
 
 // view renders a single toast as a compact colored bar.
@@ -22,20 +22,15 @@ func (t *toast) view(width int) string {
 	if maxWidth < 10 {
 		maxWidth = 10
 	}
-
 	color := levelColor(t.notification.Level)
-
 	icon := levelIcon(t.notification.Level)
-
 	label := fmt.Sprintf(" %s %s ", icon, t.notification.Message)
-
 	style := lipgloss.NewStyle().
 		Background(color).
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true).
 		MaxWidth(maxWidth).
 		Padding(0, 1)
-
 	return style.Render(label)
 }
 

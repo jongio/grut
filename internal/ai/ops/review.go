@@ -50,11 +50,11 @@ type Reviewer struct {
 // ReviewFinding is a single code review annotation.
 type ReviewFinding struct {
 	File       string `json:"file"`                 // File path
-	Line       int    `json:"line"`                 // Line number in the new version
 	Severity   string `json:"severity"`             // "error", "warning", "info", "hint"
 	Category   string `json:"category"`             // "security", "bug", "performance", "style", "test"
 	Message    string `json:"message"`              // Human-readable description
 	Suggestion string `json:"suggestion,omitempty"` // Suggested fix (optional)
+	Line       int    `json:"line"`                 // Line number in the new version
 }
 
 // NewReviewer creates a Reviewer backed by the given provider registry and
@@ -74,18 +74,15 @@ func (r *Reviewer) Review(ctx context.Context, opts git.DiffOpts) ([]ReviewFindi
 	if err != nil {
 		return nil, fmt.Errorf("building review context: %w", err)
 	}
-
 	// Bail out early when the diff is empty.
 	if len(gitCtx.Diffs) == 0 {
 		return []ReviewFinding{}, nil
 	}
-
 	// Resolve an available provider.
 	provider, err := r.registry.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving AI provider: %w", err)
 	}
-
 	// Send the review request.
 	resp, err := provider.Complete(ctx, ai.CompletionRequest{
 		Operation:    "code_review",
@@ -97,13 +94,11 @@ func (r *Reviewer) Review(ctx context.Context, opts git.DiffOpts) ([]ReviewFindi
 	if err != nil {
 		return nil, fmt.Errorf("AI completion: %w", err)
 	}
-
 	// Parse findings from the response.
 	findings, err := parseFindings(resp.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parsing review findings: %w", err)
 	}
-
 	sortFindings(findings)
 	return findings, nil
 }
@@ -112,7 +107,6 @@ func (r *Reviewer) Review(ctx context.Context, opts git.DiffOpts) ([]ReviewFindi
 // It tolerates responses wrapped in markdown code fences.
 func parseFindings(raw string) ([]ReviewFinding, error) {
 	text := stripCodeFences(raw)
-
 	findings := make([]ReviewFinding, 0)
 	if err := json.Unmarshal([]byte(text), &findings); err != nil {
 		return nil, fmt.Errorf("invalid JSON in AI response: %w", err)

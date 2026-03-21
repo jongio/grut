@@ -12,10 +12,10 @@ import (
 // Registry manages registered AI providers and resolves the active one
 // based on configuration (primary + fallback).
 type Registry struct {
-	mu        sync.RWMutex
 	providers map[string]AIProvider
 	primary   string
 	fallback  string
+	mu        sync.RWMutex
 }
 
 // NewRegistry creates a registry configured with the given AI settings.
@@ -41,7 +41,6 @@ func (r *Registry) Register(name string, p AIProvider) {
 func (r *Registry) Get(ctx context.Context) (AIProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
 	// Try the primary provider.
 	if r.primary != "" {
 		if p, ok := r.providers[r.primary]; ok {
@@ -51,7 +50,6 @@ func (r *Registry) Get(ctx context.Context) (AIProvider, error) {
 			}
 		}
 	}
-
 	// Try the fallback provider.
 	if r.fallback != "" {
 		if p, ok := r.providers[r.fallback]; ok {
@@ -61,7 +59,6 @@ func (r *Registry) Get(ctx context.Context) (AIProvider, error) {
 			}
 		}
 	}
-
 	return nil, fmt.Errorf("no available AI provider (primary=%q, fallback=%q)", r.primary, r.fallback)
 }
 
@@ -82,7 +79,6 @@ func (r *Registry) PrimaryName() string {
 func (r *Registry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	var errs []error
 	for name, p := range r.providers {
 		if err := p.Close(); err != nil {

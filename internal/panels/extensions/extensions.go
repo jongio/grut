@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/extension"
@@ -22,7 +23,6 @@ import (
 // ---------------------------------------------------------------------------
 // Internal message types (async result messages)
 // ---------------------------------------------------------------------------
-
 // extensionsLoadedMsg carries the result of an async extension list refresh.
 type extensionsLoadedMsg struct {
 	extensions []extension.ExtensionInfo
@@ -30,26 +30,25 @@ type extensionsLoadedMsg struct {
 
 // extensionToggleResultMsg carries the result of an enable/disable operation.
 type extensionToggleResultMsg struct {
-	name string
 	err  error
+	name string
 }
 
 // extensionRemoveResultMsg carries the result of a remove operation.
 type extensionRemoveResultMsg struct {
-	name string
 	err  error
+	name string
 }
 
 // extensionInstallResultMsg carries the result of an install operation.
 type extensionInstallResultMsg struct {
-	source string
 	err    error
+	source string
 }
 
 // ---------------------------------------------------------------------------
 // Narrow interface for testability
 // ---------------------------------------------------------------------------
-
 // extManager defines the subset of extension.Manager used by this panel.
 // It is satisfied by *extension.Manager and makes the panel easy to mock
 // in tests.
@@ -64,7 +63,6 @@ type extManager interface {
 // ---------------------------------------------------------------------------
 // Pending operation tracking
 // ---------------------------------------------------------------------------
-
 type pendingOp int
 
 const (
@@ -78,25 +76,19 @@ const (
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the extension management panel. It implements [panels.Panel].
 type Panel struct {
+	actionsCfg  config.ActionsConfig // right-click action overrides
+	mgr         extManager
+	ctx         context.Context
+	expanded    map[string]bool           // extension names with details expanded
+	pendingName string                    // extension name for pending remove
+	extensions  []extension.ExtensionInfo // latest snapshot, sorted by name
 	panels.BasePanel
-
-	mgr extManager
-	ctx context.Context
-
-	extensions []extension.ExtensionInfo // latest snapshot, sorted by name
-	cursor     int                       // index into extensions list
-	offset     int                       // viewport scroll offset
-	expanded   map[string]bool           // extension names with details expanded
-
-	actionsCfg config.ActionsConfig // right-click action overrides
-
-	pending     pendingOp // operation awaiting modal result
-	pendingName string    // extension name for pending remove
-
-	loading bool // true while a refresh is in flight
+	cursor  int       // index into extensions list
+	offset  int       // viewport scroll offset
+	pending pendingOp // operation awaiting modal result
+	loading bool      // true while a refresh is in flight
 }
 
 // Compile-time interface check.
@@ -114,7 +106,6 @@ func New(mgr extManager) *Panel {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -130,7 +121,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.extensions = msg.extensions
 		p.clampCursor()
 		return p, nil
-
 	case extensionToggleResultMsg:
 		if msg.err != nil {
 			return p, func() tea.Msg {
@@ -140,7 +130,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
 			return panels.ExtensionChangedMsg{}
 		})
-
 	case extensionRemoveResultMsg:
 		if msg.err != nil {
 			return p, func() tea.Msg {
@@ -150,7 +139,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
 			return panels.ExtensionChangedMsg{}
 		})
-
 	case extensionInstallResultMsg:
 		if msg.err != nil {
 			return p, func() tea.Msg {
@@ -160,25 +148,18 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
 			return panels.ExtensionChangedMsg{}
 		})
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case panels.ExtensionChangedMsg:
 		return p, p.loadExtensionsCmd()
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
 	}
@@ -190,7 +171,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.loading && len(p.extensions) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -198,7 +178,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("Loading extensions...")
 	}
-
 	if len(p.extensions) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -206,10 +185,8 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("No extensions installed")
 	}
-
 	// Build visible rows.
 	rows := p.buildVisibleRows(width)
-
 	// Apply viewport offset.
 	end := p.offset + height
 	if end > len(rows) {
@@ -219,18 +196,15 @@ func (p *Panel) View(width, height int) string {
 	if start > len(rows) {
 		start = len(rows)
 	}
-
 	lines := make([]string, 0, height)
 	for i := start; i < end; i++ {
 		lines = append(lines, rows[i])
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -250,7 +224,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Async commands
 // ---------------------------------------------------------------------------
-
 func (p *Panel) loadExtensionsCmd() tea.Cmd {
 	mgr := p.mgr
 	return func() tea.Msg {
@@ -295,12 +268,10 @@ func (p *Panel) installExtensionCmd(source string) tea.Cmd {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	key := msg.String()
 	switch key {
 	case "j", "down":
@@ -319,14 +290,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.loading = true
 		return p, p.loadExtensionsCmd()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the extension at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -346,7 +315,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := actions.ItemExtension
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
@@ -382,7 +350,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	if p.cursor < len(p.extensions)-1 {
 		p.cursor++
@@ -421,12 +388,10 @@ func (p *Panel) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
 func (p *Panel) toggleExpand() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.extensions) {
 		return p, nil
 	}
-
 	name := p.extensions[p.cursor].Manifest.Name
 	if p.expanded[name] {
 		delete(p.expanded, name)
@@ -440,7 +405,6 @@ func (p *Panel) toggleEnable() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.extensions) {
 		return p, nil
 	}
-
 	ext := p.extensions[p.cursor]
 	return p, p.toggleExtensionCmd(ext.Manifest.Name, !ext.Enabled)
 }
@@ -449,7 +413,6 @@ func (p *Panel) requestRemove() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.extensions) {
 		return p, nil
 	}
-
 	name := p.extensions[p.cursor].Manifest.Name
 	p.pending = opRemove
 	p.pendingName = name
@@ -467,11 +430,9 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	name := p.pendingName
 	p.pending = opNone
 	p.pendingName = ""
-
 	if !msg.Accept {
 		return p, nil
 	}
-
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opRemove:
 		return p, p.removeExtensionCmd(name)
@@ -489,14 +450,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		}
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Right-click
 // ---------------------------------------------------------------------------
-
 // SetActionsCfg injects the actions configuration for right-click menus.
 func (p *Panel) SetActionsCfg(cfg config.ActionsConfig) { p.actionsCfg = cfg }
 
@@ -508,10 +467,8 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	ext := p.extensions[p.cursor]
 	label := ext.Manifest.Name
-
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemExtension, label)
 	if cmd != nil {
 		p.pending = opRightClickPick
@@ -537,7 +494,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 // runtimeIcon returns a display icon for the extension runtime type.
 func runtimeIcon(runtime string) string {
 	switch runtime {
@@ -554,17 +510,14 @@ func runtimeIcon(runtime string) string {
 
 func (p *Panel) buildVisibleRows(width int) []string {
 	var rows []string
-
 	for i, ext := range p.extensions {
 		isCursor := i == p.cursor
 		rows = append(rows, p.renderExtensionRow(ext, width, isCursor))
-
 		// If expanded, append detail lines.
 		if p.expanded[ext.Manifest.Name] {
 			rows = append(rows, p.renderDetailLines(ext, width)...)
 		}
 	}
-
 	return rows
 }
 
@@ -576,22 +529,17 @@ func (p *Panel) renderExtensionRow(ext extension.ExtensionInfo, width int, isCur
 	} else {
 		statusIcon = "✗"
 	}
-
 	icon := runtimeIcon(ext.Manifest.Runtime)
-
 	// Compose the line.
 	line := fmt.Sprintf(" %s %s %s v%s",
 		statusIcon, icon, ext.Manifest.Name, ext.Manifest.Version)
-
 	if ext.Manifest.Author != "" {
 		line += fmt.Sprintf("  by %s", ext.Manifest.Author)
 	}
-
 	// Truncate to width.
 	if len(line) > width && width > 3 {
 		line = line[:width-3] + "..."
 	}
-
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
@@ -602,7 +550,6 @@ func (p *Panel) renderExtensionRow(ext extension.ExtensionInfo, width int, isCur
 	} else {
 		style = style.Foreground(lipgloss.Color("#6272A4")) // muted
 	}
-
 	return style.Render(line)
 }
 
@@ -611,22 +558,17 @@ func (p *Panel) renderDetailLines(ext extension.ExtensionInfo, width int) []stri
 	detailStyle := lipgloss.NewStyle().
 		Width(width).
 		Foreground(lipgloss.Color("#8BE9FD")) // cyan
-
 	var rows []string
-
 	if ext.Manifest.Description != "" {
 		rows = append(rows, detailStyle.Render(indent+ext.Manifest.Description))
 	}
-
 	rows = append(rows, detailStyle.Render(
 		fmt.Sprintf("%sRuntime: %s  Entry: %s", indent, ext.Manifest.Runtime, ext.Manifest.EntryPoint)))
-
 	if len(ext.Manifest.Permissions) > 0 {
 		rows = append(rows, detailStyle.Render(
 			fmt.Sprintf("%sPermissions: %s", indent, strings.Join(ext.Manifest.Permissions, ", "))))
 	} else {
 		rows = append(rows, detailStyle.Render(indent+"Permissions: none"))
 	}
-
 	return rows
 }

@@ -26,9 +26,9 @@ type bookmarksFile struct {
 
 // Manager provides thread-safe bookmark operations and persistence.
 type Manager struct {
-	mu        sync.RWMutex
-	bookmarks []Bookmark
 	configDir string
+	bookmarks []Bookmark
+	mu        sync.RWMutex
 }
 
 // NewManager creates a Manager seeded from the config's bookmark paths.
@@ -51,7 +51,6 @@ func newManagerWithDir(cfg config.BookmarksConfig, configDir string) *Manager {
 	m := &Manager{
 		configDir: configDir,
 	}
-
 	// Seed from config (initial paths from config.toml).
 	seen := make(map[string]bool, len(cfg.Paths))
 	for _, p := range cfg.Paths {
@@ -69,12 +68,10 @@ func newManagerWithDir(cfg config.BookmarksConfig, configDir string) *Manager {
 			Name: filepath.Base(abs),
 		})
 	}
-
 	// Load saved bookmarks (overrides seed if file exists).
 	if saved, err := m.load(); err == nil && len(saved) > 0 {
 		m.bookmarks = saved
 	}
-
 	return m
 }
 
@@ -95,7 +92,6 @@ func (m *Manager) Add(path string) error {
 		return fmt.Errorf("resolve path %q: %w", path, err)
 	}
 	abs = filepath.Clean(abs)
-
 	info, err := os.Stat(abs)
 	if err != nil {
 		return fmt.Errorf("stat %q: %w", abs, err)
@@ -103,21 +99,17 @@ func (m *Manager) Add(path string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("%q is not a directory", abs)
 	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	for _, b := range m.bookmarks {
 		if b.Path == abs {
 			return fmt.Errorf("bookmark already exists: %s", abs)
 		}
 	}
-
 	m.bookmarks = append(m.bookmarks, Bookmark{
 		Path: abs,
 		Name: filepath.Base(abs),
 	})
-
 	return nil
 }
 
@@ -129,17 +121,14 @@ func (m *Manager) Remove(path string) error {
 		abs = path
 	}
 	abs = filepath.Clean(abs)
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	for i, b := range m.bookmarks {
 		if b.Path == abs {
 			m.bookmarks = append(m.bookmarks[:i], m.bookmarks[i+1:]...)
 			return nil
 		}
 	}
-
 	return fmt.Errorf("bookmark not found: %s", abs)
 }
 
@@ -150,10 +139,8 @@ func (m *Manager) Has(path string) bool {
 		abs = path
 	}
 	abs = filepath.Clean(abs)
-
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	for _, b := range m.bookmarks {
 		if b.Path == abs {
 			return true
@@ -169,21 +156,17 @@ func (m *Manager) Save() error {
 	copy(data.Bookmarks, m.bookmarks)
 	configDir := m.configDir
 	m.mu.RUnlock()
-
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
-
 	b, err := toml.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("marshal bookmarks: %w", err)
 	}
-
 	path := filepath.Join(configDir, "bookmarks.toml")
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-
 	return nil
 }
 
@@ -199,12 +182,10 @@ func (m *Manager) load() ([]Bookmark, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	var f bookmarksFile
 	if err := toml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse bookmarks: %w", err)
 	}
-
 	return f.Bookmarks, nil
 }
 

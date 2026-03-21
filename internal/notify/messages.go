@@ -25,8 +25,8 @@ type ToastExpiredMsg struct {
 // Remember is true when the checkbox was checked (ConfirmWithCheckbox only);
 // it is always false when Accept is false.
 type ModalResultMsg struct {
-	Accept   bool
 	Value    string
+	Accept   bool
 	Remember bool
 }
 
@@ -52,9 +52,9 @@ type ShowModalMsg struct {
 	Message       string
 	Placeholder   string         // used only for input modals
 	Value         string         // initial value for input modals (pre-fill)
-	Kind          ModalKind      // confirm, input, confirmWithCheckbox, or actionPicker
 	CheckboxLabel string         // label for the checkbox (ConfirmWithCheckbox only)
 	Actions       []ActionOption // list of actions (ModalActionPicker only)
+	Kind          ModalKind      // confirm, input, confirmWithCheckbox, or actionPicker
 }
 
 // ModalKind distinguishes between confirmation and input modals.

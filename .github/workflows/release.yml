@@ -41,6 +41,9 @@ jobs:
 
       - uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 # v0
 
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20250305215246-b5d1cf681ef0
+
       - name: Compute next version
         id: version
         run: |
@@ -82,6 +85,64 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "v${{ steps.version.outputs.version }}" -m "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Run benchmarks for release snapshot
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          # linux-amd64 is the canonical platform for release notes.
+          PLATFORM="$(go env GOOS)-$(go env GOARCH)"
+          echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
+          go test -bench=. -benchmem -count=6 -run='^$' -timeout=15m \
+            ./internal/git/ ./internal/ai/ ./internal/config/ \
+            ./internal/crashlog/ ./internal/panels/gitdiff/ \
+            ./internal/panels/filetree/ | tee bench-release.txt
+
+      - name: Generate performance release notes
+        run: |
+          VERSION="v${{ steps.version.outputs.version }}"
+          # Use the per-platform baseline committed to the repo.
+          BASELINE="perf/baselines/${{ env.PLATFORM }}/main.txt"
+          if [ -f "$BASELINE" ]; then
+            bash scripts/bench-release-notes.sh "$BASELINE" bench-release.txt "$VERSION" \
+              > perf-notes.md
+          else
+            {
+              echo "### Performance"
+              echo ""
+              echo "No baseline available for comparison."
+              echo ""
+              echo "Benchmark data archived in \`perf/baselines/${{ env.PLATFORM }}/${VERSION}.txt\`."
+            } > perf-notes.md
+          fi
+          cat perf-notes.md
+
+      - name: Inject performance section into CHANGELOG
+        run: |
+          # Insert ### Performance block under ## [Unreleased] if not already present.
+          if ! grep -q "^### Performance" CHANGELOG.md; then
+            PERF_BLOCK=$(cat perf-notes.md)
+            awk -v block="$PERF_BLOCK" '
+              /^## \[Unreleased\]/ { print; found=1; next }
+              found && /^### / { print block; print ""; found=0 }
+              { print }
+            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          fi
+
+      - name: Commit performance notes and baselines
+        run: |
+          VERSION="v${{ steps.version.outputs.version }}"
+          PLATFORM="${{ env.PLATFORM }}"
+          mkdir -p "perf/baselines/$PLATFORM"
+          # Archive a versioned snapshot and update the rolling main baseline.
+          cp bench-release.txt "perf/baselines/$PLATFORM/${VERSION}.txt"
+          cp bench-release.txt "perf/baselines/$PLATFORM/main.txt"
+          git add CHANGELOG.md \
+            "perf/baselines/$PLATFORM/${VERSION}.txt" \
+            "perf/baselines/$PLATFORM/main.txt"
+          git diff --cached --quiet || \
+            git commit -m "perf: add ${VERSION} $PLATFORM baseline and release notes [skip ci]"
+          git push
 
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:

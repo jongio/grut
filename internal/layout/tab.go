@@ -4,8 +4,8 @@ import "fmt"
 
 // Tab represents a single tab with its own layout tree.
 type Tab struct {
-	Name string
 	Tree Node
+	Name string
 }
 
 // TabManager manages a set of tabs, each with its own layout tree.
@@ -55,7 +55,6 @@ func (tm *TabManager) Tabs() []Tab {
 func (tm *TabManager) Add(name string, tree Node) {
 	newTab := Tab{Name: name, Tree: tree}
 	insertIdx := tm.activeIdx + 1
-
 	// Insert at insertIdx
 	tm.tabs = append(tm.tabs, Tab{})
 	copy(tm.tabs[insertIdx+1:], tm.tabs[insertIdx:])
@@ -72,16 +71,13 @@ func (tm *TabManager) Close(idx int) error {
 	if len(tm.tabs) <= 1 {
 		return fmt.Errorf("cannot close the last tab")
 	}
-
 	tm.tabs = append(tm.tabs[:idx], tm.tabs[idx+1:]...)
-
 	// Adjust active index
 	if tm.activeIdx >= len(tm.tabs) {
 		tm.activeIdx = len(tm.tabs) - 1
 	} else if idx < tm.activeIdx {
 		tm.activeIdx--
 	}
-
 	return nil
 }
 

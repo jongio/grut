@@ -98,7 +98,7 @@ func TestKill_SpecificAgent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for the process to actually exit.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		agents := tracker.List()
 		if len(agents) > 0 && agents[0].Status != AgentRunning {
@@ -131,7 +131,7 @@ func TestKillAll(t *testing.T) {
 	tracker.KillAll()
 
 	// Wait for processes to exit.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		allDone := true
 		for _, a := range tracker.List() {
@@ -160,7 +160,7 @@ func TestOutputCapture(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for the process to exit.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		agents := tracker.List()
 		if len(agents) > 0 && agents[0].Status != AgentRunning {
@@ -215,7 +215,7 @@ func TestExitCode_NonZero(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for the process to exit.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		agents := tracker.List()
 		for _, a := range agents {

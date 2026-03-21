@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -23,19 +24,18 @@ import (
 // ---------------------------------------------------------------------------
 // Internal message types (async result messages)
 // ---------------------------------------------------------------------------
-
 // statusLoadedMsg carries the result of an async git-status call.
 type statusLoadedMsg struct {
-	files      []git.FileStatus
 	err        error
+	files      []git.FileStatus
 	generation uint64 // monotonic counter to discard stale results
 }
 
 // diffLoadedMsg carries the result of an async diff call for a file.
 type diffLoadedMsg struct {
+	err        error
 	path       string
 	hunks      []git.Hunk
-	err        error
 	generation uint64
 }
 
@@ -52,7 +52,6 @@ type discardResultMsg struct {
 // ---------------------------------------------------------------------------
 // View mode
 // ---------------------------------------------------------------------------
-
 // viewMode tracks the current interaction granularity.
 type viewMode int
 
@@ -69,7 +68,6 @@ const maxDiffCacheEntries = 50
 // ---------------------------------------------------------------------------
 // Section groups
 // ---------------------------------------------------------------------------
-
 // section is a logical group header in the status list.
 type section int
 
@@ -96,7 +94,6 @@ func (s section) String() string {
 // Visible row — each row is either a section header, a file entry,
 // a hunk header, or a diff line.
 // ---------------------------------------------------------------------------
-
 type rowKind int
 
 const (
@@ -107,22 +104,21 @@ const (
 )
 
 type row struct {
-	kind      rowKind
-	section   section         // which section this row belongs to
 	file      *git.FileStatus // non-nil for rowFile, rowHunk, rowDiffLine
-	hunkIdx   int             // hunk index (for rowHunk, rowDiffLine)
-	lineIdx   int             // line index within hunk (for rowDiffLine)
-	expanded  bool            // file expanded to show diff
-	hunks     []git.Hunk      // cached diff hunks for expanded files
-	selected  bool            // marked for bulk ops
 	diffLine  *git.DiffLine   // pointer to the actual diff line (for rowDiffLine)
 	hunkEntry *git.Hunk       // pointer to the actual hunk (for rowHunk)
+	hunks     []git.Hunk      // cached diff hunks for expanded files
+	kind      rowKind
+	section   section // which section this row belongs to
+	hunkIdx   int     // hunk index (for rowHunk, rowDiffLine)
+	lineIdx   int     // line index within hunk (for rowDiffLine)
+	expanded  bool    // file expanded to show diff
+	selected  bool    // marked for bulk ops
 }
 
 // ---------------------------------------------------------------------------
 // GitStatus panel
 // ---------------------------------------------------------------------------
-
 // GitClient is the subset of git.GitClient used by this panel.
 // It's intentionally narrow — only the methods the panel actually needs —
 // making it easy to mock in tests without implementing unused methods.
@@ -140,39 +136,30 @@ type GitClient interface {
 
 // GitStatus is the git status panel. It implements [panels.Panel].
 type GitStatus struct {
-	panels.BasePanel
-
-	git GitClient
-	ctx context.Context
-
-	files []git.FileStatus // latest status from git
-	rows  []row            // flattened visible rows
-	err   error            // last error from loading status
-
-	cursor int // index into rows
-	offset int // viewport scroll offset
-
-	selected map[string]bool // file paths selected for bulk ops
-
+	actionsCfg config.ActionsConfig
+	git        GitClient
+	ctx        context.Context
+	err        error           // last error from loading status
+	selected   map[string]bool // file paths selected for bulk ops
 	// Per-file diff expansion and cache.
 	expandedFiles map[string]bool       // paths of expanded files
 	diffCache     map[string][]git.Hunk // cached diffs keyed by path
-
+	activeFile    string                // path of the file in hunk/line mode
+	pendingOp     string
+	pendingName   string
+	pendingPath   string           // file path for pending destructive ops (e.g. discard)
+	files         []git.FileStatus // latest status from git
+	rows          []row            // flattened visible rows
+	panels.BasePanel
+	cursor     int      // index into rows
+	offset     int      // viewport scroll offset
 	mode       viewMode // current interaction mode
 	hunkCursor int      // active hunk index within expanded file
 	lineCursor int      // active line index within active hunk
-	activeFile string   // path of the file in hunk/line mode
-
-	loading bool // true while an async status load is in flight
-
 	// Generation counters to discard stale async results (CWE-362).
 	statusGen uint64 // incremented on each status load request
 	diffGen   uint64 // incremented on each diff load request
-
-	actionsCfg  config.ActionsConfig
-	pendingOp   string
-	pendingName string
-	pendingPath string // file path for pending destructive ops (e.g. discard)
+	loading   bool   // true while an async status load is in flight
 }
 
 // Compile-time interface check.
@@ -192,7 +179,6 @@ func New(client GitClient) *GitStatus {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *GitStatus) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -250,7 +236,6 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.files = msg.files
 		p.rebuildRows()
 		return p, p.emitStatusChanged()
-
 	case diffLoadedMsg:
 		// Discard stale diff results.
 		if msg.generation != p.diffGen {
@@ -267,7 +252,6 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		p.rebuildRows()
 		return p, nil
-
 	case stageResultMsg:
 		if msg.err != nil {
 			p.err = msg.err
@@ -279,7 +263,6 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		// Refresh status after staging/unstaging.
 		p.loading = true
 		return p, p.loadStatusCmd()
-
 	case discardResultMsg:
 		if msg.err != nil {
 			p.err = msg.err
@@ -288,14 +271,11 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.invalidateDiffCaches()
 		p.loading = true
 		return p, p.loadStatusCmd()
-
 	case panels.RefreshGitStatusMsg:
 		p.loading = true
 		return p, p.loadStatusCmd()
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
 	case panels.PanelMouseClickMsg:
@@ -317,7 +297,6 @@ func (p *GitStatus) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.loading && len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -325,7 +304,6 @@ func (p *GitStatus) View(width, height int) string {
 			Foreground(lipgloss.Color("#666666")).
 			Render("Loading git status...")
 	}
-
 	if p.err != nil && len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -333,7 +311,6 @@ func (p *GitStatus) View(width, height int) string {
 			Foreground(lipgloss.Color("#FF5555")).
 			Render(fmt.Sprintf("Error: %v", p.err))
 	}
-
 	if len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -341,23 +318,19 @@ func (p *GitStatus) View(width, height int) string {
 			Foreground(lipgloss.Color("#50FA7B")).
 			Render("Working tree clean")
 	}
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > len(p.rows) {
 		end = len(p.rows)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderRow(&p.rows[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -382,7 +355,6 @@ func (p *GitStatus) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Async commands (never call git in Update synchronously)
 // ---------------------------------------------------------------------------
-
 func (p *GitStatus) loadStatusCmd() tea.Cmd {
 	p.statusGen++
 	gen := p.statusGen
@@ -476,7 +448,6 @@ func (p *GitStatus) emitStatusChanged() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Classification helpers
 // ---------------------------------------------------------------------------
-
 // classifyFiles groups files into staged, unstaged, and untracked lists.
 func classifyFiles(files []git.FileStatus) (staged, unstaged, untracked []git.FileStatus) {
 	for i := range files {
@@ -500,12 +471,9 @@ func classifyFiles(files []git.FileStatus) (staged, unstaged, untracked []git.Fi
 // ---------------------------------------------------------------------------
 // Row rebuild
 // ---------------------------------------------------------------------------
-
 func (p *GitStatus) rebuildRows() {
 	staged, unstaged, untracked := classifyFiles(p.files)
-
 	var rows []row
-
 	if len(staged) > 0 {
 		rows = append(rows, row{kind: rowSection, section: sectionStaged})
 		for i := range staged {
@@ -525,7 +493,6 @@ func (p *GitStatus) rebuildRows() {
 			}
 		}
 	}
-
 	if len(unstaged) > 0 {
 		rows = append(rows, row{kind: rowSection, section: sectionUnstaged})
 		for i := range unstaged {
@@ -545,7 +512,6 @@ func (p *GitStatus) rebuildRows() {
 			}
 		}
 	}
-
 	if len(untracked) > 0 {
 		rows = append(rows, row{kind: rowSection, section: sectionUntracked})
 		for i := range untracked {
@@ -558,7 +524,6 @@ func (p *GitStatus) rebuildRows() {
 			rows = append(rows, fr)
 		}
 	}
-
 	p.rows = rows
 	// Clamp cursor.
 	if p.cursor >= len(p.rows) {
@@ -604,7 +569,6 @@ func (p *GitStatus) buildDiffRows(hunks []git.Hunk, sec section, file *git.FileS
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the item at the clicked row, skipping section headers.
 func (p *GitStatus) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -631,7 +595,6 @@ func (p *GitStatus) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) 
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := actions.ItemStatusFile
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pendingOp = opFirstUseConfirm
@@ -663,12 +626,10 @@ func (p *GitStatus) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (p
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	r := &p.rows[idx]
 	if r.file == nil {
 		return p, nil
 	}
-
 	label := r.file.Path
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemStatusFile, label)
 	if cmd != nil {
@@ -776,14 +737,11 @@ func (p *GitStatus) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	key := msg.String()
-
 	// Escape from hunk/line mode back to file mode.
 	if key == "esc" || key == "escape" {
 		if p.mode != modeFile {
@@ -793,7 +751,6 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	}
-
 	switch key {
 	case "j", "down":
 		p.moveCursorDown()
@@ -826,14 +783,12 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.mode = modeFile
 		return p, p.loadStatusCmd()
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *GitStatus) moveCursorDown() {
 	if p.cursor < len(p.rows)-1 {
 		p.cursor++
@@ -892,23 +847,19 @@ func (p *GitStatus) ensureCursorVisible() {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
 func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) {
 		return p, nil
 	}
-
 	r := &p.rows[p.cursor]
 	if r.kind != rowFile {
 		// In hunk/line mode, entering line mode from hunk is via 'l'.
 		return p, nil
 	}
-
 	// Untracked files cannot be expanded (no diff).
 	if r.section == sectionUntracked {
 		return p, nil
 	}
-
 	key := p.fileKey(r)
 	if p.expandedFiles[key] {
 		// Collapse.
@@ -917,19 +868,16 @@ func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 		p.rebuildRows()
 		return p, nil
 	}
-
 	// Expand — load diff.
 	p.expandedFiles[key] = true
 	staged := r.section == sectionStaged
 	path := r.file.Path
 	diffKey := key
-
 	// If we already have cached hunks, just rebuild.
 	if _, ok := p.diffCache[diffKey]; ok {
 		p.rebuildRows()
 		return p, nil
 	}
-
 	return p, p.loadDiffCmd(diffKey, path, staged)
 }
 
@@ -937,9 +885,7 @@ func (p *GitStatus) enterHunkMode() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) {
 		return p, nil
 	}
-
 	r := &p.rows[p.cursor]
-
 	switch r.kind { //nolint:exhaustive // only relevant cases handled
 	case rowFile:
 		// Only enter hunk mode if file is expanded and has hunks.
@@ -963,7 +909,6 @@ func (p *GitStatus) enterHunkMode() (panels.Panel, tea.Cmd) {
 			}
 		}
 		return p, nil
-
 	case rowHunk:
 		// Enter line mode from hunk.
 		p.mode = modeLine
@@ -983,7 +928,6 @@ func (p *GitStatus) enterHunkMode() (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	}
-
 	return p, nil
 }
 
@@ -991,9 +935,7 @@ func (p *GitStatus) stageAtCursor() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) {
 		return p, nil
 	}
-
 	r := &p.rows[p.cursor]
-
 	switch r.kind { //nolint:exhaustive // only relevant cases handled
 	case rowSection:
 		return p.stageSectionFiles(r.section)
@@ -1028,7 +970,6 @@ func (p *GitStatus) stageAtCursor() (panels.Panel, tea.Cmd) {
 		}
 		return p, p.stageCmd([]string{r.file.Path})
 	}
-
 	return p, nil
 }
 
@@ -1036,9 +977,7 @@ func (p *GitStatus) unstageAtCursor() (panels.Panel, tea.Cmd) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) {
 		return p, nil
 	}
-
 	r := &p.rows[p.cursor]
-
 	switch r.kind { //nolint:exhaustive // only relevant cases handled
 	case rowSection:
 		return p.unstageSectionFiles(r.section)
@@ -1068,7 +1007,6 @@ func (p *GitStatus) unstageAtCursor() (panels.Panel, tea.Cmd) {
 		}
 		return p, p.unstageCmd([]string{r.file.Path})
 	}
-
 	return p, nil
 }
 
@@ -1223,7 +1161,6 @@ func (p *GitStatus) invalidateDiffCaches() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 // colors for the git status panel (Dracula palette baseline).
 var colors = struct {
 	SectionHeader string
@@ -1253,7 +1190,6 @@ var colors = struct {
 
 func (p *GitStatus) renderRow(r *row, width int, isCursor bool) string {
 	var content string
-
 	switch r.kind {
 	case rowSection:
 		content = p.renderSectionHeader(r, width)
@@ -1264,14 +1200,12 @@ func (p *GitStatus) renderRow(r *row, width int, isCursor bool) string {
 	case rowDiffLine:
 		content = p.renderDiffLineRow(r, width)
 	}
-
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
 		style = style.Background(lipgloss.Color(colors.CursorBg))
 	} else if r.selected {
 		style = style.Background(lipgloss.Color(colors.SelectedBg))
 	}
-
 	return style.Render(content)
 }
 
@@ -1288,27 +1222,22 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 	if r.file == nil {
 		return ""
 	}
-
 	var b strings.Builder
-
 	// Selection marker.
 	if r.selected {
 		b.WriteString("● ")
 	} else {
 		b.WriteString("  ")
 	}
-
 	// Status indicator.
 	b.WriteString(statusIndicator(r.file, r.section))
 	b.WriteByte(' ')
-
 	// File name (basename for compact display).
 	name := filepath.Base(r.file.Path)
 	dirPart := filepath.Dir(r.file.Path)
 	if dirPart != "." {
 		b.WriteString(name)
 		b.WriteByte(' ')
-
 		dirContent := b.String()
 		dirLabel := dirPart
 		remaining := width - len(dirContent) - len(dirLabel) - 1
@@ -1323,9 +1252,7 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 	} else {
 		b.WriteString(name)
 	}
-
 	fg := p.fileColor(r.section)
-
 	// Expand indicator.
 	if r.expanded {
 		return lipgloss.NewStyle().
@@ -1335,7 +1262,6 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 				Foreground(lipgloss.Color(colors.Dim)).
 				Render(" ▼")
 	}
-
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
 		Render(b.String())
@@ -1355,7 +1281,6 @@ func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
 	if r.diffLine == nil {
 		return ""
 	}
-
 	prefix := "    "
 	var fg string
 	switch r.diffLine.Type {
@@ -1369,7 +1294,6 @@ func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
 		prefix += " "
 		fg = colors.Dim
 	}
-
 	content := prefix + r.diffLine.Content
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).

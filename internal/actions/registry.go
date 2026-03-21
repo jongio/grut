@@ -80,8 +80,8 @@ const (
 type ItemActions struct {
 	Default      ActionID
 	RightClick   ActionID // default right-click action (usually ActionShowContextMenu)
+	Description  string   // human-readable prompt text for the default action
 	Alternatives []ActionID
-	Description  string // human-readable prompt text for the default action
 }
 
 // Registry maps each item type to its available actions.

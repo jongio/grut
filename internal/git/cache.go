@@ -9,12 +9,12 @@ import (
 // Readers use RLock; the writer uses Lock. Data is considered fresh
 // if its age is within maxAge.
 type Cache struct {
-	mu        sync.RWMutex
-	status    []FileStatus
-	branches  []Branch
 	statusAge time.Time
 	branchAge time.Time
+	status    []FileStatus
+	branches  []Branch
 	maxAge    time.Duration
+	mu        sync.RWMutex
 }
 
 // NewCache creates a Cache with the given maximum age for cached data.

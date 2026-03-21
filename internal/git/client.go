@@ -17,13 +17,12 @@ import (
 // Client wraps the git CLI and implements GitClient.
 // It shells out to the git binary for all operations.
 type Client struct {
-	repoDir string
 	queue   *OpQueue
 	cache   *Cache
+	repoDir string
 }
 
 const maxGitOutputSize = 50 * 1024 * 1024 // 50 MiB
-
 // limitedBuffer wraps bytes.Buffer with a size cap to prevent OOM from
 // unexpectedly large git output (e.g., diffing large binary files).
 type limitedBuffer struct {
@@ -110,21 +109,16 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 			normalized[i] = a
 		}
 	}
-
 	if err := validateArgs(normalized); err != nil {
 		return "", fmt.Errorf("invalid git argument: %w", err)
 	}
-
 	cmd := exec.CommandContext(ctx, "git", normalized...)
 	cmd.Dir = c.repoDir
-
 	stdout := &limitedBuffer{max: maxGitOutputSize}
 	var stderr bytes.Buffer
 	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
-
 	slog.Debug("git exec", "args", normalized, "dir", c.repoDir)
-
 	if err := cmd.Run(); err != nil {
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
@@ -132,7 +126,6 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 		}
 		return "", fmt.Errorf("git %s: %s: %w", normalized[0], errMsg, err)
 	}
-
 	return stdout.String(), nil
 }
 

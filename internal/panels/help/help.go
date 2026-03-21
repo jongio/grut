@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/panels"
 )
 
@@ -149,9 +150,9 @@ var colors = struct {
 
 // Panel is the help overlay. It implements [panels.Panel].
 type Panel struct {
+	lines []string // pre-rendered content lines (unstyled text)
 	panels.BasePanel
-	lines  []string // pre-rendered content lines (unstyled text)
-	offset int      // scroll offset
+	offset int // scroll offset
 }
 
 // Compile-time interface check.
@@ -170,37 +171,29 @@ func New() *Panel {
 // Lines are stored as plain text; styling is applied during rendering.
 func (p *Panel) buildLines() {
 	var lines []string
-
 	lines = append(lines, "") // top padding
-
 	for i, sec := range sections {
 		// Section title.
 		lines = append(lines, "section:"+sec.title)
-
 		// Separator under title.
 		lines = append(lines, "sep:"+strings.Repeat("─", len(sec.title)))
-
 		// Bindings.
 		for _, b := range sec.bindings {
 			lines = append(lines, "bind:"+b.key+"\t"+b.desc)
 		}
-
 		// Blank line between sections (except after the last).
 		if i < len(sections)-1 {
 			lines = append(lines, "")
 		}
 	}
-
 	lines = append(lines, "") // bottom padding
 	lines = append(lines, "footer:Press ? or Esc to close")
-
 	p.lines = lines
 }
 
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(_ context.Context) tea.Cmd {
 	return nil
@@ -211,7 +204,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
 	}
@@ -224,7 +216,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	headingStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colors.Heading)).
 		Bold(true)
@@ -238,27 +229,21 @@ func (p *Panel) View(width, height int) string {
 	dimStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colors.Dim))
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
-
 	end := p.offset + height
 	if end > len(p.lines) {
 		end = len(p.lines)
 	}
-
 	rendered := make([]string, 0, height)
-
 	for i := p.offset; i < end; i++ {
 		line := p.lines[i]
 		var styled string
-
 		switch {
 		case strings.HasPrefix(line, "section:"):
 			title := strings.TrimPrefix(line, "section:")
 			styled = "  " + headingStyle.Render(title)
-
 		case strings.HasPrefix(line, "sep:"):
 			sep := strings.TrimPrefix(line, "sep:")
 			styled = "  " + sepStyle.Render(sep)
-
 		case strings.HasPrefix(line, "bind:"):
 			parts := strings.SplitN(strings.TrimPrefix(line, "bind:"), "\t", 2)
 			key := parts[0]
@@ -272,23 +257,18 @@ func (p *Panel) View(width, height int) string {
 				padded = key + " "
 			}
 			styled = "  " + keyStyle.Render(padded) + descStyle.Render(desc)
-
 		case strings.HasPrefix(line, "footer:"):
 			text := strings.TrimPrefix(line, "footer:")
 			styled = "  " + dimStyle.Render(text)
-
 		default:
 			styled = emptyLine
 		}
-
 		rendered = append(rendered, lipgloss.NewStyle().Width(width).MaxWidth(width).Render(styled))
 	}
-
 	// Pad remaining height with blank lines.
 	for len(rendered) < height {
 		rendered = append(rendered, emptyLine)
 	}
-
 	return strings.Join(rendered, "\n")
 }
 
@@ -305,7 +285,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
@@ -321,7 +300,6 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseWheel scrolls the help content viewport.
 func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) {
 	m := msg.Mouse()
@@ -347,7 +325,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Scrolling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) scrollDown() {
 	maxOffset := len(p.lines) - p.Height
 	if maxOffset < 0 {
@@ -367,7 +344,6 @@ func (p *Panel) scrollUp() {
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)
 // ---------------------------------------------------------------------------
-
 // scrollOffset returns the current scroll offset.
 func (p *Panel) scrollOffset() int { return p.offset }
 

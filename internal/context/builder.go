@@ -19,9 +19,9 @@ type ContextFile struct {
 // for AI chat workflows. All paths are validated against a repository root
 // to prevent directory traversal.
 type Builder struct {
+	index map[string]int // path → index into files (for O(1) lookup)
 	root  string         // canonical repo root (absolute)
 	files []ContextFile  // ordered list of selected files
-	index map[string]int // path → index into files (for O(1) lookup)
 }
 
 // NewBuilder creates a Builder anchored at the given repository root.
@@ -47,24 +47,20 @@ func (b *Builder) Add(path string) error {
 	if err != nil {
 		return fmt.Errorf("resolving path %q: %w", path, err)
 	}
-
 	// Duplicate check.
 	if _, exists := b.index[relPath]; exists {
 		return nil
 	}
-
 	data, err := os.ReadFile(resolved)
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
 	}
-
 	content := string(data)
 	cf := ContextFile{
 		Path:    relPath,
 		Content: content,
 		Tokens:  CountTokens(content),
 	}
-
 	b.index[relPath] = len(b.files)
 	b.files = append(b.files, cf)
 	return nil
@@ -77,15 +73,12 @@ func (b *Builder) Remove(path string) {
 	if err != nil {
 		return
 	}
-
 	idx, exists := b.index[relPath]
 	if !exists {
 		return
 	}
-
 	// Remove from slice, maintaining order.
 	b.files = append(b.files[:idx], b.files[idx+1:]...)
-
 	// Rebuild index.
 	delete(b.index, relPath)
 	for i := idx; i < len(b.files); i++ {
@@ -122,10 +115,8 @@ func (b *Builder) Export() string {
 	if len(b.files) == 0 {
 		return ""
 	}
-
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "# Context (%d files, %d tokens)\n", len(b.files), b.TotalTokens())
-
 	for _, f := range b.files {
 		_, _ = fmt.Fprintf(&sb, "\n## %s\n", f.Path)
 		lang := langFromExt(filepath.Ext(f.Path))
@@ -139,7 +130,6 @@ func (b *Builder) Export() string {
 		}
 		sb.WriteString("```\n")
 	}
-
 	return sb.String()
 }
 
@@ -150,21 +140,18 @@ func (b *Builder) resolve(path string) (abs string, rel string, err error) {
 	if path == "" {
 		return "", "", fmt.Errorf("path must not be empty")
 	}
-
 	// Reject explicit ".." components.
 	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
 		if part == ".." {
 			return "", "", fmt.Errorf("path escapes repository root: %s", path)
 		}
 	}
-
 	var absPath string
 	if filepath.IsAbs(path) {
 		absPath = filepath.Clean(path)
 	} else {
 		absPath = filepath.Clean(filepath.Join(b.root, path))
 	}
-
 	// Verify the path is within root.
 	relPath, err := filepath.Rel(b.root, absPath)
 	if err != nil {
@@ -173,7 +160,6 @@ func (b *Builder) resolve(path string) (abs string, rel string, err error) {
 	if strings.HasPrefix(relPath, "..") {
 		return "", "", fmt.Errorf("path escapes repository root: %s", path)
 	}
-
 	return absPath, filepath.ToSlash(relPath), nil
 }
 

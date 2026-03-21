@@ -43,9 +43,9 @@ const mcpSubprocessTimeout = 30 * time.Minute
 // ringBuffer is a simple bounded buffer that keeps the last N lines
 // of output for diagnostics.
 type ringBuffer struct {
-	mu    sync.Mutex
 	lines []string
 	max   int
+	mu    sync.Mutex
 }
 
 func (rb *ringBuffer) Write(p []byte) (n int, err error) {
@@ -74,24 +74,24 @@ var _ Runtime = (*MCPRuntime)(nil)
 
 // jsonRPCRequest is a JSON-RPC 2.0 request sent to the subprocess.
 type jsonRPCRequest struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      int64  `json:"id"`
-	Method  string `json:"method"`
 	Params  any    `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	ID      int64  `json:"id"`
 }
 
 // jsonRPCResponse is a JSON-RPC 2.0 response received from the subprocess.
 type jsonRPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      int64           `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *jsonRPCError   `json:"error,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	ID      int64           `json:"id"`
 }
 
 // jsonRPCError describes an error returned by the subprocess.
 type jsonRPCError struct {
-	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Code    int    `json:"code"`
 }
 
 // NewMCPRuntime creates a new MCP runtime for the given extension manifest.
@@ -124,7 +124,6 @@ func (m *MCPRuntime) Name() string { return "mcp" }
 // Planned work: a future release will gate subprocess capabilities behind
 // the permission system so that, for example, an MCP extension without
 // "network" permission cannot open outbound connections.
-
 // Load starts the MCP server subprocess using the given entry point.
 // The interpreter is determined from the entry point file extension:
 //   - .py → python3 (python on Windows)
@@ -134,49 +133,39 @@ func (m *MCPRuntime) Name() string { return "mcp" }
 func (m *MCPRuntime) Load(entryPoint string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	if m.cmd != nil {
 		return fmt.Errorf("mcp runtime: already loaded")
 	}
-
 	name, args := resolveCommand(entryPoint)
-
 	// Use CommandContext with a timeout to prevent runaway subprocesses
 	// (CWE-400). The context is cancelled on Close().
 	ctx, cancel := context.WithTimeout(context.Background(), mcpSubprocessTimeout)
 	cmd := exec.CommandContext(ctx, name, args...)
-
 	// Place the subprocess in its own process group so the entire tree
 	// can be killed on Close, preventing orphaned children (CWE-269).
 	setProcGroup(cmd)
-
 	// Filter environment to prevent secret leakage to untrusted
 	// extension subprocesses (CWE-526). Only safe variables are passed.
 	cmd.Env = filterEnvForSubprocess()
-
 	// Capture stderr to a bounded ring buffer for diagnostics (CWE-223).
 	stderrBuf := &ringBuffer{max: 100}
 	cmd.Stderr = stderrBuf
-
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
 		return fmt.Errorf("mcp runtime: stdin pipe: %w", err)
 	}
-
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
 		_ = stdin.Close()
 		return fmt.Errorf("mcp runtime: stdout pipe: %w", err)
 	}
-
 	if err := cmd.Start(); err != nil {
 		cancel()
 		_ = stdin.Close()
 		return fmt.Errorf("mcp runtime: start %q: %w", name, err)
 	}
-
 	m.cmd = cmd
 	m.stdin = stdin
 	m.stdout = stdout
@@ -184,7 +173,6 @@ func (m *MCPRuntime) Load(entryPoint string) error {
 	m.scanner = bufio.NewScanner(stdout)
 	m.scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1 MiB max token
 	m.cancel = cancel
-
 	// Monitor process exit in background.
 	go func() {
 		err := cmd.Wait()
@@ -193,7 +181,6 @@ func (m *MCPRuntime) Load(entryPoint string) error {
 		}
 		close(m.done)
 	}()
-
 	return nil
 }
 
@@ -206,7 +193,6 @@ func (m *MCPRuntime) Close() {
 		m.mu.Unlock()
 		return
 	}
-
 	// Check if already exited.
 	select {
 	case <-m.done:
@@ -214,23 +200,19 @@ func (m *MCPRuntime) Close() {
 		return
 	default:
 	}
-
 	// Close stdin to signal the subprocess to exit.
 	if m.stdin != nil {
 		_ = m.stdin.Close()
 	}
-
 	// Cancel the command context (triggers process kill via CommandContext).
 	if m.cancel != nil {
 		m.cancel()
 	}
-
 	// Kill the process group first (Unix: kills all children), then
 	// fall back to killing the direct child process.
 	killProcGroup(m.cmd)
 	_ = m.cmd.Process.Kill()
 	m.mu.Unlock()
-
 	// Wait for the monitor goroutine to finish (outside lock to
 	// avoid blocking other callers like Running).
 	<-m.done
@@ -240,7 +222,6 @@ func (m *MCPRuntime) Close() {
 func (m *MCPRuntime) Running() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	if m.cmd == nil {
 		return false
 	}
@@ -270,11 +251,9 @@ func (m *MCPRuntime) SendRequest(method string, params any) (json.RawMessage, er
 	stdin := m.stdin
 	scanner := m.scanner
 	m.mu.Unlock()
-
 	// Serialize I/O so concurrent callers don't interleave.
 	m.ioMu.Lock()
 	defer m.ioMu.Unlock()
-
 	id := m.nextID.Add(1)
 	req := jsonRPCRequest{
 		JSONRPC: "2.0",
@@ -282,18 +261,15 @@ func (m *MCPRuntime) SendRequest(method string, params any) (json.RawMessage, er
 		Method:  method,
 		Params:  params,
 	}
-
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("mcp runtime: marshal request: %w", err)
 	}
-
 	// Write newline-delimited JSON.
 	data = append(data, '\n')
 	if _, err := stdin.Write(data); err != nil {
 		return nil, fmt.Errorf("mcp runtime: write request: %w", err)
 	}
-
 	// Read a single response line.
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
@@ -301,16 +277,13 @@ func (m *MCPRuntime) SendRequest(method string, params any) (json.RawMessage, er
 		}
 		return nil, fmt.Errorf("mcp runtime: unexpected EOF")
 	}
-
 	var resp jsonRPCResponse
 	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
 		return nil, fmt.Errorf("mcp runtime: unmarshal response: %w", err)
 	}
-
 	if resp.Error != nil {
 		return nil, fmt.Errorf("mcp runtime: server error %d: %s", resp.Error.Code, resp.Error.Message)
 	}
-
 	return resp.Result, nil
 }
 

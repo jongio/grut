@@ -14,10 +14,10 @@ var templatesFS embed.FS
 
 // Template describes a scaffold template for creating new extensions.
 type Template struct {
+	Files       map[string]string // relative path → content (may contain {{.Name}})
 	Name        string
 	Description string
 	Runtime     string
-	Files       map[string]string // relative path → content (may contain {{.Name}})
 }
 
 // scaffoldData holds the values substituted into template files.
@@ -104,23 +104,18 @@ func Scaffold(dir, name, templateName string) error {
 	if !safeNameRe.MatchString(name) {
 		return fmt.Errorf("scaffold: name %q is invalid (must be lowercase alphanumeric, hyphens, underscores; 1-128 chars)", name)
 	}
-
 	tmpl := findTemplate(templateName)
 	if tmpl == nil {
 		return fmt.Errorf("scaffold: unknown template %q", templateName)
 	}
-
 	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); err == nil {
 		return fmt.Errorf("scaffold: directory %s already exists", target)
 	}
-
 	data := scaffoldData{Name: name}
-
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return fmt.Errorf("scaffold: create directory: %w", err)
 	}
-
 	// Clean up the target directory on any error after creation.
 	var scaffoldErr error
 	defer func() {
@@ -128,32 +123,27 @@ func Scaffold(dir, name, templateName string) error {
 			_ = os.RemoveAll(target)
 		}
 	}()
-
 	for relPath, content := range tmpl.Files {
 		rendered, err := renderTemplate(relPath, content, data)
 		if err != nil {
 			scaffoldErr = fmt.Errorf("scaffold: render %s: %w", relPath, err)
 			return scaffoldErr
 		}
-
 		fullPath := filepath.Join(target, relPath)
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			scaffoldErr = fmt.Errorf("scaffold: create parent for %s: %w", relPath, err)
 			return scaffoldErr
 		}
-
 		if err := os.WriteFile(fullPath, []byte(rendered), 0o600); err != nil {
 			scaffoldErr = fmt.Errorf("scaffold: write %s: %w", relPath, err)
 			return scaffoldErr
 		}
 	}
-
 	// Validate the generated manifest to guarantee correctness.
 	if _, err := LoadManifest(target); err != nil {
 		scaffoldErr = fmt.Errorf("scaffold: generated manifest is invalid: %w", err)
 		return scaffoldErr
 	}
-
 	return nil
 }
 

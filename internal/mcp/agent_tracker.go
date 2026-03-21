@@ -69,13 +69,13 @@ func (s AgentStatus) String() string {
 
 // AgentInfo holds metadata about a tracked agent process.
 type AgentInfo struct {
-	PID       int
-	Command   string
-	Args      []string
-	Status    AgentStatus
-	ExitCode  int
 	StartedAt time.Time
 	EndedAt   time.Time
+	Command   string
+	Args      []string
+	PID       int
+	Status    AgentStatus
+	ExitCode  int
 	Duration  time.Duration
 }
 
@@ -117,25 +117,25 @@ func (rb *ringBuffer) snapshot() []string {
 
 // trackedAgent holds the state for a single spawned agent.
 type trackedAgent struct {
-	info      AgentInfo
 	cmd       *exec.Cmd
 	cancel    context.CancelFunc
 	stdout    *ringBuffer
 	stderr    *ringBuffer
 	stdoutBuf *limitedBuffer // bounded capture buffer fed to cmd.Stdout
 	stderrBuf *limitedBuffer // bounded capture buffer fed to cmd.Stderr
+	info      AgentInfo
 }
 
 // AgentTracker manages spawned agent processes with concurrent access safety,
 // resource limits (max concurrent), timeout enforcement, and output capture.
 type AgentTracker struct {
-	mu             sync.Mutex
+	parentCtx      context.Context
 	agents         map[int]*trackedAgent
+	parentCancel   context.CancelFunc
 	maxProcesses   int
 	timeoutSeconds int
 	maxOutputLines int
-	parentCtx      context.Context
-	parentCancel   context.CancelFunc
+	mu             sync.Mutex
 }
 
 // Default limits for agent tracking.
@@ -189,17 +189,14 @@ func (t *AgentTracker) runningCountLocked() int {
 func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string) (int, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	// Check concurrent process limit.
 	running := t.runningCountLocked()
 	if running >= t.maxProcesses {
 		return 0, fmt.Errorf("agent limit reached: %d/%d processes running", running, t.maxProcesses)
 	}
-
 	// Build context with timeout.
 	timeout := time.Duration(t.timeoutSeconds) * time.Second
 	agentCtx, cancel := context.WithTimeout(t.parentCtx, timeout)
-
 	// Also respect caller context cancellation.
 	go func() {
 		select {
@@ -208,22 +205,17 @@ func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string)
 		case <-agentCtx.Done():
 		}
 	}()
-
 	cmd := exec.CommandContext(agentCtx, command, args...)
 	cmd.Env = filterEnvForAgent()
-
 	stdoutBuf := &limitedBuffer{max: maxAgentOutputSize}
 	stderrBuf := &limitedBuffer{max: maxAgentOutputSize}
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
-
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return 0, fmt.Errorf("failed to start agent %q: %w", command, err)
 	}
-
 	pid := cmd.Process.Pid
-
 	agent := &trackedAgent{
 		info: AgentInfo{
 			PID:       pid,
@@ -239,19 +231,15 @@ func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string)
 		stdoutBuf: stdoutBuf,
 		stderrBuf: stderrBuf,
 	}
-
 	t.agents[pid] = agent
-
 	// Monitor the process in a background goroutine.
 	go t.monitor(pid, agentCtx, cancel)
-
 	return pid, nil
 }
 
 // monitor waits for a process to exit and updates its status.
 func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.CancelFunc) {
 	defer cancel()
-
 	t.mu.Lock()
 	agent, ok := t.agents[pid]
 	if !ok {
@@ -260,24 +248,18 @@ func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.Cancel
 	}
 	cmd := agent.cmd
 	t.mu.Unlock()
-
 	err := cmd.Wait()
 	now := time.Now()
-
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	agent, ok = t.agents[pid]
 	if !ok {
 		return
 	}
-
 	agent.info.EndedAt = now
 	agent.info.Duration = now.Sub(agent.info.StartedAt)
-
 	// Parse stdout/stderr line-by-line into ring buffers.
 	t.parseOutput(agent)
-
 	if err != nil {
 		agent.info.Status = AgentFailed
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -309,7 +291,6 @@ func (t *AgentTracker) parseOutput(agent *trackedAgent) {
 func (t *AgentTracker) List() []AgentInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	// Update durations for running agents.
 	now := time.Now()
 	infos := make([]AgentInfo, 0, len(t.agents))
@@ -327,7 +308,6 @@ func (t *AgentTracker) List() []AgentInfo {
 func (t *AgentTracker) Kill(pid int) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	agent, ok := t.agents[pid]
 	if !ok {
 		return fmt.Errorf("agent with PID %d not found", pid)
@@ -352,11 +332,9 @@ func (t *AgentTracker) KillAll() {
 func (t *AgentTracker) Output(pid int) (stdout, stderr []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	agent, ok := t.agents[pid]
 	if !ok {
 		return nil, nil
 	}
-
 	return agent.stdout.snapshot(), agent.stderr.snapshot()
 }

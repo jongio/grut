@@ -46,42 +46,42 @@ const (
 // Model is the top-level TUI model for grut. It composes panels via
 // the layout engine, routes keyboard events, and renders the final view.
 type Model struct {
+	lastStatusBarClick time.Time     // for double-click detection on the status bar
+	gitClient          git.GitClient // git client for app-level operations (nil = no git)
+	ctx                context.Context
 	engine             *layout.Engine
 	theme              *theme.Theme
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
 	bookmarkPanel      *bmpanel.Panel                // overlay panel (nil = hidden)
-	bookmarksShown     bool                          // whether bookmark overlay is visible
 	fuzzyFinder        *fuzzyfinder.FuzzyFinder      // overlay fuzzy finder (nil = hidden)
 	helpPanel          *helppanel.Panel              // overlay help panel (nil = hidden)
 	helpShown          bool                          // whether help overlay is visible
 	welcomePanel       *welcomepanel.Panel           // overlay welcome panel (nil = hidden)
 	welcomeShown       bool                          // whether welcome overlay is visible
 	settingsPanel      *settingspanel.Panel          // overlay settings panel (nil = hidden)
-	settingsShown      bool                          // whether settings overlay is visible
 	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
-	gitClient          git.GitClient                 // git client for app-level operations (nil = no git)
 	cfg                *config.Config                // app config (nil = defaults)
 	sessionMgr         *session.Manager              // session persistence (nil = disabled)
 	chat               *chat.Model                   // AI chat footer (nil if AI disabled)
-	asyncOp            string                        // current async operation label ("pushing...", etc.)
 	asyncCancel        context.CancelFunc            // cancel the running async operation
-	pendingAction      string                        // action waiting for modal input ("commit")
 	aiCommitSuggestion *panels.AICommitSuggestionMsg // AI-generated commit message suggestion
-	currentBranch      string                        // cached git branch name for status bar
-	gitDirty           bool                          // true when working tree has uncommitted changes
-	branchAhead        int                           // commits ahead of upstream (needs push)
-	branchBehind       int                           // commits behind upstream (needs pull)
-	ctx                context.Context
 	cancel             context.CancelFunc
+	asyncOp            string // current async operation label ("pushing...", etc.)
+	pendingAction      string // action waiting for modal input ("commit")
+	currentBranch      string // cached git branch name for status bar
+	cwdEditValue       string // editable path text
+	branchAhead        int    // commits ahead of upstream (needs push)
+	branchBehind       int    // commits behind upstream (needs pull)
 	width              int
 	height             int
-	ready              bool      // true after first WindowSizeMsg
-	cwdEditing         bool      // true when status bar CWD is in inline-edit mode
-	cwdEditValue       string    // editable path text
-	cwdEditCursor      int       // cursor position (rune index) within cwdEditValue
-	lastStatusBarClick time.Time // for double-click detection on the status bar
+	cwdEditCursor      int  // cursor position (rune index) within cwdEditValue
+	bookmarksShown     bool // whether bookmark overlay is visible
+	settingsShown      bool // whether settings overlay is visible
+	gitDirty           bool // true when working tree has uncommitted changes
+	ready              bool // true after first WindowSizeMsg
+	cwdEditing         bool // true when status bar CWD is in inline-edit mode
 }
 
 // New creates a new TUI model with the given layout engine, theme, keymap,
@@ -247,7 +247,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.engine.SetSize(msg.Width, msg.Height-chatHeight)
 		m.ready = true
 		return m, nil
-
 	// Branch info for status bar.
 	case branchLoadedMsg:
 		m.currentBranch = msg.Name
@@ -263,7 +262,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.branchBehind = 0
 		cmd := m.engine.Update(msg)
 		return m, tea.Batch(cmd, m.checkGitDirty(), m.loadBranchInfo())
-
 	// F27: Route notification messages to the notify manager.
 	case notify.ShowToastMsg:
 		cmd := m.notify.Update(msg)
@@ -283,7 +281,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route modal results to the focused panel so it can act on confirm/cancel.
 		cmd := m.engine.Update(msg)
 		return m, cmd
-
 	// Git operation messages.
 	case panels.CommitRequestMsg:
 		return m.handleCommit()
@@ -304,7 +301,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAsyncOpDone(msg)
 	case panels.AutoFetchTickMsg:
 		return m.handleAutoFetchTick()
-
 	// Undo/redo messages.
 	case panels.UndoMsg:
 		return m.handleUndo()
@@ -321,7 +317,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Undone: " + desc, Level: notify.Success}
 		}
-
 	// Bookmark messages.
 	case panels.ToggleBookmarksMsg:
 		return m.toggleBookmarks()
@@ -375,7 +370,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(navCmd, repoCmd, toastCmd, m.checkGitDirty(), m.loadBranchInfo())
 	case panels.BookmarkAddMsg:
 		return m.addBookmark(msg.Path)
-
 	// Help overlay messages.
 	case panels.ToggleHelpMsg:
 		return m.toggleHelp()
@@ -433,7 +427,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.Actions.Confirmed = make(map[string]bool)
 		m.broadcastActionsCfg()
 		return m, nil
-
 	// Fuzzy finder messages.
 	case panels.ToggleFuzzyFinderMsg:
 		m.fuzzyFinder = nil // close fuzzy finder
@@ -451,7 +444,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Normal file — broadcast to panels via engine.
 		cmd := m.engine.Update(msg)
 		return m, cmd
-
 	// Chat footer messages.
 	case panels.ChatFocusMsg:
 		return m.toggleChatFocus()
@@ -471,7 +463,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chat = &updated
 			return m, cmd
 		}
-
 	// Tab management messages — disabled for v1 single-tab mode.
 	case panels.NewTabMsg:
 		return m, nil // v1: no-op
@@ -483,7 +474,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // v1: no-op
 	case panels.SwitchTabMsg:
 		return m, nil // v1: no-op
-
 	// Split / panel messages.
 	case panels.SplitVerticalMsg:
 		return m.handleSplitVertical(msg.PanelType)
@@ -491,14 +481,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSplitHorizontal(msg.PanelType)
 	case panels.ClosePanelMsg:
 		return m.handleClosePanel()
-
 	// GitStatusChangedMsg needs app-level side effect (dirty check).
 	// All other cross-panel messages fall through to the default
 	// engine.Update() which broadcasts to all panels automatically.
 	case panels.GitStatusChangedMsg:
 		cmd := m.engine.Update(msg)
 		return m, tea.Batch(cmd, m.checkGitDirty())
-
 	case tea.MouseClickMsg:
 		// If a modal is active, route mouse clicks to the modal first.
 		if m.notify.HasModal() {
@@ -526,7 +514,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Otherwise fall through to the layout engine (default case).
-
 	case tea.MouseReleaseMsg:
 		// Swallow mouse releases while a modal is active so they don't
 		// leak to the layout engine and trigger panel focus changes.
@@ -534,7 +521,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Otherwise fall through to the layout engine (default case).
-
 	case tea.MouseWheelMsg:
 		// Route mouse wheel to overlay panels so they can scroll.
 		if m.settingsShown && m.settingsPanel != nil {
@@ -550,24 +536,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		// Otherwise fall through to the layout engine (default case).
-
 	case tea.KeyPressMsg:
 		// If a modal is active, route keys to the modal first.
 		if m.notify.HasModal() {
 			cmd := m.notify.Update(msg)
 			return m, cmd
 		}
-
 		// If CWD inline-edit is active, route all keys to it.
 		if m.cwdEditing {
 			return m.handleCWDEditKey(msg)
 		}
-
 		// If an async operation is running, Esc cancels it.
 		if msg.String() == "esc" && m.asyncCancel != nil {
 			return m.cancelAsyncOp()
 		}
-
 		// If help overlay is shown, route keys to it.
 		if m.helpShown && m.helpPanel != nil {
 			_, cmd := m.helpPanel.Update(msg)
@@ -585,19 +567,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, cmd := m.settingsPanel.Update(msg)
 			return m, cmd
 		}
-
 		// If bookmarks overlay is shown, route keys to it.
 		if m.bookmarksShown && m.bookmarkPanel != nil {
 			_, cmd := m.bookmarkPanel.Update(msg)
 			return m, cmd
 		}
-
 		// If fuzzy finder overlay is shown, route keys to it.
 		if m.fuzzyFinder != nil {
 			_, cmd := m.fuzzyFinder.Update(msg)
 			return m, cmd
 		}
-
 		// If chat footer is focused, route ALL keys to it so that
 		// typing characters (?, !, letters, Enter, etc.) are consumed
 		// by the chat's text input and do NOT leak to the parent
@@ -610,7 +589,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chat = &updated
 			return m, cmd
 		}
-
 		if m.keys != nil {
 			action, handled := m.keys.Dispatch(msg.String(), m.engine.FocusedName())
 			if handled {
@@ -621,12 +599,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-
 		// Global refresh: R refreshes all panels + forces preview re-render.
 		if msg.String() == "R" {
 			return m.handleGlobalRefresh()
 		}
-
 		// Undo/redo (global key bindings).
 		if msg.String() == "ctrl+z" {
 			return m.handleUndo()
@@ -634,12 +610,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+y" {
 			return m.handleRedo()
 		}
-
 		// Route unhandled keys to focused panel.
 		cmd := m.engine.Update(msg)
 		return m, cmd
 	}
-
 	// Route all other messages to all panels via engine broadcast,
 	// and forward to the chat model so internal chat messages
 	// (e.g. stream-done, tool-exec-done) are handled.
@@ -719,7 +693,6 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePull()
 	case "fetch":
 		return m.handleFetch()
-
 	// Direct panel focus (1-5 number keys).
 	case "focus_panel_1":
 		m.engine.FocusByName("filetree")
@@ -736,7 +709,6 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "focus_panel_5":
 		m.engine.FocusByName("preview")
 		return m, nil
-
 	// Tab actions — disabled for v1 single-tab mode.
 	case "tab_new":
 		return m, nil // v1: no-op
@@ -746,7 +718,6 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // v1: no-op
 	case "tab_prev":
 		return m, nil // v1: no-op
-
 	// Split actions
 	case "split_horizontal":
 		return m.handleSplitHorizontal("preview")
@@ -761,11 +732,9 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 			slog.Warn("failed to persist preview position", "err", err)
 		}
 		return m, nil
-
 	// Preset tab switching — disabled for v1 single-tab mode.
 	case "tab_explorer", "tab_git", "tab_review", "tab_agent", "tab_full":
 		return m, nil // v1: no-op
-
 	// CRUD item actions — dispatched to all panels; focused panel acts.
 	case "item_create":
 		cmd := m.engine.Update(panels.ItemCreateMsg{})
@@ -782,7 +751,6 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "item_copy":
 		cmd := m.engine.Update(panels.ItemCopyMsg{})
 		return m, cmd
-
 	default:
 		// Panel-level actions (cursor_down, stage, etc.): route the
 		// original key event to the focused panel which handles its
@@ -857,13 +825,11 @@ func (m Model) saveSession() {
 	if m.sessionMgr == nil || m.cfg == nil || !m.cfg.Session.Enabled {
 		return
 	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		slog.Warn("session save: cannot determine working directory", "err", err)
 		return
 	}
-
 	tabs := m.engine.TabManager().Tabs()
 	tabStates := make([]session.TabState, len(tabs))
 	for i, tab := range tabs {
@@ -873,13 +839,11 @@ func (m Model) saveSession() {
 			FocusedPanel: m.engine.FocusedName(),
 		}
 	}
-
 	state := session.SessionState{
 		WorkDir:   cwd,
 		ActiveTab: m.engine.TabManager().ActiveIndex(),
 		Tabs:      tabStates,
 	}
-
 	if err := m.sessionMgr.Save(state); err != nil {
 		slog.Warn("session save failed", "err", err)
 	}
@@ -892,7 +856,6 @@ func (m Model) toggleBookmarks() (tea.Model, tea.Cmd) {
 		m.bookmarkPanel = nil
 		return m, nil
 	}
-
 	m.bookmarksShown = true
 	m.bookmarkPanel = bmpanel.New(m.bookmarkMgr)
 	m.bookmarkPanel.Focus()
@@ -908,14 +871,12 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 		m.helpPanel = nil
 		return m, nil
 	}
-
 	m.helpShown = true
 	m.helpPanel = helppanel.New()
 	m.helpPanel.Focus()
 	w, h := m.helpOverlayDims()
 	m.helpPanel.SetSize(w, h)
 	m.helpPanel.Init(m.ctx)
-
 	// Mark first run as done so the overlay won't auto-show next time.
 	if err := session.MarkFirstRunDone(); err != nil {
 		slog.Warn("failed to mark first run done", "err", err)
@@ -932,7 +893,6 @@ func (m Model) helpOverlayDims() (int, int) {
 	if w > m.width-4 {
 		w = m.width - 4
 	}
-
 	h := m.height * 3 / 4
 	if h < 10 {
 		h = 10
@@ -940,7 +900,6 @@ func (m Model) helpOverlayDims() (int, int) {
 	if h > m.height-4 {
 		h = m.height - 4
 	}
-
 	// Clamp to terminal bounds for tiny terminals.
 	if w > m.width {
 		w = m.width
@@ -948,7 +907,6 @@ func (m Model) helpOverlayDims() (int, int) {
 	if h > m.height {
 		h = m.height
 	}
-
 	return w, h
 }
 
@@ -1021,12 +979,10 @@ func (m Model) toggleSettings() (tea.Model, tea.Cmd) {
 		m.settingsPanel = nil
 		return m, nil
 	}
-
 	currentTheme := "default"
 	if m.theme != nil {
 		currentTheme = m.theme.Name
 	}
-
 	m.settingsShown = true
 	var actionsCfg config.ActionsConfig
 	if m.cfg != nil {
@@ -1054,7 +1010,6 @@ func (m Model) settingsOverlayDims() (int, int) {
 	if w < 20 {
 		w = 20
 	}
-
 	h := m.height - 4
 	if h > 40 {
 		h = 40
@@ -1062,7 +1017,6 @@ func (m Model) settingsOverlayDims() (int, int) {
 	if h < 6 {
 		h = 6
 	}
-
 	// Clamp to terminal bounds for tiny terminals.
 	if w > m.width {
 		w = m.width
@@ -1070,7 +1024,6 @@ func (m Model) settingsOverlayDims() (int, int) {
 	if h > m.height {
 		h = m.height
 	}
-
 	return w, h
 }
 
@@ -1112,21 +1065,16 @@ func injectBorderTitle(rendered, title, titleColor, borderColor string, border l
 		Bold(true).
 		Foreground(lipgloss.Color(titleColor))
 	label := "  " + titleStyle.Render(title) + "  "
-
 	lines := strings.Split(rendered, "\n")
 	if len(lines) == 0 {
 		return rendered
 	}
-
 	topWidth := lipgloss.Width(lines[0])
 	labelWidth := lipgloss.Width(label)
-
 	if labelWidth+4 > topWidth {
 		return rendered
 	}
-
 	bStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
-
 	// Reconstruct: ┌─ label ─────────┐
 	// topWidth includes the two corner characters (1 cell each).
 	innerWidth := topWidth - 2
@@ -1134,11 +1082,9 @@ func injectBorderTitle(rendered, title, titleColor, borderColor string, border l
 	if trailingDashes < 0 {
 		trailingDashes = 0
 	}
-
 	lines[0] = bStyle.Render(border.TopLeft+border.Top) +
 		label +
 		bStyle.Render(strings.Repeat(border.Top, trailingDashes)+border.TopRight)
-
 	return strings.Join(lines, "\n")
 }
 
@@ -1147,21 +1093,18 @@ func (m Model) addBookmark(path string) (tea.Model, tea.Cmd) {
 	if m.bookmarkMgr == nil {
 		return m, nil
 	}
-
 	if err := m.bookmarkMgr.Add(path); err != nil {
 		errMsg := err.Error()
 		return m, func() tea.Msg {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Warn}
 		}
 	}
-
 	if err := m.bookmarkMgr.Save(); err != nil {
 		errMsg := "Bookmark added but save failed: " + err.Error()
 		return m, func() tea.Msg {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Warn}
 		}
 	}
-
 	name := path
 	if len(name) > 30 {
 		name = "..." + name[len(name)-27:]
@@ -1215,7 +1158,6 @@ func (m Model) handleRedo() (tea.Model, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Tab and split handlers
 // ---------------------------------------------------------------------------
-
 // handleNewTab creates a new tab from the given preset name.
 // An empty preset defaults to "explorer".
 func (m Model) handleNewTab(presetName string) (tea.Model, tea.Cmd) {
@@ -1242,7 +1184,6 @@ func (m Model) handleNewTab(presetName string) (tea.Model, tea.Cmd) {
 func (m Model) handleSwitchOrCreateTab(presetName string) (tea.Model, tea.Cmd) {
 	tm := m.engine.TabManager()
 	tabs := tm.Tabs()
-
 	// Check if a tab with this preset already exists; switch to it.
 	for i, tab := range tabs {
 		if tab.Name == presetName {
@@ -1252,7 +1193,6 @@ func (m Model) handleSwitchOrCreateTab(presetName string) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-
 	// Create new tab with this preset.
 	return m.handleNewTab(presetName)
 }
@@ -1318,7 +1258,6 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 	if w > m.width-4 {
 		w = m.width - 4
 	}
-
 	h := m.height / 2
 	if h < 10 {
 		h = 10
@@ -1326,7 +1265,6 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 	if h > m.height-4 {
 		h = m.height - 4
 	}
-
 	// Clamp to terminal bounds for tiny terminals.
 	if w > m.width {
 		w = m.width
@@ -1334,7 +1272,6 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 	if h > m.height {
 		h = m.height
 	}
-
 	return w, h
 }
 
@@ -1342,7 +1279,6 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 // appropriate source based on mode ("files" or "commands").
 func (m Model) openFuzzyFinder(mode string) Model {
 	var sources []fuzzyfinder.Source
-
 	switch mode {
 	case "files":
 		cwd, err := os.Getwd()
@@ -1361,7 +1297,6 @@ func (m Model) openFuzzyFinder(mode string) Model {
 		}
 		sources = append(sources, fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth))
 	}
-
 	ff := fuzzyfinder.New(sources...)
 	ff.Focus()
 	w, h := m.fuzzyFinderDims()
@@ -1379,7 +1314,6 @@ func (m Model) fuzzyFinderDims() (int, int) {
 	if w > m.width-4 {
 		w = m.width - 4
 	}
-
 	h := m.height * 3 / 5
 	if h < 10 {
 		h = 10
@@ -1387,7 +1321,6 @@ func (m Model) fuzzyFinderDims() (int, int) {
 	if h > m.height-4 {
 		h = m.height - 4
 	}
-
 	// Clamp to terminal bounds for tiny terminals.
 	if w > m.width {
 		w = m.width
@@ -1395,7 +1328,6 @@ func (m Model) fuzzyFinderDims() (int, int) {
 	if h > m.height {
 		h = m.height
 	}
-
 	return w, h
 }
 
@@ -1405,26 +1337,21 @@ func (m Model) View() tea.View {
 	var v tea.View
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
-
 	if !m.ready {
 		v.SetContent("Loading...")
 		return v
 	}
-
 	content := m.renderLayout()
-
 	// F27: Overlay toast notifications on top of the rendered layout.
 	toastOverlay := m.notify.View(m.width)
 	if toastOverlay != "" {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, toastOverlay)
 	}
-
 	// F27: Overlay modal on top of everything.
 	modalOverlay := m.notify.ModalView(m.width, m.height)
 	if modalOverlay != "" {
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modalOverlay)
 	}
-
 	// Fuzzy finder overlay.
 	if m.fuzzyFinder != nil {
 		w, h := m.fuzzyFinderDims()
@@ -1436,23 +1363,18 @@ func (m Model) View() tea.View {
 		if contentH < 1 {
 			contentH = 1
 		}
-
 		m.fuzzyFinder.SetSize(contentW, contentH)
 		ffContent := m.fuzzyFinder.View(contentW, contentH)
-
 		ffOverlayStyle := lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
 			Padding(0, 1).
 			Width(contentW).
 			Height(contentH)
-
 		ffRendered := ffOverlayStyle.Render(ffContent)
 		ffRendered = injectBorderTitle(ffRendered, m.fuzzyFinder.Title(), m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.NormalBorder())
-
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ffRendered)
 	}
-
 	// Bookmarks overlay.
 	if m.bookmarksShown && m.bookmarkPanel != nil {
 		w, h := m.bookmarkOverlayDims()
@@ -1464,23 +1386,18 @@ func (m Model) View() tea.View {
 		if contentH < 1 {
 			contentH = 1
 		}
-
 		m.bookmarkPanel.SetSize(contentW, contentH)
 		panelContent := m.bookmarkPanel.View(contentW, contentH)
-
 		bmOverlayStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
 			Padding(0, 1).
 			Width(contentW).
 			Height(contentH)
-
 		bmRendered := bmOverlayStyle.Render(panelContent)
 		bmRendered = injectBorderTitle(bmRendered, "Bookmarks", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, bmRendered)
 	}
-
 	// Settings overlay.
 	if m.settingsShown && m.settingsPanel != nil {
 		w, h := m.settingsOverlayDims()
@@ -1492,20 +1409,16 @@ func (m Model) View() tea.View {
 		if contentH < 1 {
 			contentH = 1
 		}
-
 		m.settingsPanel.SetSize(contentW, contentH)
 		settingsContent := m.settingsPanel.View(contentW, contentH)
-
 		settingsOverlayStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
 			Padding(0, 1).
 			Width(contentW).
 			Height(contentH)
-
 		settingsRendered := settingsOverlayStyle.Render(settingsContent)
 		settingsRendered = injectBorderTitle(settingsRendered, "Settings", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, settingsRendered)
 	}
 
@@ -1546,23 +1459,18 @@ func (m Model) View() tea.View {
 		if contentH < 1 {
 			contentH = 1
 		}
-
 		m.helpPanel.SetSize(contentW, contentH)
 		helpContent := m.helpPanel.View(contentW, contentH)
-
 		helpOverlayStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
 			Padding(0, 1).
 			Width(contentW).
 			Height(contentH)
-
 		helpRendered := helpOverlayStyle.Render(helpContent)
 		helpRendered = injectBorderTitle(helpRendered, "grut — Terminal File Explorer", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, helpRendered)
 	}
-
 	v.SetContent(content)
 	return v
 }
@@ -1576,15 +1484,11 @@ func (m Model) renderLayout() string {
 	if len(rects) == 0 {
 		return ""
 	}
-
 	focusedName := m.engine.FocusedName()
 	allPanels := m.engine.Panels()
-
 	// Determine the outer border color: use the focused panel's border color.
 	borderColorStr := m.theme.Colors.BorderFocused
-
 	var innerContent string
-
 	if m.engine.IsZoomed() {
 		// Zoomed: render only the focused panel
 		rect := rects[focusedName]
@@ -1594,7 +1498,6 @@ func (m Model) renderLayout() string {
 		tab := m.engine.TabManager().ActiveTab()
 		innerContent = m.renderNode(tab.Tree, rects, allPanels, focusedName, borderColorStr)
 	}
-
 	// Wrap the composed inner content in a single outer rounded border.
 	// We collect junction positions from the layout tree so that the
 	// top/bottom border lines use ┬/┴ where vertical separators meet
@@ -1605,33 +1508,26 @@ func (m Model) renderLayout() string {
 	if !m.engine.IsZoomed() {
 		tree = m.engine.TabManager().ActiveTab().Tree
 	}
-
 	// Compute top border titles from panels at Y=0 (topmost panels).
 	topTitles := m.computeTopBorderTitles(rects, allPanels, focusedName)
 	panelArea := m.buildOuterBorder(innerContent, innerArea.Width, innerArea.Height, borderColorStr, tree, topTitles)
-
 	// Render status bar
 	statusBar := m.renderStatusBar()
-
 	// Render context-sensitive keybinding hints
 	hintsBar := m.renderHintsBar()
-
 	// Tab bar — empty string in single-tab mode.
 	tabBar := m.renderTabBar()
-
 	// Build the vertical component list, omitting the tab bar when empty.
 	var components []string
 	if tabBar != "" {
 		components = append(components, tabBar)
 	}
-
 	if m.chat != nil {
 		if m.chat.Focused() {
 			// Floating modal overlay: panels render normally with a
 			// centered chat dialog on top.
 			panelAreaHeight := lipgloss.Height(panelArea)
 			panelAreaWidth := m.width
-
 			modalWidth := m.width * chatModalWidthPct / 100
 			modalHeight := panelAreaHeight * chatModalHeightPct / 100
 			if modalWidth < chatModalMinWidth {
@@ -1643,7 +1539,6 @@ func (m Model) renderLayout() string {
 			if modalHeight > panelAreaHeight {
 				modalHeight = panelAreaHeight
 			}
-
 			// Inner dimensions after subtracting the border (1 char each side).
 			innerWidth := modalWidth - 2
 			innerHeight := modalHeight - 2
@@ -1653,19 +1548,15 @@ func (m Model) renderLayout() string {
 			if innerHeight < chatInnerMinHeight {
 				innerHeight = chatInnerMinHeight
 			}
-
 			chatContent := m.chat.RenderModalContent(innerWidth, innerHeight)
-
 			// Use the same overlay colors as other dialogs.
 			borderColor := m.overlayBorderCol()
 			titleColor := m.overlayTitleCol()
-
 			// Build the modal border entirely from scratch to avoid
 			// alignment issues with lipgloss's Border() + line replacement.
 			bdr := lipgloss.RoundedBorder()
 			bdrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
 			ttlStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor))
-
 			// Size the content to exact dimensions without a border.
 			contentBlock := lipgloss.NewStyle().
 				Width(innerWidth).
@@ -1673,7 +1564,6 @@ func (m Model) renderLayout() string {
 				Height(innerHeight).
 				MaxHeight(innerHeight).
 				Render(chatContent)
-
 			// Top line with title: ╭── Chat ──────────╮
 			titleText := ttlStyle.Render("Chat")
 			titleVisualW := lipgloss.Width(titleText)
@@ -1685,35 +1575,28 @@ func (m Model) renderLayout() string {
 			topLine := bdrStyle.Render(bdr.TopLeft+strings.Repeat(bdr.Top, prefixDashes)) +
 				bdrStyle.Render(" ") + titleText + bdrStyle.Render(" ") +
 				bdrStyle.Render(strings.Repeat(bdr.Top, suffixDashes)+bdr.TopRight)
-
 			// Wrap each content line with left/right borders.
 			contentLines := strings.Split(contentBlock, "\n")
 			for i, cl := range contentLines {
 				contentLines[i] = bdrStyle.Render(bdr.Left) + cl + bdrStyle.Render(bdr.Right)
 			}
-
 			// Bottom line: ╰───────────────────╯
 			bottomLine := bdrStyle.Render(bdr.BottomLeft + strings.Repeat(bdr.Bottom, innerWidth) + bdr.BottomRight)
-
 			modalBox := topLine + "\n" + strings.Join(contentLines, "\n") + "\n" + bottomLine
-
 			// Center the modal on top of the panel area.
 			overlaidPanelArea := lipgloss.Place(
 				panelAreaWidth, panelAreaHeight,
 				lipgloss.Center, lipgloss.Center,
 				modalBox,
 			)
-
 			components = append(components, overlaidPanelArea, hintsBar, statusBar)
 			return lipgloss.JoinVertical(lipgloss.Left, components...)
 		}
-
 		// Not focused: render panels + chat footer normally.
 		chatView := m.chat.View()
 		components = append(components, panelArea, chatView, hintsBar, statusBar)
 		return lipgloss.JoinVertical(lipgloss.Left, components...)
 	}
-
 	components = append(components, panelArea, hintsBar, statusBar)
 	return lipgloss.JoinVertical(lipgloss.Left, components...)
 }
@@ -1730,13 +1613,11 @@ func (m Model) renderTabBar() string {
 	}
 	tm := m.engine.TabManager()
 	tabs := tm.Tabs()
-
 	// Determine the active tab name.
 	activeName := ""
 	if at := tm.ActiveTab(); at != nil {
 		activeName = at.Name
 	}
-
 	type presetInfo struct {
 		key  string
 		name string
@@ -1748,31 +1629,25 @@ func (m Model) renderTabBar() string {
 		{"4", "agent"},
 		{"5", "full"},
 	}
-
 	openNames := make(map[string]bool)
 	for _, tab := range tabs {
 		openNames[tab.Name] = true
 	}
-
 	activeStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.TabActiveBg)).
 		Foreground(lipgloss.Color(m.theme.Colors.TabActiveFg)).
 		Bold(true).
 		PaddingLeft(1).
 		PaddingRight(1)
-
 	inactiveStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Foreground(lipgloss.Color(m.theme.Colors.TabInactiveFg)).
 		PaddingLeft(1).
 		PaddingRight(1)
-
 	hintStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack))
-
 	var parts []string
-
 	// Render all presets in canonical 1-5 order: opened tabs are
 	// active/inactive, unopened tabs are dimmed hints.
 	for _, p := range allPresets {
@@ -1787,9 +1662,7 @@ func (m Model) renderTabBar() string {
 			parts = append(parts, hintStyle.Render(" "+label))
 		}
 	}
-
 	tabContent := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
-
 	// Pad to full width with the status bar background.
 	contentWidth := lipgloss.Width(tabContent)
 	if contentWidth < m.width {
@@ -1798,7 +1671,6 @@ func (m Model) renderTabBar() string {
 			Render(strings.Repeat(" ", m.width-contentWidth))
 		tabContent += filler
 	}
-
 	return tabContent
 }
 
@@ -1820,13 +1692,10 @@ func (m Model) renderNode(
 			return ""
 		}
 		return m.renderPanel(n.Panel, allPanels[n.Panel], rect, n.Panel == focusedName)
-
 	case *layout.SplitNode:
 		firstContent := m.renderNode(n.First, rects, allPanels, focusedName, borderColorStr)
 		secondContent := m.renderNode(n.Second, rects, allPanels, focusedName, borderColorStr)
-
 		sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColorStr))
-
 		if n.Direction == layout.Horizontal {
 			// Build a vertical separator column (│) matching the content height.
 			h := lipgloss.Height(firstContent)
@@ -1840,28 +1709,25 @@ func (m Model) renderNode(
 			sep := strings.Join(sepLines, "\n")
 			return lipgloss.JoinHorizontal(lipgloss.Top, firstContent, sep, secondContent)
 		}
-
 		// Vertical split: horizontal separator row (─) matching width.
 		w := lipgloss.Width(firstContent)
 		if sw := lipgloss.Width(secondContent); sw > w {
 			w = sw
 		}
-
 		// Inject the title of the panel below the separator.
 		bottomPanelName := layout.FirstPanelOf(n.Second)
 		sep := m.renderSeparatorWithTitle(w, bottomPanelName, allPanels, focusedName, sepStyle)
 		return lipgloss.JoinVertical(lipgloss.Left, firstContent, sep, secondContent)
 	}
-
 	return ""
 }
 
 // borderTitle holds the title and position information for a panel
 // that should have its title rendered in the outer border.
 type borderTitle struct {
+	title    string
 	startCol int
 	endCol   int
-	title    string
 	focused  bool
 }
 
@@ -1876,22 +1742,18 @@ func (m Model) renderSeparatorWithTitle(
 	sepStyle lipgloss.Style,
 ) string {
 	plain := sepStyle.Render(strings.Repeat("─", width))
-
 	p, ok := allPanels[panelName]
 	if !ok || width < 6 {
 		return plain
 	}
-
 	title := p.Title()
 	if title == "" {
 		return plain
 	}
-
 	titleStyle := m.theme.Styles.Title
 	if panelName == focusedName {
 		titleStyle = m.theme.Styles.TitleFocused
 	}
-
 	// Truncate title if needed.
 	maxLen := width - 6
 	if maxLen < 3 {
@@ -1901,14 +1763,12 @@ func (m Model) renderSeparatorWithTitle(
 	if len(titleRunes) > maxLen {
 		title = string(titleRunes[:maxLen-1]) + "…"
 	}
-
 	label := " " + titleStyle.Render(title) + " "
 	labelWidth := lipgloss.Width(label)
 	remaining := width - 1 - labelWidth
 	if remaining < 0 {
 		return plain
 	}
-
 	return sepStyle.Render("─") + label + sepStyle.Render(strings.Repeat("─", remaining))
 }
 
@@ -1924,7 +1784,6 @@ func (m Model) renderPanel(
 	if p == nil {
 		return ""
 	}
-
 	// The rect IS the content area (no per-panel border to subtract).
 	contentW := rect.Width
 	contentH := rect.Height
@@ -1934,7 +1793,6 @@ func (m Model) renderPanel(
 	if contentH < 1 {
 		contentH = 1
 	}
-
 	// Reserve horizontal padding inside the panel so content doesn't
 	// press against the border characters.
 	pad := layout.PanelPadH
@@ -1944,15 +1802,12 @@ func (m Model) renderPanel(
 	}
 	leftPad := strings.Repeat(" ", pad)
 	rightPad := strings.Repeat(" ", pad)
-
 	content := p.View(innerW, contentH)
-
 	// Truncate content to contentH lines so panels never overflow their
 	// allocated rectangle and push the footer off screen.
 	if lines := strings.Split(content, "\n"); len(lines) > contentH {
 		content = strings.Join(lines[:contentH], "\n")
 	}
-
 	// Normalize every content line to exactly innerW, then wrap with
 	// horizontal padding so the final line width equals contentW.
 	{
@@ -1961,18 +1816,28 @@ func (m Model) renderPanel(
 		for len(lines) < contentH {
 			lines = append(lines, strings.Repeat(" ", innerW))
 		}
+		// strings.Builder: avoid per-iteration string concat in render loop.
+		// Reusing a single Builder across iterations amortises the buffer
+		// allocation; writing padding bytes directly avoids strings.Repeat.
+		var b strings.Builder
 		for i, line := range lines {
+			b.Reset()
 			w := lipgloss.Width(line)
 			if w > innerW {
 				line = ansi.Truncate(line, innerW, "")
-			} else if w < innerW {
-				line += strings.Repeat(" ", innerW-w)
 			}
-			lines[i] = leftPad + line + rightPad
+			b.WriteString(leftPad)
+			b.WriteString(line)
+			if w < innerW {
+				for j := 0; j < innerW-w; j++ {
+					b.WriteByte(' ')
+				}
+			}
+			b.WriteString(rightPad)
+			lines[i] = b.String()
 		}
 		content = strings.Join(lines, "\n")
 	}
-
 	return content
 }
 
@@ -1983,7 +1848,6 @@ func (m Model) renderPanel(
 func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int, borderColorStr string, tree layout.Node, topTitles []borderTitle) string {
 	border := lipgloss.RoundedBorder()
 	bdr := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColorStr))
-
 	// Collect junction positions from the layout tree.
 	topJ := map[int]bool{}
 	bottomJ := map[int]bool{}
@@ -1993,7 +1857,6 @@ func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int,
 		area := layout.Rect{X: 0, Y: 0, Width: contentWidth, Height: contentHeight}
 		collectJunctions(tree, area, contentWidth, contentHeight, topJ, bottomJ, leftJ, rightJ)
 	}
-
 	// Find junction columns in the top border (sorted).
 	var junctionCols []int
 	for col := 0; col < contentWidth; col++ {
@@ -2001,10 +1864,8 @@ func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int,
 			junctionCols = append(junctionCols, col)
 		}
 	}
-
 	// Build top border line with panel titles.
 	topLine := m.buildTopBorderWithTitles(contentWidth, junctionCols, topTitles, bdr, border)
-
 	// Build content lines with left/right border characters.
 	contentLines := strings.Split(content, "\n")
 	for len(contentLines) < contentHeight {
@@ -2013,18 +1874,28 @@ func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int,
 	if len(contentLines) > contentHeight {
 		contentLines = contentLines[:contentHeight]
 	}
+	// strings.Builder: pre-render border chars and avoid per-line
+	// lipgloss.Render + string concat in render loop.
+	renderedLeft := bdr.Render(border.Left)
+	renderedRight := bdr.Render(border.Right)
+	renderedLeftJ := bdr.Render("├")
+	renderedRightJ := bdr.Render("┤")
+	var borderB strings.Builder
 	for i, line := range contentLines {
-		leftChar := border.Left
+		borderB.Reset()
 		if leftJ[i] {
-			leftChar = "├"
+			borderB.WriteString(renderedLeftJ)
+		} else {
+			borderB.WriteString(renderedLeft)
 		}
-		rightChar := border.Right
+		borderB.WriteString(line)
 		if rightJ[i] {
-			rightChar = "┤"
+			borderB.WriteString(renderedRightJ)
+		} else {
+			borderB.WriteString(renderedRight)
 		}
-		contentLines[i] = bdr.Render(leftChar) + line + bdr.Render(rightChar)
+		contentLines[i] = borderB.String()
 	}
-
 	// Build bottom border line with junctions. Group consecutive non-junction
 	// characters into single Render calls to avoid per-character ANSI overhead.
 	var bottomParts []string
@@ -2043,7 +1914,6 @@ func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int,
 	}
 	bottomParts = append(bottomParts, bdr.Render(border.BottomRight))
 	bottomLine := strings.Join(bottomParts, "")
-
 	// Assemble: top + content + bottom.
 	result := topLine + "\n" + strings.Join(contentLines, "\n") + "\n" + bottomLine
 	return result
@@ -2061,7 +1931,6 @@ func (m Model) buildTopBorderWithTitles(
 ) string {
 	var parts []string
 	parts = append(parts, bdr.Render(border.TopLeft))
-
 	// Build section boundaries from junction columns.
 	// Sections: [0, j0), [j0+1, j1), ..., [jN+1, contentWidth)
 	type section struct {
@@ -2074,10 +1943,8 @@ func (m Model) buildTopBorderWithTitles(
 		prev = j + 1
 	}
 	sections = append(sections, section{prev, contentWidth})
-
 	for si, sec := range sections {
 		width := sec.end - sec.start
-
 		// Find the title that belongs to this section.
 		var title *borderTitle
 		for i := range topTitles {
@@ -2086,20 +1953,17 @@ func (m Model) buildTopBorderWithTitles(
 				break
 			}
 		}
-
 		if title != nil && width > 4 {
 			titleStyle := m.theme.Styles.Title
 			if title.focused {
 				titleStyle = m.theme.Styles.TitleFocused
 			}
-
 			t := title.title
 			maxLen := width - 5
 			tRunes := []rune(t)
 			if len(tRunes) > maxLen {
 				t = string(tRunes[:maxLen-1]) + "…"
 			}
-
 			label := " " + titleStyle.Render(t) + " "
 			labelWidth := lipgloss.Width(label)
 			remaining := width - 1 - labelWidth
@@ -2112,13 +1976,11 @@ func (m Model) buildTopBorderWithTitles(
 		} else {
 			parts = append(parts, bdr.Render(strings.Repeat(border.Top, width)))
 		}
-
 		// Add junction after this section (if not the last).
 		if si < len(junctionCols) {
 			parts = append(parts, bdr.Render("┬"))
 		}
 	}
-
 	parts = append(parts, bdr.Render(border.TopRight))
 	return strings.Join(parts, "")
 }
@@ -2169,9 +2031,7 @@ func collectJunctions(
 	if !ok {
 		return
 	}
-
 	firstArea, secondArea := layout.SplitRect(area, split.Direction, split.Ratio)
-
 	switch split.Direction {
 	case layout.Horizontal:
 		// The vertical separator column is at firstArea.X + firstArea.Width.
@@ -2192,7 +2052,6 @@ func collectJunctions(
 			rightJ[sepRow] = true
 		}
 	}
-
 	collectJunctions(split.First, firstArea, totalW, totalH, topJ, bottomJ, leftJ, rightJ)
 	collectJunctions(split.Second, secondArea, totalW, totalH, topJ, bottomJ, leftJ, rightJ)
 }
@@ -2206,9 +2065,7 @@ func (m Model) renderHintsBar() string {
 		hints := []string{"enter:send", "ctrl+e:expand", "ctrl+l:clear", "esc:blur", "ctrl+space:close"}
 		return m.renderHintLine(hints)
 	}
-
 	focusedName := m.engine.FocusedName()
-
 	// Panel-specific hints.
 	var hints []string
 	switch focusedName {
@@ -2233,12 +2090,10 @@ func (m Model) renderHintsBar() string {
 	default:
 		hints = []string{"Tab:focus", "?:help", "/:find", "1-5:tabs"}
 	}
-
 	// Append chat hint when chat is available but not focused.
 	if m.chat != nil {
 		hints = append(hints, "ctrl+space:chat")
 	}
-
 	return m.renderHintLine(hints)
 }
 
@@ -2246,7 +2101,6 @@ func (m Model) renderHintsBar() string {
 // key:description pairs.
 func (m Model) renderHintLine(hints []string) string {
 	bg := lipgloss.Color(m.theme.Colors.StatusBarBg)
-
 	// Style each hint: key part bold/colored, description dim.
 	keyStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -2255,9 +2109,7 @@ func (m Model) renderHintLine(hints []string) string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack)).
 		Background(bg)
-
 	fill := lipgloss.NewStyle().Background(bg)
-
 	var parts []string
 	for _, h := range hints {
 		idx := strings.Index(h, ":")
@@ -2267,9 +2119,7 @@ func (m Model) renderHintLine(hints []string) string {
 			parts = append(parts, keyStyle.Render(key)+fill.Render(" ")+descStyle.Render(desc))
 		}
 	}
-
 	hintsText := fill.Render(" ") + strings.Join(parts, fill.Render("  "))
-
 	// Fill remaining width with background-colored spaces (same
 	// approach as renderStatusBar) so there are no unstyled gaps.
 	textW := lipgloss.Width(hintsText)
@@ -2277,7 +2127,6 @@ func (m Model) renderHintLine(hints []string) string {
 	if gap < 0 {
 		gap = 0
 	}
-
 	return hintsText + fill.Render(strings.Repeat(" ", gap))
 }
 
@@ -2344,16 +2193,12 @@ func (m Model) renderStatusBar() string {
 	if m.cwdEditing {
 		return m.renderStatusBarEditing()
 	}
-
 	// Left side: full cwd + git branch + async op.
 	cwd, _ := os.Getwd()
-
 	cwdStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack)).
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
-
 	leftParts := []string{cwdStyle.Render(cwd)}
-
 	if m.currentBranch != "" {
 		branchText := "⎇ " + m.currentBranch
 		if m.gitDirty {
@@ -2364,7 +2209,6 @@ func (m Model) renderStatusBar() string {
 			Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 			Bold(true)
 		leftParts = append(leftParts, branchStyle.Render(branchText))
-
 		// Ahead/behind indicators.
 		if m.branchAhead > 0 || m.branchBehind > 0 {
 			var abParts []string
@@ -2380,25 +2224,21 @@ func (m Model) renderStatusBar() string {
 			leftParts = append(leftParts, abStyle.Render(strings.Join(abParts, " ")))
 		}
 	}
-
 	if m.asyncOp != "" {
 		asyncStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(m.theme.Colors.NormalYellow)).
 			Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
 		leftParts = append(leftParts, asyncStyle.Render("⟳ "+m.asyncOp))
 	}
-
 	sep := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack)).
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Render(" │ ")
 	leftText := strings.Join(leftParts, sep)
-
 	leftPad := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Render(" ")
 	left := leftPad + leftText
-
 	// Right side: version + project/folder name in brackets.
 	// Every segment must carry an explicit background to avoid
 	// body-background bleed-through in the ANSI→HTML pipeline.
@@ -2415,7 +2255,6 @@ func (m Model) renderStatusBar() string {
 		Render(" [" + folderName + "]")
 	rightPad := lipgloss.NewStyle().Background(sbBg).Render(" ")
 	brandText := versionText + bracketText + rightPad
-
 	// Fill the gap between left and right.
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(brandText)
@@ -2423,11 +2262,9 @@ func (m Model) renderStatusBar() string {
 	if gap < 0 {
 		gap = 0
 	}
-
 	filler := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Render(strings.Repeat(" ", gap))
-
 	return left + filler + brandText
 }
 
@@ -2435,7 +2272,6 @@ func (m Model) renderStatusBar() string {
 // for editing the current working directory path.
 func (m Model) renderStatusBarEditing() string {
 	runes := []rune(m.cwdEditValue)
-
 	// Build the path text with a visible cursor.
 	var before, cursor, after string
 	if m.cwdEditCursor < len(runes) {
@@ -2447,25 +2283,20 @@ func (m Model) renderStatusBarEditing() string {
 		cursor = " "
 		after = ""
 	}
-
 	editStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.NormalWhite)).
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
 	cursorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Background(lipgloss.Color(m.theme.Colors.NormalWhite))
-
 	pathText := editStyle.Render(before) + cursorStyle.Render(cursor) + editStyle.Render(after)
-
 	hintStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack)).
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
 	hint := hintStyle.Render(" enter=confirm  esc=cancel")
-
 	left := m.theme.Styles.StatusBar.
 		PaddingLeft(1).
 		Render(pathText + hint)
-
 	leftW := lipgloss.Width(left)
 	gap := m.width - leftW
 	if gap < 0 {
@@ -2474,6 +2305,5 @@ func (m Model) renderStatusBarEditing() string {
 	filler := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg)).
 		Render(strings.Repeat(" ", gap))
-
 	return left + filler
 }

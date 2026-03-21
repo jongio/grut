@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -35,12 +36,11 @@ type GitOps interface {
 // ---------------------------------------------------------------------------
 // Internal types
 // ---------------------------------------------------------------------------
-
 // listItem represents a single row in the branch list display.
 type listItem struct {
-	isHeader bool       // true for section headers ("Local Branches", etc.)
-	header   string     // section header text (valid when isHeader)
 	branch   git.Branch // branch data (valid when !isHeader)
+	header   string     // section header text (valid when isHeader)
+	isHeader bool       // true for section headers ("Local Branches", etc.)
 }
 
 // pendingOp identifies which operation is awaiting modal input.
@@ -58,24 +58,22 @@ const (
 // ---------------------------------------------------------------------------
 // Internal messages (async result messages)
 // ---------------------------------------------------------------------------
-
 // branchesLoadedMsg carries the result of an async branch-list call.
 type branchesLoadedMsg struct {
-	branches []git.Branch
 	err      error
+	branches []git.Branch
 }
 
 // branchOpResultMsg carries the result of a branch operation.
 type branchOpResultMsg struct {
+	err  error
 	op   string // "checkout", "worktree", "created", "deleted", "renamed", "fetched"
 	name string // branch name involved
-	err  error
 }
 
 // ---------------------------------------------------------------------------
 // Default colors (Dracula-inspired)
 // ---------------------------------------------------------------------------
-
 var defaultColors = struct {
 	Current  string
 	Local    string
@@ -99,27 +97,22 @@ var defaultColors = struct {
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the branch management panel. It implements [panels.Panel].
 type Panel struct {
+	actionsCfg    config.ActionsConfig
+	git           GitOps
+	ctx           context.Context
+	annotations   map[string]string // branch name → annotation text (e.g. "[merged]")
+	repoRoot      string
+	pendingBranch string     // branch name for pending delete/rename
+	pendingName   string     // item type name for first-use confirm
+	items         []listItem // flat display list (headers + branches)
 	panels.BasePanel
-
-	git      GitOps
-	cfg      config.GitConfig
-	repoRoot string
-	ctx      context.Context
-
-	items  []listItem // flat display list (headers + branches)
-	cursor int        // index into items (skips headers)
-	offset int        // viewport scroll offset
-
-	pending       pendingOp // operation awaiting modal result
-	pendingBranch string    // branch name for pending delete/rename
-	pendingName   string    // item type name for first-use confirm
-
-	actionsCfg      config.ActionsConfig
-	annotations     map[string]string // branch name → annotation text (e.g. "[merged]")
-	showAnnotations bool              // whether to display annotations next to branch names
+	cfg             config.GitConfig
+	cursor          int       // index into items (skips headers)
+	offset          int       // viewport scroll offset
+	pending         pendingOp // operation awaiting modal result
+	showAnnotations bool      // whether to display annotations next to branch names
 }
 
 // Compile-time interface check.
@@ -140,7 +133,6 @@ func New(gitOps GitOps, cfg config.GitConfig, repoRoot string) *Panel {
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -186,34 +178,24 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case branchesLoadedMsg:
 		return p.handleBranchesLoaded(msg)
-
 	case branchOpResultMsg:
 		return p.handleOpResult(msg)
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case panels.RefreshBranchesMsg:
 		return p, p.loadBranches()
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
-
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !p.Focused {
@@ -241,7 +223,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p.doCopy()
 	}
-
 	return p, nil
 }
 
@@ -250,7 +231,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if len(p.items) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -258,23 +238,19 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color(defaultColors.Dim)).
 			Render("No branches")
 	}
-
 	lines := make([]string, 0, height)
 	end := p.offset + height
 	if end > len(p.items) {
 		end = len(p.items)
 	}
-
 	for i := p.offset; i < end; i++ {
 		lines = append(lines, p.renderLine(p.items[i], width, i == p.cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < height {
 		lines = append(lines, emptyLine)
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -298,7 +274,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Message handlers
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleBranchesLoaded(msg branchesLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
 		errMsg := msg.err.Error()
@@ -317,12 +292,10 @@ func (p *Panel) handleOpResult(msg branchOpResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errText, Level: notify.Error}
 		}
 	}
-
 	// Refresh branches after a successful operation.
 	op := msg.op
 	name := msg.name
 	cmds := []tea.Cmd{p.loadBranches()}
-
 	switch op {
 	case "checkout":
 		cmds = append(cmds,
@@ -341,19 +314,16 @@ func (p *Panel) handleOpResult(msg branchOpResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: successMsg, Level: notify.Success}
 		})
 	}
-
 	return p, tea.Batch(cmds...)
 }
 
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	switch msg.String() {
 	case "j", "down":
 		p.moveCursorDown()
@@ -378,14 +348,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "a":
 		p.showAnnotations = !p.showAnnotations
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the item at the clicked row, skipping headers.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
@@ -412,7 +380,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	itemType := p.currentItemType()
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
@@ -437,7 +404,6 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.cursor = idx
 	p.ensureCursorVisible()
-
 	b := p.items[idx].branch
 	itemType := p.currentItemType()
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, itemType, b.Name)
@@ -509,7 +475,6 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	for i := p.cursor + 1; i < len(p.items); i++ {
 		if !p.items[i].isHeader {
@@ -555,19 +520,16 @@ func (p *Panel) selectedBranch() *git.Branch {
 // ---------------------------------------------------------------------------
 // Branch operations
 // ---------------------------------------------------------------------------
-
 func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 	b := p.selectedBranch()
 	if b == nil {
 		return p, nil
 	}
-
 	if b.IsCurrent {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Already on " + b.Name, Level: notify.Info}
 		}
 	}
-
 	ref := b.Name
 	if b.IsRemote {
 		// Strip remote prefix (e.g., "origin/feature" → "feature") so
@@ -576,10 +538,8 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 			ref = ref[idx+1:]
 		}
 	}
-
 	g := p.git
 	ctx := p.ctx
-
 	if p.cfg.WorktreeFirst {
 		wtPath := worktreePath(p.repoRoot, ref)
 		name := ref
@@ -588,7 +548,6 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 			return branchOpResultMsg{op: "worktree", name: name, err: err}
 		}
 	}
-
 	name := ref
 	return p, func() tea.Msg {
 		err := g.Checkout(ctx, name)
@@ -616,7 +575,6 @@ func (p *Panel) requestDelete() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot delete remote branch locally", Level: notify.Warn}
 		}
 	}
-
 	p.pending = opDelete
 	p.pendingBranch = b.Name
 	return p, notify.ShowConfirm("Delete Branch", fmt.Sprintf("Delete branch %q?", b.Name))
@@ -632,7 +590,6 @@ func (p *Panel) requestRename() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot rename remote branch", Level: notify.Warn}
 		}
 	}
-
 	p.pending = opRename
 	p.pendingBranch = b.Name
 	return p, notify.ShowInput("Rename Branch", b.Name)
@@ -665,7 +622,6 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 			name = name[idx+1:]
 		}
 	}
-
 	remotes, err := p.git.RemoteList(p.ctx)
 	if err != nil || len(remotes) == 0 {
 		return p, func() tea.Msg {
@@ -708,7 +664,6 @@ func (p *Panel) doCopy() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	branch := p.pendingBranch
@@ -716,24 +671,19 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	p.pending = opNone
 	p.pendingBranch = ""
 	p.pendingName = ""
-
 	if !msg.Accept {
 		return p, nil
 	}
-
 	g := p.git
 	ctx := p.ctx
-
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opFirstUseConfirm:
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, name, msg.Value)
 		}
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opRightClickPick:
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opCreate:
 		name := strings.TrimSpace(msg.Value)
 		if name == "" {
@@ -743,13 +693,11 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.BranchCreate(ctx, name, "")
 			return branchOpResultMsg{op: "created", name: name, err: err}
 		}
-
 	case opDelete:
 		return p, func() tea.Msg {
 			err := g.BranchDelete(ctx, branch, false)
 			return branchOpResultMsg{op: "deleted", name: branch, err: err}
 		}
-
 	case opRename:
 		newName := strings.TrimSpace(msg.Value)
 		if newName == "" || newName == branch {
@@ -760,14 +708,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			return branchOpResultMsg{op: "renamed", name: newName, err: err}
 		}
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Item list building
 // ---------------------------------------------------------------------------
-
 // buildItems constructs the flat display list from branch data and
 // positions the cursor on the current branch (if any).
 func (p *Panel) buildItems(branches []git.Branch) {
@@ -779,23 +725,19 @@ func (p *Panel) buildItems(branches []git.Branch) {
 			local = append(local, b)
 		}
 	}
-
 	p.items = nil
-
 	if len(local) > 0 {
 		p.items = append(p.items, listItem{isHeader: true, header: "Local Branches"})
 		for _, b := range local {
 			p.items = append(p.items, listItem{branch: b})
 		}
 	}
-
 	if len(remote) > 0 {
 		p.items = append(p.items, listItem{isHeader: true, header: "Remote Branches"})
 		for _, b := range remote {
 			p.items = append(p.items, listItem{branch: b})
 		}
 	}
-
 	// Default cursor to first selectable item.
 	p.cursor = 0
 	for i, item := range p.items {
@@ -804,7 +746,6 @@ func (p *Panel) buildItems(branches []git.Branch) {
 			break
 		}
 	}
-
 	// Prefer placing cursor on the current branch.
 	for i, item := range p.items {
 		if !item.isHeader && item.branch.IsCurrent {
@@ -812,7 +753,6 @@ func (p *Panel) buildItems(branches []git.Branch) {
 			break
 		}
 	}
-
 	p.offset = 0
 	p.ensureCursorVisible()
 	p.computeAnnotations(branches)
@@ -830,7 +770,6 @@ func (p *Panel) computeAnnotations(branches []git.Branch) {
 	if defaultBranch == "" {
 		defaultBranch = "main"
 	}
-
 	for _, b := range branches {
 		if b.IsRemote || b.IsCurrent {
 			continue
@@ -846,7 +785,6 @@ func (p *Panel) computeAnnotations(branches []git.Branch) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 // renderLine renders a single item in the branch list.
 func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	if item.isHeader {
@@ -856,15 +794,12 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 			Bold(true).
 			Render("── " + item.header + " ──")
 	}
-
 	b := item.branch
-
 	// Prefix: current branch marker.
 	prefix := "  "
 	if b.IsCurrent {
 		prefix = "* "
 	}
-
 	// Right-side info: ahead/behind tracking + short hash.
 	var rightParts []string
 	if b.Ahead > 0 {
@@ -873,7 +808,6 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	if b.Behind > 0 {
 		rightParts = append(rightParts, fmt.Sprintf("↓%d", b.Behind))
 	}
-
 	rightSide := ""
 	if len(rightParts) > 0 {
 		rightSide = "  " + strings.Join(rightParts, " ")
@@ -881,32 +815,25 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	if b.Hash != "" {
 		rightSide += "  " + b.Hash
 	}
-
 	// Build the line with padding for right-alignment.
 	leftSide := prefix + b.Name
-
 	// Append annotation if annotations are visible.
 	if p.showAnnotations {
 		if ann, ok := p.annotations[b.Name]; ok {
 			leftSide += " " + ann
 		}
 	}
-
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-
 	line := leftSide + gap + rightSide
-
 	// Apply styles.
 	style := lipgloss.NewStyle().Width(width)
-
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	if b.IsCurrent {
 		style = style.Foreground(lipgloss.Color(defaultColors.Current)).Bold(true)
 	} else if b.IsRemote {
@@ -914,14 +841,12 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	} else {
 		style = style.Foreground(lipgloss.Color(defaultColors.Local))
 	}
-
 	return style.Render(line)
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // worktreePath is an alias to the canonical implementation in the git package.
 // See git.WorktreePath for the convention details.
 func worktreePath(repoRoot, branch string) string {

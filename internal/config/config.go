@@ -24,21 +24,21 @@ var defaultsTOML []byte
 
 // Config is the top-level configuration for grut.
 type Config struct {
-	General    GeneralConfig    `toml:"general"`
-	FileTree   FileTreeConfig   `toml:"file_tree"`
-	Preview    PreviewConfig    `toml:"preview"`
-	Git        GitConfig        `toml:"git"`
-	GitHub     GitHubConfig     `toml:"github"`
-	Terminal   TerminalConfig   `toml:"terminal"`
-	AI         AIConfig         `toml:"ai"`
-	MCP        MCPConfig        `toml:"mcp"`
-	Extensions ExtensionsConfig `toml:"extensions"`
-	Logging    LoggingConfig    `toml:"logging"`
-	Bookmarks  BookmarksConfig  `toml:"bookmarks"`
-	Session    SessionConfig    `toml:"session"`
-	Theme      ThemeConfig      `toml:"theme"`
-	Shortcuts  ShortcutsConfig  `toml:"shortcuts"`
 	Actions    ActionsConfig    `toml:"actions"`
+	Terminal   TerminalConfig   `toml:"terminal"`
+	Theme      ThemeConfig      `toml:"theme"`
+	AI         AIConfig         `toml:"ai"`
+	General    GeneralConfig    `toml:"general"`
+	Shortcuts  ShortcutsConfig  `toml:"shortcuts"`
+	MCP        MCPConfig        `toml:"mcp"`
+	GitHub     GitHubConfig     `toml:"github"`
+	Preview    PreviewConfig    `toml:"preview"`
+	Logging    LoggingConfig    `toml:"logging"`
+	FileTree   FileTreeConfig   `toml:"file_tree"`
+	Bookmarks  BookmarksConfig  `toml:"bookmarks"`
+	Extensions ExtensionsConfig `toml:"extensions"`
+	Git        GitConfig        `toml:"git"`
+	Session    SessionConfig    `toml:"session"`
 }
 
 // GeneralConfig holds top-level UI and session preferences.
@@ -51,23 +51,23 @@ type GeneralConfig struct {
 
 // FileTreeConfig controls the file explorer pane.
 type FileTreeConfig struct {
+	IconMode             string `toml:"icon_mode"`
+	MaxDepth             int    `toml:"max_depth"`
 	ShowHidden           bool   `toml:"show_hidden"`
 	ShowIcons            bool   `toml:"show_icons"`
-	IconMode             string `toml:"icon_mode"`
 	SortDirectoriesFirst bool   `toml:"sort_directories_first"`
 	GitStatusMarkers     bool   `toml:"git_status_markers"`
 	FollowSymlinks       bool   `toml:"follow_symlinks"`
-	MaxDepth             int    `toml:"max_depth"`
 }
 
 // PreviewConfig controls the file preview pane.
 type PreviewConfig struct {
-	Enabled            bool   `toml:"enabled"`
 	Position           string `toml:"position"`
-	Width              int    `toml:"width"`
-	SyntaxHighlighting bool   `toml:"syntax_highlighting"`
 	Theme              string `toml:"theme"`
+	Width              int    `toml:"width"`
 	MaxFileSize        int    `toml:"max_file_size"`
+	Enabled            bool   `toml:"enabled"`
+	SyntaxHighlighting bool   `toml:"syntax_highlighting"`
 	LineNumbers        bool   `toml:"line_numbers"`
 	WordWrap           bool   `toml:"word_wrap"`
 	RenderMarkdown     bool   `toml:"render_markdown"`
@@ -76,14 +76,14 @@ type PreviewConfig struct {
 // GitConfig holds git integration settings.
 type GitConfig struct {
 	RefreshMethod           string   `toml:"refresh_method"`
-	RefreshFallbackInterval Duration `toml:"refresh_fallback_interval"`
 	DefaultBranch           string   `toml:"default_branch"`
-	WorktreeFirst           bool     `toml:"worktree_first"`
 	WorktreeMergeMethod     string   `toml:"worktree_merge_method"`
 	WorktreeOpenMode        string   `toml:"worktree_open_mode"`
+	RefreshFallbackInterval Duration `toml:"refresh_fallback_interval"`
 	AutoFetchInterval       Duration `toml:"auto_fetch_interval"`
-	ShowCommitGraph         bool     `toml:"show_commit_graph"`
 	MaxLogEntries           int      `toml:"max_log_entries"`
+	WorktreeFirst           bool     `toml:"worktree_first"`
+	ShowCommitGraph         bool     `toml:"show_commit_graph"`
 	SignCommits             bool     `toml:"sign_commits"`
 }
 
@@ -91,48 +91,46 @@ type GitConfig struct {
 type GitHubConfig struct {
 	Owner                  string `toml:"owner"`
 	Repo                   string `toml:"repo"`
-	PollInterval           int    `toml:"poll_interval"`
 	DefaultIssueFilter     string `toml:"default_issue_filter"`
 	DefaultPRFilter        string `toml:"default_pr_filter"`
-	AutoCheckoutPRBranch   bool   `toml:"auto_checkout_pr_branch"`
+	PollInterval           int    `toml:"poll_interval"`
 	ReviewDiffContextLines int    `toml:"review_diff_context_lines"`
+	AutoCheckoutPRBranch   bool   `toml:"auto_checkout_pr_branch"`
 }
 
 // TerminalConfig holds embedded terminal settings.
 type TerminalConfig struct {
 	Shell      string `toml:"shell"`
+	PrefixKey  string `toml:"prefix_key"`
 	Scrollback int    `toml:"scrollback"`
 	RenderFPS  int    `toml:"render_fps"`
-	PrefixKey  string `toml:"prefix_key"`
 }
 
 // AIConfig holds AI/LLM integration settings.
 type AIConfig struct {
-	// Existing fields.
-	AutoInstallDeps bool        `toml:"auto_install_deps"`
-	ContextMode     string      `toml:"context_mode"`
-	TokenModel      string      `toml:"token_model"`
-	MCP             AIMCPConfig `toml:"mcp"`
-
-	// Feature flags and provider selection.
-	Enabled          bool     `toml:"enabled"`
-	Provider         string   `toml:"provider"`          // "copilot" | "claude" | "none"
-	FallbackProvider string   `toml:"fallback_provider"` // same enum or ""
-	RedactPatterns   []string `toml:"redact_patterns"`
-	AutoCommitMsg    bool     `toml:"auto_commit_message"`
-	AutoReviewDiff   bool     `toml:"auto_review_diff"`
-	Temperature      float64  `toml:"temperature"`
-	MaxContextFiles  int      `toml:"max_context_files"`
-	MaxContextTokens int      `toml:"max_context_tokens"`
-
+	ContextMode      string      `toml:"context_mode"`
+	TokenModel       string      `toml:"token_model"`
+	MCP              AIMCPConfig `toml:"mcp"`
+	Provider         string      `toml:"provider"`          // "copilot" | "claude" | "none"
+	FallbackProvider string      `toml:"fallback_provider"` // same enum or ""
 	// Sub-feature configuration.
-	Copilot     CopilotConfig     `toml:"copilot"`
-	Claude      ClaudeConfig      `toml:"claude"`
-	Review      ReviewConfig      `toml:"review"`
-	Conflict    ConflictConfig    `toml:"conflict"`
-	Changelog   ChangelogConfig   `toml:"changelog"`
-	CommitSplit CommitSplitConfig `toml:"commit_split"`
-	Chat        ChatConfig        `toml:"chat"`
+	Copilot          CopilotConfig     `toml:"copilot"`
+	Review           ReviewConfig      `toml:"review"`
+	Chat             ChatConfig        `toml:"chat"`
+	Changelog        ChangelogConfig   `toml:"changelog"`
+	RedactPatterns   []string          `toml:"redact_patterns"`
+	Claude           ClaudeConfig      `toml:"claude"`
+	Conflict         ConflictConfig    `toml:"conflict"`
+	Temperature      float64           `toml:"temperature"`
+	MaxContextFiles  int               `toml:"max_context_files"`
+	MaxContextTokens int               `toml:"max_context_tokens"`
+	CommitSplit      CommitSplitConfig `toml:"commit_split"`
+	// Existing fields.
+	AutoInstallDeps bool `toml:"auto_install_deps"`
+	// Feature flags and provider selection.
+	Enabled        bool `toml:"enabled"`
+	AutoCommitMsg  bool `toml:"auto_commit_message"`
+	AutoReviewDiff bool `toml:"auto_review_diff"`
 }
 
 // CopilotConfig holds GitHub Copilot model settings.
@@ -149,8 +147,8 @@ type ClaudeConfig struct {
 // ReviewConfig controls AI-powered code review behaviour.
 type ReviewConfig struct {
 	SeverityThreshold string   `toml:"severity_threshold"`
-	AutoReviewOnPush  bool     `toml:"auto_review_on_push"`
 	Categories        []string `toml:"categories"`
+	AutoReviewOnPush  bool     `toml:"auto_review_on_push"`
 }
 
 // ConflictConfig controls AI-assisted merge-conflict resolution.
@@ -173,10 +171,10 @@ type CommitSplitConfig struct {
 
 // ChatConfig controls the embedded AI chat panel.
 type ChatConfig struct {
-	Enabled         bool   `toml:"enabled"`
+	SystemPrompt    string `toml:"system_prompt"` // custom override
 	CollapsedHeight int    `toml:"collapsed_height"`
 	ExpandedHeight  int    `toml:"expanded_height"`
-	SystemPrompt    string `toml:"system_prompt"` // custom override
+	Enabled         bool   `toml:"enabled"`
 	RenderMarkdown  bool   `toml:"render_markdown"`
 }
 
@@ -192,27 +190,27 @@ type MCPConfig struct {
 
 // MCPSecurityConfig controls MCP server security policies.
 type MCPSecurityConfig struct {
+	AuditLogPath        string   `toml:"audit_log_path"`
 	AllowedCommands     []string `toml:"allowed_commands"`
-	RequireConfirmation bool     `toml:"require_confirmation"`
 	AllowedWritePaths   []string `toml:"allowed_write_paths"`
 	RateLimitRead       int      `toml:"rate_limit_read"`
 	RateLimitWrite      int      `toml:"rate_limit_write"`
+	MaxAgentProcesses   int      `toml:"max_agent_processes"`
+	AgentTimeout        int      `toml:"agent_timeout"`
+	RequireConfirmation bool     `toml:"require_confirmation"`
 	SocketAuth          bool     `toml:"socket_auth"`
 	FollowSymlinks      bool     `toml:"follow_symlinks"`
 	AuditLog            bool     `toml:"audit_log"`
-	AuditLogPath        string   `toml:"audit_log_path"`
-	MaxAgentProcesses   int      `toml:"max_agent_processes"`
-	AgentTimeout        int      `toml:"agent_timeout"`
 }
 
 // ExtensionsConfig controls the extension/plugin system.
 type ExtensionsConfig struct {
-	Enabled         bool   `toml:"enabled"`
 	InstallDir      string `toml:"install_dir"`
 	RegistryURL     string `toml:"registry_url"`
-	AutoUpdate      bool   `toml:"auto_update"`
 	LuaTimeoutMs    int    `toml:"lua_timeout_ms"`
 	WasmMemoryLimit int    `toml:"wasm_memory_limit"`
+	Enabled         bool   `toml:"enabled"`
+	AutoUpdate      bool   `toml:"auto_update"`
 }
 
 // LoggingConfig controls log output.
@@ -242,11 +240,11 @@ type ThemeConfig struct {
 
 // ShortcutsConfig controls AI-powered git workflow shortcuts.
 type ShortcutsConfig struct {
+	Overrides          map[string]bool  `toml:"overrides"`
+	Custom             []CustomShortcut `toml:"custom"`
 	Enabled            bool             `toml:"enabled"`
 	AutoExecute        bool             `toml:"auto_execute"`
 	InteractivePrompts bool             `toml:"interactive_prompts"`
-	Overrides          map[string]bool  `toml:"overrides"`
-	Custom             []CustomShortcut `toml:"custom"`
 }
 
 // CustomShortcut defines a user-created shortcut in the config file.
@@ -322,37 +320,30 @@ func LoadDefaults() (*Config, error) {
 // exists), validates the result, and returns the final Config.
 func Load() (*Config, error) {
 	cfg := &Config{}
-
 	// 1. Parse embedded defaults.
 	if err := toml.Unmarshal(defaultsTOML, cfg); err != nil {
 		return nil, fmt.Errorf("parsing embedded defaults: %w", err)
 	}
-
 	// 2. Overlay user config file (if present).
 	cfgPath := configFilePath()
 	data, err := os.ReadFile(cfgPath)
 	if err == nil {
 		// Warn if config file is world-readable (Unix only).
 		warnIfWorldReadable(cfgPath)
-
 		if err := toml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parsing user config %s: %w", cfgPath, err)
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("reading config file %s: %w", cfgPath, err)
 	}
-
 	// 3. Expand tildes in all path fields.
 	expandPaths(cfg)
-
 	// 4. Validate.
 	if err := Validate(cfg); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
-
 	// 5. Resolve "auto" icon mode to "nerd" or "ascii".
 	cfg.FileTree.IconMode = ResolveIconMode(cfg.FileTree.IconMode)
-
 	return cfg, nil
 }
 
@@ -378,7 +369,6 @@ func expandPaths(cfg *Config) {
 	cfg.MCP.Security.AuditLogPath = expandTilde(cfg.MCP.Security.AuditLogPath)
 	cfg.Extensions.InstallDir = expandTilde(cfg.Extensions.InstallDir)
 	cfg.Logging.File = expandTilde(cfg.Logging.File)
-
 	for i, p := range cfg.Bookmarks.Paths {
 		cfg.Bookmarks.Paths[i] = expandTilde(p)
 	}

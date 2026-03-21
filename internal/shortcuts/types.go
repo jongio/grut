@@ -31,17 +31,17 @@ type Arg struct {
 
 // StepResult captures the outcome of executing a single step.
 type StepResult struct {
-	Step    Step
-	Output  string
 	Err     error
+	Output  string
+	Step    Step
 	Skipped bool
 }
 
 // ExecutionResult captures the outcome of a full shortcut execution.
 type ExecutionResult struct {
-	Shortcut    Shortcut
-	StepResults []StepResult
 	Err         error
+	StepResults []StepResult
+	Shortcut    Shortcut
 }
 
 // OnFail policy constants.

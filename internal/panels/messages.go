@@ -13,8 +13,8 @@ import (
 // This prevents periodic tick messages (e.g. animation frames) from
 // triggering full-UI re-renders when only one panel needs the update.
 type TargetedPanelMsg struct {
-	Target string  // panel name (e.g. "gitinfo")
 	Inner  tea.Msg // the actual message to deliver
+	Target string  // panel name (e.g. "gitinfo")
 }
 
 // FileSelectedMsg is sent when the user selects (opens) a file.
@@ -128,8 +128,8 @@ type RedoMsg struct{}
 // UndoResultMsg is sent after an undo or redo operation completes.
 // It carries a human-readable description or an error for toast display.
 type UndoResultMsg struct {
-	Description string
 	Err         error
+	Description string
 }
 
 // GitStatusChangedMsg is emitted by the gitstatus panel after a stage/unstage
@@ -200,22 +200,21 @@ type ToggleBlameMsg struct {
 // BlameLoadedMsg delivers blame annotation data to the preview panel.
 // Produced by the root model after running git blame asynchronously.
 type BlameLoadedMsg struct {
-	Lines []git.BlameLine
 	Err   error
+	Lines []git.BlameLine
 }
 
 // BisectStatusMsg reports the current bisect session status.
 // Emitted after bisect operations so the status bar can display progress.
 type BisectStatusMsg struct {
-	Active         bool
 	Current        string
 	StepsRemaining int
+	Active         bool
 }
 
 // ---------------------------------------------------------------------------
 // Git operation messages (app-level commit/push/pull/fetch)
 // ---------------------------------------------------------------------------
-
 // CommitRequestMsg is sent to trigger the commit dialog from any panel.
 type CommitRequestMsg struct{}
 
@@ -247,8 +246,8 @@ type AsyncOpStartMsg struct {
 // AsyncOpDoneMsg is emitted when an async git operation completes. The root
 // model clears the loading indicator and shows a toast with the result.
 type AsyncOpDoneMsg struct {
-	Description string
 	Err         error
+	Description string
 }
 
 // AutoFetchTickMsg drives the recurring auto-fetch timer. The root model
@@ -306,7 +305,6 @@ type RebaseAbortMsg struct{}
 // ---------------------------------------------------------------------------
 // Review messages (diff review mode)
 // ---------------------------------------------------------------------------
-
 // StartReviewMsg enters the diff review mode, loading all changed files
 // for hunk-level approve/reject decisions.
 type StartReviewMsg struct{}
@@ -334,7 +332,6 @@ type HunkRejectedMsg struct {
 // ---------------------------------------------------------------------------
 // Context builder messages
 // ---------------------------------------------------------------------------
-
 // AddToContextMsg requests adding a file to the AI context builder.
 type AddToContextMsg struct {
 	Path string
@@ -360,11 +357,10 @@ type ContextUpdatedMsg struct {
 // ---------------------------------------------------------------------------
 // Agent monitor messages
 // ---------------------------------------------------------------------------
-
 // AgentSpawnedMsg is emitted when a new agent process is spawned.
 type AgentSpawnedMsg struct {
-	PID     int
 	Command string
+	PID     int
 }
 
 // AgentExitedMsg is emitted when an agent process exits.
@@ -375,14 +371,13 @@ type AgentExitedMsg struct {
 
 // AgentOutputMsg is emitted when an agent produces a line of output.
 type AgentOutputMsg struct {
-	PID  int
 	Line string
+	PID  int
 }
 
 // ---------------------------------------------------------------------------
 // Terminal messages
 // ---------------------------------------------------------------------------
-
 // TerminalOutputMsg notifies other panels that new terminal output is available.
 // Lines contains the latest snapshot of all output lines.
 type TerminalOutputMsg struct {
@@ -397,7 +392,6 @@ type TerminalExitedMsg struct {
 // ---------------------------------------------------------------------------
 // Tab management messages
 // ---------------------------------------------------------------------------
-
 // NewTabMsg requests creating a new tab with the given layout preset.
 // An empty Preset string defaults to "explorer".
 type NewTabMsg struct {
@@ -427,7 +421,6 @@ type PrevTabMsg struct{}
 // ---------------------------------------------------------------------------
 // Extension messages
 // ---------------------------------------------------------------------------
-
 // ToggleExtensionsMsg requests showing or hiding the extensions overlay panel.
 type ToggleExtensionsMsg struct{}
 
@@ -438,7 +431,6 @@ type ExtensionChangedMsg struct{}
 // ---------------------------------------------------------------------------
 // Split / panel messages
 // ---------------------------------------------------------------------------
-
 // SplitVerticalMsg requests splitting the focused panel vertically,
 // placing a new panel of PanelType to the right.
 type SplitVerticalMsg struct {
@@ -464,7 +456,6 @@ type ResizePanelMsg struct {
 // ---------------------------------------------------------------------------
 // AI and Chat messages
 // ---------------------------------------------------------------------------
-
 // ChatFocusMsg requests the chat footer to take or release focus.
 type ChatFocusMsg struct{}
 
@@ -493,11 +484,11 @@ type AIReviewReadyMsg struct {
 // AIReviewFinding is a single code review annotation from the AI.
 type AIReviewFinding struct {
 	File       string
-	Line       int
 	Severity   string // "error", "warning", "info", "hint"
 	Category   string // "security", "bug", "performance", "style", "test"
 	Message    string
 	Suggestion string
+	Line       int
 }
 
 // AICommitSuggestionMsg carries an AI-generated commit message
@@ -512,7 +503,6 @@ type AICommitSuggestionMsg struct {
 // ---------------------------------------------------------------------------
 // Commit selection messages
 // ---------------------------------------------------------------------------
-
 // CommitSelectedMsg is sent when the user selects a commit in the commits
 // panel. Other panels can react to display commit details, diffs, etc.
 type CommitSelectedMsg struct {
@@ -542,14 +532,13 @@ type RemoteSelectedMsg struct {
 
 // StashSelectedMsg is sent when a stash entry is selected.
 type StashSelectedMsg struct {
-	Index int
 	Hash  string
+	Index int
 }
 
 // ---------------------------------------------------------------------------
 // GitHub Integration Messages
 // ---------------------------------------------------------------------------
-
 // GitHubContextMsg provides the owner/repo context detected from git remote.
 // Emitted on startup after parsing the git remote URL.
 type GitHubContextMsg struct {
@@ -566,10 +555,10 @@ type GitHubUserMsg struct {
 // IssueSelectedMsg is sent when the user selects an issue in the GitHub Issues tab.
 // Preview pane should render the issue body as markdown.
 type IssueSelectedMsg struct {
-	Number int
 	Title  string
 	Body   string
 	State  string
+	Number int
 }
 
 // IssueDeselectedMsg is sent when the user deselects an issue (via Escape).
@@ -578,23 +567,23 @@ type IssueDeselectedMsg struct{}
 
 // IssueCommentAddedMsg is sent after a comment is added to an issue.
 type IssueCommentAddedMsg struct {
-	Number int
 	Body   string
+	Number int
 }
 
 // IssueStateChangedMsg is sent when an issue is opened/closed.
 type IssueStateChangedMsg struct {
-	Number int
 	State  string
+	Number int
 }
 
 // PRSelectedMsg is sent when the user selects a PR in the GitHub PRs tab.
 // Files pane enters PR-files mode, commits pane shows PR commits, preview shows diff.
 type PRSelectedMsg struct {
-	Number     int
 	Title      string
 	State      string
 	HeadBranch string
+	Number     int
 }
 
 // PRDeselectedMsg is sent when the user deselects a PR (via Escape).
@@ -603,15 +592,15 @@ type PRDeselectedMsg struct{}
 
 // PRReviewSubmittedMsg is sent after a review is submitted on a PR.
 type PRReviewSubmittedMsg struct {
-	Number      int
 	ReviewState string
+	Number      int
 }
 
 // PRCommentAddedMsg is sent after a comment is added to a PR.
 type PRCommentAddedMsg struct {
+	Body     string
 	Number   int
 	ThreadID int64
-	Body     string
 }
 
 // PRThreadResolvedMsg is sent when a review thread is resolved/unresolved.
@@ -622,31 +611,31 @@ type PRThreadResolvedMsg struct {
 
 // PRMergedMsg is sent after a PR is merged.
 type PRMergedMsg struct {
-	Number   int
 	Strategy string
+	Number   int
 }
 
 // PRFilesLoadedMsg carries the list of files changed in a PR.
 // Sent to the files pane to enter PR-files mode.
 type PRFilesLoadedMsg struct {
-	Number int
 	Files  []PRFile
+	Number int
 }
 
 // PRFile represents a file changed in a pull request.
 type PRFile struct {
 	Filename  string
 	Status    string // "added", "removed", "modified", "renamed"
+	Patch     string
 	Additions int
 	Deletions int
-	Patch     string
 }
 
 // PRCommitsLoadedMsg carries the list of commits in a PR.
 // Sent to the commits pane to show PR-specific commits.
 type PRCommitsLoadedMsg struct {
-	Number  int
 	Commits []PRCommit
+	Number  int
 }
 
 // PRCommit represents a commit in a pull request.
@@ -660,9 +649,9 @@ type PRCommit struct {
 // ActionRunSelectedMsg is sent when the user selects a workflow run in the Actions tab.
 // Preview pane should show job steps and logs.
 type ActionRunSelectedMsg struct {
-	RunID        int64
 	WorkflowName string
 	Status       string
+	RunID        int64
 }
 
 // ActionRunDeselectedMsg is sent when the user deselects a workflow run (via Escape).
@@ -677,34 +666,34 @@ type WorkflowSelectedMsg struct {
 
 // ActionJobsLoadedMsg carries the list of jobs for a workflow run.
 type ActionJobsLoadedMsg struct {
-	RunID int64
 	Jobs  []ActionJob
+	RunID int64
 }
 
 // ActionStep represents a single step within a workflow job.
 type ActionStep struct {
-	Number     int64
 	Name       string
 	Status     string
 	Conclusion string
+	Number     int64
 }
 
 // ActionJob represents a job in a workflow run.
 type ActionJob struct {
-	ID          int64
 	Name        string
 	Status      string
 	Conclusion  string
 	StartedAt   string
 	CompletedAt string
 	Steps       []ActionStep
+	ID          int64
 }
 
 // ActionLogMsg carries log output for a specific job.
 type ActionLogMsg struct {
+	Log   string
 	RunID int64
 	JobID int64
-	Log   string
 }
 
 // GitHubFilterChangedMsg is sent when the user cycles through quick filters.
@@ -721,7 +710,6 @@ type GitHubFilterChangedMsg struct {
 // the message according to its own context (e.g. "create" means "new branch"
 // in the branches panel, "new file" in the filetree).
 // ---------------------------------------------------------------------------
-
 // ItemCreateMsg requests the focused panel to create a new item.
 type ItemCreateMsg struct{}
 

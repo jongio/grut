@@ -18,22 +18,17 @@ import (
 // maxLineBytes caps the length of a single output line to prevent memory
 // exhaustion from pathological output (e.g., a single multi-GiB line).
 const maxLineBytes = 1024 * 1024 // 1 MiB
-
 // Runner abstracts the terminal backend so that panels can use a mock
 // implementation in tests.
 type Runner interface {
 	// Write sends data to the shell's stdin.
 	Write(data []byte) error
-
 	// Lines returns a snapshot of the current output lines (thread-safe).
 	Lines() []string
-
 	// Close kills the shell process and waits for it to exit.
 	Close() error
-
 	// Done returns a channel that is closed when the shell process exits.
 	Done() <-chan struct{}
-
 	// ExitCode returns the process exit code, or -1 if still running.
 	ExitCode() int
 }
@@ -42,13 +37,13 @@ type Runner interface {
 // It reads output in background goroutines and stores lines in a
 // thread-safe scrollback buffer with a configurable maximum.
 type Terminal struct {
-	cmd      *exec.Cmd
 	stdin    io.WriteCloser
+	cmd      *exec.Cmd
+	done     chan struct{}
 	lines    []string
 	maxLines int
-	mu       sync.RWMutex
-	done     chan struct{}
 	exitCode int
+	mu       sync.RWMutex
 }
 
 // Compile-time interface check.
@@ -77,33 +72,27 @@ func New(shell string, maxLines int) (*Terminal, error) {
 	if maxLines <= 0 {
 		maxLines = 10000
 	}
-
 	cmd := exec.CommandContext(context.Background(), shell)
-
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("creating stdin pipe: %w", err)
 	}
-
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		_ = stdin.Close()
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
 	}
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		_ = stdin.Close()
 		return nil, fmt.Errorf("creating stderr pipe: %w", err)
 	}
-
 	if err := cmd.Start(); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
 		return nil, fmt.Errorf("starting shell %q: %w", shell, err)
 	}
-
 	t := &Terminal{
 		cmd:      cmd,
 		stdin:    stdin,
@@ -111,7 +100,6 @@ func New(shell string, maxLines int) (*Terminal, error) {
 		done:     make(chan struct{}),
 		exitCode: -1,
 	}
-
 	// Wait for both stream readers to finish before calling cmd.Wait.
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -121,7 +109,6 @@ func New(shell string, maxLines int) (*Terminal, error) {
 		wg.Wait()
 		t.waitForProcess()
 	}()
-
 	return t, nil
 }
 
@@ -146,12 +133,10 @@ func (t *Terminal) Lines() []string {
 func (t *Terminal) Close() error {
 	// Close stdin first to signal the shell to exit.
 	_ = t.stdin.Close()
-
 	// Kill the process if it's still running.
 	if t.cmd.Process != nil {
 		_ = t.cmd.Process.Kill()
 	}
-
 	// Wait for the process to finish and goroutines to clean up.
 	<-t.done
 	return nil

@@ -1,0 +1,173 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One benchmark run per branch per platform — avoids artifact collisions.
+concurrency:
+  group: bench-${{ github.ref }}-${{ matrix.os }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write       # commit updated baseline on main pushes
+  pull-requests: write  # post benchstat comparison as PR comment
+
+jobs:
+  bench:
+    strategy:
+      fail-fast: false   # let all platforms finish even if one fails
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: "0"
+      # Packages that have benchmark files.
+      BENCH_PKGS: >-
+        ./internal/git/
+        ./internal/ai/
+        ./internal/config/
+        ./internal/crashlog/
+        ./internal/panels/gitdiff/
+        ./internal/panels/filetree/
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0   # needed for git push on main
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20250305215246-b5d1cf681ef0
+
+      # Compute a stable platform key (e.g. linux-amd64, darwin-arm64).
+      # Used for per-platform baseline paths and artifact names.
+      - name: Set platform key
+        run: |
+          PLATFORM="$(go env GOOS)-$(go env GOARCH)"
+          echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
+          echo "BASELINE=perf/baselines/$PLATFORM/main.txt" >> "$GITHUB_ENV"
+
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem -count=6 -run='^$' -timeout=15m \
+            ${{ env.BENCH_PKGS }} | tee bench-current.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bench-${{ env.PLATFORM }}-${{ github.sha }}
+          path: bench-current.txt
+          retention-days: 90
+
+      # ── PR: compare against the committed per-platform baseline ────────────
+      - name: Compare vs main baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ ! -f "$BASELINE" ]; then
+            echo "No baseline at $BASELINE — skipping comparison."
+            echo "no_baseline=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          benchstat "$BASELINE" bench-current.txt > benchstat-diff.txt
+          cat benchstat-diff.txt
+          bash scripts/bench-regress.sh "$BASELINE" bench-current.txt 15 || {
+            echo "regression=true" >> "$GITHUB_ENV"
+          }
+
+      - name: Build PR comment body
+        if: github.event_name == 'pull_request' && env.no_baseline != 'true'
+        run: |
+          {
+            echo "## Benchmarks: \`${{ env.PLATFORM }}\`"
+            echo ""
+            echo "<details>"
+            echo "<summary>📊 Results vs <code>main</code> — click to expand</summary>"
+            echo ""
+            echo '```'
+            cat benchstat-diff.txt
+            echo '```'
+            echo ""
+            echo "</details>"
+            echo ""
+            if [ "${{ env.regression }}" = "true" ]; then
+              echo "> [!CAUTION]"
+              echo "> Benchmarks regressed by more than 15% on \`${{ env.PLATFORM }}\`."
+            else
+              echo "> [!NOTE]"
+              echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: 15%)."
+            fi
+          } > bench-comment.md
+
+      # Each platform gets its own sticky comment (keyed by platform).
+      - name: Post PR comment
+        if: github.event_name == 'pull_request' && env.no_baseline != 'true'
+        uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2
+        with:
+          header: benchmarks-${{ env.PLATFORM }}
+          path: bench-comment.md
+
+      - name: Fail on significant regression
+        if: github.event_name == 'pull_request' && env.regression == 'true'
+        run: |
+          echo "::error::[${{ env.PLATFORM }}] Benchmarks regressed >15%. See the PR comment."
+          exit 1
+
+      # -- main push: upload per-platform baseline for the update-baselines job --
+      - name: Upload baseline for commit
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: baseline-${{ env.PLATFORM }}
+          path: bench-current.txt
+          retention-days: 7
+
+  # Collect baselines from all matrix legs and commit in a single push,
+  # avoiding the git-push race that occurs when matrix jobs push concurrently.
+  update-baselines:
+    if: github.ref == 'refs/heads/main'
+    needs: [bench]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: baseline-*
+          merge-multiple: false
+
+      - name: Commit updated baselines
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for dir in baseline-*; do
+            PLATFORM="${dir#baseline-}"
+            mkdir -p "perf/baselines/$PLATFORM"
+            cp "$dir/bench-current.txt" "perf/baselines/$PLATFORM/main.txt"
+          done
+          git add perf/baselines/
+          git diff --cached --quiet || \
+            git commit -m "perf: update baselines [skip ci]"
+          # Retry push up to 3 times with rebase to handle concurrent main updates.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push; then
+              pushed=true
+              break
+            fi
+            echo "Push attempt $attempt failed, retrying..."
+            sleep 5
+          done
+          if [ "$pushed" = false ]; then
+            echo "ERROR: failed to push baselines after 3 attempts"
+            exit 1
+          fi

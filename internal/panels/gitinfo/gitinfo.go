@@ -13,6 +13,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	gh "github.com/google/go-github/v68/github"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -20,8 +22,6 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
-
-	gh "github.com/google/go-github/v68/github"
 )
 
 // gitOps defines the git operations required by the gitinfo panel.
@@ -54,7 +54,6 @@ type gitOps interface {
 // ---------------------------------------------------------------------------
 // Internal types
 // ---------------------------------------------------------------------------
-
 // itemKind distinguishes item types in the flat display list.
 type itemKind int
 
@@ -104,127 +103,127 @@ const (
 
 // listItem represents a single row in a tab's item list.
 type listItem struct {
-	kind      itemKind
-	branch    git.Branch      // branch data (valid when kind == kindLocalBranch/kindRemoteBranch)
-	worktree  git.Worktree    // worktree data (valid when kind == kindWorktree)
-	remote    git.Remote      // remote data (valid when kind == kindRemote)
-	stash     git.StashEntry  // stash data (valid when kind == kindStashEntry)
-	issue     ghIssueItem     // issue data (valid when kind == kindIssue)
-	pr        ghPRItem        // PR data (valid when kind == kindPR)
-	actionRun ghActionItem    // action run data (valid when kind == kindActionRun)
-	workflow  ghWorkflowItem  // workflow definition (valid when kind == kindWorkflow)
-	release   ghReleaseItem   // release data (valid when kind == kindRelease)
 	tag       git.Tag         // tag data (valid when kind == kindTag/kindRemoteTag)
 	reflog    git.ReflogEntry // reflog data (valid when kind == kindReflogEntry)
+	issue     ghIssueItem     // issue data (valid when kind == kindIssue)
+	release   ghReleaseItem   // release data (valid when kind == kindRelease)
+	actionRun ghActionItem    // action run data (valid when kind == kindActionRun)
+	pr        ghPRItem        // PR data (valid when kind == kindPR)
+	stash     git.StashEntry  // stash data (valid when kind == kindStashEntry)
+	branch    git.Branch      // branch data (valid when kind == kindLocalBranch/kindRemoteBranch)
+	workflow  ghWorkflowItem  // workflow definition (valid when kind == kindWorkflow)
+	remote    git.Remote      // remote data (valid when kind == kindRemote)
 	text      string          // display text for sub-items (kind == kindRemoteSub)
 	hash      string          // hash for clipboard copy (extracted for click targeting)
+	worktree  git.Worktree    // worktree data (valid when kind == kindWorktree)
+	kind      itemKind
 }
 
 // ghIssueItem holds display data for a GitHub issue.
 type ghIssueItem struct {
-	Number   int
 	Title    string
 	Body     string
 	State    string
-	Labels   []string
 	Author   string // issue creator login
 	Assignee string // first assignee login
 	HTMLURL  string // GitHub web URL
+	Labels   []string
+	Number   int
 }
 
 // ghPRItem holds display data for a GitHub pull request.
 type ghPRItem struct {
-	Number     int
 	Title      string
 	State      string // "open", "closed", "merged", "draft"
 	HeadBranch string
 	Author     string
 	HTMLURL    string // GitHub web URL
+	Number     int
 }
 
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
-	RunID        int64
 	WorkflowName string
-	RunNumber    int
 	Status       string
 	Conclusion   string
 	Branch       string
 	CreatedAt    string
 	HTMLURL      string // GitHub web URL
+	RunID        int64
+	RunNumber    int
 }
 
 // ghWorkflowItem holds display data for a GitHub Actions workflow definition.
 type ghWorkflowItem struct {
-	ID      int64
 	Name    string
 	Path    string // e.g. ".github/workflows/ci.yml"
 	State   string // "active", "disabled_manually", etc.
 	HTMLURL string // GitHub web URL
+	ID      int64
 }
 
 // ghReleaseItem holds display data for a GitHub release.
 type ghReleaseItem struct {
-	ID          int64
 	TagName     string
 	Name        string
 	Author      string
 	CreatedAt   string
+	Body        string
+	HTMLURL     string // GitHub web URL
+	ID          int64
+	AssetsCount int
 	Draft       bool
 	Prerelease  bool
-	Body        string
-	AssetsCount int
-	HTMLURL     string // GitHub web URL
 }
 
 // prDetailsLoadedMsg carries asynchronously-fetched PR files and commits.
 type prDetailsLoadedMsg struct {
-	number  int
+	err     error
 	files   []panels.PRFile
 	commits []panels.PRCommit
-	err     error
+	number  int
 }
 
 // actionJobsLoadedMsg carries asynchronously-fetched jobs for a workflow run.
 type actionJobsLoadedMsg struct {
-	runID int64
-	jobs  []panels.ActionJob
 	err   error
+	jobs  []panels.ActionJob
+	runID int64
 }
 
 // actionLogLoadedMsg carries log output for a failed job.
 type actionLogLoadedMsg struct {
+	err   error
+	log   string
 	runID int64
 	jobID int64
-	log   string
-	err   error
 }
 
 // actionRerunResultMsg carries the result of a rerun-failed-jobs operation.
 type actionRerunResultMsg struct {
-	runID int64
 	err   error
+	runID int64
 }
 
 // actionCancelResultMsg carries the result of a cancel-workflow-run operation.
 type actionCancelResultMsg struct {
-	runID int64
 	err   error
+	runID int64
 }
 
 // workflowDispatchResultMsg carries the result of a workflow dispatch operation.
 type workflowDispatchResultMsg struct {
-	workflowName string
 	err          error
+	workflowName string
 }
 
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
 // input definitions from the workflow YAML file.
 type workflowInputsFetchedMsg struct {
-	workflowID   int64
 	workflowName string
 	ref          string
 	inputs       []ghclient.WorkflowInput
+	workflowID   int64
 }
 
 // githubPollTickMsg triggers periodic GitHub data refresh.
@@ -319,41 +318,39 @@ const (
 // ---------------------------------------------------------------------------
 // Internal messages (async result messages)
 // ---------------------------------------------------------------------------
-
 // dataLoadedMsg carries the result of an async data load.
 type dataLoadedMsg struct {
+	err       error
 	branches  []git.Branch
 	worktrees []git.Worktree
 	remotes   []git.Remote
 	stashes   []git.StashEntry
 	tags      []git.Tag
 	reflog    []git.ReflogEntry
-	err       error
 }
 
 // opResultMsg carries the result of an async operation.
 type opResultMsg struct {
+	err  error
 	op   string // e.g. "checkout", "branch_created", "worktree_added"
 	name string // name involved
-	err  error
 }
 
 // ghDataLoadedMsg carries the result of an async GitHub data load.
 type ghDataLoadedMsg struct {
+	err         error
+	user        string
 	issues      []ghIssueItem
 	prs         []ghPRItem
 	actions     []ghActionItem
 	workflows   []ghWorkflowItem
 	releases    []ghReleaseItem
-	user        string
 	repoPrivate bool
-	err         error
 }
 
 // ---------------------------------------------------------------------------
 // Default colors (Dracula-inspired, consistent with other panels)
 // ---------------------------------------------------------------------------
-
 var defaultColors = struct {
 	Current    string
 	Local      string
@@ -407,25 +404,21 @@ var defaultColors = struct {
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
-
 // Panel is the gitinfo panel. It implements [panels.Panel].
 type Panel struct {
-	panels.BasePanel
-
-	mode       PanelMode // which tab subset to display
-	git        gitOps
-	cfg        config.GitConfig
-	ghCfg      config.GitHubConfig
 	actionsCfg config.ActionsConfig
-	iconMode   string // "nerd" or "ascii"
-	repoRoot   string
+	git        gitOps
 	ctx        context.Context
-
-	activeTab tabID                // currently active tab
-	tabItems  [tabCount][]listItem // items per tab
-	tabCursor [tabCount]int        // cursor per tab
-	tabOffset [tabCount]int        // viewport offset per tab
-
+	// GitHub integration fields.
+	ghClient    ghclient.Client // may be nil if auth fails
+	ghErr       error           // non-nil if GitHub init failed
+	iconMode    string          // "nerd" or "ascii"
+	repoRoot    string
+	pendingName string // name for pending operation
+	ghOwner     string
+	ghRepo      string
+	ghUser      string               // authenticated user login
+	tabItems    [tabCount][]listItem // items per tab
 	// Cached data for rebuild.
 	lastBranches  []git.Branch
 	lastWorktrees []git.Worktree
@@ -433,32 +426,25 @@ type Panel struct {
 	lastStashes   []git.StashEntry
 	lastTags      []git.Tag
 	lastReflog    []git.ReflogEntry
-
-	remoteCount int // actual number of remotes (distinct from tabItems len which includes sub-rows)
-
-	pending     pendingOp // operation awaiting modal result
-	pendingName string    // name for pending operation
-
-	// GitHub integration fields.
-	ghClient ghclient.Client // may be nil if auth fails
-	ghOwner  string
-	ghRepo   string
-	ghUser   string // authenticated user login
-	ghErr    error  // non-nil if GitHub init failed
-
-	issueFilter IssueFilterKind // current issue quick-filter
-	prFilter    PRFilterKind    // current PR quick-filter
-	allIssues   []ghIssueItem   // unfiltered issue list
-	allPRs      []ghPRItem      // unfiltered PR list
-
+	allIssues     []ghIssueItem // unfiltered issue list
+	allPRs        []ghPRItem    // unfiltered PR list
+	ghCfg         config.GitHubConfig
+	panels.BasePanel
+	cfg               config.GitConfig
+	tabCursor         [tabCount]int   // cursor per tab
+	tabOffset         [tabCount]int   // viewport offset per tab
+	mode              PanelMode       // which tab subset to display
+	activeTab         tabID           // currently active tab
+	remoteCount       int             // actual number of remotes (distinct from tabItems len which includes sub-rows)
+	pending           pendingOp       // operation awaiting modal result
+	issueFilter       IssueFilterKind // current issue quick-filter
+	prFilter          PRFilterKind    // current PR quick-filter
+	actionsWatchFrame int             // current animation frame index into watchFrames
+	lastWidth         int             // last rendered width, used for click zone calculation
 	// Repo visibility — true when the GitHub repo is private.
 	repoPrivate bool
-
 	// CI watch animation state — animated indicator when in-progress runs exist.
-	actionsWatching   bool // true when in-progress/queued runs exist AND polling is active
-	actionsWatchFrame int  // current animation frame index into watchFrames
-
-	lastWidth int // last rendered width, used for click zone calculation
+	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
 }
 
 // Compile-time interface check.
@@ -570,14 +556,11 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
-
 	// Resolve GitHub owner/repo from config or git remote.
 	p.ghOwner, p.ghRepo = p.ghCfg.ResolveGitHubRepo(ctx, p.repoRoot)
-
 	// Only create GitHub client when we have a valid owner/repo.
 	if p.ghOwner != "" && p.ghRepo != "" {
 		client, err := ghclient.NewClient(ctx)
@@ -587,7 +570,6 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 			p.ghClient = client
 		}
 	}
-
 	// Load git data + GitHub data in parallel.
 	cmds := []tea.Cmd{p.loadData()}
 	if p.ghClient != nil {
@@ -606,7 +588,6 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 		p.git = client
 	}
 	p.repoRoot = msg.Path
-
 	// Clear all cached git data.
 	p.lastBranches = nil
 	p.lastWorktrees = nil
@@ -619,7 +600,6 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 		p.tabCursor[i] = 0
 		p.tabOffset[i] = 0
 	}
-
 	// Reset GitHub client — the new directory may be a different repo.
 	p.ghClient = nil
 	p.ghOwner = ""
@@ -631,7 +611,6 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	p.actionsWatching = false
 	p.actionsWatchFrame = 0
 	p.repoPrivate = false
-
 	// Re-resolve GitHub owner/repo for the new directory.
 	ctx := p.ctx
 	if ctx == nil {
@@ -646,11 +625,9 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 			p.ghClient = ghc
 		}
 	}
-
 	if p.git == nil {
 		return p, nil
 	}
-
 	cmds := []tea.Cmd{p.loadData()}
 	if p.ghClient != nil {
 		cmds = append(cmds, p.loadGitHubData(), p.githubPollTickCmd())
@@ -733,80 +710,56 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dataLoadedMsg:
 		return p.handleDataLoaded(msg)
-
 	case ghDataLoadedMsg:
 		return p.handleGHDataLoaded(msg)
-
 	case githubPollTickMsg:
 		return p, tea.Batch(p.loadGitHubData(), p.githubPollTickCmd())
-
 	case actionsWatchTickMsg:
 		if !p.actionsWatching {
 			return p, nil // stop ticking — no in-progress runs
 		}
 		p.actionsWatchFrame = (p.actionsWatchFrame + 1) % len(watchFrames)
 		return p, p.actionsWatchTickCmd()
-
 	case opResultMsg:
 		return p.handleOpResult(msg)
-
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case panels.BranchChangedMsg, panels.RefreshBranchesMsg:
 		return p, p.loadData()
-
 	case panels.WorktreeChangedMsg:
 		return p, p.loadData()
-
 	case panels.RemoteChangedMsg:
 		return p, p.loadData()
-
 	case panels.StashChangedMsg:
 		return p, p.loadData()
-
 	case panels.TagChangedMsg:
 		return p, p.loadData()
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
-
 	case prDetailsLoadedMsg:
 		return p.handlePRDetailsLoaded(msg)
-
 	case actionJobsLoadedMsg:
 		return p.handleActionJobsLoaded(msg)
-
 	case actionLogLoadedMsg:
 		return p.handleActionLogLoaded(msg)
-
 	case actionRerunResultMsg:
 		return p.handleActionRerunResult(msg)
-
 	case actionCancelResultMsg:
 		return p.handleActionCancelResult(msg)
-
 	case workflowDispatchResultMsg:
 		return p.handleWorkflowDispatchResult(msg)
-
 	case workflowInputsFetchedMsg:
 		return p.handleWorkflowInputsFetched(msg)
-
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !p.Focused {
@@ -834,7 +787,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p.copyHashToClipboard()
 	}
-
 	return p, nil
 }
 
@@ -843,16 +795,13 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	// Tab bar: height depends on mode and GitHub availability.
 	tbh := p.tabBarHeight()
-
 	tabBar := p.renderTabBar(width)
 	contentHeight := height - tbh
 	if contentHeight <= 0 {
 		return tabBar
 	}
-
 	items := p.tabItems[p.activeTab]
 	if len(items) == 0 {
 		label := "No items"
@@ -866,26 +815,21 @@ func (p *Panel) View(width, height int) string {
 			Render(label)
 		return tabBar + "\n" + empty
 	}
-
 	cursor := p.tabCursor[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
-
 	lines := make([]string, 0, contentHeight)
 	end := offset + contentHeight
 	if end > len(items) {
 		end = len(items)
 	}
-
 	for i := offset; i < end; i++ {
 		lines = append(lines, p.renderLine(items[i], width, i == cursor))
 	}
-
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	for len(lines) < contentHeight {
 		lines = append(lines, emptyLine)
 	}
-
 	return tabBar + "\n" + strings.Join(lines, "\n")
 }
 
@@ -943,7 +887,6 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // ---------------------------------------------------------------------------
 // Message handlers
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleDataLoaded(msg dataLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
 		errMsg := msg.err.Error()
@@ -962,11 +905,9 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errText, Level: notify.Error}
 		}
 	}
-
 	op := msg.op
 	name := msg.name
 	cmds := []tea.Cmd{p.loadData()}
-
 	switch op {
 	case "checkout":
 		cmds = append(cmds,
@@ -1078,19 +1019,16 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: successMsg, Level: notify.Success}
 		})
 	}
-
 	return p, tea.Batch(cmds...)
 }
 
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
-
 	switch msg.String() {
 	case "tab":
 		tabs := p.visibleTabs()
@@ -1254,20 +1192,17 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			}
 		}
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick processes a single click in the gitinfo panel.
 // Row 0 is the git tab bar; row 1 is the GitHub tab bar (if available);
 // remaining rows are content items.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
-
 	if msg.ContentRow < tbh {
 		switch p.mode {
 		case ModeGit:
@@ -1283,7 +1218,6 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 		}
 		return p, p.activeTabSelectionCmd()
 	}
-
 	// Content area click — select the item at the clicked row.
 	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
@@ -1300,12 +1234,10 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 // Performs the context action for the item under the cursor.
 func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
-
 	if msg.ContentRow < tbh {
 		// Tab bar double-click — treat as tab switch (already handled by click).
 		return p, nil
 	}
-
 	// Content area double-click — move cursor then execute action.
 	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
@@ -1315,18 +1247,15 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	}
 	p.tabCursor[p.activeTab] = idx
 	p.ensureCursorVisible()
-
 	return p.doAction()
 }
 
 // handleMouseRightClick shows a context menu for the item at the clicked row.
 func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
-
 	if msg.ContentRow < tbh {
 		return p, nil
 	}
-
 	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
 	idx := offset + (msg.ContentRow - tbh)
@@ -1335,13 +1264,11 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	}
 	p.tabCursor[p.activeTab] = idx
 	p.ensureCursorVisible()
-
 	item := items[idx]
 	itemType := p.itemTypeForKind(item.kind)
 	if itemType == "" {
 		return p, nil
 	}
-
 	label := p.rightClickLabel(item)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, itemType, label)
 	if cmd != nil {
@@ -1386,9 +1313,7 @@ func (p *Panel) rightClickLabel(item listItem) string {
 func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) {
 	m := msg.Mouse()
 	tab := p.activeTab
-
 	tbh := p.tabBarHeight()
-
 	switch m.Button {
 	case tea.MouseWheelUp:
 		p.tabOffset[tab] -= panels.ScrollDelta
@@ -1414,26 +1339,24 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 func (p *Panel) handleTabBarClick(col int) {
 	// Tab definitions matching the git tab row in renderTabBar.
 	type tabEntry struct {
-		id          tabID
 		name, short string
 		count       string
+		id          tabID
 	}
 	tabs := []tabEntry{
-		{tabBranches, "Branches", "Br", fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-		{tabWorktrees, "Worktrees", "Wt", fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
-		{tabRemotes, "Remotes", "Rm", fmt.Sprintf("%d", p.remoteCount)},
-		{tabStash, "Stash", "St", fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
-		{tabTags, "Tags", "Tg", fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
-		{tabReflog, "Reflog", "Rl", fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
+		{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+		{id: tabWorktrees, name: "Worktrees", short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
+		{id: tabRemotes, name: "Remotes", short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
+		{id: tabStash, name: "Stash", short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
+		{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+		{id: tabReflog, name: "Reflog", short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
 	}
-
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
 	for i, t := range tabs {
 		plain[i] = struct{ name, short, count string }{t.name, t.short, t.count}
 	}
 	useShort := tabRowUseShort(plain, p.lastWidth)
-
 	pos := 1 // leading space
 	for i, t := range tabs {
 		w := p.ghTabLabelWidth(t.name, t.short, t.count, useShort)
@@ -1451,7 +1374,6 @@ func (p *Panel) handleTabBarClick(col int) {
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-
 func (p *Panel) moveCursorDown() {
 	items := p.tabItems[p.activeTab]
 	if p.tabCursor[p.activeTab] < len(items)-1 {
@@ -1673,7 +1595,6 @@ func (p *Panel) selectedRemote() *git.Remote {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
 func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 	// Guard: don't start a new action while a pending operation is active.
 	// This prevents Enter key-repeat after modal dismissal from triggering
@@ -1681,28 +1602,24 @@ func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 	if p.pending != opNone {
 		return p, nil
 	}
-
 	items := p.tabItems[p.activeTab]
 	cursor := p.tabCursor[p.activeTab]
 	if cursor < 0 || cursor >= len(items) {
 		return p, nil
 	}
 	item := items[cursor]
-
 	// Determine the item type for the action registry.
 	itemType := p.itemTypeForKind(item.kind)
 	if itemType == "" {
 		// No registry entry (e.g., kindRemoteSub) -- skip.
 		return p, nil
 	}
-
 	// Check if user has confirmed this action type.
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
 	}
-
 	// Already confirmed -- execute the configured action.
 	action := actions.ActionID(p.actionsCfg.GetDoubleClickAction(string(itemType)))
 	return p.executeRightClickAction(action)
@@ -1746,10 +1663,8 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch, kindRemoteBranch:
 		return p.requestCheckout()
-
 	case kindWorktree:
 		return p.requestWorktreeSwitch()
-
 	case kindRemote:
 		url := remoteToHTTPS(item.remote.FetchURL)
 		if url == "" {
@@ -1763,14 +1678,12 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 			return notify.ShowToastMsg{Message: "Opened " + item.remote.Name, Level: notify.Info}
 		}
-
 	case kindStashEntry:
 		s := item.stash
 		p.pending = opStashAction
 		p.pendingName = fmt.Sprintf("%d", s.Index)
 		return p, notify.ShowInputWithValue("Stash Action",
 			"apply, pop, or drop", "apply")
-
 	case kindIssue:
 		url := item.issue.HTMLURL
 		if url == "" {
@@ -1782,7 +1695,6 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened issue #%d", item.issue.Number), Level: notify.Info}
 		}
-
 	case kindPR:
 		url := item.pr.HTMLURL
 		if url == "" {
@@ -1794,7 +1706,6 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened PR #%d", item.pr.Number), Level: notify.Info}
 		}
-
 	case kindActionRun:
 		url := item.actionRun.HTMLURL
 		if url == "" {
@@ -1806,10 +1717,8 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened run #%d", item.actionRun.RunNumber), Level: notify.Info}
 		}
-
 	case kindWorkflow:
 		return p.doWorkflowDispatch()
-
 	case kindRelease:
 		url := item.release.HTMLURL
 		if url == "" {
@@ -1821,7 +1730,6 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 			return notify.ShowToastMsg{Message: "Opened release " + item.release.TagName, Level: notify.Info}
 		}
-
 	case kindTag, kindRemoteTag:
 		tg := item.tag
 		p.pending = opTagCheckout
@@ -1829,7 +1737,6 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 		return p, notify.ShowConfirm("Checkout Tag",
 			fmt.Sprintf("Checkout tag %q? This will detach HEAD.", tg.Name))
 	}
-
 	return p, nil
 }
 
@@ -1842,7 +1749,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		return p, nil
 	}
 	item := items[cursor]
-
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -1857,7 +1763,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			}
 			return p.openURLAndToast(url, "branch")
 		}
-
 	case kindRemoteBranch:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionCheckout:
@@ -1865,7 +1770,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyName:
 			return p.copyAndToast(item.branch.Name)
 		}
-
 	case kindWorktree:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionSwitch:
@@ -1881,7 +1785,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyPath:
 			return p.copyAndToast(item.worktree.Path)
 		}
-
 	case kindRemote:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionOpenInBrowser:
@@ -1893,7 +1796,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			}
 			return p.copyAndToast(url)
 		}
-
 	case kindStashEntry:
 		s := item.stash
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -1920,7 +1822,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 				return opResultMsg{op: "stash_dropped", name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
 		}
-
 	case kindIssue:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionOpenInBrowser:
@@ -1933,7 +1834,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyNumber:
 			return p.copyAndToast(fmt.Sprintf("%d", item.issue.Number))
 		}
-
 	case kindPR:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionOpenInBrowser:
@@ -1954,7 +1854,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			p.pendingName = ref
 			return p, notify.ShowConfirm("Checkout PR Branch", fmt.Sprintf("Switch to branch %q?", ref))
 		}
-
 	case kindActionRun:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionOpenInBrowser:
@@ -1967,7 +1866,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyURL:
 			return p.copyAndToast(item.actionRun.HTMLURL)
 		}
-
 	case kindWorkflow:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionDispatch:
@@ -1980,7 +1878,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyURL:
 			return p.copyAndToast(item.workflow.HTMLURL)
 		}
-
 	case kindRelease:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionOpenInBrowser:
@@ -1998,7 +1895,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyName:
 			return p.copyAndToast(item.release.TagName)
 		}
-
 	case kindTag, kindRemoteTag:
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionCheckout:
@@ -2017,7 +1913,6 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p.copyAndToast(item.tag.Hash)
 		}
 	}
-
 	return p, nil
 }
 
@@ -2070,14 +1965,12 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Already on " + b.Name, Level: notify.Info}
 		}
 	}
-
 	ref := b.Name
 	if b.IsRemote {
 		if idx := strings.IndexByte(ref, '/'); idx >= 0 {
 			ref = ref[idx+1:]
 		}
 	}
-
 	p.pending = opBranchCheckout
 	p.pendingName = ref
 	return p, notify.ShowConfirm("Switch Branch", fmt.Sprintf("Switch to branch %q?", ref))
@@ -2094,7 +1987,6 @@ func (p *Panel) doReflogCheckout() (panels.Panel, tea.Cmd) {
 	if len(hash) > 10 {
 		hash = hash[:10]
 	}
-
 	p.pending = opBranchCheckout
 	p.pendingName = item.reflog.Hash
 	return p, notify.ShowConfirm("Checkout Reflog Entry", fmt.Sprintf("Checkout %s (%s)?", hash, item.reflog.Message))
@@ -2106,7 +1998,6 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	path := wt.Path
-
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
 			if err := panels.OpenInTerminal(path); err != nil {
@@ -2116,7 +2007,6 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Opened terminal at " + path, Level: notify.Success}
 		}
 	}
-
 	return p, func() tea.Msg {
 		return opResultMsg{op: "worktree_switch", name: path}
 	}
@@ -2157,7 +2047,6 @@ func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	item := items[cursor]
-
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:
 		b := item.branch
@@ -2169,36 +2058,30 @@ func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
 		p.pending = opBranchDelete
 		p.pendingName = b.Name
 		return p, notify.ShowConfirm("Delete Branch", fmt.Sprintf("Delete branch %q?", b.Name))
-
 	case kindRemoteBranch:
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot delete remote branch locally", Level: notify.Warn}
 		}
-
 	case kindWorktree:
 		wt := item.worktree
 		p.pending = opWorktreeDelete
 		p.pendingName = wt.Path
 		return p, notify.ShowConfirm("Remove Worktree", fmt.Sprintf("Remove worktree at %q?", wt.Path))
-
 	case kindRemote:
 		r := item.remote
 		p.pending = opRemoteDelete
 		p.pendingName = r.Name
 		return p, notify.ShowConfirm("Remove Remote", fmt.Sprintf("Remove remote %q?", r.Name))
-
 	case kindTag:
 		tg := item.tag
 		p.pending = opTagDelete
 		p.pendingName = tg.Name
 		return p, notify.ShowConfirm("Delete Tag", fmt.Sprintf("Delete tag %q?", tg.Name))
-
 	case kindRemoteTag:
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot delete remote-only tag locally", Level: notify.Warn}
 		}
 	}
-
 	return p, nil
 }
 
@@ -2226,9 +2109,7 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	item := items[cursor]
-
 	var url, label string
-
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:
 		raw := remoteToHTTPS(p.guessBranchRemoteURL(item.branch))
@@ -2271,13 +2152,11 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 			label = "tag " + item.tag.Name
 		}
 	}
-
 	if url == "" {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "No URL available", Level: notify.Warn}
 		}
 	}
-
 	return p, func() tea.Msg {
 		if err := panels.OpenInBrowser(url); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
@@ -2290,7 +2169,6 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 	r := p.selectedRemote()
 	g := p.git
 	ctx := p.ctx
-
 	if r != nil {
 		name := r.Name
 		return p, tea.Batch(
@@ -2303,7 +2181,6 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 			},
 		)
 	}
-
 	// Fetch all if not on a remote item.
 	return p, tea.Batch(
 		func() tea.Msg {
@@ -2319,20 +2196,16 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	name := p.pendingName
 	p.pending = opNone
 	p.pendingName = ""
-
 	if !msg.Accept {
 		return p, nil
 	}
-
 	g := p.git
 	ctx := p.ctx
-
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opBranchCreate:
 		newName := strings.TrimSpace(msg.Value)
@@ -2343,13 +2216,11 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.BranchCreate(ctx, newName, "")
 			return opResultMsg{op: "branch_created", name: newName, err: err}
 		}
-
 	case opBranchDelete:
 		return p, func() tea.Msg {
 			err := g.BranchDelete(ctx, name, false)
 			return opResultMsg{op: "branch_deleted", name: name, err: err}
 		}
-
 	case opBranchRename:
 		newName := strings.TrimSpace(msg.Value)
 		if newName == "" || newName == name {
@@ -2359,7 +2230,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.BranchRename(ctx, name, newName)
 			return opResultMsg{op: "branch_renamed", name: newName, err: err}
 		}
-
 	case opWorktreeCreate:
 		branch := strings.TrimSpace(msg.Value)
 		if branch == "" {
@@ -2370,13 +2240,11 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.WorktreeAdd(ctx, path, branch)
 			return opResultMsg{op: "worktree_added", name: branch, err: err}
 		}
-
 	case opWorktreeDelete:
 		return p, func() tea.Msg {
 			err := g.WorktreeRemove(ctx, name, false)
 			return opResultMsg{op: "worktree_removed", name: name, err: err}
 		}
-
 	case opRemoteAdd:
 		remoteName := strings.TrimSpace(msg.Value)
 		if remoteName == "" {
@@ -2386,7 +2254,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		p.pending = opRemoteAddURL
 		p.pendingName = remoteName
 		return p, notify.ShowInput("Remote URL", "https://github.com/user/repo")
-
 	case opRemoteAddURL:
 		url := strings.TrimSpace(msg.Value)
 		if url == "" {
@@ -2397,19 +2264,16 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.RemoteAdd(ctx, remoteName, url)
 			return opResultMsg{op: "remote_added", name: remoteName, err: err}
 		}
-
 	case opRemoteDelete:
 		return p, func() tea.Msg {
 			err := g.RemoteRemove(ctx, name)
 			return opResultMsg{op: "remote_removed", name: name, err: err}
 		}
-
 	case opBranchCheckout:
 		return p, func() tea.Msg {
 			err := g.Checkout(ctx, name)
 			return opResultMsg{op: "checkout", name: name, err: err}
 		}
-
 	case opStashAction:
 		action := strings.TrimSpace(strings.ToLower(msg.Value))
 		idx, err := strconv.Atoi(name)
@@ -2437,16 +2301,13 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 				return notify.ShowToastMsg{Message: "Unknown stash action: " + action, Level: notify.Warn}
 			}
 		}
-
 	case opFirstUseConfirm:
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, name, msg.Value)
 		}
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opRightClickPick:
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
-
 	case opTagCreate:
 		tagName := strings.TrimSpace(msg.Value)
 		if tagName == "" {
@@ -2455,7 +2316,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		p.pending = opTagMessage
 		p.pendingName = tagName
 		return p, notify.ShowInput("Tag Message", "(leave empty for lightweight)")
-
 	case opTagMessage:
 		tagName := name
 		message := strings.TrimSpace(msg.Value)
@@ -2463,26 +2323,22 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			err := g.TagCreate(ctx, tagName, "", message)
 			return opResultMsg{op: "tag_created", name: tagName, err: err}
 		}
-
 	case opTagDelete:
 		return p, func() tea.Msg {
 			err := g.TagDelete(ctx, name)
 			return opResultMsg{op: "tag_deleted", name: name, err: err}
 		}
-
 	case opTagPush:
 		tagName := name
 		return p, func() tea.Msg {
 			err := g.TagPush(ctx, "origin", tagName)
 			return opResultMsg{op: "tag_pushed", name: tagName, err: err}
 		}
-
 	case opTagCheckout:
 		return p, func() tea.Msg {
 			err := g.Checkout(ctx, name)
 			return opResultMsg{op: "tag_checkout", name: name, err: err}
 		}
-
 	case opWorkflowDispatch:
 		// Step 1 complete: got the ref. Fetch workflow inputs before
 		// showing the inputs dialog so we can pre-populate fields.
@@ -2490,7 +2346,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		if ref == "" {
 			ref = p.currentBranch()
 		}
-
 		// Parse workflow ID and name from pendingName ("id:name").
 		var workflowID int64
 		var workflowName string
@@ -2501,7 +2356,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		if workflowID == 0 {
 			return p, nil
 		}
-
 		// Look up the workflow path from the cached items.
 		var workflowPath string
 		for _, item := range p.tabItems[tabWorkflows] {
@@ -2510,7 +2364,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 				break
 			}
 		}
-
 		// Fetch workflow_dispatch inputs asynchronously.
 		owner, repo := p.ghOwner, p.ghRepo
 		ghClient := p.ghClient
@@ -2532,7 +2385,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 				inputs:       wfInputs,
 			}
 		}
-
 	case opWorkflowDispatchInputs:
 		// Step 2 complete: got the inputs. Parse and dispatch.
 		// pendingName format: "id:name:ref"
@@ -2547,7 +2399,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		if workflowID == 0 || ref == "" {
 			return p, nil
 		}
-
 		// Parse inputs from "key=value" lines.
 		var inputs map[string]any
 		inputText := strings.TrimSpace(msg.Value)
@@ -2566,7 +2417,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 				inputs = nil
 			}
 		}
-
 		owner, repo := p.ghOwner, p.ghRepo
 		ghClient := p.ghClient
 		return p, func() tea.Msg {
@@ -2574,14 +2424,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			return workflowDispatchResultMsg{workflowName: workflowName, err: err}
 		}
 	}
-
 	return p, nil
 }
 
 // ---------------------------------------------------------------------------
 // Item list building
 // ---------------------------------------------------------------------------
-
 // buildItems constructs the per-tab item lists and positions cursors.
 func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remotes []git.Remote, stashes []git.StashEntry, tags []git.Tag, reflog []git.ReflogEntry) {
 	// Store data for rebuilds.
@@ -2591,7 +2439,6 @@ func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remo
 	p.lastStashes = stashes
 	p.lastTags = tags
 	p.lastReflog = reflog
-
 	p.doBuildItems()
 }
 
@@ -2603,7 +2450,6 @@ func (p *Panel) doBuildItems() {
 	stashes := p.lastStashes
 	tags := p.lastTags
 	reflog := p.lastReflog
-
 	var local, remote []git.Branch
 	for _, b := range branches {
 		if b.IsRemote {
@@ -2612,7 +2458,6 @@ func (p *Panel) doBuildItems() {
 			local = append(local, b)
 		}
 	}
-
 	// Branches tab
 	p.tabItems[tabBranches] = nil
 	for _, b := range local {
@@ -2623,7 +2468,6 @@ func (p *Panel) doBuildItems() {
 		hash := b.Hash
 		p.tabItems[tabBranches] = append(p.tabItems[tabBranches], listItem{kind: kindRemoteBranch, branch: b, hash: hash})
 	}
-
 	// Worktrees tab
 	p.tabItems[tabWorktrees] = nil
 	for _, wt := range worktrees {
@@ -2633,7 +2477,6 @@ func (p *Panel) doBuildItems() {
 		}
 		p.tabItems[tabWorktrees] = append(p.tabItems[tabWorktrees], listItem{kind: kindWorktree, worktree: wt, hash: hash})
 	}
-
 	// Remotes tab
 	p.tabItems[tabRemotes] = nil
 	p.remoteCount = len(remotes)
@@ -2650,7 +2493,6 @@ func (p *Panel) doBuildItems() {
 			})
 		}
 	}
-
 	// Stash tab
 	p.tabItems[tabStash] = nil
 	for _, s := range stashes {
@@ -2659,7 +2501,6 @@ func (p *Panel) doBuildItems() {
 			stash: s,
 		})
 	}
-
 	// Tags tab
 	p.tabItems[tabTags] = nil
 	for _, tg := range tags {
@@ -2669,7 +2510,6 @@ func (p *Panel) doBuildItems() {
 			hash: tg.Hash,
 		})
 	}
-
 	// Reflog tab
 	p.tabItems[tabReflog] = nil
 	for _, r := range reflog {
@@ -2683,7 +2523,6 @@ func (p *Panel) doBuildItems() {
 			hash:   hash,
 		})
 	}
-
 	// Default cursor to first item in branches tab; prefer current branch.
 	p.tabCursor[tabBranches] = 0
 	for i, item := range p.tabItems[tabBranches] {
@@ -2692,7 +2531,6 @@ func (p *Panel) doBuildItems() {
 			break
 		}
 	}
-
 	p.tabCursor[tabWorktrees] = 0
 	p.tabCursor[tabRemotes] = 0
 	p.tabCursor[tabStash] = 0
@@ -2727,7 +2565,6 @@ func (p *Panel) rebuildFromCurrent() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	switch item.kind {
 	case kindLocalBranch, kindRemoteBranch:
@@ -2765,30 +2602,23 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 // abbreviated to fit (e.g. "Branches" → "Br", "Workflows" → "Wf").
 func (p *Panel) renderTabBar(width int) string {
 	p.lastWidth = width
-
 	activeNameStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(defaultColors.Header)).
 		Underline(true)
-
 	activeCountStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(defaultColors.Hash))
-
 	inactiveStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(defaultColors.Dim))
-
 	sepStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(defaultColors.Dim))
-
 	sep := sepStyle.Render(" · ")
-
 	type tabDef struct {
-		id    tabID
 		name  string
 		short string
 		count string
+		id    tabID
 	}
-
 	// Render a row of tabs, abbreviating names when the full row is too wide.
 	renderRow := func(tabs []tabDef, isActiveRow bool) string {
 		// Calculate plain-text width of the row using full names.
@@ -2800,9 +2630,7 @@ func (p *Panel) renderTabBar(width int) string {
 				fullWidth += 3 // " · "
 			}
 		}
-
 		useShort := fullWidth > width
-
 		parts := make([]string, 0, len(tabs))
 		for _, t := range tabs {
 			name := t.name
@@ -2822,16 +2650,14 @@ func (p *Panel) renderTabBar(width int) string {
 		}
 		return lipgloss.NewStyle().MaxWidth(width).Render(line)
 	}
-
 	gitTabs := []tabDef{
-		{tabBranches, "Branches", "Br", fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-		{tabWorktrees, "Worktrees", "Wt", fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
-		{tabRemotes, "Remotes", "Rm", fmt.Sprintf("%d", p.remoteCount)},
-		{tabStash, "Stash", "St", fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
-		{tabTags, "Tags", "Tg", fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
-		{tabReflog, "Reflog", "Rl", fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
+		{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+		{id: tabWorktrees, name: "Worktrees", short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
+		{id: tabRemotes, name: "Remotes", short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
+		{id: tabStash, name: "Stash", short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
+		{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+		{id: tabReflog, name: "Reflog", short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
 	}
-
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()
 	issuesCount := fmt.Sprintf("%d", len(p.tabItems[tabIssues]))
@@ -2842,23 +2668,20 @@ func (p *Panel) renderTabBar(width int) string {
 	if p.prFilter != prFilterAll {
 		prsCount = p.prFilter.String()
 	}
-
 	ghTabs := []tabDef{
-		{tabIssues, "Issues", "Iss", issuesCount},
-		{tabPRs, "PRs", "PRs", prsCount},
-		{tabActions, "Actions", "Act", actionsCount},
-		{tabWorkflows, "Workflows", "Wf", fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
-		{tabReleases, "Releases", "Rel", fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
+		{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
+		{id: tabActions, name: "Actions", short: "Act", count: actionsCount},
+		{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
+		{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
 	}
-
 	// In ModeGitHub, prepend Branches and Tags to the GitHub tab row.
 	if p.mode == ModeGitHub {
 		ghTabs = append([]tabDef{
-			{tabBranches, "Branches", "Br", fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-			{tabTags, "Tags", "Tg", fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+			{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+			{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		}, ghTabs...)
 	}
-
 	switch p.mode {
 	case ModeGit:
 		return renderRow(gitTabs, isGitTab(p.activeTab))
@@ -2902,12 +2725,10 @@ func (p *Panel) actionsStatusIcon() string {
 
 func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	b := item.branch
-
 	prefix := "  "
 	if b.IsCurrent {
 		prefix = "* "
 	}
-
 	// Build right side — hash is always shown, never truncated.
 	var rightParts []string
 	if b.Ahead > 0 {
@@ -2916,7 +2737,6 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	if b.Behind > 0 {
 		rightParts = append(rightParts, fmt.Sprintf("↓%d", b.Behind))
 	}
-
 	rightSide := ""
 	if len(rightParts) > 0 {
 		rightSide = " " + strings.Join(rightParts, " ")
@@ -2924,7 +2744,6 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	if b.Hash != "" {
 		rightSide += " " + b.Hash
 	}
-
 	// Calculate available width for the name — truncate name, never hash.
 	prefixLen := len(prefix)
 	rightLen := lipgloss.Width(rightSide)
@@ -2939,17 +2758,13 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	} else if nameWidth <= 0 {
 		name = ""
 	}
-
 	leftSide := prefix + name
-
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
@@ -2961,13 +2776,11 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	} else {
 		style = style.Foreground(lipgloss.Color(defaultColors.Local))
 	}
-
 	return style.Render(line)
 }
 
 func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 	wt := item.worktree
-
 	// Right side: branch + short hash — always shown.
 	rightSide := ""
 	if wt.Branch != "" {
@@ -2980,7 +2793,6 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 	if short != "" {
 		rightSide += " " + short
 	}
-
 	// Truncate path (left side) to fit, never truncate hash.
 	prefix := "  "
 	rightLen := lipgloss.Width(rightSide)
@@ -2995,54 +2807,44 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 	} else if pathWidth <= 0 {
 		path = ""
 	}
-
 	leftSide := prefix + path
-
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.Worktree))
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	return style.Render(line)
 }
 
 func (p *Panel) renderRemote(item listItem, width int, isCursor bool) string {
 	leftSide := "  " + item.remote.Name
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.RemoteC)).Bold(true)
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	return style.Render(leftSide)
 }
 
 func (p *Panel) renderRemoteSub(item listItem, width int, isCursor bool) string {
 	leftSide := "    " + item.text
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.URL))
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	return style.Render(leftSide)
 }
 
 func (p *Panel) renderStashEntry(item listItem, width int, isCursor bool) string {
 	s := item.stash
 	label := fmt.Sprintf("  stash@{%d}: %s", s.Index, s.Message)
-
 	// Truncate label to fit width.
 	if len(label) > width {
 		if width > 4 {
@@ -3053,13 +2855,11 @@ func (p *Panel) renderStashEntry(item listItem, width int, isCursor bool) string
 			label = ""
 		}
 	}
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.Worktree))
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	return style.Render(label)
 }
 
@@ -3071,7 +2871,6 @@ func (p *Panel) renderReflogEntry(item listItem, width int, isCursor bool) strin
 	}
 	age := reflogRelativeDate(r.Date)
 	label := fmt.Sprintf("  %s %s %s (%s)", hash, r.Action, r.Message, age)
-
 	if len(label) > width {
 		if width > 4 {
 			label = label[:width-3] + "..."
@@ -3081,13 +2880,11 @@ func (p *Panel) renderReflogEntry(item listItem, width int, isCursor bool) strin
 			label = ""
 		}
 	}
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.Dim))
 	if isCursor {
 		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
 	}
-
 	return style.Render(label)
 }
 
@@ -3127,7 +2924,6 @@ func reflogRelativeDate(t time.Time) string {
 // ---------------------------------------------------------------------------
 // GitHub tab bar click handling
 // ---------------------------------------------------------------------------
-
 // handleGitHubTabBarClick switches the active tab based on column position
 // within the GitHub tab row. In ModeGitHub the layout includes Branches and
 // Tags: " Branches N · Tags N · Issues N · PRs N · Actions X · Workflows N · Releases N".
@@ -3135,20 +2931,18 @@ func reflogRelativeDate(t time.Time) string {
 func (p *Panel) handleGitHubTabBarClick(col int) {
 	// Build tab definitions matching the render order.
 	type tabEntry struct {
-		id          tabID
 		name, short string
 		count       string
+		id          tabID
 	}
 	var tabs []tabEntry
-
 	// In ModeGitHub, Branches and Tags are prepended to the tab row.
 	if p.mode == ModeGitHub {
 		tabs = append(tabs,
-			tabEntry{tabBranches, "Branches", "Br", fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-			tabEntry{tabTags, "Tags", "Tg", fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+			tabEntry{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+			tabEntry{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		)
 	}
-
 	issuesCount := fmt.Sprintf("%d", len(p.tabItems[tabIssues]))
 	if p.issueFilter != issueFilterAll {
 		issuesCount = p.issueFilter.String()
@@ -3157,22 +2951,19 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 	if p.prFilter != prFilterAll {
 		prsCount = p.prFilter.String()
 	}
-
 	tabs = append(tabs,
-		tabEntry{tabIssues, "Issues", "Iss", issuesCount},
-		tabEntry{tabPRs, "PRs", "PRs", prsCount},
-		tabEntry{tabActions, "Actions", "Act", p.actionsStatusIcon()},
-		tabEntry{tabWorkflows, "Workflows", "Wf", fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
-		tabEntry{tabReleases, "Releases", "Rel", fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		tabEntry{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
+		tabEntry{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
+		tabEntry{id: tabActions, name: "Actions", short: "Act", count: p.actionsStatusIcon()},
+		tabEntry{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
+		tabEntry{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
 	)
-
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
 	for i, t := range tabs {
 		plain[i] = struct{ name, short, count string }{t.name, t.short, t.count}
 	}
 	useShort := tabRowUseShort(plain, p.lastWidth)
-
 	pos := 1 // leading space
 	for i, t := range tabs {
 		w := p.ghTabLabelWidth(t.name, t.short, t.count, useShort)
@@ -3212,7 +3003,6 @@ func tabRowUseShort(tabs []struct{ name, short, count string }, width int) bool 
 // ---------------------------------------------------------------------------
 // GitHub data loading
 // ---------------------------------------------------------------------------
-
 // loadGitHubData returns a tea.Cmd that fetches issues, PRs, and Actions
 // from the GitHub API asynchronously.
 func (p *Panel) loadGitHubData() tea.Cmd {
@@ -3221,7 +3011,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 	ctx := p.ctx
 	return func() tea.Msg {
 		var result ghDataLoadedMsg
-
 		// Fetch repo metadata (visibility).
 		repoInfo, err := client.RepoInfo(ctx, owner, repo)
 		if err != nil {
@@ -3229,7 +3018,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		} else if repoInfo != nil {
 			result.repoPrivate = repoInfo.GetPrivate()
 		}
-
 		// Get current user.
 		user, err := client.CurrentUser(ctx)
 		if err != nil {
@@ -3237,7 +3025,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		} else if user != nil && user.Login != nil {
 			result.user = *user.Login
 		}
-
 		// Fetch issues (first page, open).
 		issues, err := client.ListIssues(ctx, owner, repo, &gh.IssueListByRepoOptions{
 			State:       "open",
@@ -3276,7 +3063,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-
 		// Fetch PRs.
 		prs, err := client.ListPRs(ctx, owner, repo, &gh.PullRequestListOptions{
 			State:       "open",
@@ -3307,7 +3093,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-
 		// Fetch action runs.
 		runs, err := client.ListWorkflowRuns(ctx, owner, repo, &gh.ListWorkflowRunsOptions{
 			ListOptions: gh.ListOptions{PerPage: 20},
@@ -3328,7 +3113,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-
 		// Fetch workflow definitions.
 		workflows, err := client.ListWorkflows(ctx, owner, repo, &gh.ListOptions{PerPage: 50})
 		if err != nil {
@@ -3344,7 +3128,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-
 		// Fetch releases.
 		releases, err := client.ListReleases(ctx, owner, repo, &gh.ListOptions{PerPage: 30})
 		if err != nil {
@@ -3377,7 +3160,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-
 		return result
 	}
 }
@@ -3392,7 +3174,6 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 	}
 	p.repoPrivate = msg.repoPrivate
 	p.buildGitHubItems(msg.issues, msg.prs, msg.actions, msg.workflows, msg.releases)
-
 	// Determine if any workflow run is still in progress or queued.
 	wasWatching := p.actionsWatching
 	p.actionsWatching = false
@@ -3402,7 +3183,6 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 			break
 		}
 	}
-
 	// Start the watch animation tick when transitioning to watching state.
 	if p.actionsWatching && !wasWatching {
 		p.actionsWatchFrame = 0
@@ -3415,10 +3195,8 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRuns []ghActionItem, workflows []ghWorkflowItem, releases []ghReleaseItem) {
 	p.allIssues = issues
 	p.allPRs = prs
-
 	p.applyIssueFilter()
 	p.applyPRFilter()
-
 	p.tabItems[tabActions] = nil
 	for _, action := range actionRuns {
 		p.tabItems[tabActions] = append(p.tabItems[tabActions], listItem{
@@ -3426,7 +3204,6 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 			actionRun: action,
 		})
 	}
-
 	p.tabItems[tabWorkflows] = nil
 	for _, wf := range workflows {
 		p.tabItems[tabWorkflows] = append(p.tabItems[tabWorkflows], listItem{
@@ -3434,7 +3211,6 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 			workflow: wf,
 		})
 	}
-
 	p.tabItems[tabReleases] = nil
 	for _, rel := range releases {
 		p.tabItems[tabReleases] = append(p.tabItems[tabReleases], listItem{
@@ -3442,7 +3218,6 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 			release: rel,
 		})
 	}
-
 	p.tabCursor[tabActions] = 0
 	p.tabOffset[tabActions] = 0
 	p.tabCursor[tabWorkflows] = 0
@@ -3454,7 +3229,6 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 // ---------------------------------------------------------------------------
 // Quick filter cycling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
 	p.issueFilter = (p.issueFilter + 1) % 4
 	p.applyIssueFilter()
@@ -3537,7 +3311,6 @@ func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
 // ---------------------------------------------------------------------------
 // GitHub selection commands
 // ---------------------------------------------------------------------------
-
 // issueSelectedCmd returns a Cmd that emits IssueSelectedMsg for the
 // issue under the cursor.
 func (p *Panel) issueSelectedCmd() tea.Cmd {
@@ -3576,7 +3349,6 @@ func (p *Panel) prSelectedCmd() tea.Cmd {
 	title := pr.Title
 	state := pr.State
 	headBranch := pr.HeadBranch
-
 	cmds := []tea.Cmd{
 		func() tea.Msg {
 			return panels.PRSelectedMsg{
@@ -3587,12 +3359,10 @@ func (p *Panel) prSelectedCmd() tea.Cmd {
 			}
 		},
 	}
-
 	// Only load PR details if we have a GitHub client.
 	if p.ghClient != nil {
 		cmds = append(cmds, p.loadPRDetails(number))
 	}
-
 	return tea.Batch(cmds...)
 }
 
@@ -3604,7 +3374,6 @@ func (p *Panel) loadPRDetails(number int) tea.Cmd {
 	return func() tea.Msg {
 		var result prDetailsLoadedMsg
 		result.number = number
-
 		// Fetch PR files.
 		files, err := client.GetPRFiles(ctx, owner, repo, number)
 		if err != nil {
@@ -3620,7 +3389,6 @@ func (p *Panel) loadPRDetails(number int) tea.Cmd {
 				Patch:     f.GetPatch(),
 			})
 		}
-
 		// Fetch PR commits.
 		commits, err := client.GetPRCommits(ctx, owner, repo, number)
 		if err != nil {
@@ -3649,7 +3417,6 @@ func (p *Panel) loadPRDetails(number int) tea.Cmd {
 				Date:    date,
 			})
 		}
-
 		return result
 	}
 }
@@ -3687,7 +3454,6 @@ func (p *Panel) actionRunSelectedCmd() tea.Cmd {
 	runID := run.RunID
 	workflowName := run.WorkflowName
 	status := run.Status
-
 	cmds := []tea.Cmd{
 		func() tea.Msg {
 			return panels.ActionRunSelectedMsg{
@@ -3697,12 +3463,10 @@ func (p *Panel) actionRunSelectedCmd() tea.Cmd {
 			}
 		},
 	}
-
 	// Only load job details if we have a GitHub client.
 	if p.ghClient != nil {
 		cmds = append(cmds, p.loadActionJobs(runID))
 	}
-
 	return tea.Batch(cmds...)
 }
 
@@ -3736,7 +3500,6 @@ func (p *Panel) loadActionJobs(runID int64) tea.Cmd {
 	return func() tea.Msg {
 		var result actionJobsLoadedMsg
 		result.runID = runID
-
 		ghJobs, err := client.ListWorkflowJobs(ctx, owner, repo, runID)
 		if err != nil {
 			result.err = fmt.Errorf("workflow jobs: %w", err)
@@ -3765,7 +3528,6 @@ func (p *Panel) loadActionJobs(runID int64) tea.Cmd {
 			}
 			result.jobs = append(result.jobs, job)
 		}
-
 		return result
 	}
 }
@@ -3781,13 +3543,11 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 	}
 	runID := msg.runID
 	jobs := msg.jobs
-
 	cmds := []tea.Cmd{
 		func() tea.Msg {
 			return panels.ActionJobsLoadedMsg{RunID: runID, Jobs: jobs}
 		},
 	}
-
 	// Auto-fetch logs for the first failed job.
 	if p.ghClient != nil {
 		for _, j := range jobs {
@@ -3797,7 +3557,6 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 			}
 		}
 	}
-
 	return p, tea.Batch(cmds...)
 }
 
@@ -3950,7 +3709,6 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 	// Wire up pending state so the next modal result hits opWorkflowDispatchInputs.
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = fmt.Sprintf("%d:%s:%s", msg.workflowID, msg.workflowName, msg.ref)
-
 	// Build pre-populated value with actual field names and defaults.
 	var prePopulated string
 	if len(msg.inputs) > 0 {
@@ -3960,33 +3718,27 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 		}
 		prePopulated = strings.Join(lines, "\n")
 	}
-
 	title := fmt.Sprintf("Inputs for %s", msg.workflowName)
 	placeholder := "key=value per line (empty to skip)"
 	if len(msg.inputs) > 0 {
 		placeholder = "edit values below (empty to skip)"
 	}
-
 	return p, notify.ShowInputWithValue(title, placeholder, prePopulated)
 }
 
 // ---------------------------------------------------------------------------
 // GitHub item rendering
 // ---------------------------------------------------------------------------
-
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
 func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	iss := item.issue
-
 	prefix := "  "
 	number := fmt.Sprintf("#%d ", iss.Number)
-
 	// Right side: first label, if any.
 	rightSide := ""
 	if len(iss.Labels) > 0 {
 		rightSide = " " + iss.Labels[0]
 	}
-
 	// Calculate available width for the title.
 	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
 	rightLen := lipgloss.Width(rightSide)
@@ -4002,7 +3754,6 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	} else if titleWidth <= 0 {
 		title = ""
 	}
-
 	leftSide := prefix + number + title
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
@@ -4010,7 +3761,6 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.Issue))
 	if isCursor {
@@ -4022,13 +3772,10 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 // renderPR renders a GitHub PR line: "  #41 Add GitHub client   draft"
 func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	pr := item.pr
-
 	prefix := "  "
 	number := fmt.Sprintf("#%d ", pr.Number)
-
 	// Right side: state.
 	rightSide := " " + pr.State
-
 	// Calculate available width for the title.
 	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
 	rightLen := lipgloss.Width(rightSide)
@@ -4044,7 +3791,6 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	} else if titleWidth <= 0 {
 		title = ""
 	}
-
 	leftSide := prefix + number + title
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
@@ -4052,7 +3798,6 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
 	line := leftSide + gap + rightSide
-
 	// Color based on state.
 	var fg string
 	switch pr.State {
@@ -4063,7 +3808,6 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	default: // "open", "closed"
 		fg = defaultColors.PR
 	}
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4076,7 +3820,6 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 // "  ✓ CI / Build #1233   main  Jan 2 15:04"
 func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string {
 	run := item.actionRun
-
 	// Status icon.
 	var icon string
 	var fg string
@@ -4096,10 +3839,8 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 			fg = defaultColors.Dim
 		}
 	}
-
 	prefix := "  "
 	left := fmt.Sprintf("%s %s #%d", icon, run.WorkflowName, run.RunNumber)
-
 	// Right side: branch + timestamp.
 	rightSide := ""
 	if run.Branch != "" {
@@ -4108,7 +3849,6 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 	if run.CreatedAt != "" {
 		rightSide += " " + run.CreatedAt
 	}
-
 	// Truncate left text to fit.
 	maxLeft := width - lipgloss.Width(prefix) - lipgloss.Width(rightSide) - 1
 	leftRunes := []rune(left)
@@ -4121,7 +3861,6 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 	} else if maxLeft <= 0 {
 		left = ""
 	}
-
 	leftSide := prefix + left
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
@@ -4129,7 +3868,6 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4142,7 +3880,6 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 // "  ● CI   .github/workflows/ci.yml   active"
 func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	wf := item.workflow
-
 	var icon string
 	var fg string
 	switch wf.State {
@@ -4156,16 +3893,13 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 		icon = "○"
 		fg = defaultColors.Dim
 	}
-
 	prefix := "  "
 	left := fmt.Sprintf("%s %s", icon, wf.Name)
-
 	rightSide := ""
 	if wf.Path != "" {
 		rightSide += " " + wf.Path
 	}
 	rightSide += " " + wf.State
-
 	maxLeft := width - lipgloss.Width(prefix) - lipgloss.Width(rightSide) - 1
 	leftRunes := []rune(left)
 	if maxLeft > 0 && len(leftRunes) > maxLeft {
@@ -4177,7 +3911,6 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	} else if maxLeft <= 0 {
 		left = ""
 	}
-
 	leftSide := prefix + left
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
@@ -4185,7 +3918,6 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4198,7 +3930,6 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 // "  ✓ v1.2.3  Release Title   author  Jan 2"
 func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	rel := item.release
-
 	var icon string
 	var fg string
 	switch {
@@ -4212,13 +3943,11 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 		icon = checkMark
 		fg = defaultColors.Release
 	}
-
 	prefix := "  "
 	left := fmt.Sprintf("%s %s", icon, rel.TagName)
 	if rel.Name != "" && rel.Name != rel.TagName {
 		left += "  " + rel.Name
 	}
-
 	rightSide := ""
 	if rel.Author != "" {
 		rightSide += " " + rel.Author
@@ -4229,7 +3958,6 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	if rel.AssetsCount > 0 {
 		rightSide += fmt.Sprintf(" %d assets", rel.AssetsCount)
 	}
-
 	maxLeft := width - lipgloss.Width(prefix) - lipgloss.Width(rightSide) - 1
 	leftRunes := []rune(left)
 	if maxLeft > 0 && len(leftRunes) > maxLeft {
@@ -4241,7 +3969,6 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	} else if maxLeft <= 0 {
 		left = ""
 	}
-
 	leftSide := prefix + left
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
@@ -4249,7 +3976,6 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
 	line := leftSide + gap + rightSide
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4260,9 +3986,7 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 
 func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	tg := item.tag
-
 	prefix := "  "
-
 	// Build right side — annotated badge + hash.
 	rightSide := ""
 	if tg.IsAnnotated {
@@ -4271,7 +3995,6 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	if tg.Hash != "" {
 		rightSide += " " + tg.Hash
 	}
-
 	// Calculate available width for the name — truncate name, never hash.
 	prefixLen := len(prefix)
 	rightLen := lipgloss.Width(rightSide)
@@ -4286,23 +4009,18 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	} else if nameWidth <= 0 {
 		name = ""
 	}
-
 	leftSide := prefix + name
-
 	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-
 	line := leftSide + gap + rightSide
-
 	// Color based on tag type.
 	fg := defaultColors.Tag
 	if item.kind == kindRemoteTag {
 		fg = defaultColors.RemoteTag
 	}
-
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4314,7 +4032,6 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 // ---------------------------------------------------------------------------
 // Clipboard
 // ---------------------------------------------------------------------------
-
 // copyHashToClipboard copies the hash of the item under cursor to clipboard.
 func (p *Panel) copyHashToClipboard() (panels.Panel, tea.Cmd) {
 	items := p.tabItems[p.activeTab]
@@ -4326,14 +4043,12 @@ func (p *Panel) copyHashToClipboard() (panels.Panel, tea.Cmd) {
 	if hash == "" {
 		return p, nil
 	}
-
 	if err := panels.CopyToClipboard(p.ctx, hash); err != nil {
 		errMsg := err.Error()
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Copy failed: " + errMsg, Level: notify.Error}
 		}
 	}
-
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Copied: " + hash, Level: notify.Success}
 	}
@@ -4382,7 +4097,6 @@ func (p *Panel) doTagDelete() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 // worktreePath computes the worktree directory for a branch following the
 // convention: <parent>/.worktrees/<repo-name>/<branch-slug>
 // currentBranch returns the name of the current (checked-out) branch, or "main" as fallback.

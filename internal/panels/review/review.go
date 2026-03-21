@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -38,8 +39,8 @@ const (
 // ReviewFile tracks review state for a single changed file.
 type ReviewFile struct {
 	Path       string
-	Diff       git.FileDiff
 	HunkStates []HunkState // per-hunk decision state
+	Diff       git.FileDiff
 }
 
 // viewMode tracks which view the panel is currently displaying.
@@ -53,11 +54,10 @@ const (
 // ---------------------------------------------------------------------------
 // Internal message types (async result messages)
 // ---------------------------------------------------------------------------
-
 // filesLoadedMsg carries the result of an async diff-all load.
 type filesLoadedMsg struct {
-	files []git.FileDiff
 	err   error
+	files []git.FileDiff
 }
 
 // stageResultMsg carries the result of a stage/unstage operation.
@@ -77,33 +77,28 @@ const (
 // Panel is the diff review panel. It displays changed files and their diffs,
 // supporting hunk-level approve/reject decisions.
 type Panel struct {
-	panels.BasePanel
-
+	// Right-click context menu
+	actionsCfg config.ActionsConfig
 	// Dependencies
-	git gitOps
-	ctx context.Context
-
-	// Review state
-	files      []ReviewFile // all changed files with review state
-	fileCursor int          // selected file index
-	hunkCursor int          // selected hunk index (in diff mode)
-	mode       viewMode     // file list or diff view
-
-	// Display state
-	scrollY     int    // viewport scroll offset
-	loading     bool   // true during async load
+	git         gitOps
+	ctx         context.Context
 	err         error  // last error from load
-	showSummary bool   // true when summary overlay is visible
 	summary     string // cached summary text
-
+	pendingOp   string
+	pendingName string
+	// Review state
+	files []ReviewFile // all changed files with review state
 	// Pre-rendered content (rebuilt on state/mode/cursor change)
 	lines          []string // rendered lines for current view
 	hunkLineStarts []int    // line indices where hunks begin (diff mode)
-
-	// Right-click context menu
-	actionsCfg  config.ActionsConfig
-	pendingOp   string
-	pendingName string
+	panels.BasePanel
+	fileCursor int      // selected file index
+	hunkCursor int      // selected hunk index (in diff mode)
+	mode       viewMode // file list or diff view
+	// Display state
+	scrollY     int  // viewport scroll offset
+	loading     bool // true during async load
+	showSummary bool // true when summary overlay is visible
 }
 
 // New creates a new review panel with the given git client.
@@ -150,7 +145,6 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case panels.StartReviewMsg:
 		return p, p.loadFiles()
-
 	case filesLoadedMsg:
 		p.loading = false
 		if msg.err != nil {
@@ -160,32 +154,24 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.buildReviewFiles(msg.files)
 		p.rebuildLines()
 		return p, nil
-
 	case stageResultMsg:
 		// Stage/unstage completed — could surface errors via toast.
 		return p, nil
-
 	case tea.KeyPressMsg:
 		if !p.Focused {
 			return p, nil
 		}
 		return p.handleKey(msg)
-
 	case panels.PanelMouseClickMsg:
 		return p.handleMouseClick(msg)
-
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
-
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
-
 	case notify.ModalResultMsg:
 		return p.handleModalResult(msg)
-
 	case tea.MouseWheelMsg:
 		return p.handleMouseWheel(msg)
-
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
 	}
@@ -198,7 +184,6 @@ func (p *Panel) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-
 	if p.loading {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -206,7 +191,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#888888")).
 			Render("Loading changes...")
 	}
-
 	if p.err != nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -214,7 +198,6 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#FF5555")).
 			Render(fmt.Sprintf("Error: %s", p.err))
 	}
-
 	if len(p.files) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -222,11 +205,9 @@ func (p *Panel) View(width, height int) string {
 			Foreground(lipgloss.Color("#888888")).
 			Render("No changes to review")
 	}
-
 	if p.showSummary {
 		return p.renderSummaryView(width, height)
 	}
-
 	return p.renderViewport(width, height)
 }
 
@@ -266,7 +247,6 @@ func (p *Panel) SetFiles(files []ReviewFile) {
 // ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
-
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if p.showSummary {
 		switch msg.String() {
@@ -276,7 +256,6 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	}
-
 	switch p.mode {
 	case modeFileList:
 		return p.handleFileListKey(msg)
@@ -337,7 +316,6 @@ func (p *Panel) handleDiffKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	}
 	f := &p.files[p.fileCursor]
 	numHunks := len(f.Diff.Hunks)
-
 	switch msg.String() {
 	case "j", "down", "]": //nolint:goconst // key name, not a magic string
 		if p.hunkCursor < numHunks-1 {
@@ -408,13 +386,11 @@ func (p *Panel) handleDiffKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Mouse handling
 // ---------------------------------------------------------------------------
-
 // handleMouseClick selects the file or hunk at the clicked row.
 func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
 	if p.showSummary || len(p.files) == 0 {
 		return p, nil
 	}
-
 	switch p.mode {
 	case modeFileList:
 		// File list lines: [0]=header, [1]=blank, [2+]=files
@@ -441,7 +417,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	if p.showSummary || len(p.files) == 0 {
 		return p, nil
 	}
-
 	if p.mode == modeFileList {
 		lineIdx := p.scrollY + msg.ContentRow
 		fileIdx := lineIdx - 2
@@ -449,7 +424,6 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 			return p, nil
 		}
 		p.fileCursor = fileIdx
-
 		itemType := actions.ItemReviewFile
 		if !p.actionsCfg.IsConfirmed(string(itemType)) {
 			p.pendingOp = opFirstUseConfirm
@@ -492,7 +466,6 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	if p.showSummary || len(p.files) == 0 {
 		return p, nil
 	}
-
 	if p.mode == modeFileList {
 		lineIdx := p.scrollY + msg.ContentRow
 		fileIdx := lineIdx - 2
@@ -501,9 +474,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 		}
 		p.fileCursor = fileIdx
 		p.rebuildLines()
-
 		label := p.files[fileIdx].Path
-
 		cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemReviewFile, label)
 		if cmd != nil {
 			p.pendingOp = opRightClickPick
@@ -522,7 +493,6 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	name := p.pendingName
 	p.pendingOp = ""
 	p.pendingName = ""
-
 	if !msg.Accept {
 		return p, nil
 	}
@@ -598,7 +568,6 @@ func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Async loading
 // ---------------------------------------------------------------------------
-
 func (p *Panel) loadFiles() tea.Cmd {
 	p.loading = true
 	p.files = nil
@@ -609,7 +578,6 @@ func (p *Panel) loadFiles() tea.Cmd {
 	p.mode = modeFileList
 	p.showSummary = false
 	p.lines = nil
-
 	gc := p.git
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -640,7 +608,6 @@ func (p *Panel) buildReviewFiles(diffs []git.FileDiff) {
 // ---------------------------------------------------------------------------
 // Stage / unstage
 // ---------------------------------------------------------------------------
-
 // afterHunkDecision checks if all hunks in a file are uniformly decided
 // and triggers the appropriate git operation.
 func (p *Panel) afterHunkDecision(f *ReviewFile) tea.Cmd {

@@ -55,9 +55,9 @@ func parseKeyMode(s string) (KeyMode, error) {
 type Binding struct {
 	Key         string  // Key combination, e.g. "ctrl+c", "j", "ctrl+b z"
 	Action      string  // Internal action identifier, e.g. "quit", "cursor_down"
-	Mode        KeyMode // When this binding is active
 	Context     string  // Panel name for context-specific bindings, or "" for all
 	Description string  // Human-readable description
+	Mode        KeyMode // When this binding is active
 }
 
 // indexKey returns the composite string used to index a binding by
@@ -68,11 +68,11 @@ func indexKey(mode KeyMode, context, key string) string {
 
 // Keymap holds all key bindings and dispatches key events to action strings.
 type Keymap struct {
-	bindings      []Binding
-	mode          KeyMode
 	index         map[string]string // indexKey → action
 	prefixes      map[string]bool   // known multi-key prefixes (e.g. "ctrl+b")
 	pendingPrefix string            // buffered first key of a multi-key sequence
+	bindings      []Binding
+	mode          KeyMode
 }
 
 // NewKeymap creates a Keymap by loading the named scheme.
@@ -101,7 +101,6 @@ func NewKeymapFromBindings(bindings []Binding) *Keymap {
 func (km *Keymap) buildIndex() {
 	for _, b := range km.bindings {
 		km.index[indexKey(b.Mode, b.Context, b.Key)] = b.Action
-
 		// Extract prefixes for multi-key sequences like "ctrl+b z".
 		parts := strings.Split(b.Key, " ")
 		for i := 1; i < len(parts); i++ {
@@ -125,18 +124,15 @@ func (km *Keymap) Dispatch(key, context string) (action string, handled bool) {
 		fullKey = km.pendingPrefix + " " + key
 		km.pendingPrefix = ""
 	}
-
 	// Check if this key starts a multi-key sequence.
 	if km.prefixes[fullKey] {
 		km.pendingPrefix = fullKey
 		return "", false
 	}
-
 	// Priority 1: Global bindings.
 	if a, ok := km.index[indexKey(ModeGlobal, "", fullKey)]; ok {
 		return a, true
 	}
-
 	// Priority 2: Mode-specific bindings.
 	switch km.mode { //nolint:exhaustive // only relevant cases handled
 	case ModePanel:
@@ -155,7 +151,6 @@ func (km *Keymap) Dispatch(key, context string) (action string, handled bool) {
 			return a, true
 		}
 	}
-
 	return "", false
 }
 

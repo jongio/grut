@@ -10,24 +10,22 @@ import (
 	"sync"
 	"time"
 
-	ignore "github.com/sabhiram/go-gitignore"
-
 	"github.com/jongio/grut/internal/keymap"
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 // ---------------------------------------------------------------------------
 // File-list cache
 // ---------------------------------------------------------------------------
-
 // cacheTTL is the duration a cached file list remains valid.
 const cacheTTL = 5 * time.Second
 
 // fileCache holds a cached set of Items keyed by root directory.
 type fileCache struct {
-	mu       sync.RWMutex
-	items    []Item
-	root     string
 	loadedAt time.Time
+	root     string
+	items    []Item
+	mu       sync.RWMutex
 	valid    bool
 }
 
@@ -36,7 +34,6 @@ type fileCache struct {
 func (c *fileCache) get(root string) []Item {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
 	if !c.valid || c.root != root {
 		return nil
 	}
@@ -53,7 +50,6 @@ func (c *fileCache) get(root string) []Item {
 func (c *fileCache) set(root string, items []Item) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	c.root = root
 	c.items = make([]Item, len(items))
 	copy(c.items, items)
@@ -65,7 +61,6 @@ func (c *fileCache) set(root string, items []Item) {
 func (c *fileCache) invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	c.valid = false
 }
 
@@ -84,29 +79,26 @@ func InvalidateFileCache() {
 type Source interface {
 	// Name returns the source category name (e.g. "files", "commands").
 	Name() string
-
 	// Items returns all searchable items from this source.
 	Items() []Item
 }
 
 // Item represents a single searchable entry in the fuzzy finder.
 type Item struct {
+	Value       any    // Arbitrary data for the result handler
 	Text        string // Searchable text (what fuzzy matches against)
 	Description string // Secondary text shown in results
 	Category    string // Source category for display grouping
-	Value       any    // Arbitrary data for the result handler
 }
 
 // ---------------------------------------------------------------------------
 // .gitignore support
 // ---------------------------------------------------------------------------
-
 // loadGitIgnore compiles a gitignore matcher from all .gitignore files found
 // between root and the filesystem root, plus .git/info/exclude. Returns nil
 // when no .gitignore files exist.
 func loadGitIgnore(root string) *ignore.GitIgnore {
 	var patterns []string
-
 	// Walk upward from root collecting .gitignore files, starting from
 	// the deepest directory so that closer files take precedence (appended
 	// last to the pattern list).
@@ -123,20 +115,17 @@ func loadGitIgnore(root string) *ignore.GitIgnore {
 		}
 		dir = parent
 	}
-
 	// Reverse so the root-most .gitignore comes first and deeper ones
 	// can override (same semantics as git).
 	for i := len(ancestors) - 1; i >= 0; i-- {
 		lines := readIgnoreLines(ancestors[i])
 		patterns = append(patterns, lines...)
 	}
-
 	// Also read .git/info/exclude if it exists.
 	exclude := filepath.Join(root, ".git", "info", "exclude")
 	if _, err := os.Stat(exclude); err == nil {
 		patterns = append(patterns, readIgnoreLines(exclude)...)
 	}
-
 	if len(patterns) == 0 {
 		return nil
 	}
@@ -178,7 +167,6 @@ var nonNavigableDirs = map[string]bool{
 // ---------------------------------------------------------------------------
 // FileSource
 // ---------------------------------------------------------------------------
-
 // FileSource walks a directory tree and provides file paths as searchable
 // items. Hidden files and directories (names starting with ".") are
 // excluded from the results. Results are cached to avoid repeated walks.
@@ -202,22 +190,17 @@ func (fs *FileSource) Items() []Item {
 	if cached := globalFileCache.get(fs.root); cached != nil {
 		return cached
 	}
-
 	gi := loadGitIgnore(fs.root)
-
 	var items []Item
 	_ = filepath.WalkDir(fs.root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // non-matching entries silently skipped
 		}
-
 		name := d.Name()
-
 		// Always skip .git directory.
 		if name == ".git" && d.IsDir() {
 			return filepath.SkipDir
 		}
-
 		// Skip hidden directories and files.
 		if name != "." && strings.HasPrefix(name, ".") {
 			if d.IsDir() {
@@ -225,31 +208,25 @@ func (fs *FileSource) Items() []Item {
 			}
 			return nil
 		}
-
 		// Always skip common non-navigable directories so files inside
 		// them are never included regardless of .gitignore presence.
 		if d.IsDir() && nonNavigableDirs[name] {
 			return filepath.SkipDir
 		}
-
 		// Skip directories — only include files.
 		if d.IsDir() {
 			return nil
 		}
-
 		rel, relErr := filepath.Rel(fs.root, path)
 		if relErr != nil {
 			rel = path
 		}
-
 		// Normalize to forward slashes for consistent display.
 		rel = filepath.ToSlash(rel)
-
 		// Apply .gitignore filtering.
 		if gi != nil && gi.MatchesPath(rel) {
 			return nil
 		}
-
 		items = append(items, Item{
 			Text:     rel,
 			Category: "file",
@@ -257,17 +234,14 @@ func (fs *FileSource) Items() []Item {
 		})
 		return nil
 	})
-
 	// Populate cache.
 	globalFileCache.set(fs.root, items)
-
 	return items
 }
 
 // ---------------------------------------------------------------------------
 // DirectorySource
 // ---------------------------------------------------------------------------
-
 // DefaultDirectorySourceMaxDepth is the default recursion depth used when
 // presenting candidate directories in the change-directory fuzzy finder.
 const DefaultDirectorySourceMaxDepth = 5
@@ -296,7 +270,6 @@ func (ds *DirectorySource) Name() string { return "directories" }
 // ignored directories.
 func (ds *DirectorySource) Items() []Item {
 	var items []Item
-
 	// Add parent directory as first item (like "cd ..").
 	parent := filepath.Dir(ds.root)
 	if parent != ds.root { // not at filesystem root
@@ -307,21 +280,16 @@ func (ds *DirectorySource) Items() []Item {
 			Value:       parent,
 		})
 	}
-
 	gi := loadGitIgnore(ds.root)
-
 	_ = filepath.WalkDir(ds.root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // inaccessible entries silently skipped
 		}
-
 		name := d.Name()
-
 		// Always skip .git directory regardless of .gitignore.
 		if name == ".git" && d.IsDir() {
 			return filepath.SkipDir
 		}
-
 		// Skip hidden directories (except root itself).
 		if name != "." && strings.HasPrefix(name, ".") {
 			if d.IsDir() {
@@ -329,32 +297,26 @@ func (ds *DirectorySource) Items() []Item {
 			}
 			return nil
 		}
-
 		// Only include directories (not files).
 		if !d.IsDir() {
 			return nil
 		}
-
 		// Skip the root itself.
 		if path == ds.root {
 			return nil
 		}
-
 		rel, relErr := filepath.Rel(ds.root, path)
 		if relErr != nil {
 			rel = path
 		}
-
 		// Normalize to forward slashes.
 		rel = filepath.ToSlash(rel)
-
 		// Always skip common non-navigable directories regardless of
 		// .gitignore presence. A parent .gitignore found by walking upward
 		// should not disable this baseline filtering.
 		if nonNavigableDirs[name] {
 			return filepath.SkipDir
 		}
-
 		// Additionally apply .gitignore filtering for other directories.
 		if gi != nil {
 			// Use trailing slash to match directory patterns.
@@ -362,13 +324,11 @@ func (ds *DirectorySource) Items() []Item {
 				return filepath.SkipDir
 			}
 		}
-
 		// Enforce max depth.
 		depth := strings.Count(rel, "/") + 1
 		if depth > ds.maxDepth {
 			return filepath.SkipDir
 		}
-
 		items = append(items, Item{
 			Text:     rel,
 			Category: "directory",
@@ -376,14 +336,12 @@ func (ds *DirectorySource) Items() []Item {
 		})
 		return nil
 	})
-
 	return items
 }
 
 // ---------------------------------------------------------------------------
 // CommandSource
 // ---------------------------------------------------------------------------
-
 // CommandSource provides keymap bindings as searchable items for the
 // command palette. Actions are deduplicated so each action appears once,
 // using the first binding's key and description.
@@ -405,18 +363,15 @@ func (cs *CommandSource) Name() string { return "commands" }
 func (cs *CommandSource) Items() []Item {
 	items := make([]Item, 0, len(cs.bindings))
 	seen := make(map[string]bool)
-
 	for _, b := range cs.bindings {
 		if seen[b.Action] {
 			continue
 		}
 		seen[b.Action] = true
-
 		desc := b.Description
 		if b.Key != "" {
 			desc += " (" + b.Key + ")"
 		}
-
 		items = append(items, Item{
 			Text:        b.Action,
 			Description: desc,
@@ -424,6 +379,5 @@ func (cs *CommandSource) Items() []Item {
 			Value:       b.Action,
 		})
 	}
-
 	return items
 }
