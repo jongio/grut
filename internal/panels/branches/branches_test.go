@@ -573,6 +573,44 @@ func TestDeleteBranch(t *testing.T) {
 	assert.False(t, mock.lastDeleteForce)
 }
 
+func TestDeleteBranch_XKeyTriggersDelete(t *testing.T) {
+	mock := &mockGitOps{branches: sampleBranches()}
+	p := newTestPanel(t, mock, defaultCfg())
+	p.Focus()
+
+	// Move to "feature/auth" (non-current local branch).
+	p.Update(keyMsg('j'))
+
+	// Press "x" directly — should trigger delete confirmation.
+	_, cmd := p.Update(keyMsg('x'))
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Delete Branch", modal.Title)
+	assert.Contains(t, modal.Message, "feature/auth")
+}
+
+func TestDeleteBranch_DKeyTriggersDelete(t *testing.T) {
+	mock := &mockGitOps{branches: sampleBranches()}
+	p := newTestPanel(t, mock, defaultCfg())
+	p.Focus()
+
+	// Move to "feature/auth" (non-current local branch).
+	p.Update(keyMsg('j'))
+
+	// Press "d" directly — should also trigger delete confirmation (legacy key).
+	_, cmd := p.Update(keyMsg('d'))
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Delete Branch", modal.Title)
+	assert.Contains(t, modal.Message, "feature/auth")
+}
+
 func TestDeleteBranch_CurrentBlocked(t *testing.T) {
 	mock := &mockGitOps{branches: sampleBranches()}
 	p := newTestPanel(t, mock, defaultCfg())

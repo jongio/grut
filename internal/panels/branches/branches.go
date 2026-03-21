@@ -261,7 +261,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "enter", Description: "Checkout branch", Action: "checkout"},
 		{Key: "n", Description: "Create new branch", Action: "item_create"},
-		{Key: "d", Description: "Delete branch", Action: "item_delete"},
+		{Key: "x", Description: "Delete branch", Action: "item_delete"},
 		{Key: "e/F2", Description: "Rename branch", Action: "item_edit"},
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy branch name", Action: "item_copy"},
@@ -333,7 +333,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.requestCheckout()
 	case "n":
 		return p.requestCreate()
-	case "d":
+	case "d", "x":
 		return p.requestDelete()
 	case "e", "F2":
 		return p.requestRename()
