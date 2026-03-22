@@ -52,7 +52,7 @@ func TestCopyToClipboard_UnicodeText(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// startDetachedFn — 40% coverage, background process launcher
+// StartDetachedFn — 40% coverage, background process launcher
 // ---------------------------------------------------------------------------
 
 func TestStartDetachedFn_ValidCommand(t *testing.T) {
@@ -66,7 +66,7 @@ func TestStartDetachedFn_ValidCommand(t *testing.T) {
 		cmd = exec.Command("echo", "test")
 	}
 
-	err := startDetachedFn(cmd)
+	err := StartDetachedFn(cmd)
 	assert.NoError(t, err)
 }
 
@@ -74,7 +74,7 @@ func TestStartDetachedFn_InvalidCommand(t *testing.T) {
 	t.Parallel()
 
 	cmd := exec.Command("this_binary_does_not_exist_12345")
-	err := startDetachedFn(cmd)
+	err := StartDetachedFn(cmd)
 	assert.Error(t, err)
 }
 
