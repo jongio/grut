@@ -92,8 +92,8 @@ type FileTree struct {
 	commitHash      string // short hash for display
 	commitLabel     string // e.g. "abc1234 Fix auth bug"
 	prLabel         string
-	branchName      string // selected branch name
-	branchLabel     string // e.g. "branch: feature/auth"
+	branchName      string   // selected branch name
+	branchLabel     string   // e.g. "branch: feature/auth"
 	visible         []*node  // flattened list of currently visible nodes
 	commitFiles     []string // relative paths from diff-tree
 	branchFiles     []string // relative paths from branch diff

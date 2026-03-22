@@ -912,6 +912,28 @@ func ensurePath() error {
 		return nil
 	}
 
+	// Windows: clean stale worktree bin entries from User PATH before
+	// checking or modifying anything. Each 'mage install' from a different
+	// worktree appends its own bin/ dir; over time these accumulate and
+	// cause the wrong binary to resolve via Get-Command.
+	if repoName := detectRepoName(); repoName != "" {
+		userPath, _ := cmdOutput("powershell", "-NoProfile", "-Command",
+			`[Environment]::GetEnvironmentVariable('Path','User')`)
+		userPath = strings.TrimSpace(userPath)
+		if userPath != "" {
+			cleaned, removed := removeStaleWorktreeBins(userPath, repoName, binDir)
+			if len(removed) > 0 {
+				fmt.Println("   Cleaning stale worktree PATH entries:")
+				for _, r := range removed {
+					fmt.Printf("   - %s\n", r)
+				}
+				exec.Command("powershell", "-NoProfile", "-Command",
+					fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`,
+						psSingleQuoteEscape(cleaned))).Run()
+			}
+		}
+	}
+
 	// Windows: ensure bin/ is in persistent PATH
 	machinePath, _ := cmdOutput("powershell", "-NoProfile", "-Command",
 		`[Environment]::GetEnvironmentVariable('Path','Machine')`)
@@ -952,11 +974,70 @@ func psSingleQuoteEscape(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
 }
 
+// detectRepoName returns the repository name by inspecting the current
+// working directory. It handles both main-repo and worktree layouts:
+//   - Worktree: .../.worktrees/<repoName>/<branch>/... → repoName
+//   - Main repo: .../<repoName> → basename of cwd
+func detectRepoName() string {
+	dir := projectDir()
+	sep := string(filepath.Separator)
+	marker := sep + ".worktrees" + sep
+	lower := strings.ToLower(dir)
+	if idx := strings.Index(lower, strings.ToLower(marker)); idx >= 0 {
+		rest := dir[idx+len(marker):]
+		if sepIdx := strings.IndexByte(rest, filepath.Separator); sepIdx > 0 {
+			return strings.ToLower(rest[:sepIdx])
+		}
+		if rest != "" {
+			return strings.ToLower(rest)
+		}
+	}
+	return strings.ToLower(filepath.Base(dir))
+}
+
+// removeStaleWorktreeBins filters a semicolon-separated PATH string,
+// removing entries that belong to other worktrees of the same repo.
+// An entry is considered a stale worktree bin if it contains
+// /.worktrees/<repoName>/ and ends with /bin, but is not currentBinDir.
+// Returns the filtered PATH and the list of removed entries.
+func removeStaleWorktreeBins(pathStr, repoName, currentBinDir string) (string, []string) {
+	sep := string(filepath.Separator)
+	worktreeMarker := strings.ToLower(sep + ".worktrees" + sep + repoName + sep)
+	binSuffix := strings.ToLower(sep + "bin")
+	currentClean := strings.ToLower(filepath.Clean(currentBinDir))
+
+	entries := strings.Split(pathStr, ";")
+	var kept []string
+	var removed []string
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		entryClean := strings.ToLower(filepath.Clean(entry))
+		if strings.Contains(entryClean, worktreeMarker) &&
+			strings.HasSuffix(entryClean, binSuffix) &&
+			entryClean != currentClean {
+			removed = append(removed, entry)
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return strings.Join(kept, ";"), removed
+}
+
 func ensureSessionPath(binDir string) {
 	current := os.Getenv("Path")
-	if !containsPath(current, binDir) {
-		os.Setenv("Path", binDir+";"+current)
+	// Remove stale worktree bin entries from the session PATH so the
+	// freshly-built binary is what resolves for the rest of this process.
+	if repoName := detectRepoName(); repoName != "" {
+		cleaned, _ := removeStaleWorktreeBins(current, repoName, binDir)
+		current = cleaned
 	}
+	if !containsPath(current, binDir) {
+		current = binDir + ";" + current
+	}
+	os.Setenv("Path", current)
 }
 
 func verify() error {
