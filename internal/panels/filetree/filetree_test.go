@@ -3403,3 +3403,147 @@ func TestBranchFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
 	assert.True(t, ft.branchFilesMode, "branchFilesMode should survive GitChangedFilesMsg")
 	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only branch files after GitChangedFilesMsg")
 }
+
+func TestCommitFilesMode_ExitsBranchMode(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Enter branch-files mode first.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go", "docs/guide.md"},
+		branch: "feature/auth",
+	})
+	require.True(t, ft.branchFilesMode)
+	require.Equal(t, "feature/auth", ft.branchName)
+
+	// Now enter commit-files mode — should exit branch-files mode.
+	ft.Update(commitFilesLoadedMsg{
+		files: []string{"main.go"},
+		hash:  "abc1234",
+		label: "abc1234 Fix bug",
+	})
+
+	assert.True(t, ft.commitFilesMode, "should enter commit-files mode")
+	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
+	assert.Empty(t, ft.branchName, "branchName should be cleared")
+	assert.Nil(t, ft.branchChangedPaths, "branchChangedPaths should be cleared")
+	assert.Nil(t, ft.branchChangedDirs, "branchChangedDirs should be cleared")
+}
+
+func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Enter branch-files mode first.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go"},
+		branch: "feature/auth",
+	})
+	require.True(t, ft.branchFilesMode)
+
+	// Now enter PR-files mode — should exit branch-files mode.
+	ft.Update(panels.PRFilesLoadedMsg{
+		Number: 42,
+		Files: []panels.PRFile{
+			{Filename: "main.go", Status: "modified"},
+		},
+	})
+
+	assert.True(t, ft.prFilesMode, "should enter PR-files mode")
+	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
+	assert.Empty(t, ft.branchName, "branchName should be cleared")
+	assert.Nil(t, ft.branchChangedPaths, "branchChangedPaths should be cleared")
+}
+
+// ---------------------------------------------------------------------------
+// Branch-files mode: security tests
+// ---------------------------------------------------------------------------
+
+// TestBranchFilesMode_PathTraversalInOutput verifies that if git diff returns
+// paths containing "../" traversal sequences, those paths resolve outside the
+// tree root and are therefore excluded from the visible tree. The filetree
+// builds its node tree from os.ReadDir rooted at rootPath, so files outside
+// the root can never appear as tree nodes. The branchChangedPaths map would
+// contain the resolved absolute path (e.g. /etc/passwd), but since no tree
+// node matches that path, it is silently filtered out.
+func TestBranchFilesMode_PathTraversalInOutput(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Simulate DiffFileNames returning traversal paths mixed with valid paths.
+	traversalFiles := []string{
+		"../../../etc/passwd",
+		"../../.ssh/id_rsa",
+		"main.go", // legitimate file that exists in the test tree
+	}
+
+	ft.Update(branchFilesLoadedMsg{
+		files:  traversalFiles,
+		branch: "evil/traversal",
+	})
+
+	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
+
+	// Verify that traversal paths are in branchChangedPaths as absolute paths
+	// outside the tree root — they were resolved by filepath.Clean(filepath.Join(...)).
+	for _, trav := range []string{"../../../etc/passwd", "../../.ssh/id_rsa"} {
+		abs := filepath.Clean(filepath.Join(dir, trav))
+		assert.True(t, ft.branchChangedPaths[abs],
+			"traversal path %q should be in branchChangedPaths as %q", trav, abs)
+		// But verify the absolute path is outside the tree root.
+		assert.False(t, strings.HasPrefix(abs, dir+string(filepath.Separator)),
+			"traversal path %q should resolve outside tree root", abs)
+	}
+
+	// The visible tree should only contain main.go (and NOT the traversal paths,
+	// because those resolved paths have no corresponding tree node).
+	var visibleNames []string
+	for _, v := range ft.visible {
+		if !v.isDir {
+			visibleNames = append(visibleNames, v.name)
+		}
+	}
+	assert.Equal(t, []string{"main.go"}, visibleNames,
+		"only legitimate files should appear; traversal paths must be excluded")
+}
+
+// TestBranchFilesMode_LargeFileList verifies that entering branch-files mode
+// with a very large number of files does not panic or hang. This simulates
+// a branch diff with thousands of changed files — there is no explicit bound
+// in the code, but the code must handle it gracefully.
+func TestBranchFilesMode_LargeFileList(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Generate 5000 file paths — none exist on disk, so they will be
+	// filtered out of the visible tree, but the map must be built without panic.
+	largeFileList := make([]string, 5000)
+	for i := range largeFileList {
+		largeFileList[i] = fmt.Sprintf("generated/dir%d/file%d.go", i/100, i)
+	}
+	// Also include one real file so the mode has something to show.
+	largeFileList = append(largeFileList, "main.go")
+
+	ft.Update(branchFilesLoadedMsg{
+		files:  largeFileList,
+		branch: "feature/massive-diff",
+	})
+
+	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
+	// branchChangedPaths should have all 5001 entries.
+	assert.Equal(t, 5001, len(ft.branchChangedPaths),
+		"all file paths should be in branchChangedPaths")
+	// Only main.go is a real file in the tree, so visible should contain just it.
+	var visibleFiles []string
+	for _, v := range ft.visible {
+		if !v.isDir {
+			visibleFiles = append(visibleFiles, v.name)
+		}
+	}
+	assert.Equal(t, []string{"main.go"}, visibleFiles,
+		"only real files should appear in the visible tree")
+}

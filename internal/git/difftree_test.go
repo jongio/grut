@@ -165,3 +165,174 @@ func TestClient_DiffFileNames_InvalidRef(t *testing.T) {
 	_, err = c.DiffFileNames(context.Background(), "main", "")
 	assert.Error(t, err, "empty commitB should fail validation")
 }
+
+// ---------------------------------------------------------------------------
+// DiffFileNames security / injection tests
+// ---------------------------------------------------------------------------
+
+// TestClient_DiffFileNames_InjectionPatterns verifies that DiffFileNames
+// rejects all common injection patterns through its ValidateRef calls.
+// This is an integration-level gate: even though ValidateRef is tested
+// independently in sanitize_test.go, these tests prove the validation is
+// wired up in DiffFileNames and would catch regressions if someone
+// accidentally removes the ValidateRef calls.
+func TestClient_DiffFileNames_InjectionPatterns(t *testing.T) {
+	t.Parallel()
+
+	dir := initTestRepo(t)
+	c, err := NewClient(dir)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		commitA string
+		commitB string
+		errMsg  string
+	}{
+		// Option injection (CWE-88): leading dashes interpreted as git flags.
+		{
+			name:    "commitA option injection --upload-pack",
+			commitA: "--upload-pack=evil",
+			commitB: "main",
+			errMsg:  "must not start with '-'",
+		},
+		{
+			name:    "commitB option injection --config",
+			commitA: "main",
+			commitB: "--config=core.gitProxy=evil",
+			errMsg:  "must not start with '-'",
+		},
+		{
+			name:    "commitA short flag -o",
+			commitA: "-o",
+			commitB: "main",
+			errMsg:  "must not start with '-'",
+		},
+
+		// Shell metacharacter injection: semicolons, pipes, ampersands.
+		{
+			name:    "commitA semicolon injection",
+			commitA: "main;rm -rf /",
+			commitB: "HEAD",
+			errMsg:  "forbidden character",
+		},
+		{
+			name:    "commitB pipe injection",
+			commitA: "HEAD",
+			commitB: "main|cat /etc/passwd",
+			errMsg:  "forbidden character",
+		},
+		{
+			name:    "commitA ampersand injection",
+			commitA: "main&evil",
+			commitB: "HEAD",
+			errMsg:  "forbidden character",
+		},
+
+		// Command substitution: $() and backtick.
+		{
+			name:    "commitA dollar-paren command substitution",
+			commitA: "$(whoami)",
+			commitB: "main",
+			errMsg:  "forbidden character",
+		},
+		{
+			name:    "commitB backtick command substitution",
+			commitA: "main",
+			commitB: "`whoami`",
+			errMsg:  "forbidden character",
+		},
+
+		// Null byte injection (CWE-626): can truncate strings in C backends.
+		{
+			name:    "commitA null byte",
+			commitA: "main\x00--evil",
+			commitB: "HEAD",
+			errMsg:  "null byte",
+		},
+		{
+			name:    "commitB null byte",
+			commitA: "HEAD",
+			commitB: "feature\x00;rm -rf /",
+			errMsg:  "null byte",
+		},
+
+		// Newline injection: could split commands in some contexts.
+		{
+			name:    "commitA newline injection",
+			commitA: "main\nevil",
+			commitB: "HEAD",
+			errMsg:  "forbidden character",
+		},
+
+		// Redirect injection.
+		{
+			name:    "commitB redirect injection",
+			commitA: "HEAD",
+			commitB: "main>/tmp/evil",
+			errMsg:  "forbidden character",
+		},
+
+		// Both refs malicious.
+		{
+			name:    "both refs malicious",
+			commitA: "--evil",
+			commitB: ";rm -rf /",
+			errMsg:  "must not start with '-'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := c.DiffFileNames(ctx, tt.commitA, tt.commitB)
+			require.Error(t, err, "DiffFileNames should reject injection pattern")
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+// TestClient_DiffFileNames_CancelledContext verifies that a cancelled context
+// is handled gracefully (returns an error, does not hang).
+func TestClient_DiffFileNames_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	dir := initTestRepo(t)
+	c, err := NewClient(dir)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	_, err = c.DiffFileNames(ctx, "HEAD", "HEAD")
+	assert.Error(t, err, "cancelled context should cause an error")
+}
+
+// ---------------------------------------------------------------------------
+// parseNameOnlyOutput tests
+// ---------------------------------------------------------------------------
+
+func TestParseNameOnlyOutput(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{name: "empty string", input: "", expected: []string{}},
+		{name: "whitespace only", input: "  \n\n  ", expected: []string{}},
+		{name: "single file", input: "main.go\n", expected: []string{"main.go"}},
+		{name: "multiple files", input: "a.go\nb.go\nc.go\n", expected: []string{"a.go", "b.go", "c.go"}},
+		{name: "with carriage returns", input: "a.go\r\nb.go\r\n", expected: []string{"a.go", "b.go"}},
+		{name: "with blank lines", input: "a.go\n\nb.go\n\n", expected: []string{"a.go", "b.go"}},
+		{name: "paths with dirs", input: "src/main.go\npkg/lib.go\n", expected: []string{"src/main.go", "pkg/lib.go"}},
+		{name: "no trailing newline", input: "a.go", expected: []string{"a.go"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseNameOnlyOutput(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
