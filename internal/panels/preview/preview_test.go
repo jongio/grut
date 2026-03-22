@@ -1639,3 +1639,51 @@ func TestRepoChangedMsg_ClearsPreview(t *testing.T) {
 	assert.False(t, pv.loading, "loading should be false")
 	assert.Nil(t, cmd, "no command should be returned")
 }
+
+// ---------------------------------------------------------------------------
+// ANSI escape-sequence injection regression tests (CWE-150)
+// ---------------------------------------------------------------------------
+
+func TestIssueSelectedMsg_ANSIInjection(t *testing.T) {
+	p := New(defaultCfg())
+	p.SetSize(80, 30)
+	msg := panels.IssueSelectedMsg{
+		Number: 42,
+		Title:  "Bug: \x1b[31mRED\x1b[0m injection",
+		Body:   "body text",
+	}
+	p.Update(msg)
+	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in issue title should be stripped")
+	assert.Contains(t, p.ghTitle, "#42 Bug: RED injection")
+}
+
+func TestPRSelectedMsg_ANSIInjection(t *testing.T) {
+	p := New(defaultCfg())
+	p.SetSize(80, 30)
+	msg := panels.PRSelectedMsg{
+		Number:     99,
+		Title:      "feat: \x1b]0;pwned\x07attack",
+		HeadBranch: "\x1b[1mevil-branch\x1b[0m",
+		State:      "open",
+	}
+	p.Update(msg)
+	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in PR title should be stripped")
+	assert.Contains(t, p.ghTitle, "feat: attack")
+	// Verify content also sanitized.
+	combined := strings.Join(p.lines, "\n")
+	stripped := ansi.Strip(combined)
+	assert.NotContains(t, stripped, "\x1b", "ANSI in PR content should be stripped")
+}
+
+func TestActionRunSelectedMsg_ANSIInjection(t *testing.T) {
+	p := New(defaultCfg())
+	p.SetSize(80, 30)
+	msg := panels.ActionRunSelectedMsg{
+		WorkflowName: "CI \x1b[2J\x1b[H",
+		RunID:        123,
+		Status:       "\x1b[31mfailure\x1b[0m",
+	}
+	p.Update(msg)
+	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in workflow name should be stripped")
+	assert.Contains(t, p.ghTitle, "CI ")
+}

@@ -1313,3 +1313,64 @@ func TestRepoChangedMsg_ResetsAndReloads(t *testing.T) {
 	assert.False(t, p.detailMode, "detailMode should be false")
 	assert.NotNil(t, cmd, "a reload command should be returned")
 }
+
+// ---------------------------------------------------------------------------
+// ANSI escape-sequence injection regression tests (CWE-150)
+// ---------------------------------------------------------------------------
+
+// TestRenderCommitLine_ANSIInjection verifies that ANSI escape sequences
+// in untrusted git data (subject, author, refs) are stripped before display.
+func TestRenderCommitLine_ANSIInjection(t *testing.T) {
+	p := New(&mockGitClient{}, config.GitConfig{})
+
+	c := git.Commit{
+		ShortHash: "abc1234",
+		Author:    "Evil\x1b[31mRED\x1b[0m",
+		Date:      time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		Subject:   "feat: \x1b[1mbold injection\x1b[0m",
+		Refs:      []string{"\x1b]0;pwned-title\x07main"},
+	}
+
+	line := p.renderCommitLine(c, "*", 120, false)
+	stripped := panels.StripANSI(line)
+
+	// After stripping lipgloss styling, no raw escape sequences should remain.
+	assert.NotContains(t, stripped, "\x1b", "ANSI escape in rendered commit line")
+	assert.Contains(t, stripped, "bold injection", "subject text preserved")
+	assert.Contains(t, stripped, "EvilRED", "author text preserved without ANSI")
+	assert.Contains(t, stripped, "main", "ref text preserved")
+}
+
+// TestDetailView_ANSIInjection verifies that commit detail view strips ANSI
+// from subject, author, email, refs, and body.
+func TestDetailView_ANSIInjection(t *testing.T) {
+	p := New(&mockGitClient{}, config.GitConfig{})
+	p.ctx = context.Background()
+	p.width = 80
+	p.height = 40
+
+	p.commits = []git.Commit{{
+		Hash:        "abc123def456789000000000000000000000000",
+		ShortHash:   "abc123d",
+		Author:      "\x1b[2J\x1b[HClearScreen",
+		AuthorEmail: "evil\x1b[31m@example.com",
+		Date:        time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		Subject:     "feat: \x1b]0;title-attack\x07injection",
+		Body:        "Body with \x1b[1mbold\x1b[0m escape",
+		Refs:        []string{"\x1b[31mred-ref\x1b[0m"},
+		Parents:     []string{"parent1"},
+	}}
+
+	p.showDetail()
+	require.True(t, p.detailMode, "detail mode should be active")
+
+	// Join all detail lines and strip lipgloss styling.
+	combined := strings.Join(p.detailLines, "\n")
+	stripped := panels.StripANSI(combined)
+
+	assert.NotContains(t, stripped, "\x1b", "no raw ANSI escapes in detail view")
+	assert.Contains(t, stripped, "ClearScreen", "author name preserved")
+	assert.Contains(t, stripped, "injection", "subject preserved")
+	assert.Contains(t, stripped, "bold", "body text preserved")
+	assert.Contains(t, stripped, "red-ref", "ref text preserved")
+}

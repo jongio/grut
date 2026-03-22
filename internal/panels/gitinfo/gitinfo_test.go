@@ -485,6 +485,12 @@ func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 	p.ghRepo = "myrepo"
 	p.SetSize(80, 20)
 
+	// Stub the browser launcher so the test never opens a real browser
+	// tab (xdg-open may not exist in headless/WSL environments).
+	orig := panels.StartDetachedFn
+	panels.StartDetachedFn = func(*exec.Cmd) error { return nil }
+	t.Cleanup(func() { panels.StartDetachedFn = orig })
+
 	// PanelHeaderDoubleClickMsg is sent by the layout engine when the user
 	// double-clicks on the panel border title (e.g. "GitHub").
 	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
@@ -3207,6 +3213,12 @@ func TestHeaderDoubleClick_WithGHClient_OpensRepo(t *testing.T) {
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
+	// Stub the browser launcher so the test never opens a real browser
+	// tab (xdg-open may not exist in headless/WSL environments).
+	orig := panels.StartDetachedFn
+	panels.StartDetachedFn = func(*exec.Cmd) error { return nil }
+	t.Cleanup(func() { panels.StartDetachedFn = orig })
+
 	// PanelHeaderDoubleClickMsg (from layout engine when double-clicking
 	// the panel border title) should open the repo in the browser.
 	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 5})
@@ -3214,8 +3226,6 @@ func TestHeaderDoubleClick_WithGHClient_OpensRepo(t *testing.T) {
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
-	// On headless CI the browser open will fail, but the toast message
-	// should reference the owner/repo.
 	assert.Contains(t, toast.Message, "owner/repo")
 }
 
@@ -4398,4 +4408,60 @@ func TestBuildGitHubItems_ActionCrossReference(t *testing.T) {
 	assert.NotContains(t, line2, checkMark)
 	assert.NotContains(t, line2, "✗")
 	assert.NotContains(t, line2, "●")
+}
+
+// ---------------------------------------------------------------------------
+// ANSI escape-sequence injection regression tests (CWE-150)
+// ---------------------------------------------------------------------------
+
+func TestRenderBranch_ANSIInjection(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindLocalBranch, branch: git.Branch{
+		Name: "\x1b[31mevil-branch\x1b[0m",
+		Hash: "abc1234",
+	}}
+	line := p.renderBranch(item, 80, false)
+	stripped := panels.StripANSI(line)
+	assert.NotContains(t, stripped, "\x1b", "ANSI in branch name should be stripped")
+	assert.Contains(t, stripped, "evil-branch")
+}
+
+func TestRightClickLabel_ANSIInjection(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	tests := []struct {
+		name string
+		item listItem
+		want string
+	}{
+		{
+			name: "issue title",
+			item: listItem{kind: kindIssue, issue: ghIssueItem{
+				Number: 1,
+				Title:  "\x1b[31mRed\x1b[0m title",
+			}},
+			want: "#1 Red title",
+		},
+		{
+			name: "PR title",
+			item: listItem{kind: kindPR, pr: ghPRItem{
+				Number: 2,
+				Title:  "feat: \x1b]0;pwned\x07attack",
+			}},
+			want: "#2 feat: attack",
+		},
+		{
+			name: "branch name",
+			item: listItem{kind: kindLocalBranch, branch: git.Branch{
+				Name: "\x1b[1mbold-branch\x1b[0m",
+			}},
+			want: "bold-branch",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label := p.rightClickLabel(tt.item)
+			assert.NotContains(t, label, "\x1b", "ANSI escapes should be stripped")
+			assert.Contains(t, label, tt.want)
+		})
+	}
 }
