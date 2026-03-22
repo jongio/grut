@@ -35,23 +35,24 @@ const (
 // panels, focus tracking, and zoom state.
 type Engine struct {
 	// Double-click detection: tracks the last click for double-click detection.
-	lastClickTime  time.Time       // timestamp of the last click
-	ctx            context.Context // stored from Init for late panel creation
-	registry       *Registry
-	tabs           *TabManager
-	panels         map[string]panels.Panel
-	dragSplit      *SplitNode // the split being resized
-	lastClickPanel string     // panel name that received the last click
-	panelOrder     []string   // ordered list of panel names for focus cycling
-	dragArea       Rect       // the area the split occupies (for ratio computation)
-	focusIdx       int        // index into panelOrder
-	width          int
-	height         int
-	nextID         int       // counter for generating unique panel names
-	dragDir        Direction // direction of the split being dragged
-	lastClickRow   int       // content-relative row of the last click
-	lastClickCol   int       // content-relative column of the last click
-	zoomed         bool      // true when focused panel is full-screen
+	lastClickTime   time.Time       // timestamp of the last click
+	ctx             context.Context // stored from Init for late panel creation
+	registry        *Registry
+	tabs            *TabManager
+	panels          map[string]panels.Panel
+	dragSplit       *SplitNode // the split being resized
+	lastClickPanel  string     // panel name that received the last click
+	panelOrder      []string   // ordered list of panel names for focus cycling
+	dragArea        Rect       // the area the split occupies (for ratio computation)
+	focusIdx        int        // index into panelOrder
+	width           int
+	height          int
+	nextID          int       // counter for generating unique panel names
+	dragDir         Direction // direction of the split being dragged
+	lastClickRow    int       // content-relative row of the last click
+	lastClickCol    int       // content-relative column of the last click
+	lastClickHeader bool      // true when the last click was on the header/border title
+	zoomed          bool      // true when focused panel is full-screen
 	// Drag-resize state: tracks an in-progress mouse drag on a split border.
 	dragging bool // true while dragging a split border
 }
@@ -355,30 +356,46 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	// Content-relative coordinates (no per-panel border now).
 	contentRow := innerY - r.Y
 	contentCol := innerX - r.X - PanelPadH
+	// Detect whether the click landed on the panel header / border title
+	// area (the row above the panel content). This happens when innerY is
+	// above the panel rect — the nearest-panel fallback still resolves
+	// the correct panel, but the raw contentRow is negative.
+	isHeaderClick := contentRow < 0
 	if contentRow < 0 {
 		contentRow = 0
 	}
 	if contentCol < 0 {
 		contentCol = 0
 	}
-	// Detect double-click: same panel, same row, within threshold.
+	// Detect double-click: same panel, same row, same zone (header vs
+	// content), within threshold.  The zone check prevents a header click
+	// (clamped to row 0) followed by a content-row-0 click from being
+	// treated as a double-click.
 	now := time.Now()
 	isDouble := e.lastClickPanel == hitName &&
 		e.lastClickRow == contentRow &&
+		e.lastClickHeader == isHeaderClick &&
 		now.Sub(e.lastClickTime) <= doubleClickThreshold
 	// Record this click for next comparison.
 	e.lastClickTime = now
 	e.lastClickRow = contentRow
 	e.lastClickCol = contentCol
+	e.lastClickHeader = isHeaderClick
 	e.lastClickPanel = hitName
 	if p, ok := e.panels[hitName]; ok {
 		var clickMsg tea.Msg
 		if isDouble {
 			// Reset tracking so a third click isn't also a double.
 			e.lastClickTime = time.Time{}
-			clickMsg = panels.PanelMouseDoubleClickMsg{
-				ContentRow: contentRow,
-				ContentCol: contentCol,
+			if isHeaderClick {
+				clickMsg = panels.PanelHeaderDoubleClickMsg{
+					ContentCol: contentCol,
+				}
+			} else {
+				clickMsg = panels.PanelMouseDoubleClickMsg{
+					ContentRow: contentRow,
+					ContentCol: contentCol,
+				}
 			}
 		} else {
 			clickMsg = panels.PanelMouseClickMsg{

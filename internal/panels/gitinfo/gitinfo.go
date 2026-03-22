@@ -767,6 +767,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleMouseClick(msg)
 	case panels.PanelMouseDoubleClickMsg:
 		return p.handleMouseDoubleClick(msg)
+	case panels.PanelHeaderDoubleClickMsg:
+		return p.openRepoInBrowser()
 	case panels.PanelMouseRightClickMsg:
 		return p.handleMouseRightClick(msg)
 	case tea.MouseWheelMsg:
@@ -1281,11 +1283,15 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 
 // handleMouseDoubleClick processes a double-click in the gitinfo panel.
 // Performs the context action for the item under the cursor.
+// Tab bar double-clicks are ignored — tab switching is handled by single
+// click, and header double-clicks (opening repo) are handled via
+// PanelHeaderDoubleClickMsg.
 func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
 	if msg.ContentRow < tbh {
-		// Header / tab bar double-click — open repo in browser.
-		return p.openRepoInBrowser()
+		// Tab bar double-click — no action; tab switching is handled by
+		// single click, repo-open by header double-click.
+		return p, nil
 	}
 	// Content area double-click — move cursor then execute action.
 	items := p.tabItems[p.activeTab]
