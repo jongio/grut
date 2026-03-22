@@ -4137,3 +4137,236 @@ func TestDKey_DispatchWorkflow(t *testing.T) {
 	// Without a real GH client, dispatch won't fire — just verify no panic.
 	_ = cmd
 }
+
+// ---------------------------------------------------------------------------
+// prColor — mergeable-state color mapping
+// ---------------------------------------------------------------------------
+
+func TestPRColor_OpenClean(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: "clean"}
+assert.Equal(t, defaultColors.PR, prColor(pr))
+}
+
+func TestPRColor_OpenEmpty(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: ""}
+assert.Equal(t, defaultColors.PR, prColor(pr), "empty mergeable state should default to green")
+}
+
+func TestPRColor_OpenDirty(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: "dirty"}
+assert.Equal(t, defaultColors.PRConflict, prColor(pr))
+}
+
+func TestPRColor_OpenUnstable(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: "unstable"}
+assert.Equal(t, defaultColors.PRUnstable, prColor(pr))
+}
+
+func TestPRColor_OpenBlocked(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: "blocked"}
+assert.Equal(t, defaultColors.PRBlocked, prColor(pr))
+}
+
+func TestPRColor_OpenUnknown(t *testing.T) {
+pr := ghPRItem{State: "open", MergeableState: "unknown"}
+assert.Equal(t, defaultColors.PRUnknown, prColor(pr))
+}
+
+func TestPRColor_Draft(t *testing.T) {
+pr := ghPRItem{State: "draft", MergeableState: "clean"}
+assert.Equal(t, defaultColors.PRDraft, prColor(pr), "draft state ignores mergeable")
+}
+
+func TestPRColor_Merged(t *testing.T) {
+pr := ghPRItem{State: prStateMerged}
+assert.Equal(t, defaultColors.PRMerged, prColor(pr))
+}
+
+func TestPRColor_Closed(t *testing.T) {
+pr := ghPRItem{State: "closed"}
+assert.Equal(t, defaultColors.PRClosed, prColor(pr))
+}
+
+// ---------------------------------------------------------------------------
+// prActionIcon — action run status icon mapping
+// ---------------------------------------------------------------------------
+
+func TestPRActionIcon_Success(t *testing.T) {
+pr := ghPRItem{ActionConclusion: "success"}
+icon, color := prActionIcon(pr)
+assert.Equal(t, checkMark, icon)
+assert.Equal(t, defaultColors.ActionOK, color)
+}
+
+func TestPRActionIcon_Failure(t *testing.T) {
+pr := ghPRItem{ActionConclusion: "failure"}
+icon, color := prActionIcon(pr)
+assert.Equal(t, "✗", icon)
+assert.Equal(t, defaultColors.ActionFail, color)
+}
+
+func TestPRActionIcon_TimedOut(t *testing.T) {
+pr := ghPRItem{ActionConclusion: "timed_out"}
+icon, color := prActionIcon(pr)
+assert.Equal(t, "✗", icon)
+assert.Equal(t, defaultColors.ActionFail, color)
+}
+
+func TestPRActionIcon_InProgress(t *testing.T) {
+pr := ghPRItem{ActionStatus: "in_progress"}
+icon, color := prActionIcon(pr)
+assert.Equal(t, "●", icon)
+assert.Equal(t, defaultColors.ActionRun, color)
+}
+
+func TestPRActionIcon_Queued(t *testing.T) {
+pr := ghPRItem{ActionStatus: "queued"}
+icon, color := prActionIcon(pr)
+assert.Equal(t, "●", icon)
+assert.Equal(t, defaultColors.ActionRun, color)
+}
+
+func TestPRActionIcon_None(t *testing.T) {
+pr := ghPRItem{}
+icon, color := prActionIcon(pr)
+assert.Empty(t, icon)
+assert.Empty(t, color)
+}
+
+func TestPRActionIcon_ConclusionOverridesStatus(t *testing.T) {
+// When both conclusion and status are set, conclusion takes precedence.
+pr := ghPRItem{ActionStatus: "in_progress", ActionConclusion: "success"}
+icon, _ := prActionIcon(pr)
+assert.Equal(t, checkMark, icon, "conclusion should take precedence over status")
+}
+
+// ---------------------------------------------------------------------------
+// renderPR — mergeable state coloring in rendered output
+// ---------------------------------------------------------------------------
+
+func TestRenderPR_OpenDirty_ContainsOpen(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 42, Title: "Fix conflicts", State: "open", MergeableState: "dirty",
+}}
+line := p.renderPR(item, 80, false)
+assert.Contains(t, line, "#42")
+assert.Contains(t, line, "Fix conflicts")
+assert.Contains(t, line, "open")
+}
+
+func TestRenderPR_Closed(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 99, Title: "Old PR", State: "closed",
+}}
+line := p.renderPR(item, 80, false)
+assert.Contains(t, line, "closed")
+}
+
+func TestRenderPR_WithActionIcon_Success(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 38, Title: "Update deps", State: "open",
+ActionStatus: "completed", ActionConclusion: "success",
+}}
+line := p.renderPR(item, 80, false)
+assert.Contains(t, line, checkMark, "success icon should appear")
+}
+
+func TestRenderPR_WithActionIcon_Failure(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 35, Title: "Refactor auth", State: "open",
+ActionStatus: "completed", ActionConclusion: "failure",
+}}
+line := p.renderPR(item, 80, false)
+assert.Contains(t, line, "✗", "failure icon should appear")
+}
+
+func TestRenderPR_WithActionIcon_InProgress(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 42, Title: "Fix login redirect", State: "open",
+ActionStatus: "in_progress",
+}}
+line := p.renderPR(item, 80, false)
+assert.Contains(t, line, "●", "in-progress icon should appear")
+}
+
+func TestRenderPR_NoActionIcon_WhenNoRun(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 10, Title: "Simple PR", State: "open",
+}}
+line := p.renderPR(item, 80, false)
+assert.NotContains(t, line, checkMark)
+assert.NotContains(t, line, "✗")
+assert.NotContains(t, line, "●")
+}
+
+func TestRenderPR_ActionIcon_NarrowWidth(t *testing.T) {
+p := newTestPanel(defaultMock())
+item := listItem{kind: kindPR, pr: ghPRItem{
+Number: 42, Title: "Very long title that needs truncation", State: "open",
+ActionConclusion: "success",
+}}
+line := p.renderPR(item, 30, false)
+assert.Contains(t, line, "#42")
+assert.Contains(t, line, checkMark)
+}
+
+// ---------------------------------------------------------------------------
+// loadGitHubData — action cross-reference
+// ---------------------------------------------------------------------------
+
+func TestBuildGitHubItems_ActionCrossReference(t *testing.T) {
+p := newTestPanel(defaultMock())
+prs := []ghPRItem{
+{Number: 10, Title: "Auth", State: "open", HeadBranch: "main"},
+{Number: 11, Title: "Deploy", State: "open", HeadBranch: "feature"},
+{Number: 12, Title: "Other", State: "open", HeadBranch: "no-match"},
+}
+actions := []ghActionItem{
+{RunID: 100, Branch: "main", Status: "completed", Conclusion: "success"},
+{RunID: 101, Branch: "feature", Status: "in_progress", Conclusion: ""},
+{RunID: 102, Branch: "main", Status: "completed", Conclusion: "failure"}, // older, should not override
+}
+
+// Cross-reference manually (same logic as loadGitHubData)
+actionByBranch := make(map[string]ghActionItem, len(actions))
+for _, action := range actions {
+if _, exists := actionByBranch[action.Branch]; !exists {
+actionByBranch[action.Branch] = action
+}
+}
+for i, pr := range prs {
+if action, ok := actionByBranch[pr.HeadBranch]; ok {
+prs[i].ActionStatus = action.Status
+prs[i].ActionConclusion = action.Conclusion
+}
+}
+
+// Verify cross-reference results
+assert.Equal(t, "completed", prs[0].ActionStatus)
+assert.Equal(t, "success", prs[0].ActionConclusion, "should use first (most recent) action for main")
+assert.Equal(t, "in_progress", prs[1].ActionStatus)
+assert.Empty(t, prs[1].ActionConclusion)
+assert.Empty(t, prs[2].ActionStatus, "no matching action run for no-match branch")
+
+// Build items and verify render
+populateGH(p, nil, prs, actions)
+items := p.tabItems[tabPRs]
+require.Len(t, items, 3)
+
+line0 := p.renderPR(items[0], 80, false)
+assert.Contains(t, line0, checkMark, "PR #10 on main should show success icon")
+
+line1 := p.renderPR(items[1], 80, false)
+assert.Contains(t, line1, "●", "PR #11 on feature should show in-progress icon")
+
+line2 := p.renderPR(items[2], 80, false)
+assert.NotContains(t, line2, checkMark)
+assert.NotContains(t, line2, "✗")
+assert.NotContains(t, line2, "●")
+}
