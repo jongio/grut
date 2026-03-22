@@ -451,12 +451,12 @@ func TestMouseDoubleClick_ContentRowTriggersAction(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
-func TestMouseDoubleClick_TabBarIgnored(t *testing.T) {
+func TestMouseDoubleClick_TabBarIgnored_NoGitHub(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 	p.SetSize(80, 20)
 
-	// Double-click on tab bar row should not crash or trigger action.
+	// Without ghOwner/ghRepo, double-click on tab bar is a no-op.
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
 	assert.Nil(t, cmd)
 }
@@ -470,6 +470,80 @@ func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 99, ContentCol: 5})
 	assert.Equal(t, cursor, p.tabCursor[tabBranches])
 	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// Header double-click opens repo in browser (#33)
+// ---------------------------------------------------------------------------
+
+func TestMouseDoubleClick_Header_OpensRepoInBrowser(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "myorg"
+	p.ghRepo = "myrepo"
+	p.SetSize(80, 20)
+
+	// ContentRow 0 is the tab bar / header area. With ghOwner+ghRepo set,
+	// double-clicking it should produce a command to open the repo URL.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	require.NotNil(t, cmd, "header double-click with GitHub info should open browser")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
+	assert.Contains(t, toast.Message, "myorg/myrepo")
+}
+
+func TestMouseDoubleClick_Header_NoOwner_Noop(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = ""
+	p.ghRepo = "repo"
+	p.SetSize(80, 20)
+
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	assert.Nil(t, cmd, "no ghOwner → no-op")
+}
+
+func TestMouseDoubleClick_Header_NoRepo_Noop(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "owner"
+	p.ghRepo = ""
+	p.SetSize(80, 20)
+
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	assert.Nil(t, cmd, "no ghRepo → no-op")
+}
+
+func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "jongio"
+	p.ghRepo = "grut"
+
+	_, cmd := p.openRepoInBrowser()
+	require.NotNil(t, cmd)
+	// Execute the command — the underlying OpenInBrowser may fail in CI
+	// (no display), but the toast message will contain the URL label.
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Contains(t, toast.Message, "jongio/grut")
+}
+
+func TestMouseDoubleClick_ContentRow_StillWorks(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.SetSize(80, 20)
+	p.Focused = true
+
+	// Content area double-click (row 1 = first item) should still trigger
+	// the item action, not the browser open.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 1, ContentCol: 5})
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+	assert.NotNil(t, cmd, "content double-click should trigger item action")
 }
 
 // ---------------------------------------------------------------------------
@@ -3099,14 +3173,21 @@ func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
 	assert.Equal(t, 0, p.tabCursor[tabIssues])
 }
 
-func TestMouseDoubleClick_WithGHClient_TabBar(t *testing.T) {
+func TestMouseDoubleClick_WithGHClient_TabBar_OpensRepo(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
-	// In ModeGitHub, row 0 is the tab bar.
+	// In ModeGitHub with ghOwner/ghRepo set, double-click on the tab bar
+	// row should produce a command that opens the repo in the browser.
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
-	assert.Nil(t, cmd, "double-click on tab bar should be ignored")
+	assert.NotNil(t, cmd, "double-click on tab bar should open repo in browser")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
+	// On headless CI the browser open will fail, but the toast message
+	// should reference the owner/repo.
+	assert.Contains(t, toast.Message, "owner/repo")
 }
 
 func TestMouseWheel_WithGHClient(t *testing.T) {

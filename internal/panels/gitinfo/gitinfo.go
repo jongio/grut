@@ -1267,8 +1267,8 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
 	if msg.ContentRow < tbh {
-		// Tab bar double-click — treat as tab switch (already handled by click).
-		return p, nil
+		// Header / tab bar double-click — open repo in browser.
+		return p.openRepoInBrowser()
 	}
 	// Content area double-click — move cursor then execute action.
 	items := p.tabItems[p.activeTab]
@@ -1968,6 +1968,16 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Copied: " + copied, Level: notify.Success}
 	}
+}
+
+// openRepoInBrowser opens the repository's GitHub page in the default browser.
+// Returns nil cmd when owner/repo are unavailable (e.g. pure git mode).
+func (p *Panel) openRepoInBrowser() (panels.Panel, tea.Cmd) {
+	if p.ghOwner == "" || p.ghRepo == "" {
+		return p, nil
+	}
+	url := fmt.Sprintf("https://github.com/%s/%s", p.ghOwner, p.ghRepo)
+	return p.openURLAndToast(url, p.ghOwner+"/"+p.ghRepo)
 }
 
 // openURLAndToast opens a URL in the browser and shows a toast notification.
