@@ -3,6 +3,7 @@ package gitinfo
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -521,10 +522,13 @@ func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
 	p.ghOwner = "jongio"
 	p.ghRepo = "grut"
 
+	// Stub the browser launcher so the test never opens a real browser tab.
+	orig := panels.StartDetachedFn
+	panels.StartDetachedFn = func(*exec.Cmd) error { return nil }
+	t.Cleanup(func() { panels.StartDetachedFn = orig })
+
 	_, cmd := p.openRepoInBrowser()
 	require.NotNil(t, cmd)
-	// Execute the command — the underlying OpenInBrowser may fail in CI
-	// (no display), but the toast message will contain the URL label.
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok)

@@ -12,17 +12,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stubStartDetachedCapture replaces startDetachedFn with a no-op that captures
+// stubStartDetachedCapture replaces StartDetachedFn with a no-op that captures
 // that retrieves the captured command after the test exercises the code path.
 func stubStartDetachedCapture(t *testing.T) func() *exec.Cmd {
 	t.Helper()
 	var captured *exec.Cmd
-	orig := startDetachedFn
-	startDetachedFn = func(cmd *exec.Cmd) error {
+	orig := StartDetachedFn
+	StartDetachedFn = func(cmd *exec.Cmd) error {
 		captured = cmd
 		return nil
 	}
-	t.Cleanup(func() { startDetachedFn = orig })
+	t.Cleanup(func() { StartDetachedFn = orig })
 	return func() *exec.Cmd { return captured }
 }
 
@@ -52,7 +52,7 @@ func TestOpenInEditor_CommonEditorLookPath(t *testing.T) {
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
-	require.NotNil(t, cmd, "startDetachedFn should have been called")
+	require.NotNil(t, cmd, "StartDetachedFn should have been called")
 	assert.Contains(t, cmd.Args[0], "code")
 }
 
@@ -84,7 +84,7 @@ func TestOpenInEditor_PlatformDefaultWindows(t *testing.T) {
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
-	require.NotNil(t, cmd, "startDetachedFn should have been called")
+	require.NotNil(t, cmd, "StartDetachedFn should have been called")
 	assert.Equal(t, "cmd", cmd.Args[0])
 	assert.Contains(t, strings.Join(cmd.Args, " "), "start")
 }
@@ -104,7 +104,7 @@ func TestOpenInBrowser_WindowsPlatform(t *testing.T) {
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
-	require.NotNil(t, cmd, "startDetachedFn should have been called")
+	require.NotNil(t, cmd, "StartDetachedFn should have been called")
 	assert.Equal(t, "rundll32", cmd.Args[0])
 }
 
@@ -124,7 +124,7 @@ func TestOpenInTerminal_WindowsPlatform(t *testing.T) {
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
-	require.NotNil(t, cmd, "startDetachedFn should have been called")
+	require.NotNil(t, cmd, "StartDetachedFn should have been called")
 	assert.Equal(t, "cmd", cmd.Args[0])
 	assert.Contains(t, strings.Join(cmd.Args, " "), "/k")
 }
