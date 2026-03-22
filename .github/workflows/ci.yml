@@ -54,7 +54,7 @@ jobs:
 
       - name: Check strict formatting (gofumpt)
         run: |
-          go install mvdan.cc/gofumpt@latest || { echo "gofumpt install failed, skipping"; exit 0; }
+          go install mvdan.cc/gofumpt@v0.9.2 || { echo "gofumpt install failed, skipping"; exit 0; }
           unformatted=$(gofumpt -l .)
           if [ -n "$unformatted" ]; then
             echo "::error::Files need strict formatting (gofumpt):"
@@ -64,8 +64,8 @@ jobs:
 
       - name: Check dead code
         run: |
-          go install golang.org/x/tools/cmd/deadcode@latest
-          go install github.com/magefile/mage@latest
+          go install golang.org/x/tools/cmd/deadcode@v0.43.0
+          go install github.com/magefile/mage@v1.16.0
           mage deadcode
 
       - run: go build ./...
@@ -75,7 +75,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
-          version: latest
+          version: v2.11.3
           install-mode: goinstall
 
       - run: go test ./...
