@@ -441,11 +441,11 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Graph))
 	// Build right-side fixed columns first to determine how much space subject gets.
 	// SHA is always pinned to the right. Author and date appear as width allows.
-	hashCol := c.ShortHash
+	hashCol := panels.StripANSI(c.ShortHash)
 	hashW := len(hashCol)
 	gap := "  " // column separator
 	// Compute author/date only when they'll fit.
-	authorCol := c.Author
+	authorCol := panels.StripANSI(c.Author)
 	if runewidth.StringWidth(authorCol) > authorColMaxWidth {
 		authorCol = runewidth.Truncate(authorCol, authorColMaxWidth, "")
 	}
@@ -478,10 +478,16 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	if subjectSpace < minSubjectW {
 		subjectSpace = minSubjectW
 	}
-	// Build subject text with inline refs.
-	subjectText := c.Subject
-	if len(c.Refs) > 0 {
-		subjectText += " (" + strings.Join(c.Refs, ", ") + ")"
+	// Build subject text with inline refs. Sanitise untrusted git data
+	// to prevent ANSI escape-sequence injection (CWE-150).
+	safeSubject := panels.StripANSI(c.Subject)
+	safeRefs := make([]string, len(c.Refs))
+	for i, r := range c.Refs {
+		safeRefs[i] = panels.StripANSI(r)
+	}
+	subjectText := safeSubject
+	if len(safeRefs) > 0 {
+		subjectText += " (" + strings.Join(safeRefs, ", ") + ")"
 	}
 	// Truncate or pad subject to fill its allotted space.
 	subjectVisW := runewidth.StringWidth(subjectText)
@@ -489,14 +495,14 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	if subjectVisW > subjectSpace {
 		subjectText = runewidth.Truncate(subjectText, subjectSpace, "")
 		// Check if refs portion was included in the truncated text.
-		if len(c.Refs) > 0 && strings.Contains(subjectText, "(") {
-			styledSubject = p.styleSubjectWithRefs(subjectText, c.Subject, subjectStyle, refStyle)
+		if len(safeRefs) > 0 && strings.Contains(subjectText, "(") {
+			styledSubject = p.styleSubjectWithRefs(subjectText, safeSubject, subjectStyle, refStyle)
 		} else {
 			styledSubject = subjectStyle.Render(subjectText)
 		}
 	} else {
-		if len(c.Refs) > 0 {
-			styledSubject = subjectStyle.Render(c.Subject) + " " + refStyle.Render("("+strings.Join(c.Refs, ", ")+")")
+		if len(safeRefs) > 0 {
+			styledSubject = subjectStyle.Render(safeSubject) + " " + refStyle.Render("("+strings.Join(safeRefs, ", ")+")")
 			// Pad to fill subject space.
 			styledVisW := lipgloss.Width(styledSubject)
 			if styledVisW < subjectSpace {
@@ -627,7 +633,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 			c = p.commits[fi]
 		}
 	}
-	label := c.ShortHash + " " + c.Subject
+	label := panels.StripANSI(c.ShortHash) + " " + panels.StripANSI(c.Subject)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemLogCommit, label)
 	if cmd != nil {
 		p.pendingOp = opRightClickPick
@@ -899,21 +905,25 @@ func (p *Panel) showDetail() {
 	lines = append(lines, dimStyle.Render(strings.Repeat("─", 40)))
 	lines = append(lines, "")
 	lines = append(lines, "Commit:  "+hashStyle.Render(c.Hash))
-	lines = append(lines, "Author:  "+authorStyle.Render(c.Author+" <"+c.AuthorEmail+">"))
+	lines = append(lines, "Author:  "+authorStyle.Render(panels.StripANSI(c.Author)+" <"+panels.StripANSI(c.AuthorEmail)+">"))
 	lines = append(lines, "Date:    "+dateStyle.Render(c.Date.Format("2006-01-02 15:04:05 -0700")))
 	if len(c.Refs) > 0 {
-		lines = append(lines, "Refs:    "+refStyle.Render(strings.Join(c.Refs, ", ")))
+		sanitizedRefs := make([]string, len(c.Refs))
+		for i, r := range c.Refs {
+			sanitizedRefs[i] = panels.StripANSI(r)
+		}
+		lines = append(lines, "Refs:    "+refStyle.Render(strings.Join(sanitizedRefs, ", ")))
 	}
 	if len(c.Parents) > 0 {
 		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
 	}
 	lines = append(lines, "")
-	lines = append(lines, "    "+c.Subject)
+	lines = append(lines, "    "+panels.StripANSI(c.Subject))
 	if c.Body != "" {
 		lines = append(lines, "")
 		for _, bodyLine := range strings.Split(c.Body, "\n") {
-			lines = append(lines, "    "+bodyLine)
+			lines = append(lines, "    "+panels.StripANSI(bodyLine))
 		}
 	}
 	lines = append(lines, "")
@@ -936,7 +946,7 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 			c = p.commits[fi]
 		}
 	}
-	hash := c.ShortHash
+	hash := panels.StripANSI(c.ShortHash)
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Copied: " + hash,

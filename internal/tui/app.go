@@ -2200,7 +2200,7 @@ func (m Model) renderStatusBar() string {
 		Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
 	leftParts := []string{cwdStyle.Render(cwd)}
 	if m.currentBranch != "" {
-		branchText := "⎇ " + m.currentBranch
+		branchText := "⎇ " + ansi.Strip(m.currentBranch)
 		if m.gitDirty {
 			branchText += "*"
 		}

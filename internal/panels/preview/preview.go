@@ -174,7 +174,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.IssueSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
-		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, msg.Title)
+		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, ansi.Strip(msg.Title))
 		p.ghContent = msg.Body
 		if p.ghContent == "" {
 			p.ghContent = "*No description provided.*"
@@ -194,8 +194,11 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.PRSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
-		p.ghTitle = fmt.Sprintf("PR #%d %s", msg.Number, msg.Title)
-		content := fmt.Sprintf("# PR #%d\n\n**%s**\n\nBranch: `%s`\nState: %s", msg.Number, msg.Title, msg.HeadBranch, msg.State)
+		safeTitle := ansi.Strip(msg.Title)
+		safeBranch := ansi.Strip(msg.HeadBranch)
+		safeState := ansi.Strip(msg.State)
+		p.ghTitle = fmt.Sprintf("PR #%d %s", msg.Number, safeTitle)
+		content := fmt.Sprintf("# PR #%d\n\n**%s**\n\nBranch: `%s`\nState: %s", msg.Number, safeTitle, safeBranch, safeState)
 		p.ghContent = content
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(content, p.width)
@@ -212,8 +215,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.ActionRunSelectedMsg:
 		p.ghMode = true
 		p.ghPlainText = false
-		p.ghTitle = fmt.Sprintf("%s (Run #%d)", msg.WorkflowName, msg.RunID)
-		content := fmt.Sprintf("# %s\n\nStatus: %s\nRun ID: %d", msg.WorkflowName, msg.Status, msg.RunID)
+		safeWfName := ansi.Strip(msg.WorkflowName)
+		safeStatus := ansi.Strip(msg.Status)
+		p.ghTitle = fmt.Sprintf("%s (Run #%d)", safeWfName, msg.RunID)
+		content := fmt.Sprintf("# %s\n\nStatus: %s\nRun ID: %d", safeWfName, safeStatus, msg.RunID)
 		p.ghContent = content
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(content, p.width)

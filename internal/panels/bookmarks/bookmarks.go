@@ -295,7 +295,7 @@ func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	path := p.items[p.cursor].Path
-	if err := panels.CopyToClipboard(context.TODO(), path); err != nil {
+	if err := panels.CopyToClipboard(context.Background(), path); err != nil {
 		errMsg := err.Error()
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{

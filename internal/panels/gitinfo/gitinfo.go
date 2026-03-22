@@ -1340,27 +1340,27 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 func (p *Panel) rightClickLabel(item listItem) string {
 	switch item.kind {
 	case kindLocalBranch, kindRemoteBranch:
-		return item.branch.Name
+		return panels.StripANSI(item.branch.Name)
 	case kindWorktree:
-		return item.worktree.Branch
+		return panels.StripANSI(item.worktree.Branch)
 	case kindRemote:
-		return item.remote.Name
+		return panels.StripANSI(item.remote.Name)
 	case kindStashEntry:
 		return fmt.Sprintf("stash@{%d}", item.stash.Index)
 	case kindIssue:
-		return fmt.Sprintf("#%d %s", item.issue.Number, item.issue.Title)
+		return fmt.Sprintf("#%d %s", item.issue.Number, panels.StripANSI(item.issue.Title))
 	case kindPR:
-		return fmt.Sprintf("#%d %s", item.pr.Number, item.pr.Title)
+		return fmt.Sprintf("#%d %s", item.pr.Number, panels.StripANSI(item.pr.Title))
 	case kindActionRun:
-		return fmt.Sprintf("#%d %s", item.actionRun.RunNumber, item.actionRun.WorkflowName)
+		return fmt.Sprintf("#%d %s", item.actionRun.RunNumber, panels.StripANSI(item.actionRun.WorkflowName))
 	case kindWorkflow:
-		return item.workflow.Name
+		return panels.StripANSI(item.workflow.Name)
 	case kindRelease:
-		return item.release.TagName + " " + item.release.Name
+		return panels.StripANSI(item.release.TagName) + " " + panels.StripANSI(item.release.Name)
 	case kindTag, kindRemoteTag:
-		return item.tag.Name
+		return panels.StripANSI(item.tag.Name)
 	default:
-		return item.text
+		return panels.StripANSI(item.text)
 	}
 }
 
@@ -2876,7 +2876,7 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	prefixLen := len(prefix)
 	rightLen := lipgloss.Width(rightSide)
 	nameWidth := width - prefixLen - rightLen - 1 // -1 for min gap
-	name := b.Name
+	name := panels.StripANSI(b.Name)
 	if nameWidth > 0 && len(name) > nameWidth {
 		if nameWidth > 1 {
 			name = name[:nameWidth-1] + "…"
@@ -2912,7 +2912,7 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 	// Right side: branch + short hash — always shown.
 	rightSide := ""
 	if wt.Branch != "" {
-		rightSide = " " + wt.Branch
+		rightSide = " " + panels.StripANSI(wt.Branch)
 	}
 	short := wt.Head
 	if len(short) > git.ShortHashLen {
@@ -2951,7 +2951,7 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 }
 
 func (p *Panel) renderRemote(item listItem, width int, isCursor bool) string {
-	leftSide := "  " + item.remote.Name
+	leftSide := "  " + panels.StripANSI(item.remote.Name)
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.RemoteC)).Bold(true)
 	if isCursor {
@@ -2961,7 +2961,7 @@ func (p *Panel) renderRemote(item listItem, width int, isCursor bool) string {
 }
 
 func (p *Panel) renderRemoteSub(item listItem, width int, isCursor bool) string {
-	leftSide := "    " + item.text
+	leftSide := "    " + panels.StripANSI(item.text)
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(defaultColors.URL))
 	if isCursor {
@@ -2972,7 +2972,7 @@ func (p *Panel) renderRemoteSub(item listItem, width int, isCursor bool) string 
 
 func (p *Panel) renderStashEntry(item listItem, width int, isCursor bool) string {
 	s := item.stash
-	label := fmt.Sprintf("  stash@{%d}: %s", s.Index, s.Message)
+	label := fmt.Sprintf("  stash@{%d}: %s", s.Index, panels.StripANSI(s.Message))
 	// Truncate label to fit width.
 	if len(label) > width {
 		if width > 4 {
@@ -2998,7 +2998,7 @@ func (p *Panel) renderReflogEntry(item listItem, width int, isCursor bool) strin
 		hash = hash[:git.ShortHashLen]
 	}
 	age := reflogRelativeDate(r.Date)
-	label := fmt.Sprintf("  %s %s %s (%s)", hash, r.Action, r.Message, age)
+	label := fmt.Sprintf("  %s %s %s (%s)", hash, panels.StripANSI(r.Action), panels.StripANSI(r.Message), age)
 	if len(label) > width {
 		if width > 4 {
 			label = label[:width-3] + "..."
@@ -4084,13 +4084,13 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	// Right side: first label, if any.
 	rightSide := ""
 	if len(iss.Labels) > 0 {
-		rightSide = " " + iss.Labels[0]
+		rightSide = " " + panels.StripANSI(iss.Labels[0])
 	}
 	// Calculate available width for the title.
 	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
 	rightLen := lipgloss.Width(rightSide)
 	titleWidth := width - prefixLen - rightLen - 1
-	title := iss.Title
+	title := panels.StripANSI(iss.Title)
 	titleRunes := []rune(title)
 	if titleWidth > 0 && len(titleRunes) > titleWidth {
 		if titleWidth > 1 {
@@ -4182,7 +4182,7 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
 	rightLen := lipgloss.Width(rightSide) + iconVisualWidth
 	titleWidth := width - prefixLen - rightLen - 1
-	title := pr.Title
+	title := panels.StripANSI(pr.Title)
 	titleRunes := []rune(title)
 	if titleWidth > 0 && len(titleRunes) > titleWidth {
 		if titleWidth > 1 {
@@ -4247,11 +4247,11 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		}
 	}
 	prefix := "  "
-	left := fmt.Sprintf("%s %s #%d", icon, run.WorkflowName, run.RunNumber)
+	left := fmt.Sprintf("%s %s #%d", icon, panels.StripANSI(run.WorkflowName), run.RunNumber)
 	// Right side: branch + timestamp.
 	rightSide := ""
 	if run.Branch != "" {
-		rightSide += " " + run.Branch
+		rightSide += " " + panels.StripANSI(run.Branch)
 	}
 	if run.CreatedAt != "" {
 		rightSide += " " + run.CreatedAt
@@ -4301,7 +4301,7 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 		fg = defaultColors.Dim
 	}
 	prefix := "  "
-	left := fmt.Sprintf("%s %s", icon, wf.Name)
+	left := fmt.Sprintf("%s %s", icon, panels.StripANSI(wf.Name))
 	rightSide := ""
 	if wf.Path != "" {
 		rightSide += " " + wf.Path
@@ -4351,13 +4351,13 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 		fg = defaultColors.Release
 	}
 	prefix := "  "
-	left := fmt.Sprintf("%s %s", icon, rel.TagName)
+	left := fmt.Sprintf("%s %s", icon, panels.StripANSI(rel.TagName))
 	if rel.Name != "" && rel.Name != rel.TagName {
-		left += "  " + rel.Name
+		left += "  " + panels.StripANSI(rel.Name)
 	}
 	rightSide := ""
 	if rel.Author != "" {
-		rightSide += " " + rel.Author
+		rightSide += " " + panels.StripANSI(rel.Author)
 	}
 	if rel.CreatedAt != "" {
 		rightSide += " " + rel.CreatedAt
@@ -4406,7 +4406,7 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	prefixLen := len(prefix)
 	rightLen := lipgloss.Width(rightSide)
 	nameWidth := width - prefixLen - rightLen - 1 // -1 for min gap
-	name := tg.Name
+	name := panels.StripANSI(tg.Name)
 	if nameWidth > 0 && len(name) > nameWidth {
 		if nameWidth > 1 {
 			name = name[:nameWidth-1] + "…"
