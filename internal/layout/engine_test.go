@@ -1790,3 +1790,47 @@ func TestUpdate_TargetedPanelMsg_DoesNotBroadcast(t *testing.T) {
 	assert.Equal(t, previewBefore, previewAfter,
 		"preview panel should be untouched when TargetedPanelMsg targets gitinfo")
 }
+
+// TestEngineHandleMouseClick_HeaderThenContentRow0_NotDoubleClick verifies
+// that a header click (contentRow < 0, clamped to 0) followed by a content
+// click on row 0 is NOT treated as a double-click, because they target
+// different zones (header vs content). Regression test for #39.
+func TestEngineHandleMouseClick_HeaderThenContentRow0_NotDoubleClick(t *testing.T) {
+	engine := newTestEngine(t)
+	engine.SetSize(100, 30)
+
+	rects := engine.PanelRects()
+	require.NotEmpty(t, rects)
+
+	// Pick a panel.
+	var name string
+	var r Rect
+	for name, r = range rects {
+		break
+	}
+	require.NotEmpty(t, name)
+
+	tabH := engine.TabBarHeight()
+	border := engine.BorderSize()
+
+	// Click 1: on the header row (one row above panel content).
+	// innerY = termY - tabH - border.  We need innerY = r.Y - 1 (above panel).
+	// So: termY = r.Y - 1 + tabH + border.
+	headerX := r.X + r.Width/2 + border
+	headerY := r.Y - 1 + tabH + border
+
+	engine.Update(tea.MouseClickMsg{X: headerX, Y: headerY, Button: tea.MouseLeft})
+
+	// Click 2: on content row 0 (first row inside the panel).
+	// innerY = r.Y  →  termY = r.Y + tabH + border.
+	contentY := r.Y + tabH + border
+
+	engine.Update(tea.MouseClickMsg{X: headerX, Y: contentY, Button: tea.MouseLeft})
+
+	// Both clicks land on the same panel and the clamped row is 0 for both.
+	// Without the lastClickHeader zone check, this would be a false double-
+	// click.  With the fix, it's two single clicks — no panic, no incorrect
+	// message dispatch.
+	assert.Equal(t, name, engine.FocusedName(),
+		"panel should be focused after two single clicks")
+}
