@@ -179,11 +179,9 @@ var deadcodeAllowlist = []string{
 	"Model.handleSwitchOrCreateTab",
 	"Model.handleCloseTab",
 
-	// ai — token estimation + sanitization (public API / test accessors)
+	// ai — token estimation (public API / test accessors)
 	"tokenBudget.remaining",
 	"estimateTokensForStatus",
-	"SanitizeCommitMessage",
-	"stripControlCharsPreserveNewlines",
 
 	// bookmarks — public factory for testing
 	"NewManagerWithDir",
@@ -236,9 +234,6 @@ var deadcodeAllowlist = []string{
 
 	// mcp/server — test-only helper for validating path arrays
 	"validateGitPaths",
-
-	// notify/modal — public API for action picker with message subtitle
-	"ShowActionPickerWithMessage",
 
 	// fuzzyfinder/source — test-support cache invalidation API
 	"fileCache.invalidate",
