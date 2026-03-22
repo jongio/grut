@@ -3521,9 +3521,9 @@ func TestBranchFilesMode_LargeFileList(t *testing.T) {
 
 	// Generate 5000 file paths — none exist on disk, so they will be
 	// filtered out of the visible tree, but the map must be built without panic.
-	largeFileList := make([]string, 5000)
-	for i := range largeFileList {
-		largeFileList[i] = fmt.Sprintf("generated/dir%d/file%d.go", i/100, i)
+	largeFileList := make([]string, 0, 5001)
+	for i := range 5000 {
+		largeFileList = append(largeFileList, fmt.Sprintf("generated/dir%d/file%d.go", i/100, i))
 	}
 	// Also include one real file so the mode has something to show.
 	largeFileList = append(largeFileList, "main.go")
