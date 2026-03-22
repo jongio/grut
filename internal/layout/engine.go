@@ -355,6 +355,11 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	// Content-relative coordinates (no per-panel border now).
 	contentRow := innerY - r.Y
 	contentCol := innerX - r.X - PanelPadH
+	// Detect whether the click landed on the panel header / border title
+	// area (the row above the panel content). This happens when innerY is
+	// above the panel rect — the nearest-panel fallback still resolves
+	// the correct panel, but the raw contentRow is negative.
+	isHeaderClick := contentRow < 0
 	if contentRow < 0 {
 		contentRow = 0
 	}
@@ -376,9 +381,15 @@ func (e *Engine) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		if isDouble {
 			// Reset tracking so a third click isn't also a double.
 			e.lastClickTime = time.Time{}
-			clickMsg = panels.PanelMouseDoubleClickMsg{
-				ContentRow: contentRow,
-				ContentCol: contentCol,
+			if isHeaderClick {
+				clickMsg = panels.PanelHeaderDoubleClickMsg{
+					ContentCol: contentCol,
+				}
+			} else {
+				clickMsg = panels.PanelMouseDoubleClickMsg{
+					ContentRow: contentRow,
+					ContentCol: contentCol,
+				}
 			}
 		} else {
 			clickMsg = panels.PanelMouseClickMsg{

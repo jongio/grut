@@ -186,6 +186,14 @@ type PanelMouseDoubleClickMsg struct {
 	ContentCol int // column within the panel content area (0-based)
 }
 
+// PanelHeaderDoubleClickMsg is sent by the layout engine when a
+// double-click lands on the panel header / border title area (the row
+// above the panel content). Panels can use this to trigger a
+// header-specific action, e.g. opening a repo URL in a browser.
+type PanelHeaderDoubleClickMsg struct {
+	ContentCol int // approximate column within the panel area
+}
+
 // PanelMouseRightClickMsg is sent by the layout engine when a right-click
 // lands inside a panel. Coordinates are relative to the panel's content
 // area (inside borders), so ContentRow 0 is the first visible line.

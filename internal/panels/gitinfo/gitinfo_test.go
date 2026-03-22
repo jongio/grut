@@ -456,7 +456,8 @@ func TestMouseDoubleClick_TabBarIgnored_NoGitHub(t *testing.T) {
 	p := newTestPanel(mock)
 	p.SetSize(80, 20)
 
-	// Without ghOwner/ghRepo, double-click on tab bar is a no-op.
+	// Double-click on tab bar row is always a no-op (tab switching is
+	// handled by single-click; repo-open by PanelHeaderDoubleClickMsg).
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
 	assert.Nil(t, cmd)
 }
@@ -473,19 +474,19 @@ func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Header double-click opens repo in browser (#33)
+// Header double-click opens repo in browser (#33, restricted in #39)
 // ---------------------------------------------------------------------------
 
-func TestMouseDoubleClick_Header_OpensRepoInBrowser(t *testing.T) {
+func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 	p.ghOwner = "myorg"
 	p.ghRepo = "myrepo"
 	p.SetSize(80, 20)
 
-	// ContentRow 0 is the tab bar / header area. With ghOwner+ghRepo set,
-	// double-clicking it should produce a command to open the repo URL.
-	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	// PanelHeaderDoubleClickMsg is sent by the layout engine when the user
+	// double-clicks on the panel border title (e.g. "GitHub").
+	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
 	require.NotNil(t, cmd, "header double-click with GitHub info should open browser")
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
@@ -493,26 +494,39 @@ func TestMouseDoubleClick_Header_OpensRepoInBrowser(t *testing.T) {
 	assert.Contains(t, toast.Message, "myorg/myrepo")
 }
 
-func TestMouseDoubleClick_Header_NoOwner_Noop(t *testing.T) {
+func TestHeaderDoubleClick_NoOwner_Noop(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 	p.ghOwner = ""
 	p.ghRepo = "repo"
 	p.SetSize(80, 20)
 
-	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
 	assert.Nil(t, cmd, "no ghOwner → no-op")
 }
 
-func TestMouseDoubleClick_Header_NoRepo_Noop(t *testing.T) {
+func TestHeaderDoubleClick_NoRepo_Noop(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 	p.ghOwner = "owner"
 	p.ghRepo = ""
 	p.SetSize(80, 20)
 
-	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
 	assert.Nil(t, cmd, "no ghRepo → no-op")
+}
+
+func TestMouseDoubleClick_TabBar_Noop_WithGitHub(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.SetSize(80, 20)
+
+	// Even with ghOwner/ghRepo set, double-clicking on the tab bar row
+	// should NOT open the repo (#39). Only header double-click does that.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
+	assert.Nil(t, cmd, "tab bar double-click should be no-op even with GitHub info")
 }
 
 func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
@@ -3173,15 +3187,26 @@ func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
 	assert.Equal(t, 0, p.tabCursor[tabIssues])
 }
 
-func TestMouseDoubleClick_WithGHClient_TabBar_OpensRepo(t *testing.T) {
+func TestMouseDoubleClick_WithGHClient_TabBar_Noop(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
 	// In ModeGitHub with ghOwner/ghRepo set, double-click on the tab bar
-	// row should produce a command that opens the repo in the browser.
+	// row should be a no-op (#39). Repo-open only via header double-click.
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
-	assert.NotNil(t, cmd, "double-click on tab bar should open repo in browser")
+	assert.Nil(t, cmd, "tab bar double-click should be no-op, not open repo")
+}
+
+func TestHeaderDoubleClick_WithGHClient_OpensRepo(t *testing.T) {
+	ghMock := &mockGHClientFull{user: ghUser("u")}
+	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p.SetSize(80, 20)
+
+	// PanelHeaderDoubleClickMsg (from layout engine when double-clicking
+	// the panel border title) should open the repo in the browser.
+	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 5})
+	require.NotNil(t, cmd, "header double-click should open repo in browser")
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
