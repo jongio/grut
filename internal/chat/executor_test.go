@@ -189,6 +189,10 @@ func (m *executorMockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]st
 	return nil, nil
 }
 
+func (m *executorMockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // Helper: create a ToolExecutor with a temp-dir PathJail
 // ---------------------------------------------------------------------------

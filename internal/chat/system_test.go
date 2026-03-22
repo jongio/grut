@@ -45,6 +45,10 @@ func (stubGitClient) DiffTreeFiles(context.Context, string) ([]string, error) {
 	panic("stub: DiffTreeFiles not implemented")
 }
 
+func (stubGitClient) DiffFileNames(context.Context, string, string) ([]string, error) {
+	panic("stub: DiffFileNames not implemented")
+}
+
 func (stubGitClient) Stage(context.Context, []string) error {
 	panic("stub: Stage not implemented")
 }

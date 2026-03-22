@@ -75,6 +75,10 @@ func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, er
 	return nil, nil
 }
 
+func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockGitClient) Stage(_ context.Context, paths []string) error {
 	m.stagedPaths = append(m.stagedPaths, paths...)
 	return m.stageErr

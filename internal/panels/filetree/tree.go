@@ -203,6 +203,7 @@ func (ft *FileTree) walkVisible(n *node) {
 		if !ft.showHidden && isHidden(child.name) {
 			inFilteredMode := (ft.commitFilesMode && ft.commitChangedPaths != nil) ||
 				(ft.prFilesMode && ft.prChangedPaths != nil) ||
+				(ft.branchFilesMode && ft.branchChangedPaths != nil) ||
 				(ft.gitFilter && ft.gitChangedPaths != nil)
 			if !inFilteredMode {
 				continue
@@ -229,6 +230,17 @@ func (ft *FileTree) walkVisible(n *node) {
 				}
 			} else {
 				if !ft.prChangedPaths[child.path] {
+					continue
+				}
+			}
+		} else if ft.branchFilesMode && ft.branchChangedPaths != nil {
+			// Branch-files filter: skip files/dirs not in the branch-changed set.
+			if child.isDir {
+				if !ft.branchChangedDirs[child.path] {
+					continue
+				}
+			} else {
+				if !ft.branchChangedPaths[child.path] {
 					continue
 				}
 			}

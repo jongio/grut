@@ -11,6 +11,7 @@ type StatusReader interface {
 	RepoRoot(ctx context.Context) (string, error)
 	IsRepo(ctx context.Context) (bool, error)
 	DiffTreeFiles(ctx context.Context, hash string) ([]string, error)
+	DiffFileNames(ctx context.Context, commitA, commitB string) ([]string, error)
 }
 
 // IgnoreChecker can report which paths are ignored by .gitignore rules.
