@@ -4110,108 +4110,108 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 // prColor returns the foreground color for a PR based on its state and
 // mergeable status.
 func prColor(pr ghPRItem) string {
-switch pr.State {
-case "draft":
-return defaultColors.PRDraft
-case prStateMerged:
-return defaultColors.PRMerged
-case "closed":
-return defaultColors.PRClosed
-default: // "open"
-switch pr.MergeableState {
-case "dirty":
-return defaultColors.PRConflict
-case "unstable":
-return defaultColors.PRUnstable
-case "blocked":
-return defaultColors.PRBlocked
-case "unknown":
-return defaultColors.PRUnknown
-default: // "clean" or ""
-return defaultColors.PR
-}
-}
+	switch pr.State {
+	case "draft":
+		return defaultColors.PRDraft
+	case prStateMerged:
+		return defaultColors.PRMerged
+	case "closed":
+		return defaultColors.PRClosed
+	default: // "open"
+		switch pr.MergeableState {
+		case "dirty":
+			return defaultColors.PRConflict
+		case "unstable":
+			return defaultColors.PRUnstable
+		case "blocked":
+			return defaultColors.PRBlocked
+		case "unknown":
+			return defaultColors.PRUnknown
+		default: // "clean" or ""
+			return defaultColors.PR
+		}
+	}
 }
 
 // prActionIcon returns the status icon and its color for the action run
 // associated with a PR. Returns empty strings when no action run exists.
 func prActionIcon(pr ghPRItem) (icon string, color string) {
-switch pr.ActionConclusion {
-case "success":
-return checkMark, defaultColors.ActionOK
-case "failure", "timed_out":
-return "✗", defaultColors.ActionFail
-}
-switch pr.ActionStatus {
-case "in_progress", "queued":
-return "●", defaultColors.ActionRun
-}
-return "", ""
+	switch pr.ActionConclusion {
+	case "success":
+		return checkMark, defaultColors.ActionOK
+	case "failure", "timed_out":
+		return "✗", defaultColors.ActionFail
+	}
+	switch pr.ActionStatus {
+	case "in_progress", "queued":
+		return "●", defaultColors.ActionRun
+	}
+	return "", ""
 }
 
 // renderPR renders a GitHub PR line: "  #41 Add GitHub client   draft"
 // Open PRs are colored by mergeable state, and an action-run status icon
 // is appended when a matching workflow run exists for the PR’s head branch.
 func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
-pr := item.pr
-prefix := "  "
-number := fmt.Sprintf("#%d ", pr.Number)
+	pr := item.pr
+	prefix := "  "
+	number := fmt.Sprintf("#%d ", pr.Number)
 
-// Action status icon (shown after state text).
-actionIcon, actionColor := prActionIcon(pr)
-iconSuffix := ""
-iconVisualWidth := 0
-if actionIcon != "" {
-iconSuffix = " " + actionIcon // space + icon char
-iconVisualWidth = 1 + runewidth.StringWidth(actionIcon)
-}
+	// Action status icon (shown after state text).
+	actionIcon, actionColor := prActionIcon(pr)
+	iconSuffix := ""
+	iconVisualWidth := 0
+	if actionIcon != "" {
+		iconSuffix = " " + actionIcon // space + icon char
+		iconVisualWidth = 1 + runewidth.StringWidth(actionIcon)
+	}
 
-// Right side: state + optional action icon.
-rightSide := " " + pr.State
+	// Right side: state + optional action icon.
+	rightSide := " " + pr.State
 
-// Calculate available width for the title.
-prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
-rightLen := lipgloss.Width(rightSide) + iconVisualWidth
-titleWidth := width - prefixLen - rightLen - 1
-title := pr.Title
-titleRunes := []rune(title)
-if titleWidth > 0 && len(titleRunes) > titleWidth {
-if titleWidth > 1 {
-title = string(titleRunes[:titleWidth-1]) + "…"
-} else {
-title = string(titleRunes[:titleWidth])
-}
-} else if titleWidth <= 0 {
-title = ""
-}
+	// Calculate available width for the title.
+	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
+	rightLen := lipgloss.Width(rightSide) + iconVisualWidth
+	titleWidth := width - prefixLen - rightLen - 1
+	title := pr.Title
+	titleRunes := []rune(title)
+	if titleWidth > 0 && len(titleRunes) > titleWidth {
+		if titleWidth > 1 {
+			title = string(titleRunes[:titleWidth-1]) + "…"
+		} else {
+			title = string(titleRunes[:titleWidth])
+		}
+	} else if titleWidth <= 0 {
+		title = ""
+	}
 
-leftSide := prefix + number + title
-usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide) + iconVisualWidth
-gap := ""
-if usedWidth < width {
-gap = strings.Repeat(" ", width-usedWidth)
-}
+	leftSide := prefix + number + title
+	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide) + iconVisualWidth
+	gap := ""
+	if usedWidth < width {
+		gap = strings.Repeat(" ", width-usedWidth)
+	}
 
-// Build the line: if we have an action icon, render it with its own color
-// so it stands out from the PR state color.
-fg := prColor(pr)
-var line string
-if iconSuffix != "" {
-iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(actionColor))
-if isCursor {
-iconStyle = iconStyle.Background(lipgloss.Color(defaultColors.CursorBg))
-}
-line = leftSide + gap + rightSide + iconStyle.Render(iconSuffix)
-} else {
-line = leftSide + gap + rightSide
-}
+	// Build the line: if we have an action icon, render it with its own color
+	// so it stands out from the PR state color.
+	fg := prColor(pr)
+	var line string
+	if iconSuffix != "" {
+		iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(actionColor))
+		if isCursor {
+			iconStyle = iconStyle.Background(lipgloss.Color(defaultColors.CursorBg))
+		}
+		line = leftSide + gap + rightSide + iconStyle.Render(iconSuffix)
+	} else {
+		line = leftSide + gap + rightSide
+	}
 
-style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-Foreground(lipgloss.Color(fg))
-if isCursor {
-style = style.Background(lipgloss.Color(defaultColors.CursorBg))
-}
-return style.Render(line)
+	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
+		Foreground(lipgloss.Color(fg))
+	if isCursor {
+		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+	}
+	return style.Render(line)
 }
 
 // renderActionRun renders a GitHub Actions run line:
