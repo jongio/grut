@@ -5,9 +5,9 @@ package markdown
 import (
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	gansi "github.com/charmbracelet/glamour/ansi"
-	gstyles "github.com/charmbracelet/glamour/styles"
+	"charm.land/glamour/v2"
+	gansi "charm.land/glamour/v2/ansi"
+	gstyles "charm.land/glamour/v2/styles"
 )
 
 // Style returns a glamour DarkStyleConfig with heading prefixes
