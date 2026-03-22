@@ -196,7 +196,7 @@ func (ft *FileTree) walkVisible(n *node) {
 		if child.name == ".git" && child.isDir {
 			continue
 		}
-		// In filtered modes (commit/PR/git-changed) the mode's own
+		// In filtered modes (commit/PR/branch/git-changed) the mode's own
 		// path-based filter already constrains visibility, so bypass
 		// the hidden-file check.  Without this, dotfile changes
 		// (e.g. .github/) are suppressed before the filter runs.

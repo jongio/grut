@@ -535,6 +535,15 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 	ft.commitFiles = msg.files
 	ft.commitHash = msg.hash
 	ft.commitLabel = msg.label
+	// Exit branch-files mode if active.
+	if ft.branchFilesMode {
+		ft.branchFilesMode = false
+		ft.branchFiles = nil
+		ft.branchName = ""
+		ft.branchLabel = ""
+		ft.branchChangedPaths = nil
+		ft.branchChangedDirs = nil
+	}
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
@@ -583,6 +592,15 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		ft.commitFiles = nil
 		ft.commitChangedPaths = nil
 		ft.commitChangedDirs = nil
+	}
+	// Exit branch-files mode if active.
+	if ft.branchFilesMode {
+		ft.branchFilesMode = false
+		ft.branchFiles = nil
+		ft.branchName = ""
+		ft.branchLabel = ""
+		ft.branchChangedPaths = nil
+		ft.branchChangedDirs = nil
 	}
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
