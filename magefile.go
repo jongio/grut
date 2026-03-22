@@ -733,6 +733,15 @@ func Contributors() error {
 	return nil
 }
 
+// Deadcode runs dead-code analysis with allowlist filtering.
+func Deadcode() error {
+	fmt.Println("=== Dead code detection ===")
+	if _, err := exec.LookPath("deadcode"); err != nil {
+		return fmt.Errorf("deadcode not installed (run: go install golang.org/x/tools/cmd/deadcode@latest)")
+	}
+	return runDeadcode()
+}
+
 // Clean removes the bin/ directory.
 func Clean() error {
 	fmt.Println("=== Cleaning ===")

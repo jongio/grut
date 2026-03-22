@@ -63,10 +63,10 @@ jobs:
           fi
 
       - name: Check dead code
-        continue-on-error: true
         run: |
-          go install golang.org/x/tools/cmd/deadcode@latest || { echo "deadcode install failed, skipping"; exit 0; }
-          deadcode ./...
+          go install golang.org/x/tools/cmd/deadcode@latest
+          go install github.com/magefile/mage@latest
+          mage deadcode
 
       - run: go build ./...
 
