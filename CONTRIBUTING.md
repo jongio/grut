@@ -134,6 +134,23 @@ Use clear, descriptive commit messages:
 - Include steps to reproduce, expected behavior, and actual behavior
 - Include your OS, terminal emulator, and grüt version (`grut --version`)
 
+## Recognition
+
+All contributors are automatically recognized in:
+- The **CHANGELOG.md** entry for each release
+- **GitHub Release** notes
+- The **CONTRIBUTORS.md** hall of fame
+
+Your first contribution gets a special "New contributor" callout! We extract
+contributors from git commit authors and `Co-authored-by:` trailers, so
+pair-programming and AI-assisted contributions are credited too.
+
+To manually regenerate the contributors list:
+
+```bash
+mage contributors
+```
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.

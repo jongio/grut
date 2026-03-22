@@ -723,6 +723,21 @@ func winToWSLPath(winPath string) string {
 	return p
 }
 
+// Contributors regenerates CONTRIBUTORS.md from the full git history.
+func Contributors() error {
+	fmt.Println("=== Generating CONTRIBUTORS.md ===")
+	out, err := cmdOutput("go", "run", "./cmd/contrib-notes", "-format=contributors")
+	if err != nil {
+		return fmt.Errorf("contributors: %w", err)
+	}
+	path := filepath.Join(projectDir(), "CONTRIBUTORS.md")
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return fmt.Errorf("write CONTRIBUTORS.md: %w", err)
+	}
+	fmt.Printf("✓ CONTRIBUTORS.md updated (%d bytes)\n", len(out))
+	return nil
+}
+
 // Clean removes the bin/ directory.
 func Clean() error {
 	fmt.Println("=== Cleaning ===")

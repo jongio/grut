@@ -29,6 +29,7 @@ archives:
       - README.md
       - LICENSE*
       - CHANGELOG.md
+      - CONTRIBUTORS.md
 
 checksum:
   name_template: "grut_checksums.txt"
@@ -102,3 +103,5 @@ release:
     go install github.com/jongio/grut@latest
     ```
   prerelease: auto
+  footer: |
+    {{ .Env.CONTRIB_FOOTER }}
