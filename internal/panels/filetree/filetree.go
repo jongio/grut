@@ -45,6 +45,9 @@ var defaultColors = struct {
 	Dim:        "#666666",
 }
 
+// keyEsc is the key name for the Escape key, used in mode-exit checks.
+const keyEsc = "esc"
+
 // node represents a single entry (file or directory) in the file tree.
 type node struct {
 	loadErr       error // non-nil if directory loading failed (F06)
@@ -725,17 +728,17 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft, nil
 	}
 	// In commit-files mode, Escape returns to normal tree view.
-	if ft.commitFilesMode && msg.String() == "esc" {
+	if ft.commitFilesMode && msg.String() == keyEsc {
 		ft.exitCommitFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	// In PR-files mode, Escape returns to normal tree view.
-	if ft.prFilesMode && msg.String() == "esc" {
+	if ft.prFilesMode && msg.String() == keyEsc {
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	// In branch-files mode, Escape returns to normal tree view.
-	if ft.branchFilesMode && msg.String() == "esc" {
+	if ft.branchFilesMode && msg.String() == keyEsc {
 		ft.exitBranchFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
