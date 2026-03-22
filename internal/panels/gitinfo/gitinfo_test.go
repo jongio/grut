@@ -152,8 +152,8 @@ func TestInitialLoad(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 
-	// Branches tab should have 3 items (2 local + 1 remote).
-	assert.Equal(t, 3, len(p.tabItems[tabBranches]))
+	// Branches tab should have 2 items (local only — ModeGit filters out remote).
+	assert.Equal(t, 2, len(p.tabItems[tabBranches]))
 
 	// Worktrees tab should have 2 items.
 	assert.Equal(t, 2, len(p.tabItems[tabWorktrees]))
@@ -414,16 +414,16 @@ func TestMouseClick_ContentRowSelectsItem(t *testing.T) {
 	p := newTestPanel(mock)
 	p.SetSize(80, 20)
 
-	// branches tab has 3 items (2 local + 1 remote). Cursor starts on current branch.
+	// branches tab has 2 items (local only in ModeGit). Cursor starts on current branch.
 	assert.Equal(t, tabBranches, p.activeTab)
 
-	// Click on content row 2 (which is item index 1 since row 0 is tab bar).
+	// Click on content row 1 (item index 0).
+	p.Update(panels.PanelMouseClickMsg{ContentRow: 1, ContentCol: 5})
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+
+	// Click on content row 2 (item index 1 = "feature").
 	p.Update(panels.PanelMouseClickMsg{ContentRow: 2, ContentCol: 5})
 	assert.Equal(t, 1, p.tabCursor[tabBranches])
-
-	// Click on content row 3 = item index 2.
-	p.Update(panels.PanelMouseClickMsg{ContentRow: 3, ContentCol: 5})
-	assert.Equal(t, 2, p.tabCursor[tabBranches])
 }
 
 func TestMouseClick_OutOfBoundsIgnored(t *testing.T) {
@@ -1220,8 +1220,9 @@ func TestDoDelete_NonCurrentBranch(t *testing.T) {
 }
 
 func TestDoDelete_RemoteBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
-	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	p := newTestGitHubPanel(defaultMock())
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
 	_, cmd := p.doDelete()
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -1270,8 +1271,9 @@ func TestDoRename_LocalBranch(t *testing.T) {
 }
 
 func TestDoRename_RemoteBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
-	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	p := newTestGitHubPanel(defaultMock())
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
 	_, cmd := p.doRename()
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -1325,13 +1327,97 @@ func TestBuildItems_CursorOnCurrentBranch(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// 16b. buildItems — mode-aware branch filtering (#46)
+// ---------------------------------------------------------------------------
+
+func TestBuildItems_ModeGitShowsOnlyLocalBranches(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{
+			{Name: "main", IsCurrent: true, Hash: "aaa"},
+			{Name: "feature", Hash: "bbb"},
+			{Name: "origin/main", IsRemote: true, Hash: "ccc"},
+			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
+		},
+	}
+	p := newTestPanel(mock) // ModeGit
+
+	assert.Equal(t, 2, len(p.tabItems[tabBranches]), "ModeGit should show only local branches")
+	for _, item := range p.tabItems[tabBranches] {
+		assert.Equal(t, kindLocalBranch, item.kind, "all branches in ModeGit should be local")
+		assert.False(t, item.branch.IsRemote, "no remote branch should appear in ModeGit")
+	}
+}
+
+func TestBuildItems_ModeGitHubShowsOnlyRemoteBranches(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{
+			{Name: "main", IsCurrent: true, Hash: "aaa"},
+			{Name: "feature", Hash: "bbb"},
+			{Name: "origin/main", IsRemote: true, Hash: "ccc"},
+			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
+		},
+	}
+	p := newTestGitHubPanel(mock) // ModeGitHub
+
+	assert.Equal(t, 2, len(p.tabItems[tabBranches]), "ModeGitHub should show only remote branches")
+	for _, item := range p.tabItems[tabBranches] {
+		assert.Equal(t, kindRemoteBranch, item.kind, "all branches in ModeGitHub should be remote")
+		assert.True(t, item.branch.IsRemote, "no local branch should appear in ModeGitHub")
+	}
+}
+
+func TestBuildItems_ModeAllShowsBothBranches(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{
+			{Name: "main", IsCurrent: true, Hash: "aaa"},
+			{Name: "feature", Hash: "bbb"},
+			{Name: "origin/main", IsRemote: true, Hash: "ccc"},
+			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
+		},
+	}
+	p := newTestPanel(mock)
+	p.mode = ModeAll
+	p.doBuildItems()
+
+	assert.Equal(t, 4, len(p.tabItems[tabBranches]), "ModeAll should show all branches")
+	localCount := 0
+	remoteCount := 0
+	for _, item := range p.tabItems[tabBranches] {
+		if item.kind == kindLocalBranch {
+			localCount++
+		} else if item.kind == kindRemoteBranch {
+			remoteCount++
+		}
+	}
+	assert.Equal(t, 2, localCount, "ModeAll should include local branches")
+	assert.Equal(t, 2, remoteCount, "ModeAll should include remote branches")
+}
+
+func TestBuildItems_GitHubPanelBranchCountReflectsFiltering(t *testing.T) {
+	mock := &mockGitOps{
+		branches: []git.Branch{
+			{Name: "main", IsCurrent: true, Hash: "aaa"},
+			{Name: "feature", Hash: "bbb"},
+			{Name: "origin/main", IsRemote: true, Hash: "ccc"},
+		},
+	}
+	// Git panel: 2 local branches.
+	pGit := newTestPanel(mock)
+	assert.Equal(t, 2, len(pGit.tabItems[tabBranches]))
+
+	// GitHub panel: 1 remote branch.
+	pGH := newTestGitHubPanel(mock)
+	assert.Equal(t, 1, len(pGH.tabItems[tabBranches]))
+}
+
+// ---------------------------------------------------------------------------
 // 17. rebuildFromCurrent — cursor clamping when items shrink
 // ---------------------------------------------------------------------------
 
 func TestRebuildFromCurrent_CursorClamped(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.tabCursor[tabBranches] = 2 // last item (index 2)
+	p.tabCursor[tabBranches] = 2 // beyond last item (ModeGit has 2 local branches)
 
 	// Shrink branches.
 	p.lastBranches = []git.Branch{{Name: "only", Hash: "xxx"}}
@@ -2917,9 +3003,10 @@ func TestHandleKey_R_Remotes_WithGHClient(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRequestCheckout_RemoteBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestGitHubPanel(defaultMock())
 	p.Focused = true
-	p.tabCursor[tabBranches] = 2 // "origin/main" (remote)
+	p.activeTab = tabBranches
+	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
 	_, cmd := p.requestCheckout()
 	require.NotNil(t, cmd)
 	// Should show a confirmation dialog (not direct checkout).
