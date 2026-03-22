@@ -305,7 +305,7 @@ func (ms *modalState) handleMouseClick(mgr *Manager, mouseX, mouseY, screenWidth
 	if boxWidth < 20 {
 		boxWidth = 20
 	}
-	cw := boxWidth - 4 // text/content width (padding 2 left + 2 right)
+	cw := boxWidth - 6 // text/content width: boxWidth minus border (1+1) minus padding (2+2)
 	// Measure the title and message heights using the same styles as
 	// view() so the line offsets match exactly.
 	titleStyle := lipgloss.NewStyle().
@@ -502,57 +502,61 @@ func (ms *modalState) view(width, height int) string {
 	if boxWidth < 20 {
 		boxWidth = 20
 	}
-	// Build the modal content
+	// Build the modal content.
+	// Content width = boxWidth minus border (1+1) minus padding (2+2).
+	// In lipgloss v2, Width(n) sets the total rendered width including
+	// border and padding, so the usable content area is n-6.
+	cw := boxWidth - 6
 	var content strings.Builder
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Width(boxWidth - 4).
+		Width(cw).
 		Align(lipgloss.Center)
 	content.WriteString(titleStyle.Render(ms.title))
 	content.WriteString("\n\n")
 	// Message
 	msgStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#CCCCCC")).
-		Width(boxWidth - 4)
+		Width(cw)
 	content.WriteString(msgStyle.Render(ms.message))
 	content.WriteString("\n\n")
 	// Kind-specific content
 	switch ms.kind {
 	case ModalConfirm:
-		content.WriteString(ms.renderConfirmButtons(boxWidth - 4))
+		content.WriteString(ms.renderConfirmButtons(cw))
 	case ModalInput:
-		content.WriteString(ms.renderInputField(boxWidth - 4))
+		content.WriteString(ms.renderInputField(cw))
 	case ModalConfirmWithCheckbox:
-		content.WriteString(ms.renderCheckbox(boxWidth - 4))
+		content.WriteString(ms.renderCheckbox(cw))
 		content.WriteString("\n")
 		hintStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#666666")).
 			Italic(true).
-			Width(boxWidth - 4).
+			Width(cw).
 			Align(lipgloss.Center)
 		content.WriteString(hintStyle.Render("tab cycle • space toggle • settings (,)"))
 		content.WriteString("\n\n")
-		content.WriteString(ms.renderConfirmButtons(boxWidth - 4))
+		content.WriteString(ms.renderConfirmButtons(cw))
 	case ModalActionPicker:
-		content.WriteString(ms.renderActionPicker(boxWidth - 4))
+		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n\n")
 		hintStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#666666")).
 			Italic(true).
-			Width(boxWidth - 4).
+			Width(cw).
 			Align(lipgloss.Center)
 		content.WriteString(hintStyle.Render("↑↓ navigate • enter select • esc cancel"))
 	case ModalActionPickerWithCheckbox:
-		content.WriteString(ms.renderActionPicker(boxWidth - 4))
+		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n")
-		content.WriteString(ms.renderActionPickerCheckbox(boxWidth - 4))
+		content.WriteString(ms.renderActionPickerCheckbox(cw))
 		content.WriteString("\n")
 		hintStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#666666")).
 			Italic(true).
-			Width(boxWidth - 4).
+			Width(cw).
 			Align(lipgloss.Center)
 		content.WriteString(hintStyle.Render("↑↓ navigate • tab checkbox • space toggle • esc cancel"))
 		content.WriteString("\n")

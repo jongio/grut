@@ -1234,6 +1234,60 @@ func TestModalConfirmMouseClickNo(t *testing.T) {
 	assert.False(t, m.HasModal())
 }
 
+// TestModalConfirmMouseClickYes_LongMessage verifies that clicking Yes works
+// when the message wraps to multiple lines. This reproduces the bug where long
+// merge confirm messages like 'Merge PR #35 "feat: ..." using squash and merge?'
+// caused button clicks to miss because the content width was computed incorrectly
+// (boxWidth-4 instead of boxWidth-6), and the message was re-wrapped inside the
+// box, shifting the button row down.
+func TestModalConfirmMouseClickYes_LongMessage(t *testing.T) {
+	m := NewManager()
+	m.SetSize(80, 24)
+	m.Update(ShowModalMsg{
+		Title:   "Confirm Merge",
+		Message: `Merge PR #35 "feat: gitinfo enhancements, contributor recognition, and deadcode cleanup" using squash and merge?`,
+		Kind:    ModalConfirm,
+	})
+
+	// The long message wraps to 3 lines at cw=44 (boxWidth 50 minus
+	// border 2 minus padding 4). Box layout:
+	//   titleH=1, msgH=3, headerLines = 1+1+3+1 = 6.
+	//   Content lines: 6(header) + 1(buttons) = 7.
+	//   bh = 7 + 2(padding) + 2(border) = 11.
+	//   padTop = (24-11)/2 = 6.
+	//   padLeft = (80-50)/2 = 15.
+	//   Button row Y = 6(padTop) + 2(border+padding) + 6(headerLines) = 14.
+	//   Content X starts at 15 + 3 = 18, midpoint at 18 + 22 = 40.
+	//   Click at X=23 (left half) → Yes.
+	cmd := m.Update(tea.MouseClickMsg{X: 23, Y: 14, Button: tea.MouseLeft})
+	require.NotNil(t, cmd, "click on Yes button should produce a command")
+
+	result := cmd().(ModalResultMsg)
+	assert.True(t, result.Accept, "clicking left half (Yes) should accept")
+	assert.False(t, m.HasModal(), "modal should be dismissed")
+}
+
+// TestModalConfirmMouseClickNo_LongMessage verifies that clicking No works
+// when the message wraps to multiple lines.
+func TestModalConfirmMouseClickNo_LongMessage(t *testing.T) {
+	m := NewManager()
+	m.SetSize(80, 24)
+	m.Update(ShowModalMsg{
+		Title:   "Confirm Merge",
+		Message: `Merge PR #35 "feat: gitinfo enhancements, contributor recognition, and deadcode cleanup" using squash and merge?`,
+		Kind:    ModalConfirm,
+	})
+
+	// Same geometry as TestModalConfirmMouseClickYes_LongMessage.
+	// Click at X=57 (right half, well past midpoint 40) → No.
+	cmd := m.Update(tea.MouseClickMsg{X: 57, Y: 14, Button: tea.MouseLeft})
+	require.NotNil(t, cmd, "click on No button should produce a command")
+
+	result := cmd().(ModalResultMsg)
+	assert.False(t, result.Accept, "clicking right half (No) should reject")
+	assert.False(t, m.HasModal(), "modal should be dismissed")
+}
+
 func TestModalConfirmMouseClickOutside(t *testing.T) {
 	m := NewManager()
 	m.SetSize(80, 24)
