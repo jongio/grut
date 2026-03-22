@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,9 @@ import (
 func extManager() *extension.Manager {
 	dir := filepath.Join(config.DataDir(), "extensions")
 	mgr := extension.NewManager(dir)
-	_ = mgr.LoadAll()
+	if err := mgr.LoadAll(); err != nil {
+		slog.Warn("load extensions", "error", err)
+	}
 	return mgr
 }
 

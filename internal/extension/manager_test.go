@@ -301,3 +301,34 @@ func TestInstall_RejectsSymlinks(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "symlinks not allowed")
 }
+
+func TestIsValidExtensionName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"lowercase", "myext", true},
+		{"with-hyphen", "my-ext", true},
+		{"with-underscore", "my_ext", true},
+		{"starts-digit", "1ext", true},
+		{"all-digits", "123", true},
+		{"single-char", "a", true},
+		{"max-length", string(make([]byte, 128)), false}, // zero bytes, invalid chars
+		{"empty", "", false},
+		{"uppercase", "MyExt", false},
+		{"all-uppercase", "MYEXT", false},
+		{"mixed-case", "myExt", false},
+		{"dot", "my.ext", false},
+		{"space", "my ext", false},
+		{"slash", "my/ext", false},
+		{"starts-hyphen", "-ext", false},
+		{"starts-underscore", "_ext", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidExtensionName(tt.input)
+			assert.Equal(t, tt.want, got, "isValidExtensionName(%q)", tt.input)
+		})
+	}
+}

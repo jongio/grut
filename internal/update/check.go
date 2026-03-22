@@ -24,9 +24,6 @@ const (
 	// in the user's config directory.
 	cacheFileName = "update-check.json"
 
-	// latestReleaseURL is the GitHub API endpoint for the latest release.
-	latestReleaseURL = "https://api.github.com/repos/jongio/grut/releases/latest"
-
 	// apiTimeout limits the HTTP request duration for API calls.
 	apiTimeout = 10 * time.Second
 
@@ -40,6 +37,10 @@ const (
 	// cacheFilePerm restricts the cache file to owner read/write.
 	cacheFilePerm = 0o600
 )
+
+// latestReleaseURL is the GitHub API endpoint for the latest release.
+// Declared as var (not const) to enable test overrides via httptest.
+var latestReleaseURL = "https://api.github.com/repos/jongio/grut/releases/latest"
 
 // UpdateInfo describes an available update.
 type UpdateInfo struct {

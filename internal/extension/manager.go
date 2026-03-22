@@ -350,8 +350,13 @@ func isValidExtensionName(name string) bool {
 	if name == "" || len(name) > 128 {
 		return false
 	}
-	for _, r := range name {
-		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+	// Only allow lowercase alphanumerics, dashes, and underscores —
+	// consistent with safeNameRe in manifest.go. Must start with [a-z0-9].
+	for i, r := range name {
+		if i == 0 && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
 			return false
 		}
 	}

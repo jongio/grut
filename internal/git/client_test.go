@@ -79,10 +79,13 @@ func TestClient_IsRepo(t *testing.T) {
 
 	// Non-repo directory — use os.MkdirTemp (not t.TempDir) to create a
 	// temp dir in the OS temp directory, bypassing GOTMPDIR which may
-	// point inside this git repository.
+	// point inside this git repository. Place an empty .git file inside
+	// to prevent git from searching parent directories for a repository,
+	// making the assertion robust regardless of where the OS temp lives.
 	tmpDir, mkErr := os.MkdirTemp("", "grut-test-nonrepo-*")
 	require.NoError(t, mkErr)
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".git"), []byte(""), 0o644))
 	nonRepoClient, err := NewClient(tmpDir)
 	require.NoError(t, err)
 

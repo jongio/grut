@@ -109,11 +109,15 @@ func Scaffold(dir, name, templateName string) error {
 		return fmt.Errorf("scaffold: unknown template %q", templateName)
 	}
 	target := filepath.Join(dir, name)
-	if _, err := os.Stat(target); err == nil {
-		return fmt.Errorf("scaffold: directory %s already exists", target)
-	}
 	data := scaffoldData{Name: name}
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	// Use os.Mkdir (not MkdirAll) to atomically create the directory.
+	// This eliminates a TOCTOU race between stat-check and create (CWE-367):
+	// an attacker could place a symlink at `target` between the two calls.
+	// os.Mkdir fails if the path already exists — no separate check needed.
+	if err := os.Mkdir(target, 0o755); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("scaffold: directory %s already exists", target)
+		}
 		return fmt.Errorf("scaffold: create directory: %w", err)
 	}
 	// Clean up the target directory on any error after creation.

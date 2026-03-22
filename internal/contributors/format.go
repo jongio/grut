@@ -28,7 +28,7 @@ func FormatChangelog(contributors []Contributor) string {
 		}
 	}
 	if len(firstTimers) > 0 {
-		fmt.Fprintf(&b, "\nNew contributors: %s — welcome! 🎉\n", strings.Join(firstTimers, ", "))
+		fmt.Fprintf(&b, "\nNew contributors: %s — welcome!\n", strings.Join(firstTimers, ", "))
 	}
 
 	return b.String()
@@ -56,7 +56,7 @@ func FormatReleaseNotes(contributors []Contributor) string {
 		}
 	}
 	if len(firstTimers) > 0 {
-		fmt.Fprintf(&b, "\n✨ New contributors: %s — welcome to grüt!\n", strings.Join(firstTimers, ", "))
+		fmt.Fprintf(&b, "\nNew contributors: %s — welcome to grüt!\n", strings.Join(firstTimers, ", "))
 	}
 
 	return b.String()
