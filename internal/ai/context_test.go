@@ -70,6 +70,9 @@ func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) { return true, n
 func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
 
 // IndexMutator stubs.
 func (m *mockGitClient) Stage(_ context.Context, _ []string) error                        { return nil }

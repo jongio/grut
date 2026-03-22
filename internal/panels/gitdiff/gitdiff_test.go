@@ -163,6 +163,10 @@ func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, er
 	return nil, nil
 }
 
+func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 // --- Construction tests ---
 
 func TestNew(t *testing.T) {

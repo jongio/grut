@@ -84,14 +84,19 @@ type FileTree struct {
 	commitChangedDirs  map[string]bool   // directories containing commit-changed files
 	prChangedPaths     map[string]bool   // absolute paths of PR-changed files
 	prChangedDirs      map[string]bool   // directories containing PR-changed files
+	branchChangedPaths map[string]bool   // absolute paths of branch-changed files
+	branchChangedDirs  map[string]bool   // directories containing branch-changed files
 	rootPath           string
 	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
 	savedCursorPath string
 	commitHash      string // short hash for display
 	commitLabel     string // e.g. "abc1234 Fix auth bug"
 	prLabel         string
+	branchName      string // selected branch name
+	branchLabel     string // e.g. "branch: feature/auth"
 	visible         []*node  // flattened list of currently visible nodes
 	commitFiles     []string // relative paths from diff-tree
+	branchFiles     []string // relative paths from branch diff
 	prFiles         []panels.PRFile
 	cfg             config.FileTreeConfig
 	// File operation state.
@@ -110,6 +115,8 @@ type FileTree struct {
 	commitFilesMode bool // when true, view shows commit-changed files
 	// PR-files mode: shows files changed in a pull request.
 	prFilesMode bool
+	// Branch-files mode: shows files changed on a selected branch.
+	branchFilesMode bool
 }
 
 // Compile-time interface check.
@@ -184,6 +191,13 @@ type commitFilesLoadedMsg struct {
 	hash  string
 	label string
 	files []string
+}
+
+// branchFilesLoadedMsg carries the result of an async DiffFileNames call.
+type branchFilesLoadedMsg struct {
+	err    error
+	branch string
+	files  []string
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +357,13 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.PRDeselectedMsg:
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
+	case panels.BranchSelectedMsg:
+		return ft.handleBranchSelected(msg)
+	case panels.BranchDeselectedMsg:
+		ft.exitBranchFilesMode()
+		return ft, ft.emitCursorFileSelected()
+	case branchFilesLoadedMsg:
+		return ft.handleBranchFilesLoaded(msg)
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
 		if !ft.focused {
@@ -421,6 +442,9 @@ func (ft *FileTree) SetSize(width, height int) {
 
 // Title implements panels.Panel.
 func (ft *FileTree) Title() string {
+	if ft.branchFilesMode {
+		return "Files: " + ft.branchLabel
+	}
 	if ft.commitFilesMode {
 		return "Files: " + ft.commitLabel
 	}
@@ -594,6 +618,88 @@ func (ft *FileTree) exitPRFilesMode() {
 }
 
 // ---------------------------------------------------------------------------
+// Branch-files mode
+// ---------------------------------------------------------------------------
+
+// handleBranchSelected starts loading files changed on the selected branch.
+func (ft *FileTree) handleBranchSelected(msg panels.BranchSelectedMsg) (panels.Panel, tea.Cmd) {
+	// Toggle off if same branch selected again or empty name.
+	if msg.Name == "" || msg.Name == ft.branchName {
+		ft.exitBranchFilesMode()
+		return ft, ft.emitCursorFileSelected()
+	}
+	if ft.gitClient == nil {
+		return ft, nil
+	}
+	gc := ft.gitClient
+	ctx := ft.ctx
+	name := msg.Name
+	return ft, func() tea.Msg {
+		files, err := gc.DiffFileNames(ctx, "HEAD", name)
+		return branchFilesLoadedMsg{files: files, branch: name, err: err}
+	}
+}
+
+// handleBranchFilesLoaded enters branch-files mode with the loaded file list.
+func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errMsg := msg.err.Error()
+		return ft, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "branch diff: " + errMsg, Level: notify.Error}
+		}
+	}
+	ft.branchFilesMode = true
+	ft.branchFiles = msg.files
+	ft.branchName = msg.branch
+	ft.branchLabel = "branch: " + msg.branch
+	// Exit commit-files mode if active.
+	if ft.commitFilesMode {
+		ft.commitFilesMode = false
+		ft.commitFiles = nil
+		ft.commitChangedPaths = nil
+		ft.commitChangedDirs = nil
+	}
+	// Exit PR-files mode if active.
+	if ft.prFilesMode {
+		ft.prFilesMode = false
+		ft.prFiles = nil
+		ft.prChangedPaths = nil
+		ft.prChangedDirs = nil
+	}
+	// Save cursor position so we can restore it on exit.
+	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
+		ft.savedCursorPath = ft.visible[ft.cursor].path
+	}
+	// Build filter sets from branch file paths.
+	ft.branchChangedPaths = make(map[string]bool, len(msg.files))
+	for _, f := range msg.files {
+		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
+		ft.branchChangedPaths[abs] = true
+	}
+	ft.branchChangedDirs = buildChangedDirSet(ft.branchChangedPaths, ft.rootPath)
+	// Expand directories containing branch-changed files so the tree
+	// shows the full hierarchy immediately.
+	ft.expandDirsInSet(ft.root, ft.branchChangedDirs)
+	ft.rebuildVisible()
+	ft.cursor = 0
+	ft.offset = 0
+	return ft, ft.emitCursorFileSelected()
+}
+
+// exitBranchFilesMode restores the normal file tree view.
+func (ft *FileTree) exitBranchFilesMode() {
+	ft.branchFilesMode = false
+	ft.branchFiles = nil
+	ft.branchName = ""
+	ft.branchLabel = ""
+	ft.branchChangedPaths = nil
+	ft.branchChangedDirs = nil
+	ft.rebuildVisible()
+	ft.restoreCursorToPath(ft.savedCursorPath)
+	ft.savedCursorPath = ""
+}
+
+// ---------------------------------------------------------------------------
 // Key handling
 // ---------------------------------------------------------------------------
 func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
@@ -608,6 +714,11 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	// In PR-files mode, Escape returns to normal tree view.
 	if ft.prFilesMode && msg.String() == "esc" {
 		ft.exitPRFilesMode()
+		return ft, ft.emitCursorFileSelected()
+	}
+	// In branch-files mode, Escape returns to normal tree view.
+	if ft.branchFilesMode && msg.String() == "esc" {
+		ft.exitBranchFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	switch msg.String() {

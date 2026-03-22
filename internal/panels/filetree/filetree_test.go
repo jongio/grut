@@ -34,6 +34,9 @@ func (m *mockGitClient) Blame(_ context.Context, _ string) ([]git.BlameLine, err
 func (m *mockGitClient) RepoRoot(_ context.Context) (string, error)                  { return "/repo", nil }
 func (m *mockGitClient) IsRepo(_ context.Context) (bool, error)                      { return true, nil }
 func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
 
 // mockGitClientWithIgnore implements both git.StatusReader and git.IgnoreChecker.
 type mockGitClientWithIgnore struct {
@@ -3119,4 +3122,284 @@ func TestPageUp_ClampsAtZero(t *testing.T) {
 	ft.cursor = 1 // near the top
 	ft.Update(keyMsg('u'))
 	assert.Equal(t, 0, ft.cursor, "page up past beginning should clamp to 0")
+}
+
+// ---------------------------------------------------------------------------
+// Branch-files mode tests
+// ---------------------------------------------------------------------------
+
+func TestBranchFilesMode_EnterAndExit(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Simulate entering branch-files mode via branchFilesLoadedMsg.
+	// Use files that exist in createTestTree: main.go and docs/guide.md.
+	_, cmd := ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go", "docs/guide.md"},
+		branch: "feature/auth",
+	})
+
+	assert.True(t, ft.branchFilesMode)
+	assert.Equal(t, "branch: feature/auth", ft.branchLabel)
+	// Tree structure: docs/ (dir) > guide.md, main.go = 3 visible nodes.
+	assert.Equal(t, 3, len(ft.visible))
+	assert.Equal(t, "Files: branch: feature/auth", ft.Title())
+
+	// Verify tree structure: directory node present with correct depth.
+	assert.Equal(t, "docs", ft.visible[0].name)
+	assert.True(t, ft.visible[0].isDir)
+	assert.Equal(t, 0, ft.visible[0].depth)
+	assert.Equal(t, "guide.md", ft.visible[1].name)
+	assert.False(t, ft.visible[1].isDir)
+	assert.Equal(t, 1, ft.visible[1].depth)
+	assert.Equal(t, "main.go", ft.visible[2].name)
+	assert.False(t, ft.visible[2].isDir)
+	assert.Equal(t, 0, ft.visible[2].depth)
+
+	// cmd should emit a FileSelectedMsg or FolderSelectedMsg for the first visible.
+	if cmd != nil {
+		msg := cmd()
+		_, ok := msg.(panels.FileSelectedMsg)
+		if !ok {
+			_, ok = msg.(panels.FolderSelectedMsg)
+			assert.True(t, ok, "expected FileSelectedMsg or FolderSelectedMsg from branch-files mode")
+		}
+	}
+
+	// Press Escape to exit.
+	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	assert.False(t, ft.branchFilesMode)
+	assert.Empty(t, ft.branchLabel)
+	assert.Equal(t, "Files", ft.Title())
+	// Visible should be rebuilt from normal tree.
+	assert.Greater(t, len(ft.visible), 0)
+}
+
+func TestBranchFilesMode_Error(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+
+	_, cmd := ft.Update(branchFilesLoadedMsg{
+		err: assert.AnError,
+	})
+
+	assert.False(t, ft.branchFilesMode, "should not enter branch-files mode on error")
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "branch diff:")
+}
+
+func TestBranchFilesMode_SurvivesRefreshMsg(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.ctx = context.Background()
+	ft.focused = true
+
+	// Enter branch-files mode with files that exist in createTestTree.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go", "docs/guide.md"},
+		branch: "feature/auth",
+	})
+	require.True(t, ft.branchFilesMode)
+	// Tree structure: docs/ > guide.md, main.go = 3 nodes.
+	require.Equal(t, 3, len(ft.visible))
+
+	// Send RefreshMsg (simulates filesystem watcher firing).
+	ft.Update(RefreshMsg{})
+
+	// Branch-files mode must survive: flag still set, visible list unchanged.
+	assert.True(t, ft.branchFilesMode, "branchFilesMode should survive RefreshMsg")
+	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only branch files after RefreshMsg")
+}
+
+func TestBranchFilesMode_SameBranchTogglesOff(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+	ft.SetGitClient(&mockGitClient{})
+
+	// Manually enter branch-files mode.
+	ft.branchFilesMode = true
+	ft.branchName = "feature/auth"
+	ft.branchLabel = "branch: feature/auth"
+	ft.branchChangedPaths = map[string]bool{
+		filepath.Join(dir, "main.go"): true,
+	}
+
+	// Send BranchSelectedMsg with the same branch name — should toggle off.
+	ft.Update(panels.BranchSelectedMsg{Name: "feature/auth"})
+
+	assert.False(t, ft.branchFilesMode, "selecting same branch should toggle off")
+	assert.Empty(t, ft.branchName)
+}
+
+func TestBranchFilesMode_EmptyNameExits(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Manually enter branch-files mode.
+	ft.branchFilesMode = true
+	ft.branchName = "feature/auth"
+	ft.branchLabel = "branch: feature/auth"
+
+	// Send BranchSelectedMsg with empty name — should exit.
+	ft.Update(panels.BranchSelectedMsg{Name: ""})
+
+	assert.False(t, ft.branchFilesMode, "empty branch name should exit branch-files mode")
+}
+
+func TestBranchDeselectedMsg(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.branchFilesMode = true
+	ft.branchName = "feature/auth"
+
+	ft.Update(panels.BranchDeselectedMsg{})
+	assert.False(t, ft.branchFilesMode, "should exit branch-files mode")
+	assert.Empty(t, ft.branchName)
+}
+
+func TestBranchFilesMode_ExitsCommitAndPRModes(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// First enter commit-files mode.
+	ft.Update(commitFilesLoadedMsg{
+		files: []string{"main.go"},
+		hash:  "abc1234",
+		label: "abc1234 Fix bug",
+	})
+	require.True(t, ft.commitFilesMode)
+
+	// Now enter branch-files mode — should exit commit-files mode.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go", "docs/guide.md"},
+		branch: "feature/auth",
+	})
+	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
+	assert.False(t, ft.commitFilesMode, "commit-files mode should be exited")
+	assert.Nil(t, ft.commitChangedPaths, "commit changed paths should be cleared")
+}
+
+func TestBranchFilesMode_ExitsPRMode(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// First enter PR-files mode.
+	ft.Update(panels.PRFilesLoadedMsg{
+		Number: 42,
+		Files: []panels.PRFile{
+			{Filename: "src/app.go", Status: "modified"},
+		},
+	})
+	require.True(t, ft.prFilesMode)
+
+	// Now enter branch-files mode — should exit PR-files mode.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go"},
+		branch: "feature/auth",
+	})
+	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
+	assert.False(t, ft.prFilesMode, "PR-files mode should be exited")
+	assert.Nil(t, ft.prChangedPaths, "PR changed paths should be cleared")
+}
+
+func TestBranchFilesMode_Title(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+
+	// Not in any mode.
+	assert.Equal(t, "Files", ft.Title())
+
+	// Enter branch-files mode.
+	ft.branchFilesMode = true
+	ft.branchLabel = "branch: develop"
+	assert.Equal(t, "Files: branch: develop", ft.Title())
+
+	// Branch-files title takes priority over commit-files.
+	ft.commitFilesMode = true
+	ft.commitLabel = "abc1234 Fix bug"
+	assert.Equal(t, "Files: branch: develop", ft.Title(), "branch label should take priority")
+}
+
+func TestBranchFilesMode_EscExit(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Enter branch-files mode.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go"},
+		branch: "hotfix/urgent",
+	})
+	require.True(t, ft.branchFilesMode)
+
+	// Press Escape.
+	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	assert.False(t, ft.branchFilesMode)
+	assert.Empty(t, ft.branchName)
+	assert.Empty(t, ft.branchLabel)
+	assert.Nil(t, ft.branchChangedPaths)
+	assert.Nil(t, ft.branchChangedDirs)
+}
+
+func TestBranchSelectedMsg_NilGitClient(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	// gitClient is nil by default.
+
+	_, cmd := ft.Update(panels.BranchSelectedMsg{Name: "feature/auth"})
+	assert.Nil(t, cmd, "should return nil cmd when gitClient is nil")
+	assert.False(t, ft.branchFilesMode)
+}
+
+func TestBranchFilesMode_HandleBranchSelected_ReturnsCmd(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.SetGitClient(&mockGitClient{})
+
+	_, cmd := ft.Update(panels.BranchSelectedMsg{Name: "feature/new"})
+	require.NotNil(t, cmd, "should return a command to load branch files")
+
+	// Execute the command — it should produce a branchFilesLoadedMsg.
+	msg := cmd()
+	loaded, ok := msg.(branchFilesLoadedMsg)
+	require.True(t, ok, "expected branchFilesLoadedMsg")
+	assert.Equal(t, "feature/new", loaded.branch)
+}
+
+func TestBranchFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+
+	// Enter branch-files mode.
+	ft.Update(branchFilesLoadedMsg{
+		files:  []string{"main.go", "docs/guide.md"},
+		branch: "feature/auth",
+	})
+	require.True(t, ft.branchFilesMode)
+	require.Equal(t, 3, len(ft.visible))
+
+	// Send GitChangedFilesMsg (simulates git status refresh).
+	ft.Update(panels.GitChangedFilesMsg{
+		Paths: map[string]bool{
+			filepath.Join(dir, "README.md"): true,
+			filepath.Join(dir, "main.go"):   true,
+		},
+	})
+
+	// Branch-files mode must survive: flag still set, visible list unchanged
+	// because branch filter takes priority over git filter.
+	assert.True(t, ft.branchFilesMode, "branchFilesMode should survive GitChangedFilesMsg")
+	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only branch files after GitChangedFilesMsg")
 }

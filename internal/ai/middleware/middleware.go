@@ -78,6 +78,10 @@ func (c *AIGitClient) DiffTreeFiles(ctx context.Context, hash string) ([]string,
 	return c.inner.DiffTreeFiles(ctx, hash)
 }
 
+func (c *AIGitClient) DiffFileNames(ctx context.Context, commitA, commitB string) ([]string, error) {
+	return c.inner.DiffFileNames(ctx, commitA, commitB)
+}
+
 // ---------------------------------------------------------------------------
 // IndexMutator — Commit is intercepted; Stage/Unstage pass through
 // ---------------------------------------------------------------------------

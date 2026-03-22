@@ -59,6 +59,9 @@ func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) { return true, m
 func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
 	return nil, m.record("diff_tree_files")
 }
+func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
+	return nil, m.record("diff_file_names")
+}
 
 func (m *mockGitClient) Stage(_ context.Context, _ []string) error   { return m.record("stage") }
 func (m *mockGitClient) Unstage(_ context.Context, _ []string) error { return m.record("unstage") }

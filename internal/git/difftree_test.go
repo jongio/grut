@@ -81,3 +81,87 @@ func TestClient_DiffTreeFiles_NonexistentHash(t *testing.T) {
 	_, err = c.DiffTreeFiles(context.Background(), "deadbeef1234567890abcdef1234567890abcdef")
 	assert.Error(t, err, "nonexistent hash should fail")
 }
+
+// ---------------------------------------------------------------------------
+// DiffFileNames tests
+// ---------------------------------------------------------------------------
+
+func TestClient_DiffFileNames(t *testing.T) {
+	dir := initTestRepo(t) // creates repo with README.md + initial commit on default branch
+	c, err := NewClient(dir)
+	require.NoError(t, err)
+
+	defaultBranch := detectDefaultBranch(t, dir)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v failed: %s", args, string(out))
+	}
+
+	// Create a feature branch and add files.
+	run("checkout", "-b", "feature/test-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "new-file.txt"), []byte("new\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pkg", "lib.go"), []byte("package pkg\n"), 0o644))
+	run("add", ".")
+	run("commit", "-m", "Add feature files")
+
+	// DiffFileNames using three-dot syntax: default...feature
+	files, err := c.DiffFileNames(context.Background(), defaultBranch, "feature/test-branch")
+	require.NoError(t, err)
+	assert.Contains(t, files, "new-file.txt")
+	assert.Contains(t, files, "pkg/lib.go")
+	assert.Len(t, files, 2)
+}
+
+func TestClient_DiffFileNames_EmptyDiff(t *testing.T) {
+	dir := initTestRepo(t)
+	c, err := NewClient(dir)
+	require.NoError(t, err)
+
+	defaultBranch := detectDefaultBranch(t, dir)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v failed: %s", args, string(out))
+	}
+
+	// Create a branch with no changes.
+	run("checkout", "-b", "feature/empty")
+
+	files, err := c.DiffFileNames(context.Background(), defaultBranch, "feature/empty")
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
+
+func TestClient_DiffFileNames_InvalidRef(t *testing.T) {
+	dir := initTestRepo(t)
+	c, err := NewClient(dir)
+	require.NoError(t, err)
+
+	// Empty commitA.
+	_, err = c.DiffFileNames(context.Background(), "", "main")
+	assert.Error(t, err, "empty commitA should fail validation")
+
+	// Empty commitB.
+	_, err = c.DiffFileNames(context.Background(), "main", "")
+	assert.Error(t, err, "empty commitB should fail validation")
+}

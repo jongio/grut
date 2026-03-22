@@ -96,6 +96,10 @@ type BranchSelectedMsg struct {
 	Name string
 }
 
+// BranchDeselectedMsg is sent when the user deselects a branch (e.g. Escape
+// or clicking the same branch again in the gitinfo panel).
+type BranchDeselectedMsg struct{}
+
 // RefreshBranchesMsg is received by the branches panel to trigger a re-fetch
 // of the branch list.
 type RefreshBranchesMsg struct{}
