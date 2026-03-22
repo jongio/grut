@@ -31,6 +31,7 @@ type CopilotProvider struct {
 	model    string
 	once     sync.Once  // ensures client.Start is called exactly once
 	startMu  sync.Mutex // protects Close while startup is in progress
+	started  bool       // true after ensureStarted has been called (regardless of outcome)
 }
 
 // NewCopilotProvider creates a CopilotProvider backed by the Copilot SDK.
@@ -197,9 +198,8 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 func (p *CopilotProvider) Close() error {
 	p.startMu.Lock()
 	defer p.startMu.Unlock()
-	// Only stop if startup succeeded (startErr == nil means once.Do ran
-	// and Start was called successfully).
-	if p.startErr == nil {
+	// Only stop if ensureStarted was called and succeeded.
+	if p.started && p.startErr == nil {
 		if err := p.client.Stop(); err != nil {
 			return fmt.Errorf("copilot: stop client: %w", err)
 		}
@@ -215,6 +215,7 @@ func (p *CopilotProvider) Close() error {
 // call (CWE-667).
 func (p *CopilotProvider) ensureStarted(ctx context.Context) error {
 	p.once.Do(func() {
+		p.started = true
 		p.startErr = p.client.Start(ctx)
 		if p.startErr != nil {
 			p.startErr = fmt.Errorf("copilot: start client: %w", p.startErr)

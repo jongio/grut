@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	copilot "github.com/github/copilot-sdk/go"
@@ -53,8 +52,8 @@ func TestCopilotProvider_Name(t *testing.T) {
 
 func TestCopilotProvider_Close_NotStarted(t *testing.T) {
 	p := &CopilotProvider{
-		client:   copilot.NewClient(nil),
-		startErr: fmt.Errorf("not started"), // simulate never-started state
+		client: copilot.NewClient(nil),
+		// started defaults to false — Close() should be a no-op.
 	}
 	assert.NoError(t, p.Close())
 }

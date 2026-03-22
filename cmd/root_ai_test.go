@@ -16,6 +16,9 @@ import (
 // providers. This does NOT test provider availability (which requires real
 // credentials) — only that registration succeeded.
 func TestInitChatRegistersProviders(t *testing.T) {
+	// Prevent the Copilot SDK from spawning a real CLI process during tests.
+	t.Setenv("COPILOT_CLI_PATH", "/nonexistent-copilot-test-stub")
+
 	cfg, err := config.LoadDefaults()
 	require.NoError(t, err)
 	// Ensure AI + chat are enabled so initChat does real work.
@@ -52,6 +55,9 @@ func TestInitChatRegistersProviders(t *testing.T) {
 // the path jail cannot be created (e.g. invalid repoRoot), the registry
 // is still returned so the AI middleware can be wired up independently.
 func TestInitChatReturnsRegistryOnPathJailFailure(t *testing.T) {
+	// Prevent the Copilot SDK from spawning a real CLI process during tests.
+	t.Setenv("COPILOT_CLI_PATH", "/nonexistent-copilot-test-stub")
+
 	cfg, err := config.LoadDefaults()
 	require.NoError(t, err)
 	cfg.AI.Enabled = true
