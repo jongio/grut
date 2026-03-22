@@ -24,7 +24,11 @@ jobs:
     strategy:
       fail-fast: false   # let all platforms finish even if one fails
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            time_threshold: 15   # stable runners, minimal binary-layout effects
+          - os: macos-latest
+            time_threshold: 40   # Apple Silicon VMs amplify Go binary-layout non-determinism
 
     runs-on: ${{ matrix.os }}
     env:
@@ -72,8 +76,8 @@ jobs:
       # ── PR: run main benchmarks on the SAME RUNNER to eliminate cross-machine
       #    variance.  Apple Silicon GitHub Actions VMs show 30-50% variance across
       #    different runner instances, making stored-baseline comparisons unreliable.
-      #    By benchmarking both main and PR code on the same machine we keep the
-      #    tight 15% threshold and detect real regressions without false positives.
+      #    By benchmarking both main and PR code on the same machine we keep a
+      #    tight threshold and detect real regressions without false positives.
       - name: Run main benchmarks (same-runner baseline)
         if: github.event_name == 'pull_request'
         run: |
@@ -110,7 +114,7 @@ jobs:
         run: |
           benchstat bench-baseline.txt bench-current.txt > benchstat-diff.txt
           cat benchstat-diff.txt
-          bash scripts/bench-regress.sh bench-baseline.txt bench-current.txt 15 10 || {
+          bash scripts/bench-regress.sh bench-baseline.txt bench-current.txt ${{ matrix.time_threshold }} 10 || {
             echo "regression=true" >> "$GITHUB_ENV"
           }
 
@@ -131,10 +135,10 @@ jobs:
             echo ""
             if [ "${{ env.regression }}" = "true" ]; then
               echo "> [!CAUTION]"
-              echo "> Benchmarks regressed by more than 15% on \`${{ env.PLATFORM }}\`."
+              echo "> Benchmarks regressed by more than ${{ matrix.time_threshold }}% on \`${{ env.PLATFORM }}\`."
             else
               echo "> [!NOTE]"
-              echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: 15%, same-runner comparison)."
+              echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: ${{ matrix.time_threshold }}%, same-runner comparison)."
             fi
           } > bench-comment.md
 
@@ -149,7 +153,7 @@ jobs:
       - name: Fail on significant regression
         if: github.event_name == 'pull_request' && env.regression == 'true'
         run: |
-          echo "::error::[${{ env.PLATFORM }}] Benchmarks regressed >15%. See the PR comment."
+          echo "::error::[${{ env.PLATFORM }}] Benchmarks regressed >${{ matrix.time_threshold }}%. See the PR comment."
           exit 1
 
       # -- main push: upload per-platform baseline for the update-baselines job --
