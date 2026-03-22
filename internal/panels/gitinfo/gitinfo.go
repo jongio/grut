@@ -262,6 +262,9 @@ var watchFrames = []string{"●", "◐", "○", "◑"}
 // checkMark is the success icon used in status indicators.
 const checkMark = "✓"
 
+// crossMark is the failure icon used in status indicators.
+const crossMark = "✗"
+
 // actionsWatchTickInterval is the polling interval for the GitHub Actions
 // watch animation frame rate.
 const actionsWatchTickInterval = 1000 * time.Millisecond
@@ -2831,7 +2834,7 @@ func (p *Panel) actionsStatusIcon() string {
 	case "success": //nolint:goconst // inline string is more readable here
 		return checkMark
 	case "failure", "timed_out": //nolint:goconst // inline string is more readable here
-		return "✗"
+		return crossMark
 	}
 	if latest.Status == "in_progress" || latest.Status == "queued" { //nolint:goconst // inline string is more readable here
 		if p.actionsWatching {
@@ -4140,7 +4143,7 @@ func prActionIcon(pr ghPRItem) (icon string, color string) {
 	case "success":
 		return checkMark, defaultColors.ActionOK
 	case "failure", "timed_out":
-		return "✗", defaultColors.ActionFail
+		return crossMark, defaultColors.ActionFail
 	}
 	switch pr.ActionStatus {
 	case "in_progress", "queued":
@@ -4226,7 +4229,7 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		icon = checkMark
 		fg = defaultColors.ActionOK
 	case "failure", "timed_out":
-		icon = "✗"
+		icon = crossMark
 		fg = defaultColors.ActionFail
 	default:
 		if run.Status == "in_progress" || run.Status == "queued" {

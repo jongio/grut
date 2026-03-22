@@ -5,6 +5,7 @@ package contributors
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -37,14 +38,14 @@ var botPatterns = []string{
 
 // coAuthorRegex matches Co-authored-by trailers in commit messages.
 // Format: Co-authored-by: Name <email>
-var coAuthorRegex = regexp.MustCompile("(?i)^co-authored-by:\\s*(.+?)\\s*<([^>]+)>")
+var coAuthorRegex = regexp.MustCompile(`(?i)^co-authored-by:\s*(.+?)\s*<([^>]+)>`)
 
 // gitRunner abstracts git command execution for testability.
-type gitRunner func(repoDir string, args ...string) (string, error)
+type gitRunner func(ctx context.Context, repoDir string, args ...string) (string, error)
 
 // defaultGitRunner shells out to the git binary.
-func defaultGitRunner(repoDir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+func defaultGitRunner(ctx context.Context, repoDir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
@@ -103,9 +104,10 @@ func Extract(opts Options) ([]Contributor, error) {
 	run := opts.runner()
 	dir := opts.repoDir()
 	rng := opts.refRange()
+	ctx := context.Background()
 
 	// Get commit authors with dates.
-	authorOut, err := run(dir,
+	authorOut, err := run(ctx, dir,
 		"log", rng,
 		"--format=%aN\x1e%aE\x1e%aI\x1f",
 	)
@@ -114,7 +116,7 @@ func Extract(opts Options) ([]Contributor, error) {
 	}
 
 	// Get commit bodies to parse Co-authored-by trailers.
-	trailerOut, err := run(dir,
+	trailerOut, err := run(ctx, dir,
 		"log", rng,
 		"--format=%aI%n%b\x1f",
 	)

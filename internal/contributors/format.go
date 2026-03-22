@@ -17,7 +17,7 @@ func FormatChangelog(contributors []Contributor) string {
 	b.WriteString("Thanks to the following people for their contributions to this release:\n\n")
 
 	for _, c := range contributors {
-		b.WriteString(fmt.Sprintf("- **%s**\n", c.Name))
+		fmt.Fprintf(&b, "- **%s**\n", c.Name)
 	}
 
 	// Highlight first-time contributors.
@@ -28,7 +28,7 @@ func FormatChangelog(contributors []Contributor) string {
 		}
 	}
 	if len(firstTimers) > 0 {
-		b.WriteString(fmt.Sprintf("\nNew contributors: %s — welcome! 🎉\n", strings.Join(firstTimers, ", ")))
+		fmt.Fprintf(&b, "\nNew contributors: %s — welcome! 🎉\n", strings.Join(firstTimers, ", "))
 	}
 
 	return b.String()
@@ -46,7 +46,7 @@ func FormatReleaseNotes(contributors []Contributor) string {
 	b.WriteString("Thank you to everyone who contributed to this release:\n\n")
 
 	for _, c := range contributors {
-		b.WriteString(fmt.Sprintf("- **%s**\n", c.Name))
+		fmt.Fprintf(&b, "- **%s**\n", c.Name)
 	}
 
 	var firstTimers []string
@@ -56,7 +56,7 @@ func FormatReleaseNotes(contributors []Contributor) string {
 		}
 	}
 	if len(firstTimers) > 0 {
-		b.WriteString(fmt.Sprintf("\n✨ New contributors: %s — welcome to grüt!\n", strings.Join(firstTimers, ", ")))
+		fmt.Fprintf(&b, "\n✨ New contributors: %s — welcome to grüt!\n", strings.Join(firstTimers, ", "))
 	}
 
 	return b.String()
@@ -73,10 +73,10 @@ func FormatContributorsMD(contributors []Contributor) string {
 	b.WriteString("|------|---------------|\n")
 
 	for _, c := range contributors {
-		b.WriteString(fmt.Sprintf("| **%s** | %d |\n", c.Name, c.CommitCount))
+		fmt.Fprintf(&b, "| **%s** | %d |\n", c.Name, c.CommitCount)
 	}
 
-	b.WriteString(fmt.Sprintf("\n---\n\n*Last updated: %s*\n", time.Now().UTC().Format("2006-01-02")))
+	fmt.Fprintf(&b, "\n---\n\n*Last updated: %s*\n", time.Now().UTC().Format("2006-01-02"))
 
 	return b.String()
 }

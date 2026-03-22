@@ -1,6 +1,7 @@
 package contributors
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 // keyed by the first non-"log" arg (the ref range).
 func fakeGitRunner(authorOut, trailerOut string) gitRunner {
 	call := 0
-	return func(_ string, args ...string) (string, error) {
+	return func(_ context.Context, _ string, args ...string) (string, error) {
 		call++
 		if call == 1 {
 			return authorOut, nil
@@ -132,7 +133,7 @@ func TestIsBot(t *testing.T) {
 func TestMarkFirstTimers(t *testing.T) {
 	// Simulate: Alice existed before, Bob is new.
 	callCount := 0
-	mockRun := func(_ string, args ...string) (string, error) {
+	mockRun := func(_ context.Context, _ string, args ...string) (string, error) {
 		callCount++
 		// The first two calls are for the main Extract (already done).
 		// MarkFirstTimers calls Extract internally for the "previous" range.
@@ -225,7 +226,7 @@ func TestExtract_EmptyOutput(t *testing.T) {
 func TestExtract_GitError(t *testing.T) {
 	opts := Options{
 		RepoDir: ".",
-		gitRun: func(_ string, args ...string) (string, error) {
+		gitRun: func(_ context.Context, _ string, args ...string) (string, error) {
 			return "", fmt.Errorf("git error")
 		},
 	}
