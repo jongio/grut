@@ -51,12 +51,11 @@ jobs:
         run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260312031701-16a31bc5fbd0
 
       # Compute a stable platform key (e.g. linux-amd64, darwin-arm64).
-      # Used for per-platform baseline paths and artifact names.
+      # Used for artifact names and baseline paths.
       - name: Set platform key
         run: |
           PLATFORM="$(go env GOOS)-$(go env GOARCH)"
           echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
-          echo "BASELINE=perf/baselines/$PLATFORM/main.txt" >> "$GITHUB_ENV"
 
       - name: Run benchmarks
         run: |
@@ -70,18 +69,48 @@ jobs:
           path: bench-current.txt
           retention-days: 90
 
-      # ── PR: compare against the committed per-platform baseline ────────────
-      - name: Compare vs main baseline
+      # ── PR: run main benchmarks on the SAME RUNNER to eliminate cross-machine
+      #    variance.  Apple Silicon GitHub Actions VMs show 30-50% variance across
+      #    different runner instances, making stored-baseline comparisons unreliable.
+      #    By benchmarking both main and PR code on the same machine we keep the
+      #    tight 15% threshold and detect real regressions without false positives.
+      - name: Run main benchmarks (same-runner baseline)
         if: github.event_name == 'pull_request'
         run: |
-          if [ ! -f "$BASELINE" ]; then
-            echo "No baseline at $BASELINE — skipping comparison."
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          PR_REF="$(git rev-parse HEAD)"
+          echo "Checking out base ($BASE_SHA) for same-runner comparison…"
+          git checkout "$BASE_SHA" --quiet
+
+          # Only benchmark packages that exist on the base branch — the PR may
+          # introduce new packages that have no main-branch counterpart.
+          VALID_PKGS=""
+          for pkg in $BENCH_PKGS; do
+            dir="${pkg#./}"
+            dir="${dir%/}"
+            if [ -d "$dir" ]; then
+              VALID_PKGS="$VALID_PKGS $pkg"
+            fi
+          done
+
+          if [ -z "$VALID_PKGS" ]; then
+            echo "No benchmark packages found on base — skipping comparison."
             echo "no_baseline=true" >> "$GITHUB_ENV"
-            exit 0
+          else
+            echo "Benchmarking on base: $VALID_PKGS"
+            go test -bench=. -benchmem -count=6 -run='^$' -timeout=15m \
+              $VALID_PKGS | tee bench-baseline.txt
           fi
-          benchstat "$BASELINE" bench-current.txt > benchstat-diff.txt
+
+          # Return to PR code.
+          git checkout "$PR_REF" --quiet
+
+      - name: Compare vs same-runner baseline
+        if: github.event_name == 'pull_request' && env.no_baseline != 'true'
+        run: |
+          benchstat bench-baseline.txt bench-current.txt > benchstat-diff.txt
           cat benchstat-diff.txt
-          bash scripts/bench-regress.sh "$BASELINE" bench-current.txt 15 || {
+          bash scripts/bench-regress.sh bench-baseline.txt bench-current.txt 15 10 || {
             echo "regression=true" >> "$GITHUB_ENV"
           }
 
@@ -92,7 +121,7 @@ jobs:
             echo "## Benchmarks: \`${{ env.PLATFORM }}\`"
             echo ""
             echo "<details>"
-            echo "<summary>📊 Results vs <code>main</code> — click to expand</summary>"
+            echo "<summary>📊 Results vs <code>main</code> (same-runner) — click to expand</summary>"
             echo ""
             echo '```'
             cat benchstat-diff.txt
@@ -105,7 +134,7 @@ jobs:
               echo "> Benchmarks regressed by more than 15% on \`${{ env.PLATFORM }}\`."
             else
               echo "> [!NOTE]"
-              echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: 15%)."
+              echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: 15%, same-runner comparison)."
             fi
           } > bench-comment.md
 
