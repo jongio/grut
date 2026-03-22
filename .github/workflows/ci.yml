@@ -3,7 +3,17 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/*.md'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/*.md'
   workflow_call:
 
 # Cancel in-progress runs for the same branch/PR to avoid wasted resources.
@@ -70,9 +80,6 @@ jobs:
 
       - run: go test ./...
 
-      - name: Benchmarks
-        run: go test -bench=. -benchmem -run='^$' -count=1 -timeout=5m ./...
-
       - name: Test (race detector)
         env:
           CGO_ENABLED: "1"
@@ -87,7 +94,7 @@ jobs:
   # CGO_ENABLED=0 means cross-compilation is pure Go — no native runners needed.
   cross-compile:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     env:
       CGO_ENABLED: "0"
     steps:

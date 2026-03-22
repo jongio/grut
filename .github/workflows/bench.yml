@@ -3,7 +3,12 @@ name: Benchmarks
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
+    types: [labeled]
 
 permissions:
   contents: write       # commit updated baseline on main pushes
@@ -11,6 +16,7 @@ permissions:
 
 jobs:
   bench:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'perf')
     # One benchmark run per branch per platform — avoids artifact collisions.
     concurrency:
       group: bench-${{ github.ref }}-${{ matrix.os }}
