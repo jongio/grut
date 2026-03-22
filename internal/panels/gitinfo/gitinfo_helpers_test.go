@@ -1419,3 +1419,33 @@ func TestGhTabLabelWidth_NoShort(t *testing.T) {
 	// short is empty, so it uses the full name even when useShort=true.
 	assert.Equal(t, len("Tags 5"), w)
 }
+
+func TestGhTabLabelWidth_UnicodeCount(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	// "✓" is 3 bytes in UTF-8 but 1 display column.
+	// "Actions ✓" should be 9 display columns, not 11 bytes.
+	w := p.ghTabLabelWidth("Actions", "Act", "✓", false)
+	assert.Equal(t, 9, w, "display width should count columns, not bytes")
+}
+
+func TestGhTabLabelWidth_UnicodeShort(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(defaultMock())
+	w := p.ghTabLabelWidth("Actions", "Act", "✓", true)
+	assert.Equal(t, 5, w, "short name + Unicode count: 'Act ✓' = 5 columns")
+}
+
+func TestTabRowUseShort_UnicodeIcons(t *testing.T) {
+	t.Parallel()
+	tabs := []struct{ name, short, count string }{
+		{"Issues", "Is", "3"},
+		{"PRs", "PR", "2"},
+		{"Actions", "Act", "✓"},
+	}
+	// Display width: 1 + (6+1+1) + 3 + (3+1+1) + 3 + (7+1+1) = 1+8+3+5+3+9 = 29
+	// With len() this would incorrectly compute 31 (✓ = 3 bytes).
+	// Width 30 should NOT trigger abbreviation with correct display-width math.
+	assert.False(t, tabRowUseShort(tabs, 30), "should not abbreviate: display width 29 fits in 30")
+	assert.True(t, tabRowUseShort(tabs, 28), "should abbreviate: display width 29 exceeds 28")
+}

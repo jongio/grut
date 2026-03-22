@@ -451,12 +451,12 @@ func TestMouseDoubleClick_ContentRowTriggersAction(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
-func TestMouseDoubleClick_TabBarIgnored(t *testing.T) {
+func TestMouseDoubleClick_TabBarIgnored_NoGitHub(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
 	p.SetSize(80, 20)
 
-	// Double-click on tab bar row should not crash or trigger action.
+	// Without ghOwner/ghRepo, double-click on tab bar is a no-op.
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
 	assert.Nil(t, cmd)
 }
@@ -470,6 +470,80 @@ func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 99, ContentCol: 5})
 	assert.Equal(t, cursor, p.tabCursor[tabBranches])
 	assert.Nil(t, cmd)
+}
+
+// ---------------------------------------------------------------------------
+// Header double-click opens repo in browser (#33)
+// ---------------------------------------------------------------------------
+
+func TestMouseDoubleClick_Header_OpensRepoInBrowser(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "myorg"
+	p.ghRepo = "myrepo"
+	p.SetSize(80, 20)
+
+	// ContentRow 0 is the tab bar / header area. With ghOwner+ghRepo set,
+	// double-clicking it should produce a command to open the repo URL.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	require.NotNil(t, cmd, "header double-click with GitHub info should open browser")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
+	assert.Contains(t, toast.Message, "myorg/myrepo")
+}
+
+func TestMouseDoubleClick_Header_NoOwner_Noop(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = ""
+	p.ghRepo = "repo"
+	p.SetSize(80, 20)
+
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	assert.Nil(t, cmd, "no ghOwner → no-op")
+}
+
+func TestMouseDoubleClick_Header_NoRepo_Noop(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "owner"
+	p.ghRepo = ""
+	p.SetSize(80, 20)
+
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 0})
+	assert.Nil(t, cmd, "no ghRepo → no-op")
+}
+
+func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "jongio"
+	p.ghRepo = "grut"
+
+	_, cmd := p.openRepoInBrowser()
+	require.NotNil(t, cmd)
+	// Execute the command — the underlying OpenInBrowser may fail in CI
+	// (no display), but the toast message will contain the URL label.
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Contains(t, toast.Message, "jongio/grut")
+}
+
+func TestMouseDoubleClick_ContentRow_StillWorks(t *testing.T) {
+	mock := defaultMock()
+	p := newTestPanel(mock)
+	p.ghOwner = "owner"
+	p.ghRepo = "repo"
+	p.SetSize(80, 20)
+	p.Focused = true
+
+	// Content area double-click (row 1 = first item) should still trigger
+	// the item action, not the browser open.
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 1, ContentCol: 5})
+	assert.Equal(t, 0, p.tabCursor[tabBranches])
+	assert.NotNil(t, cmd, "content double-click should trigger item action")
 }
 
 // ---------------------------------------------------------------------------
@@ -3099,14 +3173,21 @@ func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
 	assert.Equal(t, 0, p.tabCursor[tabIssues])
 }
 
-func TestMouseDoubleClick_WithGHClient_TabBar(t *testing.T) {
+func TestMouseDoubleClick_WithGHClient_TabBar_OpensRepo(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
-	// In ModeGitHub, row 0 is the tab bar.
+	// In ModeGitHub with ghOwner/ghRepo set, double-click on the tab bar
+	// row should produce a command that opens the repo in the browser.
 	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: 5})
-	assert.Nil(t, cmd, "double-click on tab bar should be ignored")
+	assert.NotNil(t, cmd, "double-click on tab bar should open repo in browser")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
+	// On headless CI the browser open will fail, but the toast message
+	// should reference the owner/repo.
+	assert.Contains(t, toast.Message, "owner/repo")
 }
 
 func TestMouseWheel_WithGHClient(t *testing.T) {
@@ -4055,4 +4136,237 @@ func TestDKey_DispatchWorkflow(t *testing.T) {
 	_, cmd := p.Update(tea.KeyPressMsg{Code: -1, Text: "D"})
 	// Without a real GH client, dispatch won't fire — just verify no panic.
 	_ = cmd
+}
+
+// ---------------------------------------------------------------------------
+// prColor — mergeable-state color mapping
+// ---------------------------------------------------------------------------
+
+func TestPRColor_OpenClean(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: "clean"}
+	assert.Equal(t, defaultColors.PR, prColor(pr))
+}
+
+func TestPRColor_OpenEmpty(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: ""}
+	assert.Equal(t, defaultColors.PR, prColor(pr), "empty mergeable state should default to green")
+}
+
+func TestPRColor_OpenDirty(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: "dirty"}
+	assert.Equal(t, defaultColors.PRConflict, prColor(pr))
+}
+
+func TestPRColor_OpenUnstable(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: "unstable"}
+	assert.Equal(t, defaultColors.PRUnstable, prColor(pr))
+}
+
+func TestPRColor_OpenBlocked(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: "blocked"}
+	assert.Equal(t, defaultColors.PRBlocked, prColor(pr))
+}
+
+func TestPRColor_OpenUnknown(t *testing.T) {
+	pr := ghPRItem{State: "open", MergeableState: "unknown"}
+	assert.Equal(t, defaultColors.PRUnknown, prColor(pr))
+}
+
+func TestPRColor_Draft(t *testing.T) {
+	pr := ghPRItem{State: "draft", MergeableState: "clean"}
+	assert.Equal(t, defaultColors.PRDraft, prColor(pr), "draft state ignores mergeable")
+}
+
+func TestPRColor_Merged(t *testing.T) {
+	pr := ghPRItem{State: prStateMerged}
+	assert.Equal(t, defaultColors.PRMerged, prColor(pr))
+}
+
+func TestPRColor_Closed(t *testing.T) {
+	pr := ghPRItem{State: "closed"}
+	assert.Equal(t, defaultColors.PRClosed, prColor(pr))
+}
+
+// ---------------------------------------------------------------------------
+// prActionIcon — action run status icon mapping
+// ---------------------------------------------------------------------------
+
+func TestPRActionIcon_Success(t *testing.T) {
+	pr := ghPRItem{ActionConclusion: "success"}
+	icon, color := prActionIcon(pr)
+	assert.Equal(t, checkMark, icon)
+	assert.Equal(t, defaultColors.ActionOK, color)
+}
+
+func TestPRActionIcon_Failure(t *testing.T) {
+	pr := ghPRItem{ActionConclusion: "failure"}
+	icon, color := prActionIcon(pr)
+	assert.Equal(t, "✗", icon)
+	assert.Equal(t, defaultColors.ActionFail, color)
+}
+
+func TestPRActionIcon_TimedOut(t *testing.T) {
+	pr := ghPRItem{ActionConclusion: "timed_out"}
+	icon, color := prActionIcon(pr)
+	assert.Equal(t, "✗", icon)
+	assert.Equal(t, defaultColors.ActionFail, color)
+}
+
+func TestPRActionIcon_InProgress(t *testing.T) {
+	pr := ghPRItem{ActionStatus: "in_progress"}
+	icon, color := prActionIcon(pr)
+	assert.Equal(t, "●", icon)
+	assert.Equal(t, defaultColors.ActionRun, color)
+}
+
+func TestPRActionIcon_Queued(t *testing.T) {
+	pr := ghPRItem{ActionStatus: "queued"}
+	icon, color := prActionIcon(pr)
+	assert.Equal(t, "●", icon)
+	assert.Equal(t, defaultColors.ActionRun, color)
+}
+
+func TestPRActionIcon_None(t *testing.T) {
+	pr := ghPRItem{}
+	icon, color := prActionIcon(pr)
+	assert.Empty(t, icon)
+	assert.Empty(t, color)
+}
+
+func TestPRActionIcon_ConclusionOverridesStatus(t *testing.T) {
+	// When both conclusion and status are set, conclusion takes precedence.
+	pr := ghPRItem{ActionStatus: "in_progress", ActionConclusion: "success"}
+	icon, _ := prActionIcon(pr)
+	assert.Equal(t, checkMark, icon, "conclusion should take precedence over status")
+}
+
+// ---------------------------------------------------------------------------
+// renderPR — mergeable state coloring in rendered output
+// ---------------------------------------------------------------------------
+
+func TestRenderPR_OpenDirty_ContainsOpen(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 42, Title: "Fix conflicts", State: "open", MergeableState: "dirty",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "#42")
+	assert.Contains(t, line, "Fix conflicts")
+	assert.Contains(t, line, "open")
+}
+
+func TestRenderPR_Closed(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 99, Title: "Old PR", State: "closed",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "closed")
+}
+
+func TestRenderPR_WithActionIcon_Success(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 38, Title: "Update deps", State: "open",
+		ActionStatus: "completed", ActionConclusion: "success",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, checkMark, "success icon should appear")
+}
+
+func TestRenderPR_WithActionIcon_Failure(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 35, Title: "Refactor auth", State: "open",
+		ActionStatus: "completed", ActionConclusion: "failure",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "✗", "failure icon should appear")
+}
+
+func TestRenderPR_WithActionIcon_InProgress(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 42, Title: "Fix login redirect", State: "open",
+		ActionStatus: "in_progress",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.Contains(t, line, "●", "in-progress icon should appear")
+}
+
+func TestRenderPR_NoActionIcon_WhenNoRun(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 10, Title: "Simple PR", State: "open",
+	}}
+	line := p.renderPR(item, 80, false)
+	assert.NotContains(t, line, checkMark)
+	assert.NotContains(t, line, "✗")
+	assert.NotContains(t, line, "●")
+}
+
+func TestRenderPR_ActionIcon_NarrowWidth(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	item := listItem{kind: kindPR, pr: ghPRItem{
+		Number: 42, Title: "Very long title that needs truncation", State: "open",
+		ActionConclusion: "success",
+	}}
+	line := p.renderPR(item, 30, false)
+	assert.Contains(t, line, "#42")
+	assert.Contains(t, line, checkMark)
+}
+
+// ---------------------------------------------------------------------------
+// loadGitHubData — action cross-reference
+// ---------------------------------------------------------------------------
+
+func TestBuildGitHubItems_ActionCrossReference(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	prs := []ghPRItem{
+		{Number: 10, Title: "Auth", State: "open", HeadBranch: "main"},
+		{Number: 11, Title: "Deploy", State: "open", HeadBranch: "feature"},
+		{Number: 12, Title: "Other", State: "open", HeadBranch: "no-match"},
+	}
+	actions := []ghActionItem{
+		{RunID: 100, Branch: "main", Status: "completed", Conclusion: "success"},
+		{RunID: 101, Branch: "feature", Status: "in_progress", Conclusion: ""},
+		{RunID: 102, Branch: "main", Status: "completed", Conclusion: "failure"}, // older, should not override
+	}
+
+	// Cross-reference manually (same logic as loadGitHubData)
+	actionByBranch := make(map[string]ghActionItem, len(actions))
+	for _, action := range actions {
+		if _, exists := actionByBranch[action.Branch]; !exists {
+			actionByBranch[action.Branch] = action
+		}
+	}
+	for i, pr := range prs {
+		if action, ok := actionByBranch[pr.HeadBranch]; ok {
+			prs[i].ActionStatus = action.Status
+			prs[i].ActionConclusion = action.Conclusion
+		}
+	}
+
+	// Verify cross-reference results
+	assert.Equal(t, "completed", prs[0].ActionStatus)
+	assert.Equal(t, "success", prs[0].ActionConclusion, "should use first (most recent) action for main")
+	assert.Equal(t, "in_progress", prs[1].ActionStatus)
+	assert.Empty(t, prs[1].ActionConclusion)
+	assert.Empty(t, prs[2].ActionStatus, "no matching action run for no-match branch")
+
+	// Build items and verify render
+	populateGH(p, nil, prs, actions)
+	items := p.tabItems[tabPRs]
+	require.Len(t, items, 3)
+
+	line0 := p.renderPR(items[0], 80, false)
+	assert.Contains(t, line0, checkMark, "PR #10 on main should show success icon")
+
+	line1 := p.renderPR(items[1], 80, false)
+	assert.Contains(t, line1, "●", "PR #11 on feature should show in-progress icon")
+
+	line2 := p.renderPR(items[2], 80, false)
+	assert.NotContains(t, line2, checkMark)
+	assert.NotContains(t, line2, "✗")
+	assert.NotContains(t, line2, "●")
 }

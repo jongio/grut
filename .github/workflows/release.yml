@@ -129,6 +129,48 @@ jobs:
             ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           fi
 
+      - name: Generate contributor notes
+        run: |
+          VERSION="v${{ steps.version.outputs.version }}"
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            go run ./cmd/contrib-notes -from="$PREV_TAG" -to="$VERSION" -format=changelog \
+              > contrib-changelog.md
+            go run ./cmd/contrib-notes -from="$PREV_TAG" -to="$VERSION" -format=release \
+              > contrib-release.md
+          else
+            go run ./cmd/contrib-notes -to="$VERSION" -format=changelog \
+              > contrib-changelog.md
+            go run ./cmd/contrib-notes -to="$VERSION" -format=release \
+              > contrib-release.md
+          fi
+          # Update CONTRIBUTORS.md (all-time hall of fame).
+          go run ./cmd/contrib-notes -format=contributors > CONTRIBUTORS.md
+          cat contrib-changelog.md
+
+      - name: Inject contributor section into CHANGELOG
+        run: |
+          if [ -s contrib-changelog.md ] && ! grep -q "^### Contributors" CHANGELOG.md; then
+            CONTRIB_BLOCK=$(cat contrib-changelog.md)
+            awk -v block="$CONTRIB_BLOCK" '
+              /^## \[Unreleased\]/ { print; found=1; next }
+              found && /^### / { print block; print ""; found=0 }
+              { print }
+            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          fi
+
+      - name: Set contributor footer for GoReleaser
+        run: |
+          if [ -s contrib-release.md ]; then
+            {
+              echo "CONTRIB_FOOTER<<CONTRIB_EOF"
+              cat contrib-release.md
+              echo "CONTRIB_EOF"
+            } >> "$GITHUB_ENV"
+          else
+            echo "CONTRIB_FOOTER=" >> "$GITHUB_ENV"
+          fi
+
       - name: Commit performance notes and baselines
         run: |
           VERSION="v${{ steps.version.outputs.version }}"
@@ -137,7 +179,7 @@ jobs:
           # Archive a versioned snapshot and update the rolling main baseline.
           cp bench-release.txt "perf/baselines/$PLATFORM/${VERSION}.txt"
           cp bench-release.txt "perf/baselines/$PLATFORM/main.txt"
-          git add CHANGELOG.md \
+          git add CHANGELOG.md CONTRIBUTORS.md \
             "perf/baselines/$PLATFORM/${VERSION}.txt" \
             "perf/baselines/$PLATFORM/main.txt"
           git diff --cached --quiet || \

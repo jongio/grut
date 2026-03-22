@@ -179,11 +179,9 @@ var deadcodeAllowlist = []string{
 	"Model.handleSwitchOrCreateTab",
 	"Model.handleCloseTab",
 
-	// ai — token estimation + sanitization (public API / test accessors)
+	// ai — token estimation (public API / test accessors)
 	"tokenBudget.remaining",
 	"estimateTokensForStatus",
-	"SanitizeCommitMessage",
-	"stripControlCharsPreserveNewlines",
 
 	// bookmarks — public factory for testing
 	"NewManagerWithDir",
@@ -236,9 +234,6 @@ var deadcodeAllowlist = []string{
 
 	// mcp/server — test-only helper for validating path arrays
 	"validateGitPaths",
-
-	// notify/modal — public API for action picker with message subtitle
-	"ShowActionPickerWithMessage",
 
 	// fuzzyfinder/source — test-support cache invalidation API
 	"fileCache.invalidate",
@@ -721,6 +716,30 @@ func winToWSLPath(winPath string) string {
 		p = "/mnt/" + drive + p[2:]
 	}
 	return p
+}
+
+// Contributors regenerates CONTRIBUTORS.md from the full git history.
+func Contributors() error {
+	fmt.Println("=== Generating CONTRIBUTORS.md ===")
+	out, err := cmdOutput("go", "run", "./cmd/contrib-notes", "-format=contributors")
+	if err != nil {
+		return fmt.Errorf("contributors: %w", err)
+	}
+	path := filepath.Join(projectDir(), "CONTRIBUTORS.md")
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return fmt.Errorf("write CONTRIBUTORS.md: %w", err)
+	}
+	fmt.Printf("✓ CONTRIBUTORS.md updated (%d bytes)\n", len(out))
+	return nil
+}
+
+// Deadcode runs dead-code analysis with allowlist filtering.
+func Deadcode() error {
+	fmt.Println("=== Dead code detection ===")
+	if _, err := exec.LookPath("deadcode"); err != nil {
+		return fmt.Errorf("deadcode not installed (run: go install golang.org/x/tools/cmd/deadcode@latest)")
+	}
+	return runDeadcode()
 }
 
 // Clean removes the bin/ directory.

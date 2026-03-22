@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,6 +23,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/mattn/go-runewidth"
 )
 
 // gitOps defines the git operations required by the gitinfo panel.
@@ -133,12 +135,15 @@ type ghIssueItem struct {
 
 // ghPRItem holds display data for a GitHub pull request.
 type ghPRItem struct {
-	Title      string
-	State      string // "open", "closed", "merged", "draft"
-	HeadBranch string
-	Author     string
-	HTMLURL    string // GitHub web URL
-	Number     int
+	Title            string
+	State            string // "open", "closed", "merged", "draft"
+	HeadBranch       string
+	Author           string
+	HTMLURL          string // GitHub web URL
+	Number           int
+	MergeableState   string // "clean", "dirty", "unstable", "blocked", "unknown", ""
+	ActionStatus     string // matched action run status: "success", "failure", "in_progress", "queued", ""
+	ActionConclusion string // matched action run conclusion
 }
 
 // prStateMerged is the canonical value for a merged pull request state.
@@ -256,6 +261,9 @@ var watchFrames = []string{"●", "◐", "○", "◑"}
 
 // checkMark is the success icon used in status indicators.
 const checkMark = "✓"
+
+// crossMark is the failure icon used in status indicators.
+const crossMark = "✗"
 
 // actionsWatchTickInterval is the polling interval for the GitHub Actions
 // watch animation frame rate.
@@ -385,6 +393,11 @@ var defaultColors = struct {
 	URL        string
 	Issue      string
 	PR         string
+	PRConflict string
+	PRUnstable string
+	PRBlocked  string
+	PRUnknown  string
+	PRClosed   string
 	PRDraft    string
 	PRMerged   string
 	ActionOK   string
@@ -409,6 +422,11 @@ var defaultColors = struct {
 	URL:        "#6272A4",
 	Issue:      "#F8F8F2",
 	PR:         "#50FA7B",
+	PRConflict: "#FF5555",
+	PRUnstable: "#F1FA8C",
+	PRBlocked:  "#FFB86C",
+	PRUnknown:  "#6272A4",
+	PRClosed:   "#994444",
 	PRDraft:    "#FFB86C",
 	PRMerged:   "#BD93F9",
 	ActionOK:   "#50FA7B",
@@ -1266,8 +1284,8 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	tbh := p.tabBarHeight()
 	if msg.ContentRow < tbh {
-		// Tab bar double-click — treat as tab switch (already handled by click).
-		return p, nil
+		// Header / tab bar double-click — open repo in browser.
+		return p.openRepoInBrowser()
 	}
 	// Content area double-click — move cursor then execute action.
 	items := p.tabItems[p.activeTab]
@@ -1967,6 +1985,16 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Copied: " + copied, Level: notify.Success}
 	}
+}
+
+// openRepoInBrowser opens the repository's GitHub page in the default browser.
+// Returns nil cmd when owner/repo are unavailable (e.g. pure git mode).
+func (p *Panel) openRepoInBrowser() (panels.Panel, tea.Cmd) {
+	if p.ghOwner == "" || p.ghRepo == "" {
+		return p, nil
+	}
+	url := fmt.Sprintf("https://github.com/%s/%s", p.ghOwner, p.ghRepo)
+	return p.openURLAndToast(url, p.ghOwner+"/"+p.ghRepo)
 }
 
 // openURLAndToast opens a URL in the browser and shows a toast notification.
@@ -2719,7 +2747,7 @@ func (p *Panel) renderTabBar(width int) string {
 		// Format: " Name count · Name count · ..."
 		fullWidth := 1 // leading space
 		for i, t := range tabs {
-			fullWidth += len(t.name) + 1 + len(t.count) // "Name count"
+			fullWidth += runewidth.StringWidth(t.name) + 1 + runewidth.StringWidth(t.count) // "Name count"
 			if i < len(tabs)-1 {
 				fullWidth += 3 // " · "
 			}
@@ -2806,7 +2834,7 @@ func (p *Panel) actionsStatusIcon() string {
 	case "success": //nolint:goconst // inline string is more readable here
 		return checkMark
 	case "failure", "timed_out": //nolint:goconst // inline string is more readable here
-		return "✗"
+		return crossMark
 	}
 	if latest.Status == "in_progress" || latest.Status == "queued" { //nolint:goconst // inline string is more readable here
 		if p.actionsWatching {
@@ -3078,7 +3106,7 @@ func (p *Panel) ghTabLabelWidth(name, short, count string, useShort bool) int {
 	if useShort && short != "" {
 		name = short
 	}
-	return len(fmt.Sprintf("%s %s", name, count))
+	return runewidth.StringWidth(fmt.Sprintf("%s %s", name, count))
 }
 
 // tabRowUseShort returns true when tab labels should be abbreviated to fit
@@ -3086,7 +3114,7 @@ func (p *Panel) ghTabLabelWidth(name, short, count string, useShort bool) int {
 func tabRowUseShort(tabs []struct{ name, short, count string }, width int) bool {
 	fullWidth := 1 // leading space
 	for i, t := range tabs {
-		fullWidth += len(t.name) + 1 + len(t.count) // "Name count"
+		fullWidth += runewidth.StringWidth(t.name) + 1 + runewidth.StringWidth(t.count) // "Name count"
 		if i < len(tabs)-1 {
 			fullWidth += 3 // " · "
 		}
@@ -3207,6 +3235,46 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
+		// Enrich open PRs with mergeable state (parallel individual fetches).
+		if len(result.prs) > 0 {
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			for i, pr := range result.prs {
+				if pr.State != "open" {
+					continue
+				}
+				wg.Add(1)
+				go func(idx int, num int) {
+					defer wg.Done()
+					detail, err := client.GetPR(ctx, owner, repo, num)
+					if err != nil {
+						slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", err)
+						return
+					}
+					mu.Lock()
+					result.prs[idx].MergeableState = detail.GetMergeableState()
+					mu.Unlock()
+				}(i, pr.Number)
+			}
+			wg.Wait()
+		}
+
+		// Cross-reference action runs to PRs by head branch.
+		if len(result.prs) > 0 && len(result.actions) > 0 {
+			actionByBranch := make(map[string]ghActionItem, len(result.actions))
+			for _, action := range result.actions {
+				if _, exists := actionByBranch[action.Branch]; !exists {
+					actionByBranch[action.Branch] = action // first = most recent
+				}
+			}
+			for i, pr := range result.prs {
+				if action, ok := actionByBranch[pr.HeadBranch]; ok {
+					result.prs[i].ActionStatus = action.Status
+					result.prs[i].ActionConclusion = action.Conclusion
+				}
+			}
+		}
+
 		// Fetch workflow definitions.
 		workflows, err := client.ListWorkflows(ctx, owner, repo, &gh.ListOptions{PerPage: 50})
 		if err != nil {
@@ -4042,16 +4110,71 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	return style.Render(line)
 }
 
+// prColor returns the foreground color for a PR based on its state and
+// mergeable status.
+func prColor(pr ghPRItem) string {
+	switch pr.State {
+	case "draft":
+		return defaultColors.PRDraft
+	case prStateMerged:
+		return defaultColors.PRMerged
+	case "closed":
+		return defaultColors.PRClosed
+	default: // "open"
+		switch pr.MergeableState {
+		case "dirty":
+			return defaultColors.PRConflict
+		case "unstable":
+			return defaultColors.PRUnstable
+		case "blocked":
+			return defaultColors.PRBlocked
+		case "unknown":
+			return defaultColors.PRUnknown
+		default: // "clean" or ""
+			return defaultColors.PR
+		}
+	}
+}
+
+// prActionIcon returns the status icon and its color for the action run
+// associated with a PR. Returns empty strings when no action run exists.
+func prActionIcon(pr ghPRItem) (icon string, color string) {
+	switch pr.ActionConclusion {
+	case "success":
+		return checkMark, defaultColors.ActionOK
+	case "failure", "timed_out":
+		return crossMark, defaultColors.ActionFail
+	}
+	switch pr.ActionStatus {
+	case "in_progress", "queued":
+		return "●", defaultColors.ActionRun
+	}
+	return "", ""
+}
+
 // renderPR renders a GitHub PR line: "  #41 Add GitHub client   draft"
+// Open PRs are colored by mergeable state, and an action-run status icon
+// is appended when a matching workflow run exists for the PR’s head branch.
 func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	pr := item.pr
 	prefix := "  "
 	number := fmt.Sprintf("#%d ", pr.Number)
-	// Right side: state.
+
+	// Action status icon (shown after state text).
+	actionIcon, actionColor := prActionIcon(pr)
+	iconSuffix := ""
+	iconVisualWidth := 0
+	if actionIcon != "" {
+		iconSuffix = " " + actionIcon // space + icon char
+		iconVisualWidth = 1 + runewidth.StringWidth(actionIcon)
+	}
+
+	// Right side: state + optional action icon.
 	rightSide := " " + pr.State
+
 	// Calculate available width for the title.
 	prefixLen := lipgloss.Width(prefix) + lipgloss.Width(number)
-	rightLen := lipgloss.Width(rightSide)
+	rightLen := lipgloss.Width(rightSide) + iconVisualWidth
 	titleWidth := width - prefixLen - rightLen - 1
 	title := pr.Title
 	titleRunes := []rune(title)
@@ -4064,23 +4187,28 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	} else if titleWidth <= 0 {
 		title = ""
 	}
+
 	leftSide := prefix + number + title
-	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide)
+	usedWidth := lipgloss.Width(leftSide) + lipgloss.Width(rightSide) + iconVisualWidth
 	gap := ""
 	if usedWidth < width {
 		gap = strings.Repeat(" ", width-usedWidth)
 	}
-	line := leftSide + gap + rightSide
-	// Color based on state.
-	var fg string
-	switch pr.State {
-	case "draft":
-		fg = defaultColors.PRDraft
-	case prStateMerged:
-		fg = defaultColors.PRMerged
-	default: // "open", "closed"
-		fg = defaultColors.PR
+
+	// Build the line: if we have an action icon, render it with its own color
+	// so it stands out from the PR state color.
+	fg := prColor(pr)
+	var line string
+	if iconSuffix != "" {
+		iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(actionColor))
+		if isCursor {
+			iconStyle = iconStyle.Background(lipgloss.Color(defaultColors.CursorBg))
+		}
+		line = leftSide + gap + rightSide + iconStyle.Render(iconSuffix)
+	} else {
+		line = leftSide + gap + rightSide
 	}
+
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
@@ -4101,7 +4229,7 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		icon = checkMark
 		fg = defaultColors.ActionOK
 	case "failure", "timed_out":
-		icon = "✗"
+		icon = crossMark
 		fg = defaultColors.ActionFail
 	default:
 		if run.Status == "in_progress" || run.Status == "queued" {

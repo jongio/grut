@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Automated contributor recognition in changelogs, GitHub Releases, and CONTRIBUTORS.md hall of fame
 - Welcome screen overlay with animated grüt banner and first-run keyboard reference
 - Right-click context menu with action picker for all panels
 - Configurable click actions with mouse support for all panels
