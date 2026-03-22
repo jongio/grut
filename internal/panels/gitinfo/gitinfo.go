@@ -22,6 +22,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/mattn/go-runewidth"
 )
 
 // gitOps defines the git operations required by the gitinfo panel.
@@ -2719,7 +2720,7 @@ func (p *Panel) renderTabBar(width int) string {
 		// Format: " Name count · Name count · ..."
 		fullWidth := 1 // leading space
 		for i, t := range tabs {
-			fullWidth += len(t.name) + 1 + len(t.count) // "Name count"
+			fullWidth += runewidth.StringWidth(t.name) + 1 + runewidth.StringWidth(t.count) // "Name count"
 			if i < len(tabs)-1 {
 				fullWidth += 3 // " · "
 			}
@@ -3078,7 +3079,7 @@ func (p *Panel) ghTabLabelWidth(name, short, count string, useShort bool) int {
 	if useShort && short != "" {
 		name = short
 	}
-	return len(fmt.Sprintf("%s %s", name, count))
+	return runewidth.StringWidth(fmt.Sprintf("%s %s", name, count))
 }
 
 // tabRowUseShort returns true when tab labels should be abbreviated to fit
@@ -3086,7 +3087,7 @@ func (p *Panel) ghTabLabelWidth(name, short, count string, useShort bool) int {
 func tabRowUseShort(tabs []struct{ name, short, count string }, width int) bool {
 	fullWidth := 1 // leading space
 	for i, t := range tabs {
-		fullWidth += len(t.name) + 1 + len(t.count) // "Name count"
+		fullWidth += runewidth.StringWidth(t.name) + 1 + runewidth.StringWidth(t.count) // "Name count"
 		if i < len(tabs)-1 {
 			fullWidth += 3 // " · "
 		}
