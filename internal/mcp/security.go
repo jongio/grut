@@ -115,8 +115,12 @@ func (j *PathJail) Validate(path string) (string, error) {
 }
 
 // containsDotDot reports whether path contains a ".." component.
+// Backslashes are unconditionally replaced with forward slashes so that
+// Windows-style traversal (e.g. "..\etc\passwd") is detected on every OS.
+// filepath.ToSlash only replaces os.PathSeparator, which is already '/' on
+// Unix — so it would leave backslashes untouched.
 func containsDotDot(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+	for _, part := range strings.Split(strings.ReplaceAll(path, "\\", "/"), "/") {
 		if part == ".." {
 			return true
 		}

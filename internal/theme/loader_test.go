@@ -243,8 +243,8 @@ func TestContainsDotDot(t *testing.T) {
 		{"../etc/passwd", true},
 		{"a/../../b", true},
 		{`..\..\windows\system32`, true},
-		{"theme..toml", false},  // double dot in filename, not a component
-		{"a/.../b", false},      // triple dot is not traversal
+		{"theme..toml", false}, // double dot in filename, not a component
+		{"a/.../b", false},     // triple dot is not traversal
 		{".hidden/theme.toml", false},
 	}
 

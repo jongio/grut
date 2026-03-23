@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -315,9 +316,14 @@ func TestWSL() error {
 	// filepath.ToSlash converts backslashes to forward slashes, which is
 	// required for wslpath on WSL 1 — passing single-backslash Windows paths
 	// causes wslpath to strip the backslashes and return exit status 1.
-	wslPath, err := cmdOutput("wsl", "wslpath", "-u", filepath.ToSlash(projectDir()))
+	// Use a short timeout: if WSL doesn't respond in 30s it is not usable.
+	wslPath, err := cmdOutputTimeout(30*time.Second, "wsl", "wslpath", "-u", filepath.ToSlash(projectDir()))
 	if err != nil {
-		return fmt.Errorf("wslpath: %w", err)
+		if os.Getenv("WSL_SKIP") != "" {
+			fmt.Println("   Skipped (WSL did not respond; WSL_SKIP set)")
+			return nil
+		}
+		return fmt.Errorf("wslpath: WSL did not respond within 30s — is WSL running? (set WSL_SKIP=1 to skip) (%w)", err)
 	}
 	wslPath = strings.TrimSpace(wslPath)
 
@@ -341,7 +347,7 @@ func TestWSL() error {
 		line := strings.TrimSpace(string(content))
 		if strings.HasPrefix(line, "gitdir:") {
 			winGitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-			wslGitDir, convErr := cmdOutput("wsl", "wslpath", "-u", filepath.ToSlash(winGitDir))
+			wslGitDir, convErr := cmdOutputTimeout(30*time.Second, "wsl", "wslpath", "-u", filepath.ToSlash(winGitDir))
 			if convErr == nil {
 				wslGitDir = strings.TrimSpace(wslGitDir)
 				newContent := "gitdir: " + wslGitDir + "\n"
@@ -354,7 +360,10 @@ func TestWSL() error {
 		}
 	}
 
-	cmd := exec.Command("wsl", "bash", "-lc",
+	const wslTestTimeout = 10 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), wslTestTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "wsl", "bash", "-lc",
 		fmt.Sprintf("cd %s && go test ./... -count=1", escapedPath))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1097,6 +1106,16 @@ func run(name string, args ...string) error {
 
 func cmdOutput(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
+	cmd.Dir = projectDir()
+	out, err := cmd.Output()
+	return string(out), err
+}
+
+// cmdOutputTimeout runs a command with a deadline, returning an error on timeout.
+func cmdOutputTimeout(d time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = projectDir()
 	out, err := cmd.Output()
 	return string(out), err

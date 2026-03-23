@@ -465,11 +465,12 @@ func looksLikePath(name string) bool {
 }
 
 // containsDotDot reports whether the path contains a ".." component,
-// which could allow directory traversal. Paths are normalised to forward
-// slashes before splitting so that both Unix and Windows separators are
-// handled consistently.
+// which could allow directory traversal. Backslashes are unconditionally
+// replaced with forward slashes so that Windows-style traversal (e.g.
+// "..\etc\passwd") is detected on every OS. filepath.ToSlash only replaces
+// os.PathSeparator, which is already '/' on Unix — leaving backslashes intact.
 func containsDotDot(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+	for _, part := range strings.Split(strings.ReplaceAll(path, "\\", "/"), "/") {
 		if part == ".." {
 			return true
 		}

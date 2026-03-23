@@ -14,8 +14,11 @@ import (
 // internal git metadata while still allowing benign dot-files such as
 // .gitignore and .gitattributes.
 func IsSensitivePath(path string) error {
-	// Normalise to forward slashes for consistent matching.
-	normalized := filepath.ToSlash(path)
+	// Normalise to forward slashes for consistent matching. Use
+	// strings.ReplaceAll instead of filepath.ToSlash because the latter only
+	// replaces os.PathSeparator (already '/' on Unix), leaving backslashes
+	// intact and allowing Windows-style traversal bypasses on Linux.
+	normalized := strings.ReplaceAll(path, "\\", "/")
 
 	// On Windows, strip NTFS alternate data stream markers (":stream_name")
 	// and trailing dots/spaces from path components. The OS silently strips
