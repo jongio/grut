@@ -280,7 +280,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "enter/a", Description: "Apply stash entry", Action: "apply"},
 		{Key: "p", Description: "Pop stash entry", Action: "pop"},
 		{Key: "n/s", Description: "Push new stash", Action: "item_create"},
-		{Key: "d", Description: "Drop stash entry", Action: "item_delete"},
+		{Key: "d/x", Description: "Drop stash entry", Action: "item_delete"},
 		{Key: "y", Description: "Copy stash reference", Action: "item_copy"},
 		{Key: "D", Description: "Drop all stash entries", Action: "drop_all"},
 	}
@@ -441,7 +441,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.executeApply()
 	case "p":
 		return p.executePop()
-	case "d":
+	case "d", "x":
 		return p.requestDrop()
 	case "n", "s":
 		return p.requestPush()

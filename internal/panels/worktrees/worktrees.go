@@ -193,6 +193,17 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, p.loadWorktrees()
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
+	// CRUD actions dispatched via keymap.
+	case panels.ItemDeleteMsg:
+		if !p.Focused {
+			return p, nil
+		}
+		return p.requestDelete()
+	case panels.ItemCreateMsg:
+		if !p.Focused {
+			return p, nil
+		}
+		return p.requestCreate()
 	}
 	return p, nil
 }
@@ -232,7 +243,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "enter", Description: "Switch to worktree", Action: "switch"},
 		{Key: "n", Description: "New worktree", Action: "create"},
-		{Key: "d", Description: "Remove worktree", Action: "remove"},
+		{Key: "d/x", Description: "Remove worktree", Action: "item_delete"},
 		{Key: "R", Description: "Refresh", Action: "refresh"},
 		{Key: "p", Description: "Prune missing", Action: "prune"},
 	}
@@ -304,7 +315,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.requestSwitch()
 	case "n":
 		return p.requestCreate()
-	case "d":
+	case "d", "x":
 		return p.requestDelete()
 	case "R":
 		return p, p.loadWorktrees()

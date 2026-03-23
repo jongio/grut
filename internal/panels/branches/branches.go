@@ -113,6 +113,7 @@ type Panel struct {
 	offset          int       // viewport scroll offset
 	pending         pendingOp // operation awaiting modal result
 	showAnnotations bool      // whether to display annotations next to branch names
+	preserveCursor  bool      // when true, buildItems preserves cursor position instead of jumping to current branch
 }
 
 // Compile-time interface check.
@@ -261,7 +262,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "enter", Description: "Checkout branch", Action: "checkout"},
 		{Key: "n", Description: "Create new branch", Action: "item_create"},
-		{Key: "x", Description: "Delete branch", Action: "item_delete"},
+		{Key: "d/x", Description: "Delete branch", Action: "item_delete"},
 		{Key: "e/F2", Description: "Rename branch", Action: "item_edit"},
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy branch name", Action: "item_copy"},
@@ -295,6 +296,7 @@ func (p *Panel) handleOpResult(msg branchOpResultMsg) (panels.Panel, tea.Cmd) {
 	// Refresh branches after a successful operation.
 	op := msg.op
 	name := msg.name
+	p.preserveCursor = true
 	cmds := []tea.Cmd{p.loadBranches()}
 	switch op {
 	case "checkout":
@@ -717,6 +719,10 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 // buildItems constructs the flat display list from branch data and
 // positions the cursor on the current branch (if any).
 func (p *Panel) buildItems(branches []git.Branch) {
+	prevCursor := p.cursor
+	shouldPreserve := p.preserveCursor
+	p.preserveCursor = false
+
 	var local, remote []git.Branch
 	for _, b := range branches {
 		if b.IsRemote {
@@ -738,21 +744,54 @@ func (p *Panel) buildItems(branches []git.Branch) {
 			p.items = append(p.items, listItem{branch: b})
 		}
 	}
-	// Default cursor to first selectable item.
-	p.cursor = 0
-	for i, item := range p.items {
-		if !item.isHeader {
-			p.cursor = i
-			break
+
+	if shouldPreserve && len(p.items) > 0 {
+		// After an operation (delete/rename/create): preserve cursor
+		// position so the user can repeat operations on adjacent items.
+		p.cursor = prevCursor
+		if p.cursor >= len(p.items) {
+			p.cursor = len(p.items) - 1
+		}
+		if p.cursor < 0 {
+			p.cursor = 0
+		}
+		// If the cursor landed on a header, move to the nearest branch.
+		if p.items[p.cursor].isHeader {
+			moved := false
+			for i := p.cursor + 1; i < len(p.items); i++ {
+				if !p.items[i].isHeader {
+					p.cursor = i
+					moved = true
+					break
+				}
+			}
+			if !moved {
+				for i := p.cursor - 1; i >= 0; i-- {
+					if !p.items[i].isHeader {
+						p.cursor = i
+						break
+					}
+				}
+			}
+		}
+	} else {
+		// Initial load or explicit refresh: position on current branch.
+		p.cursor = 0
+		for i, item := range p.items {
+			if !item.isHeader {
+				p.cursor = i
+				break
+			}
+		}
+		// Prefer placing cursor on the current branch.
+		for i, item := range p.items {
+			if !item.isHeader && item.branch.IsCurrent {
+				p.cursor = i
+				break
+			}
 		}
 	}
-	// Prefer placing cursor on the current branch.
-	for i, item := range p.items {
-		if !item.isHeader && item.branch.IsCurrent {
-			p.cursor = i
-			break
-		}
-	}
+
 	p.offset = 0
 	p.ensureCursorVisible()
 	p.computeAnnotations(branches)
