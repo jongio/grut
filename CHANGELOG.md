@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Contributors
+
+Thanks to the following people for their contributions to this release:
+
+- **Copilot**
+- **Test**
+- **Jon Gallant**
+
+New contributors: **Copilot**, **Test** — welcome!
+
 ### Added
 - Automated contributor recognition in changelogs, GitHub Releases, and CONTRIBUTORS.md hall of fame
 - Welcome screen overlay with animated grüt banner and first-run keyboard reference

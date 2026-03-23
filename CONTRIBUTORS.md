@@ -1,16 +1,16 @@
 # Contributors
 
-Thank you to everyone who has contributed to gr├╝t! This file is
+Thank you to everyone who has contributed to grüt! This file is
 auto-generated from git history during each release.
 
 ## All Contributors
 
 | Name | Contributions |
 |------|---------------|
-| **Copilot** | 28 |
-| **Jon Gallant** | 21 |
-| **Test** | 14 |
+| **Copilot** | 64 |
+| **Test** | 49 |
+| **Jon Gallant** | 28 |
 
 ---
 
-*Last updated: 2026-03-22*
+*Last updated: 2026-03-23*
