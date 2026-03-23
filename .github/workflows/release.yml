@@ -186,6 +186,17 @@ jobs:
             git commit -m "perf: add ${VERSION} $PLATFORM baseline and release notes [skip ci]"
           git push
 
+      - name: Clean intermediate files
+        run: rm -f bench-release.txt perf-notes.md contrib-changelog.md contrib-release.md
+
+      - name: Re-point tag to final commit
+        run: |
+          VERSION="v${{ steps.version.outputs.version }}"
+          # The tag was created before the perf-baseline commit, so HEAD has
+          # moved past it.  Re-tag at HEAD so GoReleaser sees a clean state.
+          git tag -fa "$VERSION" -m "$VERSION"
+          git push --force origin "$VERSION"
+
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: "v2.9.0"
