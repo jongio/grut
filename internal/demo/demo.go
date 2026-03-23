@@ -313,6 +313,11 @@ import (
 )
 
 func main() {
+	// Warn loudly if JWT_SECRET is still set to a well-known development default.
+	if s := os.Getenv("JWT_SECRET"); s == "change-me" || s == "dev-secret-do-not-use" || s == "" {
+		log.Println("WARNING: JWT_SECRET is unset or using a default value — set a strong secret before deploying")
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

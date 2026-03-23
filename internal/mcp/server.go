@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -157,7 +158,8 @@ func (s *Server) validateGitPathInJail(path string) (string, error) {
 		return "", fmt.Errorf("resolve relative path: %w", err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path escapes repository root: %s", path)
+		slog.Debug("mcp: git path escapes root", "path", path)
+		return "", fmt.Errorf("path escapes repository root")
 	}
 	return filepath.ToSlash(rel), nil
 }

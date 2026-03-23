@@ -225,3 +225,57 @@ func TestThemeTOMLMetaVariant(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, th.Variant)
 }
+
+// ---------------------------------------------------------------------------
+// containsDotDot — path traversal detection
+// ---------------------------------------------------------------------------
+
+func TestContainsDotDot(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"simple.toml", false},
+		{"/absolute/path/theme.toml", false},
+		{"relative/path/theme.toml", false},
+		{"../etc/passwd", true},
+		{"a/../../b", true},
+		{`..\..\windows\system32`, true},
+		{"theme..toml", false},  // double dot in filename, not a component
+		{"a/.../b", false},      // triple dot is not traversal
+		{".hidden/theme.toml", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			got := containsDotDot(tt.path)
+			assert.Equal(t, tt.want, got, "containsDotDot(%q)", tt.path)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Load — path traversal rejection
+// ---------------------------------------------------------------------------
+
+func TestLoadRejectsTraversalPath(t *testing.T) {
+	// A theme name with path traversal should fall back to default,
+	// not read from an arbitrary location.
+	th, err := Load("../../etc/passwd")
+	require.NoError(t, err)
+	// Should have fallen back to the built-in "default" theme.
+	assert.Equal(t, "default", th.Name)
+}
+
+func TestLoadAcceptsCleanAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom.toml")
+	require.NoError(t, os.WriteFile(path, []byte(completeTestTOML), 0o600))
+
+	th, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, "#000000", th.Colors.Background)
+}

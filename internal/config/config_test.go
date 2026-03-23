@@ -1072,6 +1072,14 @@ func TestRejectEmbeddedKeys(t *testing.T) {
 		assert.Contains(t, errs[0].Error(), "embedded API key")
 	})
 
+	t.Run("GitHub App token detected (gat_)", func(t *testing.T) {
+		ai := clean()
+		ai.Provider = "gat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+		errs := rejectEmbeddedKeys(nil, "ai", ai)
+		require.NotEmpty(t, errs)
+		assert.Contains(t, errs[0].Error(), "embedded API key")
+	})
+
 	t.Run("normal string no error", func(t *testing.T) {
 		ai := clean()
 		errs := rejectEmbeddedKeys(nil, "ai", ai)

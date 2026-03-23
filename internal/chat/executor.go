@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -221,7 +222,8 @@ func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string,
 	}
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	if err := mcp.IsSensitivePath(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
@@ -269,7 +271,8 @@ func (e *ToolExecutor) fileWrite(_ context.Context, args map[string]any) (string
 	}
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	if err := mcp.IsSensitivePath(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
@@ -308,7 +311,8 @@ func (e *ToolExecutor) fileDelete(_ context.Context, args map[string]any) (strin
 	}
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	if err := os.Remove(resolved); err != nil {
 		return "", fmt.Errorf("delete file: %w", err)
@@ -330,11 +334,13 @@ func (e *ToolExecutor) fileRename(_ context.Context, args map[string]any) (strin
 	}
 	resolvedOld, err := e.jail.Validate(oldPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid old path: %s", oldPath)
+		slog.Debug("chat: invalid old path rejected", "path", oldPath, "error", err)
+		return "", fmt.Errorf("invalid old path")
 	}
 	resolvedNew, err := e.jail.Validate(newPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid new path: %s", newPath)
+		slog.Debug("chat: invalid new path rejected", "path", newPath, "error", err)
+		return "", fmt.Errorf("invalid new path")
 	}
 	// Ensure parent directory for target exists.
 	if mkErr := os.MkdirAll(filepath.Dir(resolvedNew), 0o755); mkErr != nil {
@@ -360,7 +366,8 @@ func (e *ToolExecutor) fileList(_ context.Context, args map[string]any) (string,
 	recursive := getBool(args, "recursive")
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	var entries []string
 	if recursive {
@@ -424,7 +431,8 @@ func (e *ToolExecutor) fileMkdir(_ context.Context, args map[string]any) (string
 	}
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	if err := os.MkdirAll(resolved, 0o755); err != nil {
 		return "", fmt.Errorf("create directory: %w", err)
@@ -724,7 +732,8 @@ func (e *ToolExecutor) navigateTo(args map[string]any) (string, error) {
 	// Validate the path is inside the repo, but navigation itself is a
 	// message for the TUI — we just return the validated relative path.
 	if _, err := e.jail.Validate(path); err != nil {
-		return "", fmt.Errorf("invalid path: %s", path)
+		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	return fmt.Sprintf("navigate:%s", path), nil
 }
@@ -740,7 +749,8 @@ func (e *ToolExecutor) searchFiles(ctx context.Context, args map[string]any) (st
 	}
 	resolved, err := e.jail.Validate(searchPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", searchPath)
+		slog.Debug("chat: invalid path rejected", "path", searchPath, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	var matches []string
 	walkErr := filepath.WalkDir(resolved, func(p string, d fs.DirEntry, walkErr error) error {
@@ -796,7 +806,8 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 	}
 	resolved, err := e.jail.Validate(searchPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %s", searchPath)
+		slog.Debug("chat: invalid path rejected", "path", searchPath, "error", err)
+		return "", fmt.Errorf("invalid path")
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {

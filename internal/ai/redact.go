@@ -77,6 +77,15 @@ var builtinSecretPatterns = []string{
 
 	// JWT tokens (three base64url-encoded segments).
 	`eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+`,
+
+	// Google Cloud API keys.
+	`AIza[0-9A-Za-z_-]{35}`,
+
+	// SendGrid API keys.
+	`SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}`,
+
+	// Twilio API keys.
+	`SK[a-f0-9]{32}`,
 }
 
 // Redactor sanitises content before it reaches AI providers, removing

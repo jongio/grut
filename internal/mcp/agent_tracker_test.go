@@ -285,6 +285,63 @@ func TestSpawn_InvalidCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to start agent")
 }
 
+// ---------------------------------------------------------------------------
+// validateAgentArg — argument sanitisation
+// ---------------------------------------------------------------------------
+
+func TestValidateAgentArg(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		arg     string
+		wantErr bool
+		errMsg  string
+	}{
+		{"clean string", "hello", false, ""},
+		{"flag allowed", "-n", false, ""},
+		{"long flag allowed", "--output", false, ""},
+		{"path allowed", "/usr/bin/tool", false, ""},
+		{"numeric", "42", false, ""},
+		{"null byte", "a\x00b", true, "null byte"},
+		{"semicolon", "a;b", true, "forbidden character"},
+		{"pipe", "a|b", true, "forbidden character"},
+		{"ampersand", "a&b", true, "forbidden character"},
+		{"dollar", "a$b", true, "forbidden character"},
+		{"backtick", "a`b", true, "forbidden character"},
+		{"backslash", `a\b`, true, "forbidden character"},
+		{"angle bracket", "a<b", true, "forbidden character"},
+		{"newline", "a\nb", true, "forbidden character"},
+		{"carriage return", "a\rb", true, "forbidden character"},
+		{"invalid utf8", string([]byte{0xFF, 0xFE}), true, "invalid UTF-8"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateAgentArg(tt.arg)
+			if tt.wantErr {
+				require.Error(t, err, "validateAgentArg(%q) should fail", tt.arg)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err, "validateAgentArg(%q) should pass", tt.arg)
+			}
+		})
+	}
+}
+
+func TestSpawn_RejectsBadArgs(t *testing.T) {
+	tracker := NewAgentTracker(5, 30)
+	defer tracker.KillAll()
+
+	cmd, _ := echoCmd("test")
+	// Inject a shell metacharacter into args.
+	_, err := tracker.Spawn(context.Background(), cmd, []string{"clean", "a;rm -rf /"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "argument 1")
+	assert.Contains(t, err.Error(), "forbidden character")
+}
+
 func TestList_UpdatesDurationForRunning(t *testing.T) {
 	tracker := NewAgentTracker(5, 30)
 	defer tracker.KillAll()

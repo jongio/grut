@@ -8,8 +8,11 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // maxAgentOutputSize caps stdout/stderr capture buffers at 10 MiB to
@@ -184,9 +187,43 @@ func (t *AgentTracker) runningCountLocked() int {
 	return n
 }
 
+// agentShellMetachars contains characters that could trigger shell
+// interpretation. Even though exec.Command does not invoke a shell,
+// rejecting these provides defence-in-depth against command injection
+// if agent arguments originate from untrusted sources such as AI output.
+const agentShellMetachars = ";|&$`\\<>\n\r"
+
+// validateAgentArg rejects agent command arguments that contain dangerous
+// characters. Unlike git.ValidateArg, leading dashes ARE allowed because
+// agent tools legitimately need flags (e.g. -n, --output).
+func validateAgentArg(arg string) error {
+	if !utf8.ValidString(arg) {
+		return fmt.Errorf("agent argument contains invalid UTF-8")
+	}
+	for i, r := range arg {
+		if r == 0 {
+			return fmt.Errorf("agent argument contains null byte at position %d", i)
+		}
+		if strings.ContainsRune(agentShellMetachars, r) {
+			return fmt.Errorf("agent argument contains forbidden character %q at position %d", r, i)
+		}
+		if unicode.Is(unicode.Cf, r) {
+			return fmt.Errorf("agent argument contains Unicode format character at position %d", i)
+		}
+	}
+	return nil
+}
+
 // Spawn starts a new agent process and tracks it. Returns the assigned PID
 // (or internal ID in test mode) and an error if limits are exceeded.
 func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string) (int, error) {
+	// Validate all arguments before acquiring the lock so we fail fast
+	// on bad input without consuming a process slot.
+	for i, arg := range args {
+		if err := validateAgentArg(arg); err != nil {
+			return 0, fmt.Errorf("argument %d: %w", i, err)
+		}
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	// Check concurrent process limit.

@@ -149,6 +149,9 @@ type ghPRItem struct {
 // prStateMerged is the canonical value for a merged pull request state.
 const prStateMerged = "merged"
 
+// prStateOpen is the canonical value for an open pull request state.
+const prStateOpen = "open"
+
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
 	WorkflowName string
@@ -3162,7 +3165,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		}
 		// Fetch issues (first page, open).
 		issues, err := client.ListIssues(ctx, owner, repo, &gh.IssueListByRepoOptions{
-			State:       "open",
+			State:       prStateOpen,
 			ListOptions: gh.ListOptions{PerPage: 50},
 		})
 		if err != nil {
@@ -3200,7 +3203,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		}
 		// Fetch PRs.
 		prs, err := client.ListPRs(ctx, owner, repo, &gh.PullRequestListOptions{
-			State:       "open",
+			State:       prStateOpen,
 			ListOptions: gh.ListOptions{PerPage: 50},
 		})
 		if err != nil {
@@ -3253,7 +3256,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 			var wg sync.WaitGroup
 			var mu sync.Mutex
 			for i, pr := range result.prs {
-				if pr.State != "open" {
+				if pr.State != prStateOpen {
 					continue
 				}
 				wg.Add(1)
@@ -3473,7 +3476,7 @@ func (p *Panel) applyPRFilter() {
 func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
 	switch p.prFilter {
 	case prFilterNeedsReview:
-		return pr.Author != p.ghUser && pr.State == "open" //nolint:goconst // inline string is more readable here
+		return pr.Author != p.ghUser && pr.State == prStateOpen
 	case prFilterMine:
 		return pr.Author == p.ghUser
 	case prFilterDraft:
@@ -3929,7 +3932,7 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	pr := items[cursor].pr
 
 	// Guard: only allow merge on open PRs.
-	if pr.State != "open" {
+	if pr.State != prStateOpen {
 		stateLabel := pr.State
 		if stateLabel == "" {
 			stateLabel = "unknown"
@@ -4133,7 +4136,7 @@ func prColor(pr ghPRItem) string {
 		return defaultColors.PRMerged
 	case "closed":
 		return defaultColors.PRClosed
-	default: // "open"
+	default: // prStateOpen
 		switch pr.MergeableState {
 		case "dirty":
 			return defaultColors.PRConflict

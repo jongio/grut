@@ -685,7 +685,7 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toggleSettings()
 	case "chat_focus":
 		return m.toggleChatFocus()
-	case "commit":
+	case pendingActionCommit:
 		return m.handleCommit()
 	case "push":
 		return m.handlePush()

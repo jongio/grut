@@ -18,6 +18,9 @@ const asyncOpPushing = "pushing..."
 // message when it is displayed in a toast notification.
 const toastMsgMaxLen = 40
 
+// pendingActionCommit identifies the commit pending action.
+const pendingActionCommit = "commit"
+
 // pendingActionAmend identifies the amend-commit pending action.
 const pendingActionAmend = "amend"
 
@@ -42,7 +45,7 @@ func (m Model) handleCommit() (tea.Model, tea.Cmd) {
 	if m.asyncOp != "" || m.notify.HasModal() {
 		return m, nil
 	}
-	m.pendingAction = "commit" //nolint:goconst // inline string is more readable here
+	m.pendingAction = pendingActionCommit
 
 	// Pre-fill with AI suggestion if available.
 	if s := m.aiCommitSuggestion; s != nil {
@@ -71,13 +74,13 @@ func (m Model) executeCommit(commitMsg string) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		hash, err := gc.Commit(ctx, commitMsg, git.CommitOpts{Sign: sign})
 		if err != nil {
-			return panels.AsyncOpDoneMsg{Description: "commit", Err: err}
+			return panels.AsyncOpDoneMsg{Description: pendingActionCommit, Err: err}
 		}
 
 		// Record for undo so the user can revert the commit.
 		if undoMgr != nil {
 			undoMgr.RecordAction(git.UndoAction{
-				Type:      "commit",
+				Type:      pendingActionCommit,
 				RefBefore: hash,
 				Metadata: map[string]string{
 					"message": commitMsg,
@@ -319,7 +322,7 @@ func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cm
 	}
 
 	switch action {
-	case "commit":
+	case pendingActionCommit:
 		return m.executeCommit(msg.Value)
 	case pendingActionAmend:
 		return m.executeAmend(msg.Value)

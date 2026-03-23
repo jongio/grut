@@ -73,6 +73,15 @@ func TestSecurityNoSecretSurvivesRedaction(t *testing.T) {
 
 		// API secret assignment
 		{"api-secret assignment", `api-secret = "a1b2c3d4e5f6g7h8i9j0k1l2"`, "a1b2c3d4e5f6g7h8i9j0"},
+
+		// Google Cloud API key
+		{"Google Cloud API key", "GOOGLE_KEY=AIzaSyA1234567890abcdefghijklmnopqrstuvw", "AIzaSyA1234567890abcdefghijklmnopqrstuvw"},
+
+		// SendGrid API key
+		{"SendGrid API key", "SENDGRID_KEY=SG.abcdefghijklmnopqrstuv.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst", "SG.abcdefghijklmnopqrstuv"},
+
+		// Twilio API key (fake test value — not a real key)
+		{"Twilio API key", "TWILIO_KEY=SKdeadbeefdeadbeefdeadbeefdeadbeef", "SKdeadbeefdeadbeefdeadbeefdeadbeef"},
 	}
 
 	for _, tt := range tests {

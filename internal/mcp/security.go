@@ -56,12 +56,14 @@ func (j *PathJail) Validate(path string) (string, error) {
 			return "", fmt.Errorf("UNC paths are not allowed")
 		}
 		if isWindowsReservedName(filepath.Base(path)) {
-			return "", fmt.Errorf("windows reserved device name not allowed: %s", filepath.Base(path))
+			slog.Debug("mcp: windows reserved device name rejected", "basename", filepath.Base(path))
+			return "", fmt.Errorf("windows reserved device name not allowed")
 		}
 	}
 	// Reject paths containing ".." components before any resolution.
 	if containsDotDot(path) {
-		return "", fmt.Errorf("path contains '..': %s", path)
+		slog.Debug("mcp: path contains '..' rejected", "path", path)
+		return "", fmt.Errorf("path contains '..'")
 	}
 	// Build absolute path.
 	var absPath string
@@ -91,7 +93,8 @@ func (j *PathJail) Validate(path string) (string, error) {
 		// case normalization on case-insensitive filesystems).
 		info, lErr := os.Lstat(absPath)
 		if lErr == nil && info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("symlinks not allowed: %s", path)
+			slog.Debug("mcp: symlink rejected", "path", path)
+			return "", fmt.Errorf("symlinks not allowed")
 		}
 	}
 	// Verify the resolved path is within the jail root.
@@ -99,12 +102,14 @@ func (j *PathJail) Validate(path string) (string, error) {
 	rel, err := filepath.Rel(j.root, resolved)
 	if err != nil {
 		if filepath.IsAbs(path) {
-			return "", fmt.Errorf("path escapes repository root: %s", path)
+			slog.Debug("mcp: absolute path escapes root", "path", path)
+			return "", fmt.Errorf("path escapes repository root")
 		}
 		return "", fmt.Errorf("compute relative path: %w", err)
 	}
 	if strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("path escapes repository root: %s", path)
+		slog.Debug("mcp: relative path escapes root", "path", path)
+		return "", fmt.Errorf("path escapes repository root")
 	}
 	return resolved, nil
 }
@@ -237,6 +242,12 @@ func NewAuditLogger(cfg config.MCPSecurityConfig) (*AuditLogger, error) {
 	if logPath == "" {
 		logPath = filepath.Join(config.DataDir(), "mcp-audit.log")
 	}
+	// Defence-in-depth: clean the path and reject directory traversal
+	// so a malicious config value cannot write logs to arbitrary locations.
+	logPath = filepath.Clean(logPath)
+	if containsDotDot(logPath) {
+		return nil, fmt.Errorf("audit log path contains '..' traversal")
+	}
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return nil, fmt.Errorf("create audit log dir: %w", err)
 	}
@@ -282,15 +293,70 @@ func (al *AuditLogger) Log(tool string, params map[string]any, status string, du
 	)
 }
 
+// isSensitiveAuditField reports whether key contains a sensitive word.
+// It splits the key on common separators ('_', '-', '.') and camelCase
+// boundaries, then checks whether any resulting segment exactly matches a
+// known sensitive field name.  This avoids false positives from substring
+// matching (e.g. "is_private" or "primary_key") while still catching
+// camelCase keys like "requestBody".
 func isSensitiveAuditField(key string) bool {
 	k := strings.ToLower(key)
-	for _, field := range sensitiveAuditFields {
-		if strings.Contains(k, field) {
-			return true
+	// Split on common separators used in JSON/config keys.
+	segments := strings.FieldsFunc(k, func(r rune) bool {
+		return r == '_' || r == '-' || r == '.'
+	})
+	// Also split each segment on camelCase boundaries.  We do this on the
+	// original key (before lowering) so we can detect transitions from
+	// lowercase to uppercase.
+	sepParts := strings.FieldsFunc(key, func(r rune) bool {
+		return r == '_' || r == '-' || r == '.'
+	})
+	camelSegments := make([]string, 0, len(sepParts)*2)
+	for _, part := range sepParts {
+		camelSegments = append(camelSegments, splitCamelCase(part)...)
+	}
+	// Merge both segment sets for checking.
+	all := append(segments, camelSegments...) //nolint:gocritic // append to different slice is intentional
+	for _, seg := range all {
+		lower := strings.ToLower(seg)
+		for _, field := range sensitiveAuditFields {
+			if lower == field {
+				return true
+			}
 		}
 	}
 	return false
 }
+
+// splitCamelCase splits a camelCase or PascalCase string into words.
+// e.g. "requestBody" → ["request", "Body"], "APIToken" → ["API", "Token"].
+func splitCamelCase(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var parts []string
+	start := 0
+	runes := []rune(s)
+	for i := 1; i < len(runes); i++ {
+		// Split before an uppercase letter that follows a lowercase letter,
+		// or before an uppercase letter followed by a lowercase (for runs
+		// like "API" → keep together, then split at "Token").
+		prev := runes[i-1]
+		cur := runes[i]
+		if isLowerRune(prev) && isUpperRune(cur) {
+			parts = append(parts, string(runes[start:i]))
+			start = i
+		} else if i+1 < len(runes) && isUpperRune(prev) && isUpperRune(cur) && isLowerRune(runes[i+1]) {
+			parts = append(parts, string(runes[start:i]))
+			start = i
+		}
+	}
+	parts = append(parts, string(runes[start:]))
+	return parts
+}
+
+func isLowerRune(r rune) bool { return r >= 'a' && r <= 'z' }
+func isUpperRune(r rune) bool { return r >= 'A' && r <= 'Z' }
 
 // windowsReservedNames lists the device names that Windows reserves and
 // that cannot safely be used as regular file names.

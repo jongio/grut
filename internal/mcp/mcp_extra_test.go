@@ -72,11 +72,19 @@ func TestIsSensitiveAuditField(t *testing.T) {
 		{"my_secret_key", true},
 		{"user_credential_hash", true},
 		{"requestBody", true},
+		{"authToken", true},     // camelCase: "auth" + "Token"
+		{"privateKey", true},    // camelCase: "private" + "Key"
+		{"secretValue", true},   // camelCase: "secret" + "Value"
+		{"api-token", true},     // dash-separated
+		{"my.secret.key", true}, // dot-separated
 		{"path", false},
 		{"file", false},
 		{"status", false},
 		{"repo", false},
 		{"", false},
+		{"is_private", true},       // "is" + "private" — "private" IS sensitive
+		{"primary_key", true},      // "primary" + "key" — "key" IS sensitive
+		{"authorized_user", false}, // "authorized" != "auth"
 	}
 
 	for _, tt := range tests {
@@ -158,6 +166,38 @@ func TestNewAuditLogger_MkdirAllError(t *testing.T) {
 
 	_, err := NewAuditLogger(cfg)
 	assert.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// NewAuditLogger — path traversal rejection
+// ---------------------------------------------------------------------------
+
+func TestNewAuditLogger_RejectsTraversalPath(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.MCPSecurityConfig{
+		AuditLog:     true,
+		AuditLogPath: filepath.Join("..", "..", "tmp", "malicious-audit.log"),
+	}
+
+	_, err := NewAuditLogger(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'..' traversal")
+}
+
+func TestNewAuditLogger_AcceptsCleanPath(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "subdir", "audit.log")
+
+	cfg := config.MCPSecurityConfig{
+		AuditLog:     true,
+		AuditLogPath: logPath,
+	}
+
+	al, err := NewAuditLogger(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = al.Close() })
+	assert.True(t, al.enabled)
 }
 
 // ---------------------------------------------------------------------------

@@ -328,7 +328,7 @@ func appendEnumOrPathErr(errs []error, field, value string, allowed ...string) [
 // config string fields. Each pattern is anchored to the start of the value.
 var apiKeyPatterns = regexp.MustCompile(
 	`^(sk-[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|` +
-		`glpat-[a-zA-Z0-9\-]{20,}|xox[bps]-[a-zA-Z0-9\-]+)`,
+		`gat_[a-zA-Z0-9]{36}|glpat-[a-zA-Z0-9\-]{20,}|xox[bps]-[a-zA-Z0-9\-]+)`,
 )
 
 // rejectEmbeddedKeys scans every exported string field in the AIConfig struct

@@ -224,7 +224,17 @@ func (tf *themeFile) toColors() Colors {
 func Load(name string) (*Theme, error) {
 	// File path — read directly from disk.
 	if looksLikePath(name) {
-		data, err := os.ReadFile(name)
+		// Defence-in-depth: clean the path and reject directory
+		// traversal so a malicious or misconfigured theme value
+		// cannot read arbitrary files outside intended directories.
+		cleaned := filepath.Clean(name)
+		if containsDotDot(cleaned) {
+			slog.Warn("theme path contains traversal, falling back to default",
+				"path", name,
+			)
+			return Load("default")
+		}
+		data, err := os.ReadFile(cleaned)
 		if err != nil {
 			slog.Warn("custom theme not found, falling back to default",
 				"path", name,
@@ -232,7 +242,7 @@ func Load(name string) (*Theme, error) {
 			)
 			return Load("default")
 		}
-		return parse(name, data)
+		return parse(cleaned, data)
 	}
 
 	// 1. Custom theme directory takes precedence.
@@ -452,4 +462,17 @@ func validateColors(c Colors) error {
 // built-in theme name.
 func looksLikePath(name string) bool {
 	return strings.ContainsAny(name, `/\`) || strings.HasSuffix(name, ".toml")
+}
+
+// containsDotDot reports whether the path contains a ".." component,
+// which could allow directory traversal. Paths are normalised to forward
+// slashes before splitting so that both Unix and Windows separators are
+// handled consistently.
+func containsDotDot(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }

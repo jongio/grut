@@ -2,6 +2,7 @@ package context
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,7 +46,8 @@ func NewBuilder(root string) (*Builder, error) {
 func (b *Builder) Add(path string) error {
 	resolved, relPath, err := b.resolve(path)
 	if err != nil {
-		return fmt.Errorf("resolving path %q: %w", path, err)
+		slog.Debug("context: path resolution failed", "path", path, "error", err)
+		return fmt.Errorf("resolving path: %w", err)
 	}
 	// Duplicate check.
 	if _, exists := b.index[relPath]; exists {
@@ -143,7 +145,8 @@ func (b *Builder) resolve(path string) (abs string, rel string, err error) {
 	// Reject explicit ".." components.
 	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
 		if part == ".." {
-			return "", "", fmt.Errorf("path escapes repository root: %s", path)
+			slog.Debug("context: path traversal rejected", "path", path)
+			return "", "", fmt.Errorf("path escapes repository root")
 		}
 	}
 	var absPath string
@@ -158,7 +161,8 @@ func (b *Builder) resolve(path string) (abs string, rel string, err error) {
 		return "", "", fmt.Errorf("compute relative path: %w", err)
 	}
 	if strings.HasPrefix(relPath, "..") {
-		return "", "", fmt.Errorf("path escapes repository root: %s", path)
+		slog.Debug("context: path escapes root", "path", path)
+		return "", "", fmt.Errorf("path escapes repository root")
 	}
 	return absPath, filepath.ToSlash(relPath), nil
 }
