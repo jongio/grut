@@ -313,12 +313,12 @@ func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.Cancel
 // parseOutput splits raw capture buffers into ring buffer lines.
 func (t *AgentTracker) parseOutput(agent *trackedAgent) {
 	for _, line := range bytes.Split(agent.stdoutBuf.Bytes(), []byte("\n")) {
-		if s := string(line); s != "" {
+		if s := strings.TrimRight(string(line), "\r"); s != "" {
 			agent.stdout.write(s)
 		}
 	}
 	for _, line := range bytes.Split(agent.stderrBuf.Bytes(), []byte("\n")) {
-		if s := string(line); s != "" {
+		if s := strings.TrimRight(string(line), "\r"); s != "" {
 			agent.stderr.write(s)
 		}
 	}

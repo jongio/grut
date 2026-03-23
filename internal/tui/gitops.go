@@ -191,7 +191,7 @@ func (m Model) executeReword(commitMsg string) (tea.Model, tea.Cmd) {
 
 		if undoMgr != nil {
 			undoMgr.RecordAction(git.UndoAction{
-				Type:      pendingActionAmend,
+				Type:      pendingActionReword,
 				RefBefore: hash,
 				Metadata: map[string]string{
 					"message": commitMsg,
