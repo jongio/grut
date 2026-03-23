@@ -544,6 +544,126 @@ func TestRemoveWorktree_Cancelled(t *testing.T) {
 	assert.Nil(t, cmd, "cancelled modal should not trigger remove")
 }
 
+func TestRemoveWorktree_XKeyTriggersDelete(t *testing.T) {
+	mock := &mockGitOps{worktrees: sampleWorktrees()}
+	p := newTestPanel(t, mock, alwaysExists)
+	p.Focus()
+
+	// Move to second worktree (not main).
+	p.Update(keyMsg('j'))
+	assert.Equal(t, 1, p.cursor)
+	assert.False(t, p.items[1].isMain)
+
+	// Press "x" — should trigger delete confirmation.
+	_, cmd := p.Update(keyMsg('x'))
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Remove Worktree", modal.Title)
+	assert.Equal(t, notify.ModalConfirm, modal.Kind)
+}
+
+func TestRemoveWorktree_ItemDeleteMsgTriggersDelete(t *testing.T) {
+	mock := &mockGitOps{worktrees: sampleWorktrees()}
+	p := newTestPanel(t, mock, alwaysExists)
+	p.Focus()
+
+	// Move to second worktree (not main).
+	p.Update(keyMsg('j'))
+
+	// Send ItemDeleteMsg (dispatched by keymap for "x" → "item_delete" action).
+	_, cmd := p.Update(panels.ItemDeleteMsg{})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Remove Worktree", modal.Title)
+}
+
+func TestRemoveWorktree_ItemDeleteMsgNotFocused(t *testing.T) {
+	mock := &mockGitOps{worktrees: sampleWorktrees()}
+	p := newTestPanel(t, mock, alwaysExists)
+	// Panel is NOT focused.
+	p.Update(keyMsg('j'))
+
+	_, cmd := p.Update(panels.ItemDeleteMsg{})
+	assert.Nil(t, cmd, "unfocused panel should ignore ItemDeleteMsg")
+}
+
+func TestRemoveWorktree_RepeatedDeleteWorks(t *testing.T) {
+	// Regression test for #45: repeated deletes should work without
+	// manual re-navigation because cursor is preserved after deletion.
+	wts := []git.Worktree{
+		{Path: "/wt/main", Branch: "main", Head: "aaa"},
+		{Path: "/wt/feat-a", Branch: "feat-a", Head: "bbb"},
+		{Path: "/wt/feat-b", Branch: "feat-b", Head: "ccc"},
+		{Path: "/wt/feat-c", Branch: "feat-c", Head: "ddd"},
+	}
+	mock := &mockGitOps{worktrees: wts}
+	p := newTestPanel(t, mock, alwaysExists)
+	p.Focus()
+
+	// Move to feat-a (index 1).
+	p.Update(keyMsg('j'))
+	assert.Equal(t, 1, p.cursor)
+
+	// Delete feat-a.
+	_, cmd := p.Update(keyMsg('d'))
+	require.NotNil(t, cmd)
+	cmd()
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	result := cmd()
+	opResult, ok := result.(worktreeOpResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "removed", opResult.op)
+
+	// Process opResult (returns batch cmd with reload + notifications).
+	p.Update(opResult)
+
+	// Simulate reload with feat-a removed.
+	mock.worktrees = []git.Worktree{
+		{Path: "/wt/main", Branch: "main", Head: "aaa"},
+		{Path: "/wt/feat-b", Branch: "feat-b", Head: "ccc"},
+		{Path: "/wt/feat-c", Branch: "feat-c", Head: "ddd"},
+	}
+	reloadCmd := p.loadWorktrees()
+	reloadMsg := reloadCmd()
+	p.Update(reloadMsg)
+
+	// Cursor should still be at index 1 (now feat-b), enabling second delete.
+	assert.Equal(t, 1, p.cursor)
+	assert.Equal(t, "feat-b", p.items[p.cursor].worktree.Branch)
+
+	// Second delete should work immediately.
+	_, cmd = p.Update(keyMsg('x'))
+	require.NotNil(t, cmd)
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Remove Worktree", modal.Title)
+	assert.Contains(t, modal.Message, "feat-b")
+}
+
+func TestCreateWorktree_ItemCreateMsgTriggersCreate(t *testing.T) {
+	mock := &mockGitOps{worktrees: sampleWorktrees()}
+	p := newTestPanel(t, mock, alwaysExists)
+	p.Focus()
+
+	// Send ItemCreateMsg (dispatched by keymap for "n" → "item_create" action).
+	_, cmd := p.Update(panels.ItemCreateMsg{})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "New Worktree", modal.Title)
+	assert.Equal(t, notify.ModalInput, modal.Kind)
+}
+
 // ---------------------------------------------------------------------------
 // Prune missing worktrees
 // ---------------------------------------------------------------------------
@@ -634,7 +754,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.True(t, actions["cursor_up"])
 	assert.True(t, actions["switch"])
 	assert.True(t, actions["create"])
-	assert.True(t, actions["remove"])
+	assert.True(t, actions["item_delete"])
 	assert.True(t, actions["refresh"])
 	assert.True(t, actions["prune"])
 }

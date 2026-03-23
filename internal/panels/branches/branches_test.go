@@ -647,6 +647,161 @@ func TestDeleteBranch_RemoteBlocked(t *testing.T) {
 	assert.Contains(t, toast.Message, "Cannot delete remote")
 }
 
+func TestDeleteBranch_RepeatedDeletePreservesCursor(t *testing.T) {
+	// Regression test for #45: after a successful delete, the cursor should
+	// stay near the deleted item instead of jumping to the current branch,
+	// enabling sequential deletes without manual re-navigation.
+	branches := []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "feat-a", Hash: "bbb"},
+		{Name: "feat-b", Hash: "ccc"},
+		{Name: "feat-c", Hash: "ddd"},
+	}
+	mock := &mockGitOps{branches: branches}
+	p := newTestPanel(t, mock, defaultCfg())
+	p.Focus()
+
+	// Cursor starts on "main" (current). Move to "feat-a" (index 2, after header).
+	p.Update(keyMsg('j'))
+	assert.Equal(t, "feat-a", p.items[p.cursor].branch.Name)
+	cursorBefore := p.cursor
+
+	// Initiate delete → confirm.
+	_, cmd := p.Update(keyMsg('d'))
+	require.NotNil(t, cmd)
+	cmd() // run ShowConfirm
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	result := cmd()
+	opResult, ok := result.(branchOpResultMsg)
+	require.True(t, ok)
+	assert.Equal(t, "deleted", opResult.op)
+
+	// Process opResult — sets preserveCursor flag and returns batch cmd.
+	p.Update(opResult)
+
+	// Simulate reload with feat-a removed.
+	mock.branches = []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "feat-b", Hash: "ccc"},
+		{Name: "feat-c", Hash: "ddd"},
+	}
+	reloadCmd := p.loadBranches()
+	reloadMsg := reloadCmd()
+	p.Update(reloadMsg)
+
+	// Cursor should be near the old position, NOT on "main".
+	assert.Equal(t, cursorBefore, p.cursor, "cursor should be preserved near deleted item")
+	assert.False(t, p.items[p.cursor].branch.IsCurrent, "cursor should not jump to current branch")
+	assert.Equal(t, "feat-b", p.items[p.cursor].branch.Name, "cursor should land on next item")
+
+	// Second delete should work without re-navigation.
+	_, cmd = p.Update(keyMsg('x'))
+	require.NotNil(t, cmd)
+	msg := cmd()
+	modal, ok := msg.(notify.ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Delete Branch", modal.Title)
+	assert.Contains(t, modal.Message, "feat-b")
+}
+
+func TestDeleteBranch_CursorClampsOnLastItem(t *testing.T) {
+	// When the last item is deleted, cursor should clamp to the new last item.
+	branches := []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "feat-a", Hash: "bbb"},
+	}
+	mock := &mockGitOps{branches: branches}
+	p := newTestPanel(t, mock, defaultCfg())
+	p.Focus()
+
+	// Move to feat-a (last selectable item).
+	p.Update(keyMsg('j'))
+	assert.Equal(t, "feat-a", p.items[p.cursor].branch.Name)
+
+	// Delete feat-a.
+	_, cmd := p.Update(keyMsg('d'))
+	require.NotNil(t, cmd)
+	cmd()
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	result := cmd()
+	opResult := result.(branchOpResultMsg)
+
+	// Process opResult — sets preserveCursor flag.
+	p.Update(opResult)
+
+	// Reload with only main remaining.
+	mock.branches = []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+	}
+	reloadCmd := p.loadBranches()
+	reloadMsg := reloadCmd()
+	p.Update(reloadMsg)
+
+	// Cursor should clamp to valid range and land on a non-header item.
+	assert.GreaterOrEqual(t, p.cursor, 0)
+	assert.Less(t, p.cursor, len(p.items))
+	assert.False(t, p.items[p.cursor].isHeader)
+}
+
+func TestDeleteBranch_CursorSkipsHeaderAfterDelete(t *testing.T) {
+	// When deletion causes cursor to land on a section header, it should
+	// move to the nearest selectable branch.
+	branches := []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "feat-a", Hash: "bbb"},
+		{Name: "origin/main", IsRemote: true, Hash: "aaa"},
+	}
+	mock := &mockGitOps{branches: branches}
+	p := newTestPanel(t, mock, defaultCfg())
+	p.Focus()
+
+	// Items: [Local Header, main, feat-a, Remote Header, origin/main]
+	// Move to feat-a (index 2).
+	p.Update(keyMsg('j'))
+	assert.Equal(t, "feat-a", p.items[p.cursor].branch.Name)
+
+	// Delete feat-a.
+	_, cmd := p.Update(keyMsg('d'))
+	require.NotNil(t, cmd)
+	cmd()
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	result := cmd()
+	opResult := result.(branchOpResultMsg)
+
+	// Process opResult — sets preserveCursor flag.
+	p.Update(opResult)
+
+	// Reload without feat-a.
+	// Items: [Local Header, main, Remote Header, origin/main]
+	mock.branches = []git.Branch{
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "origin/main", IsRemote: true, Hash: "aaa"},
+	}
+	reloadCmd := p.loadBranches()
+	reloadMsg := reloadCmd()
+	p.Update(reloadMsg)
+
+	// Cursor was at index 2, which is now "Remote Header". Should skip to
+	// the next selectable item.
+	assert.False(t, p.items[p.cursor].isHeader, "cursor should not be on a header")
+}
+
+func TestDeleteBranch_InitialLoadCursorOnCurrentBranch(t *testing.T) {
+	// On initial load (no prior items), cursor should still land on current branch.
+	branches := []git.Branch{
+		{Name: "feat-a", Hash: "bbb"},
+		{Name: "main", IsCurrent: true, Hash: "aaa"},
+		{Name: "feat-b", Hash: "ccc"},
+	}
+	mock := &mockGitOps{branches: branches}
+	p := newTestPanel(t, mock, defaultCfg())
+
+	assert.Equal(t, "main", p.items[p.cursor].branch.Name, "initial load should position cursor on current branch")
+}
+
 // ---------------------------------------------------------------------------
 // Rename branch
 // ---------------------------------------------------------------------------
