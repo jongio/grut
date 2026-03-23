@@ -2586,15 +2586,22 @@ func (p *Panel) doBuildItems() {
 			local = append(local, b)
 		}
 	}
-	// Branches tab
+	// Branches tab — filter by panel mode:
+	//   ModeGit    → local branches only
+	//   ModeGitHub → remote branches only
+	//   ModeAll    → both (backwards compat)
 	p.tabItems[tabBranches] = nil
-	for _, b := range local {
-		hash := b.Hash
-		p.tabItems[tabBranches] = append(p.tabItems[tabBranches], listItem{kind: kindLocalBranch, branch: b, hash: hash})
+	if p.mode != ModeGitHub {
+		for _, b := range local {
+			hash := b.Hash
+			p.tabItems[tabBranches] = append(p.tabItems[tabBranches], listItem{kind: kindLocalBranch, branch: b, hash: hash})
+		}
 	}
-	for _, b := range remote {
-		hash := b.Hash
-		p.tabItems[tabBranches] = append(p.tabItems[tabBranches], listItem{kind: kindRemoteBranch, branch: b, hash: hash})
+	if p.mode != ModeGit {
+		for _, b := range remote {
+			hash := b.Hash
+			p.tabItems[tabBranches] = append(p.tabItems[tabBranches], listItem{kind: kindRemoteBranch, branch: b, hash: hash})
+		}
 	}
 	// Worktrees tab
 	p.tabItems[tabWorktrees] = nil
