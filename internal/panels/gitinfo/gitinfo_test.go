@@ -1383,9 +1383,10 @@ func TestBuildItems_ModeAllShowsBothBranches(t *testing.T) {
 	localCount := 0
 	remoteCount := 0
 	for _, item := range p.tabItems[tabBranches] {
-		if item.kind == kindLocalBranch {
+		switch item.kind {
+		case kindLocalBranch:
 			localCount++
-		} else if item.kind == kindRemoteBranch {
+		case kindRemoteBranch:
 			remoteCount++
 		}
 	}
