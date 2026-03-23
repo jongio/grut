@@ -186,6 +186,9 @@ jobs:
             git commit -m "perf: add ${VERSION} $PLATFORM baseline and release notes [skip ci]"
           git push
 
+      - name: Clean intermediate files
+        run: rm -f bench-release.txt perf-notes.md contrib-changelog.md contrib-release.md
+
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: "v2.9.0"
