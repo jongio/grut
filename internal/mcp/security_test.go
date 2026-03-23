@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -336,18 +335,11 @@ func TestPathJail_RejectNullBytePath(t *testing.T) {
 	jail, err := NewPathJail(root, false)
 	require.NoError(t, err)
 
-	// Null bytes in paths are a common injection technique.
-	resolved, err := jail.Validate("file\x00.txt")
-	// This should either error because of null byte or because the path
-	// is invalid. The key invariant: it must not succeed with a path
-	// outside the jail.
-	if err == nil {
-		// If the OS didn't reject it, verify the resolved path is still
-		// inside the jail (it should be if the null byte was sanitized).
-		t.Log("OS accepted null byte in path — verifying jail containment")
-		require.True(t, strings.HasPrefix(resolved, jail.Root()),
-			"resolved path %q must be inside jail root %q", resolved, jail.Root())
-	}
+	// Null bytes in paths are a common injection technique (CWE-158).
+	// PathJail.Validate rejects them explicitly before any OS operation.
+	_, err = jail.Validate("file\x00.txt")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "null byte")
 }
 
 // TestPathJail_RejectUNCPath verifies that UNC paths (Windows network shares)

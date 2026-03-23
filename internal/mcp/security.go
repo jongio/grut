@@ -50,6 +50,13 @@ func (j *PathJail) Validate(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path must not be empty")
 	}
+	// Defence-in-depth: reject embedded null bytes early. Go 1.21+ rejects
+	// them at the syscall layer, but catching here gives a clearer error and
+	// prevents any platform-specific bypass where a null byte truncates the
+	// path string (CWE-158).
+	if strings.ContainsRune(path, 0) {
+		return "", fmt.Errorf("path contains null byte")
+	}
 	// Windows-specific: reject UNC paths and reserved device names.
 	if runtime.GOOS == "windows" {
 		if strings.HasPrefix(path, `\\`) {
