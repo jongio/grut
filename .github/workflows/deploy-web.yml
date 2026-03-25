@@ -19,6 +19,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Skip push-triggered runs from automated release commits. The release
+    # workflow calls deploy-web.yml via workflow_call — an independent
+    # push-triggered run would be a duplicate.
+    if: >-
+      github.event_name != 'push' ||
+      github.actor != 'github-actions[bot]'
     steps:
       # Pin actions to full SHA for supply-chain security.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
