@@ -27,6 +27,13 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Skip push-triggered runs from automated release commits. The release
+    # workflow already calls ci.yml via workflow_call — an independent
+    # push-triggered run is a duplicate that races the release's concurrency
+    # group and can cancel or conflict with the in-flight release CI step.
+    if: >-
+      github.event_name != 'push' ||
+      github.actor != 'github-actions[bot]'
     env:
       CGO_ENABLED: "0"           # Match release build settings
 
