@@ -365,6 +365,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 	switch action { //nolint:exhaustive // only relevant cases handled
 	case actions.ActionSwitch:
 		return p.requestSwitch()
+	case actions.ActionChangeDirectory:
+		return p.changeDirectory()
 	case actions.ActionOpenTerminal:
 		return p.openTerminal()
 	case actions.ActionCopyPath:
@@ -398,6 +400,24 @@ func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Copied path", Level: notify.Info}
+	}
+}
+
+// changeDirectory emits a ChangeDirectoryMsg so the app re-roots into
+// the selected worktree.
+func (p *Panel) changeDirectory() (panels.Panel, tea.Cmd) {
+	item := p.selectedWorktree()
+	if item == nil {
+		return p, nil
+	}
+	if item.isMissing {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Cannot cd: path missing", Level: notify.Warn}
+		}
+	}
+	path := item.worktree.Path
+	return p, func() tea.Msg {
+		return panels.ChangeDirectoryMsg{Path: path}
 	}
 }
 

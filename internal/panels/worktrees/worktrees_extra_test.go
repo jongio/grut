@@ -10,6 +10,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetActionsCfg(t *testing.T) {
@@ -229,4 +230,51 @@ func TestDefaultPathChecker(t *testing.T) {
 	t.Run("missing path returns false", func(t *testing.T) {
 		assert.False(t, defaultPathChecker("/nonexistent/path/abc123"))
 	})
+}
+
+// ---------------------------------------------------------------------------
+// changeDirectory
+// ---------------------------------------------------------------------------
+
+func TestChangeDirectory_EmitsChangeDirectoryMsg(t *testing.T) {
+	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
+	p.cursor = 1
+
+	_, cmd := p.changeDirectory()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	cdMsg, ok := msg.(panels.ChangeDirectoryMsg)
+	require.True(t, ok, "expected ChangeDirectoryMsg")
+	assert.Equal(t, "/home/user/grut-feat", cdMsg.Path)
+}
+
+func TestChangeDirectory_MissingPath(t *testing.T) {
+	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
+	p.items[1].isMissing = true
+	p.cursor = 1
+
+	_, cmd := p.changeDirectory()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "missing")
+}
+
+func TestChangeDirectory_NoItems(t *testing.T) {
+	p := newTestPanel(t, &mockGitOps{worktrees: []git.Worktree{}}, alwaysExists)
+	_, cmd := p.changeDirectory()
+	assert.Nil(t, cmd)
+}
+
+func TestExecuteRightClickAction_ChangeDirectory(t *testing.T) {
+	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
+	p.cursor = 1
+
+	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(panels.ChangeDirectoryMsg)
+	assert.True(t, ok, "expected ChangeDirectoryMsg")
 }

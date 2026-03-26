@@ -75,6 +75,7 @@ const (
 	ActionMergePR         ActionID = "merge_pr"
 	ActionShowContextMenu ActionID = "context_menu"
 	ActionPush            ActionID = "push"
+	ActionChangeDirectory ActionID = "change_directory"
 )
 
 // ItemActions defines the default action and alternatives for an item type.
@@ -89,7 +90,7 @@ type ItemActions struct {
 var Registry = map[ItemType]ItemActions{
 	ItemLocalBranch:  {Default: ActionCheckout, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyName, ActionOpenInBrowser}, Description: "switch to this branch"},
 	ItemRemoteBranch: {Default: ActionCheckout, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyName}, Description: "check out this remote branch locally"},
-	ItemWorktree:     {Default: ActionSwitch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenTerminal, ActionCopyPath}, Description: "switch to this worktree"},
+	ItemWorktree:     {Default: ActionSwitch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionChangeDirectory, ActionOpenTerminal, ActionCopyPath}, Description: "switch to this worktree"},
 	ItemRemote:       {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL}, Description: "open this remote in your browser"},
 	ItemStashEntry:   {Default: ActionPromptAction, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionApply, ActionPop, ActionDrop}, Description: "choose a stash action (apply/pop/drop)"},
 	ItemIssue:        {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL, ActionCopyNumber}, Description: "open this issue in your browser"},
@@ -162,6 +163,7 @@ var actionLabels = map[ActionID]string{
 	ActionMergePR:         "merge PR",
 	ActionShowContextMenu: "context menu",
 	ActionPush:            "push",
+	ActionChangeDirectory: "change directory",
 }
 
 // itemLabels maps each item type to a human-readable label.
