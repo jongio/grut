@@ -202,6 +202,23 @@ type PanelMouseRightClickMsg struct {
 	ContentCol int // column within the panel content area (0-based)
 }
 
+// PanelMouseMotionMsg is sent by the layout engine when the mouse moves
+// within a panel while a button is held. Coordinates are relative to the
+// panel's content area (inside borders). Used for drag-based text
+// selection in the preview panel.
+type PanelMouseMotionMsg struct {
+	ContentRow int // row within the panel content area (0-based)
+	ContentCol int // column within the panel content area (0-based)
+}
+
+// PanelMouseReleaseMsg is sent by the layout engine when a mouse button
+// is released inside a panel. Coordinates are relative to the panel's
+// content area (inside borders). Used to finalize text selection.
+type PanelMouseReleaseMsg struct {
+	ContentRow int // row within the panel content area (0-based)
+	ContentCol int // column within the panel content area (0-based)
+}
+
 // ToggleBlameMsg requests toggling blame annotations for the given file.
 // Emitted by the preview panel when the user presses B; the root model
 // catches this to start an async git-blame load.

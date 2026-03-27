@@ -229,13 +229,13 @@ func (e *Engine) Update(msg tea.Msg) tea.Cmd {
 		if e.dragging {
 			return e.handleDragMotion(msg)
 		}
-		return e.updateFocused(msg)
+		return e.handleMouseMotion(msg)
 	case tea.MouseReleaseMsg:
 		if e.dragging {
 			e.handleDragEnd()
 			return nil
 		}
-		return e.updateFocused(msg)
+		return e.handleMouseRelease(msg)
 	case tea.KeyMsg, tea.MouseMsg:
 		return e.updateFocused(msg)
 	case panels.TargetedPanelMsg:
@@ -497,6 +497,61 @@ func (e *Engine) updateFocused(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	return nil
+}
+
+// handleMouseMotion translates raw terminal coordinates into
+// panel-relative content coordinates and forwards a
+// PanelMouseMotionMsg to the focused panel.
+func (e *Engine) handleMouseMotion(msg tea.MouseMotionMsg) tea.Cmd {
+	return e.forwardMouseToFocused(msg.Mouse(), func(row, col int) tea.Msg {
+		return panels.PanelMouseMotionMsg{ContentRow: row, ContentCol: col}
+	})
+}
+
+// handleMouseRelease translates raw terminal coordinates into
+// panel-relative content coordinates and forwards a
+// PanelMouseReleaseMsg to the focused panel.
+func (e *Engine) handleMouseRelease(msg tea.MouseReleaseMsg) tea.Cmd {
+	return e.forwardMouseToFocused(msg.Mouse(), func(row, col int) tea.Msg {
+		return panels.PanelMouseReleaseMsg{ContentRow: row, ContentCol: col}
+	})
+}
+
+// forwardMouseToFocused converts raw terminal mouse coordinates into
+// panel-relative content coordinates and sends the result of buildMsg
+// to the focused panel. If the focused panel cannot be resolved or the
+// mouse is outside the panel area, it falls back to updateFocused.
+func (e *Engine) forwardMouseToFocused(m tea.Mouse, buildMsg func(row, col int) tea.Msg) tea.Cmd {
+	if len(e.panelOrder) == 0 {
+		return nil
+	}
+	idx := e.focusIdx
+	if idx < 0 || idx >= len(e.panelOrder) {
+		return nil
+	}
+	name := e.panelOrder[idx]
+	rects := e.PanelRects()
+	r, ok := rects[name]
+	if !ok {
+		return nil
+	}
+	innerX := m.X - borderSize
+	innerY := m.Y - e.tabBarHeight() - borderSize
+	contentRow := innerY - r.Y
+	contentCol := innerX - r.X - PanelPadH
+	if contentRow < 0 {
+		contentRow = 0
+	}
+	if contentCol < 0 {
+		contentCol = 0
+	}
+	p, ok := e.panels[name]
+	if !ok {
+		return nil
+	}
+	updated, cmd := p.Update(buildMsg(contentRow, contentCol))
+	e.panels[name] = updated
+	return cmd
 }
 
 // PanelRects returns the resolved rectangles for each panel in the
