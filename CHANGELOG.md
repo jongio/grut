@@ -18,6 +18,7 @@ Thanks to the following people for their contributions to this release:
 New contributors: **Copilot**, **Test** — welcome!
 
 ### Added
+- Text selection in preview pane — click+drag to select, double-click for word selection, `y` to copy to clipboard, Escape to clear
 - Automated contributor recognition in changelogs, GitHub Releases, and CONTRIBUTORS.md hall of fame
 - Welcome screen overlay with animated grüt banner and first-run keyboard reference
 - Right-click context menu with action picker for all panels

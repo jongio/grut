@@ -132,7 +132,14 @@ import Screenshot from '../../components/Screenshot.astro';
   ]} />
 
   <h2>Preview <small>(panel 5)</small></h2>
-  <p>Navigation keys (<kbd>j</kbd>/<kbd>k</kbd>/<kbd>g</kbd>/<kbd>G</kbd>/<kbd>d</kbd>/<kbd>u</kbd>) scroll content. No panel-specific actions.</p>
+  <KeybindingTable bindings={[
+    { key: 'j / k', action: 'Scroll content' },
+    { key: 'g / G', action: 'Jump to top / bottom' },
+    { key: 'd / u', action: 'Page down / up' },
+    { key: 'y', action: 'Copy selection to clipboard' },
+    { key: 'Esc', action: 'Clear selection' },
+  ]} />
+  <p>Click and drag to select text. Double-click to select a word.</p>
 
   <h2>Keybinding Schemes</h2>
   <p>

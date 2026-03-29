@@ -150,6 +150,14 @@ Always active regardless of focused panel.
 
 ## Preview (panel 5)
 
-Navigation keys (`j`/`k`/`g`/`G`/`d`/`u`) scroll content. No panel-specific actions.
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll content |
+| `g` / `G` | Jump to top / bottom |
+| `d` / `u` | Page down / up |
+| `y` | Copy selection to clipboard |
+| `Esc` | Clear selection |
+
+Click and drag to select text. Double-click to select a word.
 
 

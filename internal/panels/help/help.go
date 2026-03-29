@@ -129,6 +129,8 @@ var sections = []section{
 			{key: "j/k", desc: "Scroll content"},
 			{key: "g/G", desc: "Jump to top/bottom"},
 			{key: "d/u", desc: "Page down/up"},
+			{key: "y", desc: "Copy selection"},
+			{key: "Esc", desc: "Clear selection"},
 		},
 	},
 }
