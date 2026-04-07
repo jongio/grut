@@ -122,8 +122,13 @@
     "preview": {
       "description": "Preview panel (panel 5)",
       "focusKey": "5",
-      "bindings": [],
-      "note": "Navigation keys (j/k/g/G/d/u) scroll content. No panel-specific actions."
+      "bindings": [
+        { "key": "W", "action": "Toggle word wrap" },
+        { "key": "n", "action": "Toggle line numbers" },
+        { "key": "m", "action": "Toggle markdown render" },
+        { "key": "B", "action": "Toggle blame" }
+      ],
+      "note": "Navigation keys (j/k/g/G/d/u) scroll content."
     }
   }
 }
