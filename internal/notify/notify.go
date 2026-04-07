@@ -42,6 +42,10 @@ func (l Level) String() string {
 // DefaultToastDuration is the default auto-dismiss time for toasts.
 const DefaultToastDuration = 3 * time.Second
 
+// maxInlineNotifications is the upper bound on persistent inline entries.
+// When exceeded, the oldest entry is evicted to prevent unbounded growth.
+const maxInlineNotifications = 50
+
 // Notification holds the data for a single notification.
 type Notification struct {
 	CreatedAt time.Time
@@ -101,7 +105,7 @@ func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration)
 
 // AddInline adds a persistent inline notification identified by the given
 // id. If an inline notification with the same id already exists, it is
-// replaced.
+// replaced. When the cap is exceeded, the oldest entry is evicted.
 func (m *Manager) AddInline(id, msg string, level Level) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -112,6 +116,20 @@ func (m *Manager) AddInline(id, msg string, level Level) {
 			Level:     level,
 			CreatedAt: time.Now(),
 		},
+	}
+	// Evict oldest if over cap (defensive bound against unbounded growth).
+	if len(m.inlines) > maxInlineNotifications {
+		var oldestID string
+		var oldestTime time.Time
+		for k, v := range m.inlines {
+			if oldestID == "" || v.notification.CreatedAt.Before(oldestTime) {
+				oldestID = k
+				oldestTime = v.notification.CreatedAt
+			}
+		}
+		if oldestID != "" {
+			delete(m.inlines, oldestID)
+		}
 	}
 }
 

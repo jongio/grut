@@ -520,6 +520,8 @@ func Preflight() error {
 		"./internal/crashlog/",
 		"./internal/panels/gitdiff/",
 		"./internal/panels/filetree/",
+		"./internal/markdown/",
+		"./internal/notify/",
 	); err != nil {
 		return fmt.Errorf("benchmark smoke: %w", err)
 	}
@@ -893,6 +895,8 @@ func runBenchmarks(dir, outFile string, opts ...int) error {
 		"./internal/crashlog/",
 		"./internal/panels/gitdiff/",
 		"./internal/panels/filetree/",
+		"./internal/markdown/",
+		"./internal/notify/",
 	}
 	args := append([]string{
 		"test", "-bench=.", "-benchmem", "-run=^$",

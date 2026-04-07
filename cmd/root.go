@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof" //nolint:gosec // pprof server is opt-in via --pprof flag
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/ai"
@@ -267,6 +270,34 @@ Environment:
 			}
 			cpuProfileFile = f
 		}
+
+		pprofPort, _ := cmd.Flags().GetString("pprof")
+		if pprofPort != "" {
+			go func() {
+				addr := "localhost:" + pprofPort
+				slog.Info("pprof server starting", "addr", "http://"+addr+"/debug/pprof/")
+				if err := http.ListenAndServe(addr, nil); err != nil { //nolint:gosec // pprof is opt-in dev tool
+					slog.Error("pprof server failed", "err", err)
+				}
+			}()
+
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					var ms runtime.MemStats
+					runtime.ReadMemStats(&ms)
+					slog.Info("memstats",
+						"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
+						"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
+						"heap_objects", ms.HeapObjects,
+						"goroutines", runtime.NumGoroutine(),
+						"gc_cycles", ms.NumGC,
+					)
+				}
+			}()
+		}
+
 		return nil
 	}
 
@@ -277,6 +308,7 @@ Environment:
 	// Global flags available to all subcommands.
 	rootCmd.PersistentFlags().String("cpu-profile", "", "write CPU profile to `file`")
 	rootCmd.PersistentFlags().String("mem-profile", "", "write memory profile to `file`")
+	rootCmd.PersistentFlags().String("pprof", "", "start pprof server on given port (e.g. 6060)")
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
 	rootCmd.PersistentFlags().Bool("reset-welcome", false, "Reset first-run state so the welcome screen shows on next launch")
