@@ -61,6 +61,10 @@ type Preview struct {
 	ghMode      bool // true when showing GitHub content instead of file
 	ghPlainText bool // true when ghContent is pre-formatted (not markdown)
 	gitDiffOnly bool // when true, show only diff (not file content)
+	// Text selection state
+	selAnchor *selPoint // where the click/drag began (absolute line + rune col)
+	selEnd    *selPoint // where the drag/shift-move reached
+	selecting bool      // true while mouse button is held and dragging
 }
 
 // fileLoadedMsg is the result of an async file load operation (F01).
@@ -139,6 +143,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghTitle = ""
 		p.ghContent = ""
 		p.ghPlainText = false
+		p.clearSelection()
 		// Start async file load (F01: no blocking I/O in Update).
 		p.filePath = msg.Path
 		p.scrollY = 0
@@ -307,6 +312,14 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollDown(3)
 		}
 		return p, nil
+	case panels.PanelMouseClickMsg:
+		return p.handleMouseClick(msg)
+	case panels.PanelMouseMotionMsg:
+		return p.handleMouseMotion(msg)
+	case panels.PanelMouseReleaseMsg:
+		return p.handleMouseRelease(msg)
+	case panels.PanelMouseDoubleClickMsg:
+		return p.handleDoubleClick(msg)
 	case panels.BlameLoadedMsg:
 		if msg.Err != nil {
 			p.blameMode = false
@@ -350,6 +363,14 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 					}
 				}
 				p.blameLines = nil
+			}
+		case "y":
+			if p.hasSelection() {
+				return p.copySelection()
+			}
+		case "escape", "esc":
+			if p.hasSelection() {
+				p.clearSelection()
 			}
 		}
 	}
@@ -863,11 +884,16 @@ func (p *Preview) renderContent(width, height int) string {
 		contentWidth = 1
 	}
 	// Build rendered lines
+	sel, selE := p.selRange()
 	rendered := make([]string, 0, len(visible))
 	for i, line := range visible {
 		lineNum := start + i + 1
+		absLine := start + i
 		// Expand tabs so truncation measures display width correctly.
 		line = strings.ReplaceAll(line, "\t", "    ")
+		// Apply selection highlight before truncation/wrapping so
+		// the highlight covers the correct rune range.
+		line = applySelectionHighlight(line, absLine, sel, selE)
 		if p.wordWrap && contentWidth > 0 {
 			line = lipgloss.NewStyle().Width(contentWidth).Render(line)
 		} else {
