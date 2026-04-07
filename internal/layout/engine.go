@@ -539,12 +539,6 @@ func (e *Engine) forwardMouseToFocused(m tea.Mouse, buildMsg func(row, col int) 
 	innerY := m.Y - e.tabBarHeight() - borderSize
 	contentRow := innerY - r.Y
 	contentCol := innerX - r.X - PanelPadH
-	if contentRow < 0 {
-		contentRow = 0
-	}
-	if contentCol < 0 {
-		contentCol = 0
-	}
 	p, ok := e.panels[name]
 	if !ok {
 		return nil

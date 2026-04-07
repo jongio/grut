@@ -264,7 +264,7 @@ func (p *Preview) selectedText() string {
 			startCol = endCol
 		}
 		sb.WriteString(string(runes[startCol:endCol]))
-		if lineIdx < e.Line {
+		if lineIdx < e.Line && lineIdx+1 < len(dl) {
 			sb.WriteByte('\n')
 		}
 	}

@@ -961,9 +961,9 @@ func TestSelectedText_SelectionEndBeyondFile(t *testing.T) {
 	p.selAnchor = &selPoint{Line: 0, Col: 0}
 	p.selEnd = &selPoint{Line: 100, Col: 50} // way beyond content
 	got := p.selectedText()
-	// Loop iterates through both lines, appending \n after each except the last
-	// that fits within dl bounds. Line 1 gets \n since lineIdx < e.Line.
-	assert.Equal(t, "line one\nline two\n", got)
+	// Loop iterates through both lines; no trailing newline when selection
+	// extends past the end of the content.
+	assert.Equal(t, "line one\nline two", got)
 }
 
 func TestCopySelection_EmptyStringWithValidAnchors(t *testing.T) {

@@ -177,6 +177,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.IssueSelectedMsg:
+		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = false
 		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, ansi.Strip(msg.Title))
@@ -197,6 +198,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.PRSelectedMsg:
+		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = false
 		safeTitle := ansi.Strip(msg.Title)
@@ -218,6 +220,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.ActionRunSelectedMsg:
+		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = false
 		safeWfName := ansi.Strip(msg.WorkflowName)
@@ -239,6 +242,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.WorkflowSelectedMsg:
 		// Show the workflow definition file in the preview pane.
+		p.clearSelection()
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -255,6 +259,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.diffLines = nil
 		return p, p.loadFileCmd(msg.Path)
 	case panels.ActionJobsLoadedMsg:
+		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = true
 		p.scrollY = 0
