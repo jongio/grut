@@ -2,11 +2,18 @@ package preview
 
 import (
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
+
+// builderPool reuses strings.Builder instances to reduce per-line
+// allocations in the selection highlight render loop.
+var builderPool = sync.Pool{
+	New: func() any { return new(strings.Builder) },
+}
 
 // selectionBg is the background color used for text selection highlighting.
 var selectionBg = lipgloss.Color("#44475A")
@@ -50,7 +57,15 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 	// character by character, tracking rune position while preserving
 	// ANSI sequences.
 	hlStyle := lipgloss.NewStyle().Background(selectionBg)
-	var before, selected, after strings.Builder
+	before := builderPool.Get().(*strings.Builder)
+	before.Reset()
+	defer builderPool.Put(before)
+	sel2 := builderPool.Get().(*strings.Builder)
+	sel2.Reset()
+	defer builderPool.Put(sel2)
+	after := builderPool.Get().(*strings.Builder)
+	after.Reset()
+	defer builderPool.Put(after)
 	runeIdx := 0
 	i := 0
 
@@ -86,7 +101,7 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 			if runeIdx < startCol {
 				before.WriteString(seq)
 			} else if runeIdx < endCol {
-				selected.WriteString(seq)
+				sel2.WriteString(seq)
 			} else {
 				after.WriteString(seq)
 			}
@@ -99,7 +114,7 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 		if runeIdx < startCol {
 			before.WriteString(ch)
 		} else if runeIdx < endCol {
-			selected.WriteString(ch)
+			sel2.WriteString(ch)
 		} else {
 			after.WriteString(ch)
 		}
@@ -107,10 +122,10 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 		i += size
 	}
 
-	if selected.Len() == 0 {
+	if sel2.Len() == 0 {
 		return line
 	}
-	return before.String() + hlStyle.Render(selected.String()) + after.String()
+	return before.String() + hlStyle.Render(sel2.String()) + after.String()
 }
 
 func isCSITerminator(b byte) bool {

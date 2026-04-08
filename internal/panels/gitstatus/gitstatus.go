@@ -235,7 +235,8 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		p.files = msg.files
-		p.rowsDirty = true
+		p.rebuildRows()
+		p.rowsDirty = false
 		return p, p.emitStatusChanged()
 	case diffLoadedMsg:
 		// Discard stale diff results.
@@ -251,7 +252,8 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.diffCache = make(map[string][]git.Hunk)
 			p.diffCache[msg.path] = msg.hunks
 		}
-		p.rowsDirty = true
+		p.rebuildRows()
+		p.rowsDirty = false
 		return p, nil
 	case stageResultMsg:
 		if msg.err != nil {
@@ -877,7 +879,8 @@ func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 		// Collapse.
 		delete(p.expandedFiles, key)
 		delete(p.diffCache, key)
-		p.rowsDirty = true
+		p.rebuildRows()
+		p.rowsDirty = false
 		return p, nil
 	}
 	// Expand — load diff.
@@ -887,7 +890,8 @@ func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 	diffKey := key
 	// If we already have cached hunks, just rebuild.
 	if _, ok := p.diffCache[diffKey]; ok {
-		p.rowsDirty = true
+		p.rebuildRows()
+		p.rowsDirty = false
 		return p, nil
 	}
 	return p, p.loadDiffCmd(diffKey, path, staged)

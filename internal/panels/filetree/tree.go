@@ -5,12 +5,19 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 )
+
+// builderPool reuses strings.Builder instances to reduce per-frame
+// allocations in the render loop (one builder per visible tree node).
+var builderPool = sync.Pool{
+	New: func() any { return new(strings.Builder) },
+}
 
 // ---------------------------------------------------------------------------
 // Tree loading
@@ -455,7 +462,9 @@ func truncateToWidth(s string, maxW int) string {
 // ---------------------------------------------------------------------------
 
 func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
-	var b strings.Builder
+	b := builderPool.Get().(*strings.Builder)
+	b.Reset()
+	defer builderPool.Put(b)
 
 	if ft.listMode {
 		// List mode: show relative path, no indentation or tree connectors.

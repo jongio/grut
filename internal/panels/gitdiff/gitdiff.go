@@ -25,6 +25,10 @@ const (
 	viewSideBySide                 // two-column old/new view
 )
 
+// maxRenderedLines caps the total number of pre-rendered lines to prevent
+// excessive memory usage and sluggish rendering for very large diffs.
+const maxRenderedLines = 50000
+
 // GitDiff is the diff viewer panel. It displays file diffs with
 // syntax-highlighted additions/deletions in inline or side-by-side format.
 type GitDiff struct {
@@ -355,7 +359,12 @@ func (d *GitDiff) buildInlineLines() {
 	d.hunkStarts = d.hunkStarts[:0]
 	d.fileStarts = d.fileStarts[:0]
 	findingsMap := d.buildFindingsMap()
+	truncated := false
 	for _, fd := range d.diffs {
+		if len(d.lines) >= maxRenderedLines {
+			truncated = true
+			break
+		}
 		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File header
 		header := d.fileHeader(fd)
@@ -371,9 +380,17 @@ func (d *GitDiff) buildInlineLines() {
 			continue
 		}
 		for _, hunk := range fd.Hunks {
+			if len(d.lines) >= maxRenderedLines {
+				truncated = true
+				break
+			}
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			for _, line := range hunk.Lines {
+				if len(d.lines) >= maxRenderedLines {
+					truncated = true
+					break
+				}
 				var rendered string
 				switch line.Type {
 				case git.DiffLineAdded:
@@ -397,8 +414,17 @@ func (d *GitDiff) buildInlineLines() {
 					}
 				}
 			}
+			if truncated {
+				break
+			}
+		}
+		if truncated {
+			break
 		}
 		d.lines = append(d.lines, "") // blank separator between files
+	}
+	if truncated {
+		d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 	}
 }
 
@@ -426,7 +452,12 @@ func (d *GitDiff) buildSideBySideLines() {
 		contentWidth = 1
 	}
 	findingsMap := d.buildFindingsMap()
+	truncated := false
 	for _, fd := range d.diffs {
+		if len(d.lines) >= maxRenderedLines {
+			truncated = true
+			break
+		}
 		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File headers (side-by-side)
 		leftHeader := fmt.Sprintf("── %s (old) ", fd.Path)
@@ -449,10 +480,18 @@ func (d *GitDiff) buildSideBySideLines() {
 			continue
 		}
 		for _, hunk := range fd.Hunks {
+			if len(d.lines) >= maxRenderedLines {
+				truncated = true
+				break
+			}
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			pairs := pairDiffLines(hunk.Lines)
 			for _, pair := range pairs {
+				if len(d.lines) >= maxRenderedLines {
+					truncated = true
+					break
+				}
 				leftStr := d.formatSideColumn(pair.old, numWidth, contentWidth, false)
 				rightStr := d.formatSideColumn(pair.new, numWidth, contentWidth, true)
 				d.lines = append(d.lines, leftStr+" │ "+rightStr)
@@ -479,8 +518,17 @@ func (d *GitDiff) buildSideBySideLines() {
 					}
 				}
 			}
+			if truncated {
+				break
+			}
+		}
+		if truncated {
+			break
 		}
 		d.lines = append(d.lines, "") // blank separator
+	}
+	if truncated {
+		d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 	}
 }
 
