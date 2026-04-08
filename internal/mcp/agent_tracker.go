@@ -214,9 +214,45 @@ func validateAgentArg(arg string) error {
 	return nil
 }
 
+// validateAgentCommand rejects agent command binary names that contain
+// dangerous characters. The command is the first argument to exec.Command,
+// so shell metacharacters, null bytes, control characters, and Unicode
+// format characters are forbidden (CWE-78). Empty commands are also
+// rejected.
+func validateAgentCommand(command string) error {
+	if command == "" {
+		return fmt.Errorf("agent command must not be empty")
+	}
+	if !utf8.ValidString(command) {
+		return fmt.Errorf("agent command contains invalid UTF-8")
+	}
+	for i, r := range command {
+		if r == 0 {
+			return fmt.Errorf("agent command contains null byte at position %d", i)
+		}
+		if strings.ContainsRune(agentShellMetachars, r) {
+			return fmt.Errorf("agent command contains forbidden character %q at position %d", r, i)
+		}
+		if unicode.IsControl(r) {
+			return fmt.Errorf("agent command contains control character at position %d", i)
+		}
+		if unicode.Is(unicode.Cf, r) {
+			return fmt.Errorf("agent command contains Unicode format character at position %d", i)
+		}
+	}
+	return nil
+}
+
 // Spawn starts a new agent process and tracks it. Returns the assigned PID
 // (or internal ID in test mode) and an error if limits are exceeded.
 func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string) (int, error) {
+	// Validate the command binary name before execution. Agent commands
+	// may originate from AI/MCP tool calls, so defence-in-depth requires
+	// rejecting shell metacharacters and control characters even though
+	// exec.Command does not invoke a shell (CWE-78).
+	if err := validateAgentCommand(command); err != nil {
+		return 0, fmt.Errorf("command: %w", err)
+	}
 	// Validate all arguments before acquiring the lock so we fail fast
 	// on bad input without consuming a process slot.
 	for i, arg := range args {

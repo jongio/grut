@@ -402,3 +402,90 @@ func TestHardLimitConstants_Positive(t *testing.T) {
 		assert.Positive(t, l.value, "%s must be positive", l.name)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// AllowedWritePaths security validation
+// ---------------------------------------------------------------------------
+
+func TestValidate_AllowedWritePathsTraversal(t *testing.T) {
+	tests := []struct {
+		name    string
+		paths   []string
+		wantErr string
+	}{
+		{
+			name:    "dotdot forward slash",
+			paths:   []string{"~/../../etc"},
+			wantErr: "must not contain '..'",
+		},
+		{
+			name:    "dotdot backslash",
+			paths:   []string{`~\..\..\etc`},
+			wantErr: "must not contain '..'",
+		},
+		{
+			name:    "dotdot middle",
+			paths:   []string{"/home/user/../../../etc/passwd"},
+			wantErr: "must not contain '..'",
+		},
+		{
+			name:  "valid absolute path",
+			paths: []string{"/home/user/repos"},
+		},
+		{
+			name:  "valid tilde path",
+			paths: []string{"~/repos"},
+		},
+		{
+			name:  "empty list ok",
+			paths: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validCfg(t)
+			cfg.MCP.Security.AllowedWritePaths = tc.paths
+			err := Validate(cfg)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidate_AllowedWritePathsUNC(t *testing.T) {
+	cfg := validCfg(t)
+	cfg.MCP.Security.AllowedWritePaths = []string{`\\evil-server\share`}
+	err := Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "UNC paths")
+}
+
+func TestRejectTraversalPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{name: "clean path", path: "/home/user/repo", wantErr: false},
+		{name: "dotdot unix", path: "/home/../etc", wantErr: true},
+		{name: "dotdot windows", path: `C:\Users\..\Admin`, wantErr: true},
+		{name: "dotdot start", path: "../escape", wantErr: true},
+		{name: "dotdot end", path: "/tmp/dir/..", wantErr: true},
+		{name: "single dot ok", path: "/tmp/./dir", wantErr: false},
+		{name: "dots in name ok", path: "/tmp/my..file.txt", wantErr: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := rejectTraversalPath(nil, "test.field", tc.path)
+			if tc.wantErr {
+				assert.Len(t, errs, 1)
+			} else {
+				assert.Empty(t, errs)
+			}
+		})
+	}
+}

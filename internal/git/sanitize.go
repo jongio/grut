@@ -212,6 +212,41 @@ func validateArgs(args []string) error {
 	return nil
 }
 
+// validateAuthor checks that an author string ("Name <email>") is safe for
+// use in --author=. It rejects shell metacharacters except angle brackets
+// (which git requires for the email wrapper), null bytes, control characters,
+// and Unicode format characters. Leading dashes are rejected to prevent
+// option injection (CWE-88).
+func validateAuthor(author string) error {
+	if author == "" {
+		return fmt.Errorf("author must not be empty")
+	}
+	if !utf8.ValidString(author) {
+		return fmt.Errorf("author contains invalid UTF-8")
+	}
+	if strings.HasPrefix(author, "-") {
+		return fmt.Errorf("author must not start with '-' (option injection)")
+	}
+	// authorForbidden is the shell metachar set minus < and >, which git
+	// --author needs for "Name <email>" format.
+	const authorForbidden = ";|&$`\\\n\r"
+	for i, r := range author {
+		if r == 0 {
+			return fmt.Errorf("author contains null byte at position %d", i)
+		}
+		if strings.ContainsRune(authorForbidden, r) {
+			return fmt.Errorf("author contains forbidden character %q at position %d", r, i)
+		}
+		if unicode.IsControl(r) && r != '\t' {
+			return fmt.Errorf("author contains control character at position %d", i)
+		}
+		if unicode.Is(unicode.Cf, r) {
+			return fmt.Errorf("author contains Unicode format character at position %d", i)
+		}
+	}
+	return nil
+}
+
 // CheckGitInstalled verifies git is available on PATH.
 func CheckGitInstalled() error {
 	_, err := exec.LookPath("git")

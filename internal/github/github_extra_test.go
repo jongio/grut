@@ -98,6 +98,34 @@ func TestClient_GetJobLogs_CacheTypeError(t *testing.T) {
 	assert.Contains(t, err.Error(), "unexpected cache type")
 }
 
+func TestClient_GetJobLogs_RejectsHTTPRedirect(t *testing.T) {
+	// The logs URL server redirects to an HTTP (not HTTPS) target.
+	// Our CheckRedirect must block this to prevent SSRF/cleartext leakage.
+	httpTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("should not reach here"))
+	}))
+	t.Cleanup(httpTarget.Close)
+
+	logsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Redirect to the plain HTTP target
+		http.Redirect(w, r, httpTarget.URL+"/evil", http.StatusFound)
+	}))
+	t.Cleanup(logsServer.Close)
+
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/owner/repo/actions/jobs/99/logs" {
+			http.Redirect(w, r, logsServer.URL+"/logs.txt", http.StatusFound)
+			return
+		}
+		http.NotFound(w, r)
+	})
+
+	ctx := context.Background()
+	_, err := client.GetJobLogs(ctx, "owner", "repo", 99)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-HTTPS")
+}
+
 // ---------------------------------------------------------------------------
 // GetPRDiff — 45.5% coverage, add cache-hit test
 // ---------------------------------------------------------------------------

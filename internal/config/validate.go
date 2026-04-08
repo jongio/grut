@@ -273,6 +273,15 @@ func Validate(cfg *Config) error {
 	if cfg.Extensions.InstallDir != "" {
 		errs = rejectUNCPath(errs, "extensions.install_dir", cfg.Extensions.InstallDir)
 	}
+	// Defence-in-depth: reject UNC paths and directory traversal in
+	// AllowedWritePaths so a malicious config cannot grant the MCP
+	// server write access to arbitrary network shares or parent
+	// directories (CWE-22, CWE-40).
+	for i, p := range cfg.MCP.Security.AllowedWritePaths {
+		field := fmt.Sprintf("mcp.security.allowed_write_paths[%d]", i)
+		errs = rejectUNCPath(errs, field, p)
+		errs = rejectTraversalPath(errs, field, p)
+	}
 
 	return errors.Join(errs...)
 }
@@ -290,6 +299,21 @@ func rejectUNCPath(errs []error, field, value string) []error {
 	// be interpreted as UNC when the config is used on Windows.
 	if strings.HasPrefix(value, "//") {
 		return append(errs, fieldErr(field, "UNC paths (//...) are not allowed for security reasons"))
+	}
+	return errs
+}
+
+// rejectTraversalPath appends an error if value contains ".." path
+// components, which could be used for directory traversal (CWE-22).
+// Both forward slashes and backslashes are checked so that
+// Windows-style traversal is detected on all platforms.
+func rejectTraversalPath(errs []error, field, value string) []error {
+	// Normalise backslashes so Windows-style "..\etc" is caught on Unix.
+	normalized := strings.ReplaceAll(value, "\\", "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == ".." {
+			return append(errs, fieldErr(field, "path must not contain '..' (directory traversal)"))
+		}
 	}
 	return errs
 }

@@ -456,3 +456,45 @@ func TestValidatePath_OversizedInput(t *testing.T) {
 	huge := strings.Repeat("a", 1<<20)
 	_ = ValidatePath(huge)
 }
+
+// ---------------------------------------------------------------------------
+// validateAuthor
+// ---------------------------------------------------------------------------
+
+func TestValidateAuthor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		author  string
+		wantErr bool
+		errMsg  string
+	}{
+		{name: "valid author", author: "John Doe <john@example.com>", wantErr: false},
+		{name: "valid name only", author: "John Doe", wantErr: false},
+		{name: "empty", author: "", wantErr: true, errMsg: "must not be empty"},
+		{name: "semicolon", author: "John; rm -rf /", wantErr: true, errMsg: "forbidden character"},
+		{name: "pipe", author: "John | cat /etc/passwd", wantErr: true, errMsg: "forbidden character"},
+		{name: "ampersand", author: "John & whoami", wantErr: true, errMsg: "forbidden character"},
+		{name: "dollar", author: "John $HOME", wantErr: true, errMsg: "forbidden character"},
+		{name: "backtick", author: "John `id`", wantErr: true, errMsg: "forbidden character"},
+		{name: "backslash", author: `John\nDoe`, wantErr: true, errMsg: "forbidden character"},
+		{name: "newline", author: "John\nDoe", wantErr: true, errMsg: "forbidden character"},
+		{name: "null byte", author: "John\x00Doe", wantErr: true, errMsg: "null byte"},
+		{name: "leading dash", author: "--exec=evil", wantErr: true, errMsg: "must not start with '-'"},
+		{name: "angle brackets allowed", author: "John <john@example.com>", wantErr: false},
+		{name: "invalid utf8", author: "John\xff\xfe", wantErr: true, errMsg: "invalid UTF-8"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateAuthor(tc.author)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

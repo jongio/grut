@@ -220,6 +220,25 @@ func (c *Client) Commit(ctx context.Context, msg string, opts CommitOpts) (strin
 	if msg == "" && !opts.Amend && opts.Fixup == "" {
 		return "", fmt.Errorf("commit: message must not be empty")
 	}
+	// Defence-in-depth: validate Fixup (a commit-ish ref) before
+	// concatenation into --fixup=. exec.Command prevents shell injection,
+	// but ValidateRef guards against option injection and malformed refs
+	// (CWE-88).
+	if opts.Fixup != "" {
+		if err := ValidateRef(opts.Fixup); err != nil {
+			return "", fmt.Errorf("commit fixup: %w", err)
+		}
+	}
+	// Defence-in-depth: validate Author string before concatenation into
+	// --author=. The value is a free-form "Name <email>" string, so we
+	// use ValidateArg which rejects shell metacharacters and null bytes
+	// but allows the angle brackets git needs via its format-specifier
+	// exception (CWE-88).
+	if opts.Author != "" {
+		if err := validateAuthor(opts.Author); err != nil {
+			return "", fmt.Errorf("commit author: %w", err)
+		}
+	}
 
 	var hash string
 	err := c.queue.Exec(ctx, func() error {

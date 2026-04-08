@@ -500,7 +500,18 @@ func (c *clientImpl) GetJobLogs(ctx context.Context, owner, repo string, jobID i
 	if err != nil {
 		return "", fmt.Errorf("build job %d logs request: %w", jobID, err)
 	}
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(r *http.Request, via []*http.Request) error {
+			if r.URL.Scheme != "https" {
+				return fmt.Errorf("refusing redirect to non-HTTPS URL: %s", r.URL)
+			}
+			if len(via) >= 5 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch job %d logs: %w", jobID, err)
