@@ -13,6 +13,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain isolates the entire test process from user/system git configuration.
+// Without this, git commands spawned by the production Client.run() method
+// inherit the user's global config (GPG signing, LFS filters, credential
+// helpers) which can cause interactive prompts and indefinite hangs.
+func TestMain(m *testing.M) {
+	os.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	os.Setenv("GIT_CONFIG_GLOBAL", "")
+	os.Setenv("GIT_TERMINAL_PROMPT", "0")
+	os.Exit(m.Run())
+}
+
+// testGitEnv returns environment variables for running git in tests.
+// It isolates test repos from user/system git configuration to prevent
+// interactive prompts (GPG signing, credential helpers, editors) and
+// slow filters (git-lfs) from causing test hangs or flakiness.
+func testGitEnv() []string {
+	overrides := map[string]string{
+		"GIT_AUTHOR_NAME":     "Test",
+		"GIT_AUTHOR_EMAIL":    "test@example.com",
+		"GIT_COMMITTER_NAME":  "Test",
+		"GIT_COMMITTER_EMAIL": "test@example.com",
+		"GIT_TERMINAL_PROMPT": "0",
+		"GIT_CONFIG_NOSYSTEM": "1",
+		"GIT_CONFIG_GLOBAL":   "",
+	}
+
+	// Build env from os.Environ(), replacing any keys we override.
+	env := make([]string, 0, len(os.Environ())+len(overrides))
+	for _, e := range os.Environ() {
+		k, _, _ := strings.Cut(e, "=")
+		if _, skip := overrides[k]; !skip {
+			env = append(env, e)
+		}
+	}
+	for k, v := range overrides {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
 // initTestRepo creates a temporary git repository with an initial commit.
 // Returns the repo path. The repo is cleaned up automatically by t.TempDir.
 func initTestRepo(t *testing.T) string {
@@ -23,12 +63,7 @@ func initTestRepo(t *testing.T) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Test",
-			"GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=Test",
-			"GIT_COMMITTER_EMAIL=test@example.com",
-		)
+		cmd.Env = testGitEnv()
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v failed: %s", args, string(out))
 	}
@@ -38,6 +73,9 @@ func initTestRepo(t *testing.T) string {
 	run("config", "user.email", "test@example.com")
 	// Disable autocrlf to ensure consistent line endings across platforms.
 	run("config", "core.autocrlf", "false")
+	// Disable GPG signing to prevent interactive prompts in CI/test.
+	run("config", "commit.gpgsign", "false")
+	run("config", "tag.gpgsign", "false")
 
 	// Create initial file and commit.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test\n"), 0o644))
@@ -53,11 +91,13 @@ func detectDefaultBranch(t *testing.T, dir string) string {
 	t.Helper()
 	cmd := exec.Command("git", "branch", "--show-current")
 	cmd.Dir = dir
+	cmd.Env = testGitEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		// Fallback: try symbolic-ref.
 		cmd = exec.Command("git", "symbolic-ref", "--short", "HEAD")
 		cmd.Dir = dir
+		cmd.Env = testGitEnv()
 		out, err = cmd.Output()
 		require.NoError(t, err, "cannot detect default branch")
 	}

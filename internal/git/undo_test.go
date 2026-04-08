@@ -252,12 +252,7 @@ func TestUndoManager_UndoRedoDiscard(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Test",
-			"GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=Test",
-			"GIT_COMMITTER_EMAIL=test@example.com",
-		)
+		cmd.Env = testGitEnv()
 		out, runErr := cmd.CombinedOutput()
 		require.NoError(t, runErr, "git %v failed: %s", args, string(out))
 		return strings.TrimSpace(string(out))
@@ -314,6 +309,7 @@ func TestUndoManager_UndoRedoResetHard(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", "rev-parse", "HEAD")
 		cmd.Dir = dir
+		cmd.Env = testGitEnv()
 		out, headErr := cmd.Output()
 		require.NoError(t, headErr)
 		return strings.TrimSpace(string(out))
