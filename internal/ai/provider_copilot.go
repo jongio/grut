@@ -128,16 +128,21 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 			close(ch)
 			close(done)
 			// Disconnect with a timeout to prevent goroutine leak.
+			// Fire-and-forget: if Disconnect hangs past the 5s deadline
+			// we log and exit so the outer goroutine is not pinned.
 			go func() {
 				disconnDone := make(chan struct{})
 				go func() {
 					_ = session.Disconnect()
 					close(disconnDone)
 				}()
+				timer := time.NewTimer(5 * time.Second)
+				defer timer.Stop()
 				select {
 				case <-disconnDone:
-				case <-time.After(5 * time.Second):
-					slog.Debug("copilot: session disconnect timed out after 5s")
+				case <-timer.C:
+					slog.Debug("copilot: session disconnect timed out after 5s; abandoning")
+					// Inner goroutine will finish on its own.
 				}
 			}()
 		})

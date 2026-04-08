@@ -490,12 +490,18 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			result.lines = buildMetadataLines(path, info)
 			return result
 		}
-		// Detect binary content via MIME type
-		mime, err := mimetype.DetectFile(path)
+		// Detect binary content via MIME type using only the first 512 bytes
+		// to avoid reading potentially large files just for type detection.
+		f, err := os.Open(path)
 		if err != nil {
 			result.err = err
 			return result
 		}
+		header := make([]byte, 512)
+		n, _ := f.Read(header)
+		f.Close()
+		header = header[:n]
+		mime := mimetype.Detect(header)
 		if !isTextMIME(mime.String()) {
 			result.isBinary = true
 			result.lines = append(buildMetadataLines(path, info), "", "Type: "+mime.String())
