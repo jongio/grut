@@ -274,6 +274,10 @@ func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string)
 	return pid, nil
 }
 
+// agentCleanupGrace is the time to wait after an agent exits before
+// removing it from the tracker, allowing log retrieval.
+const agentCleanupGrace = 30 * time.Second
+
 // monitor waits for a process to exit and updates its status.
 func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.CancelFunc) {
 	defer cancel()
@@ -288,9 +292,9 @@ func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.Cancel
 	err := cmd.Wait()
 	now := time.Now()
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	agent, ok = t.agents[pid]
 	if !ok {
+		t.mu.Unlock()
 		return
 	}
 	agent.info.EndedAt = now
@@ -308,6 +312,17 @@ func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.Cancel
 		agent.info.Status = AgentExited
 		agent.info.ExitCode = 0
 	}
+	t.mu.Unlock()
+	// Schedule cleanup after a grace period so callers can still
+	// retrieve logs for recently-exited agents.
+	time.AfterFunc(agentCleanupGrace, func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		a, ok := t.agents[pid]
+		if ok && a.info.Status != AgentRunning {
+			delete(t.agents, pid)
+		}
+	})
 }
 
 // parseOutput splits raw capture buffers into ring buffer lines.
