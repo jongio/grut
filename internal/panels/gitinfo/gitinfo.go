@@ -268,6 +268,13 @@ const checkMark = "✓"
 // crossMark is the failure icon used in status indicators.
 const crossMark = "✗"
 
+// GitHub Actions conclusion strings used in switch cases.
+const (
+	conclusionSuccess  = "success"
+	conclusionFailure  = "failure"
+	conclusionTimedOut = "timed_out"
+)
+
 // actionsWatchTickInterval is the polling interval for the GitHub Actions
 // watch animation frame rate.
 const actionsWatchTickInterval = 1000 * time.Millisecond
@@ -2856,9 +2863,9 @@ func (p *Panel) actionsStatusIcon() string {
 	// Check the latest run's status/conclusion.
 	latest := items[0].actionRun
 	switch latest.Conclusion {
-	case "success": //nolint:goconst // inline string is more readable here
+	case conclusionSuccess:
 		return checkMark
-	case "failure", "timed_out": //nolint:goconst // inline string is more readable here
+	case conclusionFailure, conclusionTimedOut:
 		return crossMark
 	}
 	if latest.Status == "in_progress" || latest.Status == "queued" { //nolint:goconst // inline string is more readable here
@@ -4165,9 +4172,9 @@ func prColor(pr ghPRItem) string {
 // associated with a PR. Returns empty strings when no action run exists.
 func prActionIcon(pr ghPRItem) (icon string, color string) {
 	switch pr.ActionConclusion {
-	case "success":
+	case conclusionSuccess:
 		return checkMark, defaultColors.ActionOK
-	case "failure", "timed_out":
+	case conclusionFailure, conclusionTimedOut:
 		return crossMark, defaultColors.ActionFail
 	}
 	switch pr.ActionStatus {
@@ -4250,10 +4257,10 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 	var icon string
 	var fg string
 	switch run.Conclusion {
-	case "success":
+	case conclusionSuccess:
 		icon = checkMark
 		fg = defaultColors.ActionOK
-	case "failure", "timed_out":
+	case conclusionFailure, conclusionTimedOut:
 		icon = crossMark
 		fg = defaultColors.ActionFail
 	default:

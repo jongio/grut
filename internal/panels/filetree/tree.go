@@ -462,7 +462,10 @@ func truncateToWidth(s string, maxW int) string {
 // ---------------------------------------------------------------------------
 
 func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
-	b := builderPool.Get().(*strings.Builder)
+	b, _ := builderPool.Get().(*strings.Builder)
+	if b == nil {
+		b = new(strings.Builder)
+	}
 	b.Reset()
 	defer builderPool.Put(b)
 

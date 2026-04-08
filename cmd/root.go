@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"time"
 
@@ -273,29 +274,36 @@ Environment:
 
 		pprofPort, _ := cmd.Flags().GetString("pprof")
 		if pprofPort != "" {
-			go func() {
-				addr := "localhost:" + pprofPort
-				slog.Info("pprof server starting", "addr", "http://"+addr+"/debug/pprof/")
-				if err := http.ListenAndServe(addr, nil); err != nil { //nolint:gosec // pprof is opt-in dev tool
-					slog.Error("pprof server failed", "err", err)
-				}
-			}()
+			port, err := strconv.Atoi(pprofPort)
+			if err != nil || port < 1 || port > 65535 {
+				fmt.Fprintf(os.Stderr, "Warning: invalid pprof port %q (must be 1-65535)\n", pprofPort)
+			} else {
+				// Bind to 127.0.0.1 explicitly — "localhost" may resolve to
+				// an unexpected address on misconfigured systems.
+				addr := "127.0.0.1:" + pprofPort
+				go func() {
+					slog.Info("pprof server starting", "addr", "http://"+addr+"/debug/pprof/")
+					if err := http.ListenAndServe(addr, nil); err != nil { //nolint:gosec // pprof is opt-in dev tool
+						slog.Error("pprof server failed", "err", err)
+					}
+				}()
 
-			go func() {
-				ticker := time.NewTicker(30 * time.Second)
-				defer ticker.Stop()
-				for range ticker.C {
-					var ms runtime.MemStats
-					runtime.ReadMemStats(&ms)
-					slog.Info("memstats",
-						"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
-						"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
-						"heap_objects", ms.HeapObjects,
-						"goroutines", runtime.NumGoroutine(),
-						"gc_cycles", ms.NumGC,
-					)
-				}
-			}()
+				go func() {
+					ticker := time.NewTicker(30 * time.Second)
+					defer ticker.Stop()
+					for range ticker.C {
+						var ms runtime.MemStats
+						runtime.ReadMemStats(&ms)
+						slog.Info("memstats",
+							"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
+							"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
+							"heap_objects", ms.HeapObjects,
+							"goroutines", runtime.NumGoroutine(),
+							"gc_cycles", ms.NumGC,
+						)
+					}
+				}()
+			}
 		}
 
 		return nil

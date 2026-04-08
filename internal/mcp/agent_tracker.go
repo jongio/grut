@@ -270,7 +270,7 @@ func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string)
 	}
 	t.agents[pid] = agent
 	// Monitor the process in a background goroutine.
-	go t.monitor(pid, agentCtx, cancel)
+	go t.monitor(pid, cancel)
 	return pid, nil
 }
 
@@ -279,7 +279,7 @@ func (t *AgentTracker) Spawn(ctx context.Context, command string, args []string)
 const agentCleanupGrace = 30 * time.Second
 
 // monitor waits for a process to exit and updates its status.
-func (t *AgentTracker) monitor(pid int, _ context.Context, cancel context.CancelFunc) {
+func (t *AgentTracker) monitor(pid int, cancel context.CancelFunc) {
 	defer cancel()
 	t.mu.Lock()
 	agent, ok := t.agents[pid]

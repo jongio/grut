@@ -57,13 +57,22 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 	// character by character, tracking rune position while preserving
 	// ANSI sequences.
 	hlStyle := lipgloss.NewStyle().Background(selectionBg)
-	before := builderPool.Get().(*strings.Builder)
+	before, _ := builderPool.Get().(*strings.Builder)
+	if before == nil {
+		before = new(strings.Builder)
+	}
 	before.Reset()
 	defer builderPool.Put(before)
-	sel2 := builderPool.Get().(*strings.Builder)
+	sel2, _ := builderPool.Get().(*strings.Builder)
+	if sel2 == nil {
+		sel2 = new(strings.Builder)
+	}
 	sel2.Reset()
 	defer builderPool.Put(sel2)
-	after := builderPool.Get().(*strings.Builder)
+	after, _ := builderPool.Get().(*strings.Builder)
+	if after == nil {
+		after = new(strings.Builder)
+	}
 	after.Reset()
 	defer builderPool.Put(after)
 	runeIdx := 0

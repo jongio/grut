@@ -1,6 +1,7 @@
 package github
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -235,6 +236,77 @@ func TestCacheInvalidate(t *testing.T) {
 				assert.False(t, issB, "issues:b should be removed")
 				assert.True(t, prOK, "prs:a should remain")
 				assert.Equal(t, "v3", prVal)
+			},
+		},
+		{
+			name: "invalidate cleans order slice",
+			run: func(t *testing.T) {
+				c := newCache()
+				c.Set("a", 1)
+				c.Set("b", 2)
+				c.Set("c", 3)
+				c.Invalidate("b")
+
+				assert.Len(t, c.order, 2, "order slice should shrink after Invalidate")
+				assert.Equal(t, []string{"a", "c"}, c.order)
+			},
+		},
+		{
+			name: "invalidate prefix cleans order slice",
+			run: func(t *testing.T) {
+				c := newCache()
+				c.Set("issues:1", "v1")
+				c.Set("issues:2", "v2")
+				c.Set("prs:1", "v3")
+				c.InvalidatePrefix("issues:")
+
+				assert.Len(t, c.order, 1, "order slice should contain only non-prefix keys")
+				assert.Equal(t, []string{"prs:1"}, c.order)
+			},
+		},
+		{
+			name: "expired get cleans order slice",
+			run: func(t *testing.T) {
+				c := newCache()
+				c.ttl = time.Millisecond
+				c.Set("ephemeral", "value")
+				c.ttl = defaultTTL
+				c.Set("durable", "value")
+				time.Sleep(5 * time.Millisecond)
+
+				// Get the expired key — should clean order
+				_, ok := c.Get("ephemeral")
+				assert.False(t, ok)
+
+				assert.Len(t, c.order, 1)
+				assert.Equal(t, []string{"durable"}, c.order)
+			},
+		},
+		{
+			name: "eviction skips stale order entries from prior invalidation",
+			run: func(t *testing.T) {
+				// Use a tiny cache to trigger eviction quickly.
+				c := newCache()
+				// Fill to capacity minus 1 then invalidate some, then fill past limit.
+				for i := range maxCacheEntries {
+					c.Set(fmt.Sprintf("k%d", i), i)
+				}
+				assert.Len(t, c.entries, maxCacheEntries)
+
+				// Invalidate first entry — order is cleaned, map is cleaned.
+				c.Invalidate("k0")
+				assert.Len(t, c.entries, maxCacheEntries-1)
+				assert.Len(t, c.order, maxCacheEntries-1)
+
+				// Adding a new entry should not require eviction since
+				// we're below the limit.
+				c.Set("new", "val")
+				assert.Len(t, c.entries, maxCacheEntries)
+
+				// Verify the new key is accessible.
+				val, ok := c.Get("new")
+				assert.True(t, ok)
+				assert.Equal(t, "val", val)
 			},
 		},
 	}

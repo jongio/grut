@@ -201,6 +201,50 @@ func TestInlinePersistsAcrossUpdates(t *testing.T) {
 	assert.Equal(t, 1, m.InlineCount())
 }
 
+func TestAddInlineEvictsOldestWhenOverCap(t *testing.T) {
+	m := NewManager()
+
+	// Add exactly maxInlineNotifications entries.
+	for i := range maxInlineNotifications {
+		m.AddInline(fmt.Sprintf("n%d", i), fmt.Sprintf("msg %d", i), Info)
+	}
+	assert.Equal(t, maxInlineNotifications, m.InlineCount())
+
+	// Adding one more should evict one entry and keep the count at cap.
+	m.AddInline("overflow", "extra", Warn)
+	assert.Equal(t, maxInlineNotifications, m.InlineCount(), "count should stay at cap")
+	assert.Equal(t, "extra", m.inlineMessage("overflow"), "new entry should exist")
+
+	// Verify exactly one original entry was evicted.
+	surviving := 0
+	for i := range maxInlineNotifications {
+		if m.inlineMessage(fmt.Sprintf("n%d", i)) != "" {
+			surviving++
+		}
+	}
+	assert.Equal(t, maxInlineNotifications-1, surviving, "exactly one original entry should be evicted")
+}
+
+func TestAddInlineEvictsCorrectOldest(t *testing.T) {
+	m := NewManager()
+
+	// Insert entries with controlled creation times by sleeping briefly.
+	m.AddInline("first", "msg-first", Info)
+	time.Sleep(time.Millisecond)
+	m.AddInline("second", "msg-second", Info)
+
+	// Fill to cap with newer entries.
+	for i := 2; i < maxInlineNotifications; i++ {
+		m.AddInline(fmt.Sprintf("n%d", i), "filler", Info)
+	}
+	assert.Equal(t, maxInlineNotifications, m.InlineCount())
+
+	// Overflow — "first" should be evicted because it has the earliest CreatedAt.
+	m.AddInline("trigger", "trigger", Warn)
+	assert.Empty(t, m.inlineMessage("first"), "first (oldest) should be evicted")
+	assert.Equal(t, "msg-second", m.inlineMessage("second"), "second should survive")
+}
+
 // --- View rendering tests ---
 
 func TestViewEmptyManager(t *testing.T) {

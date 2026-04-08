@@ -571,30 +571,6 @@ func (d *GitDiff) fmtSideCol(line *git.DiffLine, numWidth, contentWidth int, emp
 	}
 }
 
-// formatSideColumn renders one column of a side-by-side line.
-func (d *GitDiff) formatSideColumn(line *git.DiffLine, numWidth, contentWidth int, isNew bool) string {
-	if line == nil {
-		// Empty column (no corresponding line on this side)
-		return strings.Repeat(" ", numWidth+3+contentWidth)
-	}
-	lineNum := line.OldLine
-	if isNew {
-		lineNum = line.NewLine
-	}
-	numStr := fmt.Sprintf("%*d", numWidth, lineNum)
-	content := truncate(line.Content, contentWidth)
-	content = padRight(content, contentWidth)
-	full := numStr + " │ " + content
-	switch line.Type {
-	case git.DiffLineAdded:
-		return d.addedStyle().Render(full)
-	case git.DiffLineRemoved:
-		return d.removedStyle().Render(full)
-	default:
-		return d.contextStyle().Render(full)
-	}
-}
-
 // --- Viewport rendering ---
 // renderViewport renders the visible portion of pre-rendered lines
 // into the given width×height area with a scroll indicator.

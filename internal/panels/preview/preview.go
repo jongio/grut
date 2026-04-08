@@ -498,8 +498,12 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			return result
 		}
 		header := make([]byte, 512)
-		n, _ := f.Read(header)
+		n, readErr := f.Read(header)
 		f.Close()
+		if readErr != nil && n == 0 {
+			result.err = readErr
+			return result
+		}
 		header = header[:n]
 		mime := mimetype.Detect(header)
 		if !isTextMIME(mime.String()) {
@@ -511,6 +515,13 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			result.err = err
+			return result
+		}
+		// Defence-in-depth: reject files that passed the 512-byte MIME
+		// check but contain null bytes (polyglot / binary-after-header).
+		if bytes.ContainsRune(data, 0) {
+			result.isBinary = true
+			result.lines = append(buildMetadataLines(path, info), "", "Type: binary (null bytes detected)")
 			return result
 		}
 		source := string(data)

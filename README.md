@@ -165,6 +165,9 @@ grut version      # Print the version
 | `--version`, `-v` | Print the version and exit |
 | `--demo` | Launch with a demo project to explore grut |
 | `--no-ai` | Disable AI features for this session |
+| `--cpu-profile FILE` | Write CPU profile to FILE (dev/debug) |
+| `--mem-profile FILE` | Write memory profile to FILE (dev/debug) |
+| `--pprof PORT` | Start pprof server on localhost:PORT (dev/debug) |
 
 A background update check runs on every launch and notifies you when a new version is available.
 
