@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -359,12 +360,7 @@ func (d *GitDiff) buildInlineLines() {
 	d.hunkStarts = d.hunkStarts[:0]
 	d.fileStarts = d.fileStarts[:0]
 	findingsMap := d.buildFindingsMap()
-	truncated := false
 	for _, fd := range d.diffs {
-		if len(d.lines) >= maxRenderedLines {
-			truncated = true
-			break
-		}
 		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File header
 		header := d.fileHeader(fd)
@@ -380,16 +376,12 @@ func (d *GitDiff) buildInlineLines() {
 			continue
 		}
 		for _, hunk := range fd.Hunks {
-			if len(d.lines) >= maxRenderedLines {
-				truncated = true
-				break
-			}
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			for _, line := range hunk.Lines {
 				if len(d.lines) >= maxRenderedLines {
-					truncated = true
-					break
+					d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
+					return
 				}
 				var rendered string
 				switch line.Type {
@@ -414,17 +406,8 @@ func (d *GitDiff) buildInlineLines() {
 					}
 				}
 			}
-			if truncated {
-				break
-			}
-		}
-		if truncated {
-			break
 		}
 		d.lines = append(d.lines, "") // blank separator between files
-	}
-	if truncated {
-		d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 	}
 }
 
@@ -451,13 +434,10 @@ func (d *GitDiff) buildSideBySideLines() {
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
+	// Cache the empty column string used for nil side-by-side lines.
+	emptyCol := strings.Repeat(" ", numWidth+3+contentWidth)
 	findingsMap := d.buildFindingsMap()
-	truncated := false
 	for _, fd := range d.diffs {
-		if len(d.lines) >= maxRenderedLines {
-			truncated = true
-			break
-		}
 		d.fileStarts = append(d.fileStarts, len(d.lines))
 		// File headers (side-by-side)
 		leftHeader := fmt.Sprintf("── %s (old) ", fd.Path)
@@ -480,20 +460,16 @@ func (d *GitDiff) buildSideBySideLines() {
 			continue
 		}
 		for _, hunk := range fd.Hunks {
-			if len(d.lines) >= maxRenderedLines {
-				truncated = true
-				break
-			}
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
 			pairs := pairDiffLines(hunk.Lines)
 			for _, pair := range pairs {
 				if len(d.lines) >= maxRenderedLines {
-					truncated = true
-					break
+					d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
+					return
 				}
-				leftStr := d.formatSideColumn(pair.old, numWidth, contentWidth, false)
-				rightStr := d.formatSideColumn(pair.new, numWidth, contentWidth, true)
+				leftStr := d.fmtSideCol(pair.old, numWidth, contentWidth, emptyCol, false)
+				rightStr := d.fmtSideCol(pair.new, numWidth, contentWidth, emptyCol, true)
 				d.lines = append(d.lines, leftStr+" │ "+rightStr)
 				// Inject review annotations for lines in this pair
 				if d.showReviewAnnotations {
@@ -518,17 +494,8 @@ func (d *GitDiff) buildSideBySideLines() {
 					}
 				}
 			}
-			if truncated {
-				break
-			}
-		}
-		if truncated {
-			break
 		}
 		d.lines = append(d.lines, "") // blank separator
-	}
-	if truncated {
-		d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 	}
 }
 
@@ -536,7 +503,8 @@ func (d *GitDiff) buildSideBySideLines() {
 // Consecutive removed lines are paired with consecutive added lines.
 // Context lines appear on both sides.
 func pairDiffLines(lines []git.DiffLine) []linePair {
-	var pairs []linePair
+	// Pre-allocate with estimated capacity: worst case is 1 pair per line.
+	pairs := make([]linePair, 0, len(lines))
 	var removed, added []git.DiffLine
 	flush := func() {
 		maxLen := len(removed)
@@ -553,8 +521,8 @@ func pairDiffLines(lines []git.DiffLine) []linePair {
 			}
 			pairs = append(pairs, linePair{old: o, new: n})
 		}
-		removed = nil
-		added = nil
+		removed = removed[:0]
+		added = added[:0]
 	}
 	for i := range lines {
 		line := lines[i]
@@ -573,6 +541,34 @@ func pairDiffLines(lines []git.DiffLine) []linePair {
 	}
 	flush()
 	return pairs
+}
+
+// fmtSideCol renders one column of a side-by-side line.
+// emptyCol is the pre-computed padding string for nil lines.
+func (d *GitDiff) fmtSideCol(line *git.DiffLine, numWidth, contentWidth int, emptyCol string, isNew bool) string {
+	if line == nil {
+		return emptyCol
+	}
+	lineNum := line.OldLine
+	if isNew {
+		lineNum = line.NewLine
+	}
+	// Right-align line number using strconv instead of fmt.Sprintf.
+	numStr := strconv.Itoa(lineNum)
+	if pad := numWidth - len(numStr); pad > 0 {
+		numStr = strings.Repeat(" ", pad) + numStr
+	}
+	content := truncate(line.Content, contentWidth)
+	content = padRight(content, contentWidth)
+	full := numStr + " │ " + content
+	switch line.Type {
+	case git.DiffLineAdded:
+		return d.addedStyle().Render(full)
+	case git.DiffLineRemoved:
+		return d.removedStyle().Render(full)
+	default:
+		return d.contextStyle().Render(full)
+	}
 }
 
 // formatSideColumn renders one column of a side-by-side line.
