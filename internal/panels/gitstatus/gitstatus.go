@@ -160,6 +160,7 @@ type GitStatus struct {
 	statusGen uint64 // incremented on each status load request
 	diffGen   uint64 // incremented on each diff load request
 	loading   bool   // true while an async status load is in flight
+	rowsDirty bool   // true when rows need rebuilding before next render
 }
 
 // Compile-time interface check.
@@ -234,7 +235,7 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		p.files = msg.files
-		p.rebuildRows()
+		p.rowsDirty = true
 		return p, p.emitStatusChanged()
 	case diffLoadedMsg:
 		// Discard stale diff results.
@@ -250,7 +251,7 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.diffCache = make(map[string][]git.Hunk)
 			p.diffCache[msg.path] = msg.hunks
 		}
-		p.rebuildRows()
+		p.rowsDirty = true
 		return p, nil
 	case stageResultMsg:
 		if msg.err != nil {
@@ -297,6 +298,11 @@ func (p *GitStatus) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
+	// Rebuild rows only when the underlying data has changed.
+	if p.rowsDirty {
+		p.rebuildRows()
+		p.rowsDirty = false
+	}
 	if p.loading && len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
@@ -323,8 +329,14 @@ func (p *GitStatus) View(width, height int) string {
 	if end > len(p.rows) {
 		end = len(p.rows)
 	}
+	// Pre-compute row background styles once per frame instead of per row.
+	rs := rowStyles{
+		cursor:   lipgloss.NewStyle().Width(width).Background(lipgloss.Color(colors.CursorBg)),
+		selected: lipgloss.NewStyle().Width(width).Background(lipgloss.Color(colors.SelectedBg)),
+		normal:   lipgloss.NewStyle().Width(width),
+	}
 	for i := p.offset; i < end; i++ {
-		lines = append(lines, p.renderRow(&p.rows[i], width, i == p.cursor))
+		lines = append(lines, p.renderRow(&p.rows[i], width, i == p.cursor, &rs))
 	}
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
@@ -865,7 +877,7 @@ func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 		// Collapse.
 		delete(p.expandedFiles, key)
 		delete(p.diffCache, key)
-		p.rebuildRows()
+		p.rowsDirty = true
 		return p, nil
 	}
 	// Expand — load diff.
@@ -875,7 +887,7 @@ func (p *GitStatus) expandOrEnter() (panels.Panel, tea.Cmd) {
 	diffKey := key
 	// If we already have cached hunks, just rebuild.
 	if _, ok := p.diffCache[diffKey]; ok {
-		p.rebuildRows()
+		p.rowsDirty = true
 		return p, nil
 	}
 	return p, p.loadDiffCmd(diffKey, path, staged)
@@ -1188,7 +1200,15 @@ var colors = struct {
 	HunkHeader:    "#6272A4",
 }
 
-func (p *GitStatus) renderRow(r *row, width int, isCursor bool) string {
+// rowStyles holds pre-computed styles for the three possible row backgrounds.
+// Created once per View() call instead of per row.
+type rowStyles struct {
+	cursor   lipgloss.Style
+	selected lipgloss.Style
+	normal   lipgloss.Style
+}
+
+func (p *GitStatus) renderRow(r *row, width int, isCursor bool, rs *rowStyles) string {
 	var content string
 	switch r.kind {
 	case rowSection:
@@ -1200,13 +1220,13 @@ func (p *GitStatus) renderRow(r *row, width int, isCursor bool) string {
 	case rowDiffLine:
 		content = p.renderDiffLineRow(r, width)
 	}
-	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color(colors.CursorBg))
-	} else if r.selected {
-		style = style.Background(lipgloss.Color(colors.SelectedBg))
+		return rs.cursor.Render(content)
 	}
-	return style.Render(content)
+	if r.selected {
+		return rs.selected.Render(content)
+	}
+	return rs.normal.Render(content)
 }
 
 func (p *GitStatus) renderSectionHeader(r *row, width int) string {
@@ -1242,12 +1262,14 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 		dirLabel := dirPart
 		remaining := width - len(dirContent) - len(dirLabel) - 1
 		if remaining > 0 {
-			return lipgloss.NewStyle().
+			var out strings.Builder
+			out.WriteString(lipgloss.NewStyle().
 				Foreground(lipgloss.Color(p.fileColor(r.section))).
-				Render(dirContent) +
-				lipgloss.NewStyle().
-					Foreground(lipgloss.Color(colors.Dim)).
-					Render(dirLabel)
+				Render(dirContent))
+			out.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colors.Dim)).
+				Render(dirLabel))
+			return out.String()
 		}
 	} else {
 		b.WriteString(name)
@@ -1255,12 +1277,14 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 	fg := p.fileColor(r.section)
 	// Expand indicator.
 	if r.expanded {
-		return lipgloss.NewStyle().
+		var out strings.Builder
+		out.WriteString(lipgloss.NewStyle().
 			Foreground(lipgloss.Color(fg)).
-			Render(b.String()) +
-			lipgloss.NewStyle().
-				Foreground(lipgloss.Color(colors.Dim)).
-				Render(" ▼")
+			Render(b.String()))
+		out.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colors.Dim)).
+			Render(" ▼"))
+		return out.String()
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
@@ -1268,36 +1292,38 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 }
 
 func (p *GitStatus) renderHunkRow(r *row, _ int) string {
-	header := ""
+	var b strings.Builder
+	b.WriteString("  ")
 	if r.hunkEntry != nil {
-		header = r.hunkEntry.Header
+		b.WriteString(r.hunkEntry.Header)
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colors.HunkHeader)).
-		Render("  " + header)
+		Render(b.String())
 }
 
 func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
 	if r.diffLine == nil {
 		return ""
 	}
-	prefix := "    "
+	var b strings.Builder
+	b.WriteString("    ")
 	var fg string
 	switch r.diffLine.Type {
 	case git.DiffLineAdded:
-		prefix += "+"
+		b.WriteByte('+')
 		fg = colors.Added
 	case git.DiffLineRemoved:
-		prefix += "-"
+		b.WriteByte('-')
 		fg = colors.Removed
 	default:
-		prefix += " "
+		b.WriteByte(' ')
 		fg = colors.Dim
 	}
-	content := prefix + r.diffLine.Content
+	b.WriteString(r.diffLine.Content)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
-		Render(content)
+		Render(b.String())
 }
 
 func statusIndicator(f *git.FileStatus, sec section) string {
