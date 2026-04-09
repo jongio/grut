@@ -26,7 +26,7 @@ func (p *Panel) rebuildLines() {
 
 func (p *Panel) buildFileListLines() {
 	lines := make([]string, 0, 2+len(p.files))
-	lines = append(lines, headerStyle().Render("Review Changes"))
+	lines = append(lines, p.headerStyle().Render("Review Changes"))
 	lines = append(lines, "")
 
 	for i, f := range p.files {
@@ -38,9 +38,9 @@ func (p *Panel) buildFileListLines() {
 			cursor = "▸ "
 		}
 
-		style := dimStyle()
+		style := p.dimStyle()
 		if i == p.fileCursor {
-			style = selectedStyle()
+			style = p.selectedStyle()
 		}
 
 		line := fmt.Sprintf("%s%s %s %s", cursor, icon, f.Path, status)
@@ -61,18 +61,18 @@ func (p *Panel) buildDiffLines() {
 
 	// File header
 	header := fmt.Sprintf("── %s ──", f.Path)
-	lines = append(lines, headerStyle().Render(header))
+	lines = append(lines, p.headerStyle().Render(header))
 	lines = append(lines, "")
 
 	if f.Diff.IsBinary {
-		lines = append(lines, dimStyle().Render("Binary file differs"))
+		lines = append(lines, p.dimStyle().Render("Binary file differs"))
 		p.lines = lines
 		p.hunkLineStarts = nil
 		return
 	}
 
 	if len(f.Diff.Hunks) == 0 {
-		lines = append(lines, dimStyle().Render("No changes"))
+		lines = append(lines, p.dimStyle().Render("No changes"))
 		p.lines = lines
 		p.hunkLineStarts = nil
 		return
@@ -98,9 +98,9 @@ func (p *Panel) buildDiffLines() {
 		hunkHeader := fmt.Sprintf("%sHunk %d/%d [%s] %s",
 			cursor, i+1, len(f.Diff.Hunks), stateIcon, hunk.Header)
 
-		style := headerStyle()
+		style := p.headerStyle()
 		if i == p.hunkCursor {
-			style = selectedStyle()
+			style = p.selectedStyle()
 		}
 		lines = append(lines, style.Render(hunkHeader))
 
@@ -109,11 +109,11 @@ func (p *Panel) buildDiffLines() {
 			var rendered string
 			switch dl.Type {
 			case git.DiffLineAdded:
-				rendered = addedStyle().Render("+ " + dl.Content)
+				rendered = p.addedStyle().Render("+ " + dl.Content)
 			case git.DiffLineRemoved:
-				rendered = removedStyle().Render("- " + dl.Content)
+				rendered = p.removedStyle().Render("- " + dl.Content)
 			default:
-				rendered = contextStyle().Render("  " + dl.Content)
+				rendered = p.contextStyle().Render("  " + dl.Content)
 			}
 			lines = append(lines, rendered)
 		}
@@ -223,28 +223,28 @@ func (p *Panel) clampScroll(viewportHeight int) {
 // Styles (fallback colors matching gitdiff panel defaults)
 // ---------------------------------------------------------------------------
 
-func headerStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
+func (p *Panel) headerStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().BrightBlue, "#7A9EBF"))
 }
 
-func selectedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
+func (p *Panel) selectedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
 }
 
-func addedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
+func (p *Panel) addedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffAdded, "#6B9E56"))
 }
 
-func removedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+func (p *Panel) removedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 }
 
-func contextStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#BBBBBB"))
+func (p *Panel) contextStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffContext, "#999999"))
 }
 
-func dimStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+func (p *Panel) dimStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().BrightBlack, "#666666"))
 }
 
 // ---------------------------------------------------------------------------

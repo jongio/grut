@@ -44,7 +44,7 @@ func TestHandleMouseWheel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+			p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 			p.offset = tt.startOffset
 			p.totalLines = tt.totalLines
 			p.Height = tt.height
@@ -92,7 +92,7 @@ func TestCycleTheme_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(layout.PreviewRight, "default", tt.themeNames, config.ActionsConfig{})
+			p := New(layout.PreviewRight, "default", tt.themeNames, config.ActionsConfig{}, nil)
 			assert.Equal(t, tt.want, p.cycleTheme(tt.current))
 		})
 	}

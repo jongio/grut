@@ -126,7 +126,7 @@ func keyMsg(code rune) tea.KeyPressMsg {
 // branch load synchronously, simulating the Init() → branchesLoadedMsg cycle.
 func newTestPanel(t *testing.T, mock *mockGitOps, cfg config.GitConfig) *Panel {
 	t.Helper()
-	p := New(mock, cfg, "/fake/repo")
+	p := New(mock, cfg, "/fake/repo", nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd, "Init should return a command")
 	msg := cmd()
@@ -148,14 +148,14 @@ func TestPanelImplementsPanel(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	mock := &mockGitOps{}
-	p := New(mock, defaultCfg(), "/repo")
+	p := New(mock, defaultCfg(), "/repo", nil)
 	assert.Equal(t, "branches", p.Title())
 	assert.NotNil(t, p.git)
 }
 
 func TestInit_ReturnsLoadCmd(t *testing.T) {
 	mock := &mockGitOps{branches: sampleBranches()}
-	p := New(mock, defaultCfg(), "/repo")
+	p := New(mock, defaultCfg(), "/repo", nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 }
@@ -200,7 +200,7 @@ func TestLoadBranches_CursorOnCurrentBranch(t *testing.T) {
 
 func TestLoadBranches_Error(t *testing.T) {
 	mock := &mockGitOps{branchErr: errors.New("git not found")}
-	p := New(mock, defaultCfg(), "/repo")
+	p := New(mock, defaultCfg(), "/repo", nil)
 	cmd := p.Init(context.Background())
 	msg := cmd()
 
@@ -959,7 +959,7 @@ func TestNoSelectedBranch_OperationsNoOp(t *testing.T) {
 
 func TestKeyBindings(t *testing.T) {
 	mock := &mockGitOps{}
-	p := New(mock, defaultCfg(), "/repo")
+	p := New(mock, defaultCfg(), "/repo", nil)
 
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
@@ -1210,7 +1210,7 @@ func TestAnnotations_ToggleHidesAnnotations(t *testing.T) {
 
 func TestAnnotations_KeyBindingIncluded(t *testing.T) {
 	mock := &mockGitOps{}
-	p := New(mock, defaultCfg(), "/repo")
+	p := New(mock, defaultCfg(), "/repo", nil)
 
 	bindings := p.KeyBindings()
 	actions := make(map[string]bool)

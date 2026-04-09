@@ -637,6 +637,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch action {
 	case "quit":
+		// If the focused panel has an active text selection, Ctrl+C copies
+		// the selection instead of quitting (standard OS copy behavior).
+		if sc, ok := m.engine.FocusedPanel().(panels.SelectionCopier); ok && sc.HasSelection() {
+			_, cmd := sc.CopySelection()
+			return m, cmd
+		}
 		m.saveSession()
 		m.closePanels()
 		m.cancel()
@@ -859,7 +865,7 @@ func (m Model) toggleBookmarks() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.bookmarksShown = true
-	m.bookmarkPanel = bmpanel.New(m.bookmarkMgr)
+	m.bookmarkPanel = bmpanel.New(m.bookmarkMgr, m.theme)
 	m.bookmarkPanel.Focus()
 	m.bookmarkPanel.SetSize(m.bookmarkOverlayDims())
 	m.bookmarkPanel.Init(m.ctx)
@@ -874,7 +880,7 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.helpShown = true
-	m.helpPanel = helppanel.New()
+	m.helpPanel = helppanel.New(m.theme)
 	m.helpPanel.Focus()
 	w, h := m.helpOverlayDims()
 	m.helpPanel.SetSize(w, h)
@@ -921,7 +927,7 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 	}
 
 	m.welcomeShown = true
-	m.welcomePanel = welcomepanel.New()
+	m.welcomePanel = welcomepanel.New(m.theme)
 	m.welcomePanel.Focus()
 	w, h := m.welcomeOverlayDims()
 	m.welcomePanel.SetSize(w, h)
@@ -995,6 +1001,7 @@ func (m Model) toggleSettings() (tea.Model, tea.Cmd) {
 		currentTheme,
 		theme.ListThemes(),
 		actionsCfg,
+		m.theme,
 	)
 	m.settingsPanel.Focus()
 	w, h := m.settingsOverlayDims()
@@ -1299,7 +1306,7 @@ func (m Model) openFuzzyFinder(mode string) Model {
 		}
 		sources = append(sources, fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth))
 	}
-	ff := fuzzyfinder.New(sources...)
+	ff := fuzzyfinder.New(m.theme, sources...)
 	ff.Focus()
 	w, h := m.fuzzyFinderDims()
 	ff.SetSize(w, h)

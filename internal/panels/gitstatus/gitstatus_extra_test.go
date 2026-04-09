@@ -14,7 +14,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	cfg := config.ActionsConfig{
 		RightClick: map[string]string{"git_status_file": "stage"},
 		Confirmed:  map[string]bool{"git_status_file": true},
@@ -27,7 +27,7 @@ func TestSetActionsCfg(t *testing.T) {
 
 func TestHandleMouseWheel_Down(t *testing.T) {
 	t.Run("scrolls down and clamps to max offset", func(t *testing.T) {
-		p := New(&mockGitClient{})
+		p := New(&mockGitClient{}, nil)
 		p.rows = []row{{}, {}, {}, {}}
 		p.Height = 1
 
@@ -41,7 +41,7 @@ func TestHandleMouseWheel_Down(t *testing.T) {
 
 func TestHandleMouseWheel_Up(t *testing.T) {
 	t.Run("scrolls up and clamps to zero", func(t *testing.T) {
-		p := New(&mockGitClient{})
+		p := New(&mockGitClient{}, nil)
 		p.rows = []row{{}, {}, {}, {}}
 		p.Height = 1
 		p.offset = 2
@@ -69,7 +69,7 @@ func TestEnsureCursorVisible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(&mockGitClient{})
+			p := New(&mockGitClient{}, nil)
 			p.Height = tt.height
 			p.cursor = tt.cursor
 			p.offset = tt.offset
@@ -82,7 +82,7 @@ func TestEnsureCursorVisible(t *testing.T) {
 }
 
 func TestInvalidateDiffCaches(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.diffCache["a:staged"] = []git.Hunk{{Header: "@@ -1 +1 @@"}}
 	p.diffCache["b:unstaged"] = []git.Hunk{{Header: "@@ -2 +2 @@"}}
 	p.expandedFiles["a:staged"] = true
@@ -95,7 +95,7 @@ func TestInvalidateDiffCaches(t *testing.T) {
 }
 
 func TestFileKey(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	file := &git.FileStatus{Path: "file.go"}
 
 	tests := []struct {
@@ -189,7 +189,7 @@ func TestExecuteRightClickAction_StageUnstage_Staged(t *testing.T) {
 }
 
 func TestExecuteRightClickAction_UnknownAction(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	_, cmd := p.executeRightClickAction(actions.ActionID("unknown"))
 	assert.Nil(t, cmd)
 }
@@ -199,7 +199,7 @@ func TestExecuteRightClickAction_UnknownAction(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleModalResult_Rejected(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.pendingOp = opRightClickPick
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
@@ -241,7 +241,7 @@ func TestHandleModalResult_FirstUseConfirm(t *testing.T) {
 }
 
 func TestHandleModalResult_UnknownOp(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.pendingOp = "something_else"
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "expand_diff"})
@@ -253,7 +253,7 @@ func TestHandleModalResult_UnknownOp(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCopyPath_OutOfBounds(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.cursor = -1
 
 	_, cmd := p.copyPath()
@@ -261,7 +261,7 @@ func TestCopyPath_OutOfBounds(t *testing.T) {
 }
 
 func TestCopyPath_NilFile(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{{kind: rowSection, section: sectionStaged}}
 	p.cursor = 0
 
@@ -271,7 +271,7 @@ func TestCopyPath_NilFile(t *testing.T) {
 
 func TestCopyPath_ValidFile(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified}
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.ctx = context.Background()
 	p.rows = []row{{kind: rowFile, section: sectionStaged, file: &file}}
 	p.cursor = 0
@@ -285,7 +285,7 @@ func TestCopyPath_ValidFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleMouseRightClick_OutOfBounds(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{{kind: rowFile}}
 	p.Height = 10
 
@@ -294,7 +294,7 @@ func TestHandleMouseRightClick_OutOfBounds(t *testing.T) {
 }
 
 func TestHandleMouseRightClick_SectionHeader(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{{kind: rowSection, section: sectionStaged}}
 	p.Height = 10
 
@@ -303,7 +303,7 @@ func TestHandleMouseRightClick_SectionHeader(t *testing.T) {
 }
 
 func TestHandleMouseRightClick_NilFile(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{{kind: rowFile, file: nil}}
 	p.Height = 10
 
@@ -313,7 +313,7 @@ func TestHandleMouseRightClick_NilFile(t *testing.T) {
 
 func TestHandleMouseRightClick_ValidFile(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified}
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{{kind: rowFile, section: sectionStaged, file: &file}}
 	p.Height = 10
 	// Mark as confirmed so it triggers direct action.
@@ -332,7 +332,7 @@ func TestHandleMouseRightClick_ValidFile(t *testing.T) {
 func TestMoveCursorDown_SkipsSection(t *testing.T) {
 	file1 := git.FileStatus{Path: "a.go", StagedStatus: git.StatusModified}
 	file2 := git.FileStatus{Path: "b.go", WorktreeStatus: git.StatusModified}
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{
 		{kind: rowFile, section: sectionStaged, file: &file1},
 		{kind: rowSection, section: sectionUnstaged},
@@ -349,7 +349,7 @@ func TestMoveCursorDown_SkipsSection(t *testing.T) {
 func TestMoveCursorUp_SkipsSection(t *testing.T) {
 	file1 := git.FileStatus{Path: "a.go", StagedStatus: git.StatusModified}
 	file2 := git.FileStatus{Path: "b.go", WorktreeStatus: git.StatusModified}
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.rows = []row{
 		{kind: rowFile, section: sectionStaged, file: &file1},
 		{kind: rowSection, section: sectionUnstaged},
@@ -368,7 +368,7 @@ func TestMoveCursorUp_SkipsSection(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestFileColor(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	tests := []struct {
 		name    string
 		section section

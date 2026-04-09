@@ -18,7 +18,7 @@ func newTestPreview(lines []string) *Preview {
 	p := New(config.PreviewConfig{
 		Enabled:     true,
 		MaxFileSize: 1048576,
-	})
+	}, nil)
 	p.lines = lines
 	p.width = 80
 	p.height = 24
@@ -324,9 +324,12 @@ func TestFileSelectedMsg_ClearsSelection(t *testing.T) {
 // applySelectionHighlight
 // ---------------------------------------------------------------------------
 
+// _selP is a zero-value Preview used to call applySelectionHighlight in tests.
+var _selP = &Preview{}
+
 func TestApplySelectionHighlight_NoSelection(t *testing.T) {
 	line := "hello world"
-	got := applySelectionHighlight(line, 0, nil, nil)
+	got := _selP.applySelectionHighlight(line, 0, nil, nil)
 	assert.Equal(t, line, got)
 }
 
@@ -334,7 +337,7 @@ func TestApplySelectionHighlight_OutOfRange(t *testing.T) {
 	line := "hello world"
 	sel := &selPoint{Line: 5, Col: 0}
 	selE := &selPoint{Line: 5, Col: 5}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	assert.Equal(t, line, got)
 }
 
@@ -342,7 +345,7 @@ func TestApplySelectionHighlight_FullLine(t *testing.T) {
 	line := "hello"
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 0, Col: 5}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	// The entire content should be highlighted.
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "hello", stripped)
@@ -353,7 +356,7 @@ func TestApplySelectionHighlight_PartialLine(t *testing.T) {
 	line := "hello world"
 	sel := &selPoint{Line: 0, Col: 6}
 	selE := &selPoint{Line: 0, Col: 11}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "hello world", stripped)
 	// "world" portion should have highlight codes.
@@ -366,7 +369,7 @@ func TestApplySelectionHighlight_MultiLineMiddle(t *testing.T) {
 	line := "middle line"
 	sel := &selPoint{Line: 0, Col: 3}
 	selE := &selPoint{Line: 2, Col: 5}
-	got := applySelectionHighlight(line, 1, sel, selE) // line 1 is fully within range
+	got := _selP.applySelectionHighlight(line, 1, sel, selE) // line 1 is fully within range
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "middle line", stripped)
 	assert.NotEqual(t, line, got, "should be highlighted")
@@ -376,7 +379,7 @@ func TestApplySelectionHighlight_WithANSI(t *testing.T) {
 	line := "\x1b[31mhello\x1b[0m world"
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 0, Col: 5}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "hello world", stripped)
 }
@@ -570,7 +573,7 @@ func TestSecurity_ANSI_Highlight_MalformedSequence(t *testing.T) {
 	line := "abc\x1bdef\x1b[ghi"
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 0, Col: 6}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	// Must not panic; result must contain the visible text.
 	stripped := ansi.Strip(got)
 	assert.NotEmpty(t, stripped)
@@ -580,7 +583,7 @@ func TestSecurity_ANSI_Highlight_NestedSequences(t *testing.T) {
 	line := "\x1b[1m\x1b[31mhello\x1b[0m"
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 0, Col: 5}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "hello", stripped)
 }
@@ -616,7 +619,7 @@ func TestSecurity_HighlightVeryLongLine(t *testing.T) {
 	long := strings.Repeat("X", 100_000)
 	sel := &selPoint{Line: 0, Col: 10}
 	selE := &selPoint{Line: 0, Col: 100}
-	got := applySelectionHighlight(long, 0, sel, selE)
+	got := _selP.applySelectionHighlight(long, 0, sel, selE)
 	// Must not panic; highlighted output must contain the original visible chars.
 	stripped := ansi.Strip(got)
 	assert.Equal(t, 100_000, len(stripped))
@@ -698,7 +701,7 @@ func TestSecurity_Highlight_Unicode_MultiByte(t *testing.T) {
 	line := "Hello\u4e16\u754c!"
 	sel := &selPoint{Line: 0, Col: 5}
 	selE := &selPoint{Line: 0, Col: 7}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "Hello\u4e16\u754c!", stripped)
 	assert.NotEqual(t, line, got, "should have highlight ANSI codes")
@@ -817,7 +820,7 @@ func TestSecurity_Highlight_EmptyLine(t *testing.T) {
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 2, Col: 5}
 	// Middle line in selection is empty.
-	got := applySelectionHighlight("", 1, sel, selE)
+	got := _selP.applySelectionHighlight("", 1, sel, selE)
 	// Empty string highlighted — should not panic.
 	stripped := ansi.Strip(got)
 	assert.Equal(t, "", stripped)
@@ -827,7 +830,7 @@ func TestSecurity_Highlight_StartColEqualsEndCol(t *testing.T) {
 	line := "hello"
 	sel := &selPoint{Line: 0, Col: 3}
 	selE := &selPoint{Line: 0, Col: 3}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	// Zero-width selection — no highlight applied.
 	assert.Equal(t, line, got)
 }
@@ -836,7 +839,7 @@ func TestSecurity_Highlight_StartBeyondLine(t *testing.T) {
 	line := "hi"
 	sel := &selPoint{Line: 0, Col: 100}
 	selE := &selPoint{Line: 0, Col: 200}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	// startCol >= runeCount — returns unchanged line.
 	assert.Equal(t, line, got)
 }
@@ -846,7 +849,7 @@ func TestSecurity_Highlight_OnlyANSI(t *testing.T) {
 	line := "\x1b[31m\x1b[0m"
 	sel := &selPoint{Line: 0, Col: 0}
 	selE := &selPoint{Line: 0, Col: 5}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	// runeCount = 0, so startCol >= runeCount. Returns unchanged.
 	assert.Equal(t, line, got)
 }
@@ -981,7 +984,7 @@ func TestApplySelectionHighlight_BothGuardConditions(t *testing.T) {
 	// startCol > endCol AND startCol > runeCount
 	sel := &selPoint{Line: 0, Col: 200}
 	selE := &selPoint{Line: 0, Col: 100}
-	got := applySelectionHighlight(line, 0, sel, selE)
+	got := _selP.applySelectionHighlight(line, 0, sel, selE)
 	assert.Equal(t, line, got, "should return original line when start > end and > runeCount")
 }
 
@@ -1000,4 +1003,44 @@ func TestSelectedText_CombinedMode_SpanningHeaders(t *testing.T) {
 	assert.Contains(t, got, "+diff line")
 	assert.Contains(t, got, "File Content")
 	assert.Contains(t, got, "file")
+}
+
+// ---------------------------------------------------------------------------
+// SelectionCopier interface
+// ---------------------------------------------------------------------------
+
+func TestPreviewImplementsSelectionCopier(t *testing.T) {
+	p := newTestPreview([]string{"hello world"})
+	var sc panels.SelectionCopier = p // compile-time interface check
+	assert.NotNil(t, sc)
+}
+
+func TestHasSelection_ExportedDelegatesToInternal(t *testing.T) {
+	p := newTestPreview([]string{"hello"})
+	assert.False(t, p.HasSelection())
+
+	p.selAnchor = &selPoint{Line: 0, Col: 0}
+	p.selEnd = &selPoint{Line: 0, Col: 3}
+	assert.True(t, p.HasSelection())
+}
+
+func TestCopySelection_ExportedDelegatesToInternal(t *testing.T) {
+	p := newTestPreview([]string{"hello world"})
+	p.selAnchor = &selPoint{Line: 0, Col: 0}
+	p.selEnd = &selPoint{Line: 0, Col: 5}
+
+	panel, cmd := p.CopySelection()
+	assert.Equal(t, p, panel)
+	// copySelection clears the selection after copying.
+	assert.Nil(t, p.selAnchor)
+	assert.Nil(t, p.selEnd)
+	// cmd is non-nil (clipboard operation).
+	assert.NotNil(t, cmd)
+}
+
+func TestCopySelection_ExportedNoSelection(t *testing.T) {
+	p := newTestPreview([]string{"hello"})
+	panel, cmd := p.CopySelection()
+	assert.Equal(t, p, panel)
+	assert.Nil(t, cmd)
 }

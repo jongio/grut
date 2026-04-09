@@ -6,6 +6,7 @@ package conflicts
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // ---------------------------------------------------------------------------
@@ -110,6 +112,7 @@ type Panel struct {
 	pendingOp   string
 	pendingName string
 	files       []string // paths of conflicted files
+	theme       *theme.Theme
 	panels.BasePanel
 	cursor  int
 	offset  int
@@ -121,12 +124,27 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new conflicts panel with the given git client.
-func New(gc gitOps) *Panel {
+func New(gc gitOps, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "conflicts"},
 		git:       gc,
 		resolved:  make(map[string]bool),
+		theme:     th,
 	}
+}
+
+func (p *Panel) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // SetActionsCfg stores the actions configuration for right-click menus.
@@ -710,7 +728,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#50FA7B")).
+			Foreground(colorOf(p.themeColors().NormalGreen, "#6B9E56")).
 			Render("No conflicts")
 	}
 	// Reserve 2 lines for the status bar.
@@ -739,10 +757,10 @@ func (p *Panel) View(width, height int) string {
 // renderFileRow renders a single conflict file entry.
 func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 	marker := "✗"
-	markerColor := lipgloss.Color("#FF5555") // red for unresolved
+	markerColor := colorOf(p.themeColors().NormalRed, "#C44B4B") // red for unresolved
 	if p.resolved[path] {
 		marker = "✓"
-		markerColor = lipgloss.Color("#50FA7B") // green for resolved
+		markerColor = colorOf(p.themeColors().NormalGreen, "#6B9E56") // green for resolved
 	}
 	markerStyle := lipgloss.NewStyle().Foreground(markerColor)
 	label := markerStyle.Render(marker) + " " + path
@@ -758,8 +776,8 @@ func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
 		style = style.
-			Background(lipgloss.Color("#44475A")).
-			Foreground(lipgloss.Color("#F8F8F2"))
+			Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).
+			Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
 	}
 	return style.Render(label)
 }
@@ -774,8 +792,8 @@ func (p *Panel) renderStatusBar(width int) string {
 	status := fmt.Sprintf(" %s — %d/%d conflicts remaining", p.mode, remaining, total)
 	style := lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.Color("#FF79C6")).
-		Foreground(lipgloss.Color("#282A36")).
+		Background(colorOf(p.themeColors().NormalYellow, "#C9A227")).
+		Foreground(colorOf(p.themeColors().Background, "#0D0D0D")).
 		Bold(true)
 	return style.Render(status)
 }

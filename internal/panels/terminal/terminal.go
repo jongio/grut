@@ -6,6 +6,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 	term "github.com/jongio/grut/internal/terminal"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // mode represents the terminal panel's input mode.
@@ -40,9 +42,10 @@ type Panel struct {
 	runner term.Runner
 	ctx    context.Context
 	cfg    config.TerminalConfig
-	shell  string   // display name for status bar
-	input  []rune   // input buffer in insert mode
-	lines  []string // latest snapshot of output lines
+	shell  string       // display name for status bar
+	theme  *theme.Theme // optional theme for styled colors
+	input  []rune       // input buffer in insert mode
+	lines  []string     // latest snapshot of output lines
 	panels.BasePanel
 	mode    mode
 	offset  int  // scroll offset from bottom (0 = latest)
@@ -57,13 +60,28 @@ var (
 
 // New creates a new terminal panel with the given config and backend runner.
 // If runner is nil, the panel displays a placeholder until a runner is set.
-func New(cfg config.TerminalConfig, runner term.Runner, shell string) *Panel {
+func New(cfg config.TerminalConfig, runner term.Runner, shell string, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "terminal"},
 		runner:    runner,
 		cfg:       cfg,
 		shell:     shell,
+		theme:     th,
 	}
+}
+
+func (p *Panel) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +119,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No terminal")
 	}
 	// Reserve space for status bar and (optionally) input prompt.
@@ -365,7 +383,7 @@ func (p *Panel) renderInput(width int) string {
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Foreground(lipgloss.Color("#F8F8F2")).
+		Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4")).
 		Render(prompt)
 }
 
@@ -398,7 +416,7 @@ func (p *Panel) renderStatus(width int) string {
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.Color("#44475A")).
-		Foreground(lipgloss.Color("#F8F8F2")).
+		Background(colorOf(p.themeColors().StatusBarBg, "#2A2A2A")).
+		Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4")).
 		Render(status)
 }

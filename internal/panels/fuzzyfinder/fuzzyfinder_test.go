@@ -38,7 +38,7 @@ func newTestItems() []Item {
 }
 
 func newTestFinder(items []Item) *FuzzyFinder {
-	return New(&staticSource{name: "test", items: items})
+	return New(nil, &staticSource{name: "test", items: items})
 }
 
 // textKeyMsg constructs a KeyPressMsg for printable text input.
@@ -248,7 +248,7 @@ func TestNewWithMultipleSources(t *testing.T) {
 		{Text: "quit", Category: "command", Value: "quit"},
 	}}
 
-	ff := New(files, cmds)
+	ff := New(nil, files, cmds)
 	assert.Equal(t, 2, ff.matchCount(), "should combine items from all sources")
 }
 
@@ -441,7 +441,7 @@ func TestCommandSourceSelectReturnsCommandItem(t *testing.T) {
 		{Key: "j", Action: "cursor_down", Description: "Move down", Mode: keymap.ModePanel},
 	}
 
-	ff := New(NewCommandSource(bindings))
+	ff := New(nil, NewCommandSource(bindings))
 
 	item := ff.selectedItem()
 	require.NotNil(t, item)

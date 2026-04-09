@@ -68,7 +68,7 @@ func keyMsg(code rune) tea.KeyPressMsg {
 
 func newTestPanel(t *testing.T, mock *mockExtManager) *Panel {
 	t.Helper()
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd, "Init should return a command")
 	// Execute the load command synchronously.
@@ -109,14 +109,14 @@ func makeExtFull(name, version, runtime, author, desc, entry string, perms []str
 
 func TestNew(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Equal(t, "extensions", p.Title())
 	assert.NotNil(t, p.expanded)
 }
 
 func TestInterfaceCompliance(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 
 	// Verify Panel interface.
 	var _ panels.Panel = p
@@ -128,7 +128,7 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 			makeExt("test-ext", "1.0.0", "lua", true),
 		},
 	}
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 }
@@ -139,7 +139,7 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 
 func TestView_ZeroDimensions(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Empty(t, p.View(0, 0))
 	assert.Empty(t, p.View(-1, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -155,7 +155,7 @@ func TestView_NoExtensions(t *testing.T) {
 
 func TestView_Loading(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 	p.loading = true
 	view := p.View(80, 24)
 	assert.Contains(t, view, "Loading extensions")
@@ -652,7 +652,7 @@ func TestExtensionChangedMsg_TriggersRefresh(t *testing.T) {
 
 func TestKeyBindings(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 
@@ -675,7 +675,7 @@ func TestKeyBindings(t *testing.T) {
 
 func TestFocusBlur(t *testing.T) {
 	mock := &mockExtManager{}
-	p := New(mock)
+	p := New(mock, nil)
 
 	assert.False(t, p.Focused)
 	p.Focus()

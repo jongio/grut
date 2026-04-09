@@ -18,7 +18,7 @@ func TestNewRegistry(t *testing.T) {
 func TestRegistryRegisterAndCreate(t *testing.T) {
 	r := NewRegistry()
 	r.Register("test", func() panels.Panel {
-		return panels.NewPlaceholder("test")
+		return panels.NewPlaceholder("test", nil)
 	})
 
 	assert.True(t, r.Has("test"))
@@ -38,8 +38,8 @@ func TestRegistryCreateUnknown(t *testing.T) {
 
 func TestRegistryNames(t *testing.T) {
 	r := NewRegistry()
-	r.Register("alpha", func() panels.Panel { return panels.NewPlaceholder("alpha") })
-	r.Register("beta", func() panels.Panel { return panels.NewPlaceholder("beta") })
+	r.Register("alpha", func() panels.Panel { return panels.NewPlaceholder("alpha", nil) })
+	r.Register("beta", func() panels.Panel { return panels.NewPlaceholder("beta", nil) })
 
 	names := r.Names()
 	assert.Len(t, names, 2)
@@ -50,10 +50,10 @@ func TestRegistryNames(t *testing.T) {
 func TestRegistryOverwrite(t *testing.T) {
 	r := NewRegistry()
 	r.Register("test", func() panels.Panel {
-		return panels.NewPlaceholder("original")
+		return panels.NewPlaceholder("original", nil)
 	})
 	r.Register("test", func() panels.Panel {
-		return panels.NewPlaceholder("replaced")
+		return panels.NewPlaceholder("replaced", nil)
 	})
 
 	p, err := r.Create("test")

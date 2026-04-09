@@ -26,7 +26,7 @@ func newTestManager(t *testing.T) *bm.Manager {
 // newTestPanel creates a focused panel backed by a test manager.
 func newTestPanel(t *testing.T, manager *bm.Manager) *Panel {
 	t.Helper()
-	p := New(manager)
+	p := New(manager, nil)
 	p.Focus()
 	p.SetSize(80, 24)
 	p.Init(context.Background())
@@ -205,7 +205,7 @@ func TestPanel_KeyBindings(t *testing.T) {
 
 func TestPanel_Title(t *testing.T) {
 	m := newTestManager(t)
-	p := New(m)
+	p := New(m, nil)
 	assert.Equal(t, "bookmarks", p.Title())
 }
 

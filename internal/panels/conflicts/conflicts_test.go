@@ -91,7 +91,7 @@ func conflictFiles() []git.FileStatus {
 // newTestPanel creates a Panel pre-loaded with conflict files for testing.
 func newTestPanel(t *testing.T, mg *mockGit) *Panel {
 	t.Helper()
-	p := New(mg)
+	p := New(mg, nil)
 	p.SetSize(80, 24)
 	return p
 }
@@ -144,7 +144,7 @@ func TestPanelImplementsPanel(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	assert.Equal(t, "conflicts", p.Title())
 	assert.NotNil(t, p.KeyBindings())
 	assert.Empty(t, p.files)
@@ -153,7 +153,7 @@ func TestNew(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	cmd := p.Init(context.Background())
 	// Init returns nil — no initial load needed until a merge/rebase starts.
 	assert.Nil(t, cmd)
@@ -888,7 +888,7 @@ func TestCleanMergeNoConflicts(t *testing.T) {
 
 func TestFocusBlur(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	assert.False(t, p.Focused)
 
 	p.Focus()
@@ -968,7 +968,7 @@ func TestOpModeString(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyBindings(t *testing.T) {
-	p := New(&mockGit{})
+	p := New(&mockGit{}, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 

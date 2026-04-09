@@ -127,7 +127,7 @@ func keyMsg(code rune) tea.KeyPressMsg {
 // an initial status load synchronously.
 func newTestPanel(t *testing.T, mock *mockGitClient) *GitStatus {
 	t.Helper()
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd, "Init should return a command")
 	// Execute the load command synchronously.
@@ -142,7 +142,7 @@ func newTestPanel(t *testing.T, mock *mockGitClient) *GitStatus {
 
 func TestNew(t *testing.T) {
 	mock := &mockGitClient{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Equal(t, "gitstatus", p.Title())
 	assert.NotNil(t, p.selected)
 	assert.NotNil(t, p.expandedFiles)
@@ -155,7 +155,7 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 			{Path: "file.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
 	}
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 	assert.True(t, p.loading)
@@ -214,7 +214,7 @@ func TestStatusLoaded_Error(t *testing.T) {
 
 func TestView_Loading(t *testing.T) {
 	mock := &mockGitClient{}
-	p := New(mock)
+	p := New(mock, nil)
 	p.loading = true
 	view := p.View(80, 24)
 	assert.Contains(t, view, "Loading git status")
@@ -222,7 +222,7 @@ func TestView_Loading(t *testing.T) {
 
 func TestView_ZeroDimensions(t *testing.T) {
 	mock := &mockGitClient{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Empty(t, p.View(0, 0))
 	assert.Empty(t, p.View(-1, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -520,7 +520,7 @@ func TestHunkMode(t *testing.T) {
 
 func TestKeyBindings(t *testing.T) {
 	mock := &mockGitClient{}
-	p := New(mock)
+	p := New(mock, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 
@@ -673,7 +673,7 @@ func TestGitStatusChangedMsg_Emitted(t *testing.T) {
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
 	}
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 
@@ -1244,7 +1244,7 @@ func TestRepoChangedMsg_NonGitDir(t *testing.T) {
 			{Path: "file.go", WorktreeStatus: git.StatusModified},
 		},
 	}
-	p := New(mock)
+	p := New(mock, nil)
 	p.Init(context.Background())
 
 	tmpDir := t.TempDir()
@@ -1299,7 +1299,7 @@ func TestDiscardAtCursor_StagedFile_NoOp(t *testing.T) {
 }
 
 func TestDiscardAtCursor_OutOfBounds(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.Focus()
 	p.cursor = -1
 
@@ -1308,7 +1308,7 @@ func TestDiscardAtCursor_OutOfBounds(t *testing.T) {
 }
 
 func TestDiscardAtCursor_NilFile(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.Focus()
 	p.rows = []row{{kind: rowSection, section: sectionUnstaged}}
 	p.cursor = 0
@@ -1319,7 +1319,7 @@ func TestDiscardAtCursor_NilFile(t *testing.T) {
 
 func TestDiscardModalResult_Accepted(t *testing.T) {
 	mock := &mockGitClient{}
-	p := New(mock)
+	p := New(mock, nil)
 	p.Init(context.Background())
 	p.pendingOp = opDiscard
 	p.pendingPath = "modified.go"
@@ -1336,7 +1336,7 @@ func TestDiscardModalResult_Accepted(t *testing.T) {
 }
 
 func TestDiscardModalResult_Rejected(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.pendingOp = opDiscard
 	p.pendingPath = "modified.go"
 
@@ -1347,7 +1347,7 @@ func TestDiscardModalResult_Rejected(t *testing.T) {
 }
 
 func TestDiscardResultMsg_RefreshesStatus(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.Init(context.Background())
 
 	_, cmd := p.Update(discardResultMsg{err: nil})
@@ -1356,7 +1356,7 @@ func TestDiscardResultMsg_RefreshesStatus(t *testing.T) {
 }
 
 func TestDiscardResultMsg_Error(t *testing.T) {
-	p := New(&mockGitClient{})
+	p := New(&mockGitClient{}, nil)
 	p.Init(context.Background())
 
 	_, cmd := p.Update(discardResultMsg{err: fmt.Errorf("discard failed")})

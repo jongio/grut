@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/markdown"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // Preview is the file preview panel. It displays syntax-highlighted source
@@ -61,6 +63,8 @@ type Preview struct {
 	ghMode      bool // true when showing GitHub content instead of file
 	ghPlainText bool // true when ghContent is pre-formatted (not markdown)
 	gitDiffOnly bool // when true, show only diff (not file content)
+	// Theme support
+	theme *theme.Theme
 	// Text selection state
 	selAnchor *selPoint // where the click/drag began (absolute line + rune col)
 	selEnd    *selPoint // where the drag/shift-move reached
@@ -87,18 +91,37 @@ type diffLoadedMsg struct {
 var _ panels.Panel = (*Preview)(nil)
 
 // New creates a new Preview panel with the given configuration.
-func New(cfg config.PreviewConfig) *Preview {
+func New(cfg config.PreviewConfig, th *theme.Theme) *Preview {
 	return &Preview{
 		cfg:            cfg,
 		lineNumbers:    cfg.LineNumbers,
 		wordWrap:       cfg.WordWrap,
 		renderMarkdown: cfg.RenderMarkdown,
+		theme:          th,
 	}
 }
 
 // SetGitClient configures the git client for diff-aware preview.
 func (p *Preview) SetGitClient(gc git.StatusReader) {
 	p.gitClient = gc
+}
+
+// themeColors returns the theme's color palette, or an empty Colors{} when
+// no theme is set.
+func (p *Preview) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+// colorOf returns a lipgloss color for the themed value if non-empty,
+// otherwise falls back to the provided default hex string.
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // handleRepoChanged replaces the git client and clears preview content
@@ -393,7 +416,7 @@ func (p *Preview) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#888888")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("Loading...")
 	}
 	// Empty state — skip when in GitHub content mode (ghMode has its own lines).
@@ -461,6 +484,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
 		{Key: "B", Description: "Toggle blame", Action: "toggle_blame"},
+		{Key: "y/Ctrl+C", Description: "Copy selection", Action: "copy_selection"},
 	}
 }
 
@@ -552,6 +576,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 // It tries unstaged first, then falls back to staged diff.
 func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 	gc := p.gitClient
+	tc := p.themeColors()
 	return func() tea.Msg {
 		ctx := context.Background()
 		// Try unstaged diff first, then staged.
@@ -562,9 +587,9 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
-		removedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
+		addedStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffAdded, "#6B9E56"))
+		removedStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffRemoved, "#C44B4B"))
+		headerStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffHeader, "#7A9EBF"))
 		var lines []string
 		for _, d := range diffs {
 			for _, h := range d.Hunks {
@@ -811,8 +836,8 @@ func (p *Preview) viewportHeight() int {
 // --- Rendering ---
 // newDimStyle creates the dim style for line numbers and indicators.
 // Created as a local value to avoid package-level mutable state (F23).
-func newDimStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+func (p *Preview) newDimStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().BrightBlack, "#555555"))
 }
 
 func (p *Preview) renderEmptyState(width, height int) string {
@@ -821,7 +846,7 @@ func (p *Preview) renderEmptyState(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(lipgloss.Color("#888888"))
+		Foreground(colorOf(p.themeColors().BrightBlack, "#666666"))
 	return style.Render(msg)
 }
 
@@ -831,7 +856,7 @@ func (p *Preview) renderError(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(lipgloss.Color("#FF5555"))
+		Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 	return style.Render(msg)
 }
 
@@ -848,7 +873,7 @@ func (p *Preview) renderMetadata(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(lipgloss.Color("#AAAAAA"))
+		Foreground(colorOf(p.themeColors().FileDefault, "#888888"))
 	return style.Render(content)
 }
 
@@ -861,7 +886,7 @@ func (p *Preview) renderContent(width, height int) string {
 			displayLines = p.diffLines
 		} else {
 			// Normal mode with diff: show both.
-			diffHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
+			diffHeader := lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().DiffHeader, "#7A9EBF"))
 			combined := make([]string, 0, len(p.diffLines)+len(p.lines)+3)
 			combined = append(combined, diffHeader.Render("── Git Diff ──"))
 			combined = append(combined, p.diffLines...)
@@ -915,7 +940,7 @@ func (p *Preview) renderContent(width, height int) string {
 		line = strings.ReplaceAll(line, "\t", "    ")
 		// Apply selection highlight before truncation/wrapping so
 		// the highlight covers the correct rune range.
-		line = applySelectionHighlight(line, absLine, sel, selE)
+		line = p.applySelectionHighlight(line, absLine, sel, selE)
 		if p.wordWrap && contentWidth > 0 {
 			line = lipgloss.NewStyle().Width(contentWidth).Render(line)
 		} else {
@@ -923,7 +948,7 @@ func (p *Preview) renderContent(width, height int) string {
 		}
 		if p.lineNumbers {
 			numStr := fmt.Sprintf("%*d │ ", numWidth, lineNum)
-			line = newDimStyle().Render(numStr) + line
+			line = p.newDimStyle().Render(numStr) + line
 		}
 		// Final hard-truncate to panel width so lipgloss Width() in the
 		// outer container never wraps any line.
@@ -933,7 +958,7 @@ func (p *Preview) renderContent(width, height int) string {
 	// Pad with empty lines if needed
 	for len(rendered) < contentHeight {
 		if p.lineNumbers {
-			rendered = append(rendered, newDimStyle().Render(strings.Repeat(" ", numWidth+3)))
+			rendered = append(rendered, p.newDimStyle().Render(strings.Repeat(" ", numWidth+3)))
 		} else {
 			rendered = append(rendered, "")
 		}
@@ -941,7 +966,7 @@ func (p *Preview) renderContent(width, height int) string {
 	content := strings.Join(rendered, "\n")
 	// Add scroll indicator
 	scrollInfo := p.scrollIndicator(totalLines, height)
-	scrollLine := ansi.Truncate(newDimStyle().Render(scrollInfo), width, "")
+	scrollLine := ansi.Truncate(p.newDimStyle().Render(scrollInfo), width, "")
 	content += "\n" + scrollLine
 	return content
 }

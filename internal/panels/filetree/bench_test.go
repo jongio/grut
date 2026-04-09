@@ -118,7 +118,7 @@ func newBenchTree(root string) *FileTree {
 		SortDirectoriesFirst: true,
 		MaxDepth:             20,
 	}
-	ft := New(cfg, root)
+	ft := New(cfg, root, nil)
 	ft.loadChildren(ft.root)
 	return ft
 }
@@ -230,7 +230,7 @@ func BenchmarkRenderLine(b *testing.B) {
 			SortDirectoriesFirst: true,
 			MaxDepth:             20,
 		}
-		ft := New(cfg, root)
+		ft := New(cfg, root, nil)
 		ft.loadChildren(ft.root)
 		ft.root.expanded = true
 		ft.rebuildVisible()

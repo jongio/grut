@@ -271,6 +271,16 @@ func (p *Preview) selectedText() string {
 	return sb.String()
 }
 
+// HasSelection implements panels.SelectionCopier.
+func (p *Preview) HasSelection() bool {
+	return p.hasSelection()
+}
+
+// CopySelection implements panels.SelectionCopier.
+func (p *Preview) CopySelection() (panels.Panel, tea.Cmd) {
+	return p.copySelection()
+}
+
 // copySelection copies the selected text to the clipboard.
 func (p *Preview) copySelection() (panels.Panel, tea.Cmd) {
 	text := p.selectedText()

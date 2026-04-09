@@ -10,7 +10,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockExtManager{})
+	p := New(&mockExtManager{}, nil)
 	cfg := config.ActionsConfig{
 		RightClick: map[string]string{"extension": "toggle_enable"},
 		Confirmed:  map[string]bool{"extension": true},
@@ -73,7 +73,7 @@ func TestEnsureCursorVisible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(&mockExtManager{})
+			p := New(&mockExtManager{}, nil)
 			p.Height = tt.height
 			p.cursor = tt.cursor
 			p.offset = tt.offset

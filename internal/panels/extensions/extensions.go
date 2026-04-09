@@ -6,6 +6,7 @@ package extensions
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"slices"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // ---------------------------------------------------------------------------
@@ -81,6 +83,7 @@ type Panel struct {
 	actionsCfg  config.ActionsConfig // right-click action overrides
 	mgr         extManager
 	ctx         context.Context
+	theme       *theme.Theme
 	expanded    map[string]bool           // extension names with details expanded
 	pendingName string                    // extension name for pending remove
 	extensions  []extension.ExtensionInfo // latest snapshot, sorted by name
@@ -95,12 +98,27 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new extension management panel with the given manager.
-func New(mgr extManager) *Panel {
+func New(mgr extManager, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "extensions"},
 		mgr:       mgr,
 		expanded:  make(map[string]bool),
+		theme:     th,
 	}
+}
+
+func (p *Panel) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // ---------------------------------------------------------------------------
@@ -175,14 +193,14 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("Loading extensions...")
 	}
 	if len(p.extensions) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No extensions installed")
 	}
 	// Build visible rows.
@@ -543,12 +561,12 @@ func (p *Panel) renderExtensionRow(ext extension.ExtensionInfo, width int, isCur
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
-			Background(lipgloss.Color("#44475A")).
-			Foreground(lipgloss.Color("#F8F8F2"))
+			Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).
+			Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
 	} else if ext.Enabled {
-		style = style.Foreground(lipgloss.Color("#50FA7B")) // green
+		style = style.Foreground(colorOf(p.themeColors().NormalGreen, "#6B9E56")) // green
 	} else {
-		style = style.Foreground(lipgloss.Color("#6272A4")) // muted
+		style = style.Foreground(colorOf(p.themeColors().BrightBlack, "#555555")) // muted
 	}
 	return style.Render(line)
 }
@@ -557,7 +575,7 @@ func (p *Panel) renderDetailLines(ext extension.ExtensionInfo, width int) []stri
 	indent := "    "
 	detailStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(lipgloss.Color("#8BE9FD")) // cyan
+		Foreground(colorOf(p.themeColors().BrightBlue, "#7A9EBF")) // cyan
 	var rows []string
 	if ext.Manifest.Description != "" {
 		rows = append(rows, detailStyle.Render(indent+ext.Manifest.Description))

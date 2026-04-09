@@ -83,7 +83,7 @@ func TestCurrentBranch_EmptyBranches(t *testing.T) {
 func TestVisibleTabs_ModeAll_GitTab(t *testing.T) {
 	t.Parallel()
 	mock := defaultMock()
-	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
 	p.activeTab = tabBranches // a git tab
 	tabs := p.visibleTabs()
@@ -97,7 +97,7 @@ func TestVisibleTabs_ModeAll_GitTab(t *testing.T) {
 func TestVisibleTabs_ModeAll_GitHubTab(t *testing.T) {
 	t.Parallel()
 	mock := defaultMock()
-	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
 	p.activeTab = tabIssues // a GitHub tab
 	tabs := p.visibleTabs()
@@ -109,7 +109,7 @@ func TestVisibleTabs_ModeAll_GitHubTab(t *testing.T) {
 func TestTabBarHeight_ModeAll_WithGHClient(t *testing.T) {
 	t.Parallel()
 	mock := defaultMock()
-	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
 	p.ghClient = &mockGHClientFull{} // non-nil → 2 rows
 	assert.Equal(t, 2, p.tabBarHeight())
@@ -118,7 +118,7 @@ func TestTabBarHeight_ModeAll_WithGHClient(t *testing.T) {
 func TestTabBarHeight_ModeAll_NoGHClient(t *testing.T) {
 	t.Parallel()
 	mock := defaultMock()
-	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
 	p.ghClient = nil // nil → 1 row
 	assert.Equal(t, 1, p.tabBarHeight())

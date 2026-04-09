@@ -6,6 +6,7 @@ package gitdiff
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -229,14 +230,14 @@ func (d *GitDiff) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#888888")).
+			Foreground(colorOf(d.themeColors().BrightBlack, "#666666")).
 			Render("Loading diff...")
 	}
 	if d.err != nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#FF5555")).
+			Foreground(colorOf(d.themeColors().NormalRed, "#C44B4B")).
 			Render(fmt.Sprintf("Error: %s", d.err))
 	}
 	if len(d.diffs) == 0 {
@@ -247,7 +248,7 @@ func (d *GitDiff) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#888888")).
+			Foreground(colorOf(d.themeColors().BrightBlack, "#666666")).
 			Render(msg)
 	}
 	return d.renderViewport(width, height)
@@ -774,22 +775,41 @@ func severityIcon(severity string) string {
 	}
 }
 
+// themeColors returns the theme's color palette, or an empty Colors{} when
+// no theme is set (all fields are zero-value empty strings).
+func (d *GitDiff) themeColors() theme.Colors {
+	if d.theme != nil {
+		return d.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+// colorOf returns a lipgloss.Color from the themed value if non-empty,
+// otherwise falls back to the hardcoded default.
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
+}
+
 // severityStyle returns a lipgloss.Style colored by severity.
 func (d *GitDiff) severityStyle(severity string) lipgloss.Style {
-	var color string
+	tc := d.themeColors()
+	var c color.Color
 	switch severity {
 	case "error":
-		color = "#FF5555"
+		c = colorOf(tc.NormalRed, "#C44B4B")
 	case "warning":
-		color = "#FFB86C"
+		c = colorOf(tc.NormalYellow, "#C9A227")
 	case "info":
-		color = "#8BE9FD"
+		c = colorOf(tc.NormalBlue, "#7A9EBF")
 	case "hint":
-		color = "#666666"
+		c = colorOf(tc.BrightBlack, "#555555")
 	default:
-		color = "#FFB86C"
+		c = colorOf(tc.NormalYellow, "#C9A227")
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	return lipgloss.NewStyle().Foreground(c)
 }
 
 // --- Theme-aware styles ---
@@ -797,32 +817,32 @@ func (d *GitDiff) addedStyle() lipgloss.Style {
 	if d.theme != nil {
 		return d.theme.Styles.DiffAdded
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
+	return lipgloss.NewStyle().Foreground(colorOf(d.themeColors().DiffAdded, "#6B9E56"))
 }
 
 func (d *GitDiff) removedStyle() lipgloss.Style {
 	if d.theme != nil {
 		return d.theme.Styles.DiffRemoved
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	return lipgloss.NewStyle().Foreground(colorOf(d.themeColors().DiffRemoved, "#C44B4B"))
 }
 
 func (d *GitDiff) contextStyle() lipgloss.Style {
 	if d.theme != nil {
 		return d.theme.Styles.DiffContext
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#BBBBBB"))
+	return lipgloss.NewStyle().Foreground(colorOf(d.themeColors().DiffContext, "#999999"))
 }
 
 func (d *GitDiff) headerStyle() lipgloss.Style {
 	if d.theme != nil {
 		return d.theme.Styles.DiffHeader
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
+	return lipgloss.NewStyle().Foreground(colorOf(d.themeColors().DiffHeader, "#7A9EBF")).Bold(true)
 }
 
 func (d *GitDiff) dimStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	return lipgloss.NewStyle().Foreground(colorOf(d.themeColors().BrightBlack, "#555555"))
 }
 
 // --- Helpers ---

@@ -74,7 +74,7 @@ func (m *mockGitOps) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEnt
 // ---------------------------------------------------------------------------
 
 func newTestPanel(mock *mockGitOps) *Panel {
-	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
 	cmd := p.Init(context.Background())
 	if cmd != nil {
@@ -86,7 +86,7 @@ func newTestPanel(mock *mockGitOps) *Panel {
 
 // newTestGitHubPanel creates a Panel in ModeGitHub (only GitHub tabs visible).
 func newTestGitHubPanel(mock *mockGitOps) *Panel {
-	p := NewGitHub(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := NewGitHub(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
 	cmd := p.Init(context.Background())
 	if cmd != nil {
@@ -140,7 +140,7 @@ func defaultMock() *mockGitOps {
 // ---------------------------------------------------------------------------
 
 func TestNewPanel(t *testing.T) {
-	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii", nil)
 	assert.Equal(t, "Git", p.Title())
 }
 
@@ -265,7 +265,7 @@ func TestViewEmptyDimensions(t *testing.T) {
 }
 
 func TestKeyBindings(t *testing.T) {
-	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii", nil)
 	bindings := p.KeyBindings()
 	require.NotEmpty(t, bindings)
 
@@ -351,7 +351,7 @@ func TestLoadError(t *testing.T) {
 	mock := &mockGitOps{
 		branchErr: assert.AnError,
 	}
-	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii", nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 
@@ -626,7 +626,7 @@ func TestRKey_SwitchesToRemotesTab(t *testing.T) {
 }
 
 func TestKeyBindings_RRemotesAction(t *testing.T) {
-	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii")
+	p := New(&mockGitOps{}, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii", nil)
 	bindings := p.KeyBindings()
 
 	// 'r' should be documented as remotes/rerun, not refresh.
@@ -3038,7 +3038,7 @@ func TestRequestWorktreeSwitch_NilWorktree(t *testing.T) {
 
 func TestRequestWorktreeSwitch_NewTerminal(t *testing.T) {
 	mock := defaultMock()
-	p := New(mock, config.GitConfig{WorktreeOpenMode: "new_terminal"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii")
+	p := New(mock, config.GitConfig{WorktreeOpenMode: "new_terminal"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	cmd := p.Init(context.Background())
 	if cmd != nil {
 		msg := cmd()

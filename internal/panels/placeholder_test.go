@@ -8,33 +8,33 @@ import (
 )
 
 func TestNewPlaceholder(t *testing.T) {
-	p := NewPlaceholder("test-panel")
+	p := NewPlaceholder("test-panel", nil)
 	assert.Equal(t, "test-panel", p.Title())
 	assert.Empty(t, p.KeyBindings())
 }
 
 func TestPlaceholderInit(t *testing.T) {
-	p := NewPlaceholder("test")
+	p := NewPlaceholder("test", nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd)
 }
 
 func TestPlaceholderUpdate(t *testing.T) {
-	p := NewPlaceholder("test")
+	p := NewPlaceholder("test", nil)
 	updated, cmd := p.Update(nil)
 	assert.Equal(t, p, updated)
 	assert.Nil(t, cmd)
 }
 
 func TestPlaceholderView(t *testing.T) {
-	p := NewPlaceholder("filetree")
+	p := NewPlaceholder("filetree", nil)
 
 	content := p.View(40, 10)
 	assert.Contains(t, content, "filetree")
 }
 
 func TestPlaceholderViewZeroSize(t *testing.T) {
-	p := NewPlaceholder("test")
+	p := NewPlaceholder("test", nil)
 	assert.Empty(t, p.View(0, 10))
 	assert.Empty(t, p.View(10, 0))
 	assert.Empty(t, p.View(0, 0))
@@ -42,14 +42,14 @@ func TestPlaceholderViewZeroSize(t *testing.T) {
 }
 
 func TestPlaceholderViewFocused(t *testing.T) {
-	p := NewPlaceholder("filetree")
+	p := NewPlaceholder("filetree", nil)
 	p.Focus()
 	content := p.View(40, 10)
 	assert.Contains(t, content, "filetree")
 }
 
 func TestPlaceholderFocusBlur(t *testing.T) {
-	p := NewPlaceholder("test")
+	p := NewPlaceholder("test", nil)
 	assert.False(t, p.Focused)
 
 	p.Focus()
@@ -60,14 +60,14 @@ func TestPlaceholderFocusBlur(t *testing.T) {
 }
 
 func TestPlaceholderSetSize(t *testing.T) {
-	p := NewPlaceholder("test")
+	p := NewPlaceholder("test", nil)
 	p.SetSize(80, 24)
 	assert.Equal(t, 80, p.Width)
 	assert.Equal(t, 24, p.Height)
 }
 
 func TestPlaceholderString(t *testing.T) {
-	p := NewPlaceholder("filetree")
+	p := NewPlaceholder("filetree", nil)
 	assert.Equal(t, "Placeholder(filetree)", p.String())
 }
 

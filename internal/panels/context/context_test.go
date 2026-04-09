@@ -21,7 +21,7 @@ func newTestPanel(t *testing.T) (*Panel, string) {
 	root := t.TempDir()
 	builder, err := ctxbuilder.NewBuilder(root)
 	require.NoError(t, err)
-	p := New(builder)
+	p := New(builder, nil)
 	p.Focus()
 	p.SetSize(80, 24)
 	p.Init(context.Background())

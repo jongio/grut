@@ -80,7 +80,7 @@ func (p *Preview) renderBlameContent(width, height int) string {
 
 	// Add scroll indicator
 	scrollInfo := p.scrollIndicator(totalLines, height)
-	content += "\n" + newDimStyle().Render(scrollInfo)
+	content += "\n" + p.newDimStyle().Render(scrollInfo)
 
 	return content
 }

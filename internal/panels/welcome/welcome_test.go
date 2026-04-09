@@ -14,7 +14,7 @@ import (
 
 func newTestPanel(t *testing.T) *Panel {
 	t.Helper()
-	p := New()
+	p := New(nil)
 	p.Focus()
 	p.SetSize(80, 30)
 	return p
@@ -25,25 +25,25 @@ func newTestPanel(t *testing.T) *Panel {
 // ---------------------------------------------------------------------------
 
 func TestNew_ReturnsPanel(t *testing.T) {
-	p := New()
+	p := New(nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "welcome", p.PanelTitle)
 }
 
 func TestNew_BuildsLines(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.Greater(t, len(p.lines), 0, "buildLines should populate content")
 }
 
 func TestNew_HeaderCount(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.Greater(t, p.headerCount, 0, "headerCount should be set")
 	// Header includes banner lines, empty lines, and subtitle.
 	assert.LessOrEqual(t, p.headerCount, len(p.lines))
 }
 
 func TestNew_StylesCached(t *testing.T) {
-	p := New()
+	p := New(nil)
 	// Verify styles were initialized (non-zero value).
 	var zeroStyle lipgloss.Style
 	assert.NotEqual(t, zeroStyle, p.bannerStyle)
@@ -51,7 +51,7 @@ func TestNew_StylesCached(t *testing.T) {
 }
 
 func TestNew_InitialState(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.Equal(t, 0, p.offset)
 	assert.Equal(t, 0, p.animFrame)
 	assert.False(t, p.animDone)
@@ -289,7 +289,7 @@ func TestSetSize_ReclampsOffset(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestView_ZeroDimensions(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.Empty(t, p.View(0, 0))
 	assert.Empty(t, p.View(-1, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -379,7 +379,7 @@ func TestView_MinimalHeight(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyBindings_ReturnsBindings(t *testing.T) {
-	p := New()
+	p := New(nil)
 	bindings := p.KeyBindings()
 	assert.Greater(t, len(bindings), 0)
 
@@ -398,7 +398,7 @@ func TestKeyBindings_ReturnsBindings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBuildLines_BindLinesUseTabSeparator(t *testing.T) {
-	p := New()
+	p := New(nil)
 	for _, line := range p.lines {
 		if strings.HasPrefix(line, "bind:") {
 			content := strings.TrimPrefix(line, "bind:")
@@ -411,7 +411,7 @@ func TestBuildLines_BindLinesUseTabSeparator(t *testing.T) {
 }
 
 func TestBuildLines_AccentLinesUseTabSeparator(t *testing.T) {
-	p := New()
+	p := New(nil)
 	for _, line := range p.lines {
 		if strings.HasPrefix(line, "accent:") {
 			content := strings.TrimPrefix(line, "accent:")

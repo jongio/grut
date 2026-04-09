@@ -94,7 +94,7 @@ func TestImplementsPanel(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	cfg := defaultCfg()
-	p := New(cfg)
+	p := New(cfg, nil)
 
 	assert.NotNil(t, p)
 	assert.Equal(t, "preview", p.Title())
@@ -111,7 +111,7 @@ func TestNewCustomConfig(t *testing.T) {
 		RenderMarkdown: false,
 		MaxFileSize:    512,
 	}
-	p := New(cfg)
+	p := New(cfg, nil)
 
 	assert.False(t, p.lineNumbers)
 	assert.True(t, p.wordWrap)
@@ -120,13 +120,13 @@ func TestNewCustomConfig(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd)
 }
 
 func TestEmptyStateRendering(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 
 	content := p.View(60, 20)
 	assert.NotEmpty(t, content)
@@ -135,7 +135,7 @@ func TestEmptyStateRendering(t *testing.T) {
 }
 
 func TestEmptyStateZeroSize(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	assert.Empty(t, p.View(0, 20))
 	assert.Empty(t, p.View(20, 0))
 	assert.Empty(t, p.View(0, 0))
@@ -149,7 +149,7 @@ func TestPlainTextFile(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 
 	// Load via FileSelectedMsg
@@ -166,7 +166,7 @@ func TestTitleChangesOnFileSelect(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "example.txt", "content")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	assert.Equal(t, "preview", p.Title())
 
 	loadFile(t, p, path)
@@ -185,7 +185,7 @@ func main() {
 `
 	path := writeFile(t, dir, "main.go", goCode)
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -214,7 +214,7 @@ if __name__ == "__main__":
 `
 	path := writeFile(t, dir, "script.py", pyCode)
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -234,7 +234,7 @@ greet("World");
 `
 	path := writeFile(t, dir, "app.js", jsCode)
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -251,7 +251,7 @@ func TestSyntaxHighlightingDisabled(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(80, 20)
 	loadFile(t, p, path)
 
@@ -265,7 +265,7 @@ func TestMarkdownRendering(t *testing.T) {
 	mdContent := "# Hello World\n\nThis is a **bold** paragraph.\n\n- Item 1\n- Item 2\n"
 	path := writeFile(t, dir, "README.md", mdContent)
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -291,7 +291,7 @@ func TestMarkdownExtensions(t *testing.T) {
 		name := "test" + ext
 		path := writeFile(t, dir, name, mdContent)
 
-		p := New(defaultCfg())
+		p := New(defaultCfg(), nil)
 		p.SetSize(60, 20)
 		loadFile(t, p, path)
 
@@ -305,7 +305,7 @@ func TestBinaryFileDetection(t *testing.T) {
 	dir := t.TempDir()
 	path := writeBinaryFile(t, dir, "image.png")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -326,7 +326,7 @@ func TestLargeFileRejection(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.MaxFileSize = 100 // 100 bytes
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -344,7 +344,7 @@ func TestLargeFileShowsMetadata(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.MaxFileSize = 100
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -363,7 +363,7 @@ func TestMaxFileSizeZeroDisablesCheck(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.MaxFileSize = 0 // disabled
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -380,7 +380,7 @@ func TestLineNumberDisplay(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.LineNumbers = true
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -399,7 +399,7 @@ func TestLineNumberToggle(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.LineNumbers = true
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	p.Focus()
 	loadFile(t, p, path)
@@ -430,7 +430,7 @@ func TestWordWrapToggle(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.WordWrap = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	p.Focus()
 	loadFile(t, p, path)
@@ -454,7 +454,7 @@ func TestRenderMarkdownToggle(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.RenderMarkdown = true
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	p.Focus()
 	loadFile(t, p, path)
@@ -492,7 +492,7 @@ func TestRenderMarkdownToggleNonMarkdownFile(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	p.Focus()
 	loadFile(t, p, path)
@@ -515,7 +515,7 @@ func TestScrollDown(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -542,7 +542,7 @@ func TestScrollUp(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -568,7 +568,7 @@ func TestScrollUpBoundsAtZero(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -589,7 +589,7 @@ func TestPageDown(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -615,7 +615,7 @@ func TestPageUp(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -645,7 +645,7 @@ func TestGotoTop(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -670,7 +670,7 @@ func TestGotoBottom(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -693,7 +693,7 @@ func TestScrollClampOnShortFile(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20) // much taller than content
 	p.Focus()
 	loadFile(t, p, path)
@@ -707,7 +707,7 @@ func TestFileSelectedMsg(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "test.txt", "hello")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 
 	// F01: Update now returns a cmd for async file loading.
@@ -731,7 +731,7 @@ func TestFileSelectedMsgResetsState(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 
@@ -747,7 +747,7 @@ func TestFileSelectedMsgResetsState(t *testing.T) {
 }
 
 func TestFocusBlur(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	assert.False(t, p.focused)
 
 	p.Focus()
@@ -758,18 +758,18 @@ func TestFocusBlur(t *testing.T) {
 }
 
 func TestSetSize(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 24)
 	assert.Equal(t, 80, p.width)
 	assert.Equal(t, 24, p.height)
 }
 
 func TestKeyBindings(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	bindings := p.KeyBindings()
 
 	assert.NotEmpty(t, bindings)
-	assert.Len(t, bindings, 10)
+	assert.Len(t, bindings, 11)
 
 	// Verify all expected bindings are present
 	actions := make([]string, len(bindings))
@@ -788,6 +788,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "toggle_line_numbers")
 	assert.Contains(t, actions, "toggle_markdown_render")
 	assert.Contains(t, actions, "toggle_blame")
+	assert.Contains(t, actions, "copy_selection")
 }
 
 func TestKeysIgnoredWhenBlurred(t *testing.T) {
@@ -801,7 +802,7 @@ func TestKeysIgnoredWhenBlurred(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	// Don't focus
 	loadFile(t, p, path)
@@ -812,7 +813,7 @@ func TestKeysIgnoredWhenBlurred(t *testing.T) {
 }
 
 func TestNonexistentFile(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, "/nonexistent/path/file.txt")
 
@@ -827,7 +828,7 @@ func TestDirectory(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, dir)
 
@@ -841,7 +842,7 @@ func TestEmptyFile(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -862,7 +863,7 @@ func TestScrollIndicator(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.LineNumbers = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	p.Focus()
 	loadFile(t, p, path)
@@ -884,7 +885,7 @@ func TestScrollIndicator(t *testing.T) {
 }
 
 func TestUpdateReturnsPanel(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	result, cmd := p.Update(nil)
 	assert.Equal(t, p, result)
 	assert.Nil(t, cmd)
@@ -922,7 +923,7 @@ func TestIsTextMIME(t *testing.T) {
 }
 
 func TestViewportHeight(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 
 	// With normal height
 	p.height = 20
@@ -962,7 +963,7 @@ func TestRenderMarkdown_NoHashPrefixes(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestIssueSelectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	_, cmd := p.Update(panels.IssueSelectedMsg{
@@ -984,7 +985,7 @@ func TestIssueSelectedMsg(t *testing.T) {
 }
 
 func TestIssueSelectedMsg_EmptyBody(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	p.Update(panels.IssueSelectedMsg{
@@ -998,7 +999,7 @@ func TestIssueSelectedMsg_EmptyBody(t *testing.T) {
 }
 
 func TestIssueDeselectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	// Select an issue first.
@@ -1017,7 +1018,7 @@ func TestIssueDeselectedMsg_RestoresFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "restore.txt", "file content")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	// Load a file first.
@@ -1039,7 +1040,7 @@ func TestIssueDeselectedMsg_RestoresFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPRSelectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	_, cmd := p.Update(panels.PRSelectedMsg{
@@ -1061,7 +1062,7 @@ func TestPRSelectedMsg(t *testing.T) {
 }
 
 func TestPRDeselectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	p.Update(panels.PRSelectedMsg{Number: 1, Title: "T", State: "open", HeadBranch: "b"})
@@ -1078,7 +1079,7 @@ func TestPRDeselectedMsg_RestoresFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "file.txt", "content")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -1092,7 +1093,7 @@ func TestPRDeselectedMsg_RestoresFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestActionRunSelectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	_, cmd := p.Update(panels.ActionRunSelectedMsg{
@@ -1112,7 +1113,7 @@ func TestActionRunSelectedMsg(t *testing.T) {
 }
 
 func TestActionRunDeselectedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	p.Update(panels.ActionRunSelectedMsg{RunID: 1, WorkflowName: "CI", Status: "completed"})
@@ -1129,7 +1130,7 @@ func TestActionRunDeselectedMsg_RestoresFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "file.txt", "content")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -1274,7 +1275,7 @@ func TestRenderActionLog_Truncation(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderError(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 20)
 	p.filePath = "test.txt"
 	p.err = os.ErrNotExist
@@ -1288,7 +1289,7 @@ func TestRenderError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGitFilterActiveMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	assert.False(t, p.gitDiffOnly)
 
 	_, cmd := p.Update(panels.GitFilterActiveMsg{Active: true})
@@ -1315,7 +1316,7 @@ func TestMouseWheelScrolling(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	loadFile(t, p, path)
 
@@ -1341,7 +1342,7 @@ func TestDiffLinesRenderedInView(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.LineNumbers = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -1366,7 +1367,7 @@ func TestGitDiffOnlyMode(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
 	cfg.LineNumbers = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
@@ -1384,7 +1385,7 @@ func TestDiffLoadedMsg_WrongPath(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(80, 20)
 	loadFile(t, p, path)
 
@@ -1402,7 +1403,7 @@ func TestDiffLoadedMsg_WrongPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestActionJobsLoadedMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	jobs := []panels.ActionJob{
@@ -1418,7 +1419,7 @@ func TestActionJobsLoadedMsg(t *testing.T) {
 }
 
 func TestActionLogMsg(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	// Put panel in ghMode first.
@@ -1438,7 +1439,7 @@ func TestActionLogMsg(t *testing.T) {
 }
 
 func TestActionLogMsg_NotInGhMode(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.ghMode = false
 
 	origContent := p.ghContent
@@ -1449,7 +1450,7 @@ func TestActionLogMsg_NotInGhMode(t *testing.T) {
 }
 
 func TestActionLogMsg_EmptyLog(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.ghMode = true
 	p.ghContent = "before"
 
@@ -1467,7 +1468,7 @@ func TestFileSelectedMsg_ClearsGhMode(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "test.txt", "hello")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 
 	// Enter ghMode via issue.
@@ -1496,7 +1497,7 @@ func TestPreviewScrollMsg(t *testing.T) {
 
 	cfg := defaultCfg()
 	cfg.SyntaxHighlighting = false
-	p := New(cfg)
+	p := New(cfg, nil)
 	p.SetSize(60, 10)
 	loadFile(t, p, path)
 
@@ -1515,7 +1516,7 @@ func TestPreviewScrollMsg(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBlameLoadedMsg_Success(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.blameMode = true
 
 	blameLines := []git.BlameLine{
@@ -1530,7 +1531,7 @@ func TestBlameLoadedMsg_Success(t *testing.T) {
 }
 
 func TestBlameLoadedMsg_Error(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.blameMode = true
 
 	_, cmd := p.Update(panels.BlameLoadedMsg{Err: os.ErrNotExist})
@@ -1544,7 +1545,7 @@ func TestBlameLoadedMsg_Error(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoadingStateRendering(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 	p.loading = true
 
@@ -1557,7 +1558,7 @@ func TestLoadingStateRendering(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGhModeViewRendering(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 
 	// Enter ghMode.
@@ -1596,7 +1597,7 @@ func TestFilePath_ReturnsCurrentPath(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "file.go", "package main\n")
 
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 	loadFile(t, p, path)
 
@@ -1604,7 +1605,7 @@ func TestFilePath_ReturnsCurrentPath(t *testing.T) {
 }
 
 func TestFilePath_EmptyWhenNoFile(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(60, 20)
 
 	assert.Equal(t, "", p.FilePath())
@@ -1615,7 +1616,7 @@ func TestFilePath_EmptyWhenNoFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRepoChangedMsg_ClearsPreview(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.Init(context.Background())
 
 	// Set up some preview state.
@@ -1645,7 +1646,7 @@ func TestRepoChangedMsg_ClearsPreview(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestIssueSelectedMsg_ANSIInjection(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	msg := panels.IssueSelectedMsg{
 		Number: 42,
@@ -1658,7 +1659,7 @@ func TestIssueSelectedMsg_ANSIInjection(t *testing.T) {
 }
 
 func TestPRSelectedMsg_ANSIInjection(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	msg := panels.PRSelectedMsg{
 		Number:     99,
@@ -1676,7 +1677,7 @@ func TestPRSelectedMsg_ANSIInjection(t *testing.T) {
 }
 
 func TestActionRunSelectedMsg_ANSIInjection(t *testing.T) {
-	p := New(defaultCfg())
+	p := New(defaultCfg(), nil)
 	p.SetSize(80, 30)
 	msg := panels.ActionRunSelectedMsg{
 		WorkflowName: "CI \x1b[2J\x1b[H",

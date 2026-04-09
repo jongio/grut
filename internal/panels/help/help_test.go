@@ -13,7 +13,7 @@ import (
 // newTestPanel creates a focused help panel with default dimensions.
 func newTestPanel(t *testing.T) *Panel {
 	t.Helper()
-	p := New()
+	p := New(nil)
 	p.Focus()
 	p.SetSize(60, 30)
 	p.Init(context.Background())
@@ -25,7 +25,7 @@ func newTestPanel(t *testing.T) *Panel {
 // ---------------------------------------------------------------------------
 
 func TestNew_CreatesPanel(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.NotNil(t, p)
 	assert.Equal(t, "help", p.Title())
 	assert.True(t, p.lineCount() > 0, "should have content lines")
@@ -36,7 +36,7 @@ func TestPanel_ImplementsPanelInterface(t *testing.T) {
 }
 
 func TestPanel_FocusBlur(t *testing.T) {
-	p := New()
+	p := New(nil)
 	p.Focus()
 	assert.True(t, p.Focused)
 	p.Blur()
@@ -44,14 +44,14 @@ func TestPanel_FocusBlur(t *testing.T) {
 }
 
 func TestPanel_SetSize(t *testing.T) {
-	p := New()
+	p := New(nil)
 	p.SetSize(80, 24)
 	assert.Equal(t, 80, p.Width)
 	assert.Equal(t, 24, p.Height)
 }
 
 func TestPanel_InitReturnsNil(t *testing.T) {
-	p := New()
+	p := New(nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd)
 }
@@ -122,7 +122,7 @@ func TestView_ContainsKeyBindings(t *testing.T) {
 }
 
 func TestView_ZeroDimensions(t *testing.T) {
-	p := New()
+	p := New(nil)
 	assert.Empty(t, p.View(0, 0))
 	assert.Empty(t, p.View(-1, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -131,7 +131,7 @@ func TestView_ZeroDimensions(t *testing.T) {
 }
 
 func TestView_SmallDimensions(t *testing.T) {
-	p := New()
+	p := New(nil)
 	p.SetSize(10, 3)
 	view := p.View(10, 3)
 	assert.NotEmpty(t, view, "should render something even with small dimensions")
@@ -240,7 +240,7 @@ func TestClose_QuestionMark(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyBindings(t *testing.T) {
-	p := New()
+	p := New(nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 	assert.Len(t, bindings, 4)
@@ -260,7 +260,7 @@ func TestKeyBindings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestContent_AllSections(t *testing.T) {
-	p := New()
+	p := New(nil)
 	// Render full content at large height to see everything.
 	view := p.View(80, 500)
 
@@ -274,7 +274,7 @@ func TestContent_AllSections(t *testing.T) {
 }
 
 func TestContent_AllKeyBindings(t *testing.T) {
-	p := New()
+	p := New(nil)
 	view := p.View(80, 500)
 
 	expectedKeys := []string{

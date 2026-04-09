@@ -6,6 +6,7 @@ package stash
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // opKind identifies the type of pending stash operation awaiting modal
@@ -74,6 +76,7 @@ type stashShowMsg struct {
 type Panel struct {
 	actionsCfg     config.ActionsConfig
 	git            gitOps
+	theme          *theme.Theme
 	ctx            context.Context
 	pending        *pendingOp
 	previewContent string
@@ -89,11 +92,26 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new stash panel with the given git client.
-func New(gc gitOps) *Panel {
+func New(gc gitOps, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "stash"},
 		git:       gc,
+		theme:     th,
 	}
+}
+
+func (p *Panel) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // SetActionsCfg stores the actions configuration for right-click menus.
@@ -252,7 +270,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No stash entries")
 	}
 	lines := make([]string, 0, height)
@@ -327,7 +345,7 @@ func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 	}
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color("#44475A")).Bold(true)
+		style = style.Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).Bold(true)
 	}
 	return style.Render(line)
 }
@@ -356,13 +374,13 @@ func (p *Panel) renderPreview(width, height int) string {
 		style := lipgloss.NewStyle().Width(width)
 		switch {
 		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
-			style = style.Foreground(lipgloss.Color("#50FA7B"))
+			style = style.Foreground(colorOf(p.themeColors().DiffAdded, "#6B9E56"))
 		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
-			style = style.Foreground(lipgloss.Color("#FF5555"))
+			style = style.Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 		case strings.HasPrefix(line, "@@"):
-			style = style.Foreground(lipgloss.Color("#8BE9FD"))
+			style = style.Foreground(colorOf(p.themeColors().DiffHunk, "#7A9EBF"))
 		case strings.HasPrefix(line, "diff "):
-			style = style.Foreground(lipgloss.Color("#BD93F9")).Bold(true)
+			style = style.Foreground(colorOf(p.themeColors().DiffHeader, "#C9A227")).Bold(true)
 		}
 		visible = append(visible, style.Render(line))
 	}

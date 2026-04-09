@@ -116,7 +116,7 @@ func defaultCfg() config.TerminalConfig {
 
 func newTestPanel(runner *mockRunner) *Panel {
 	cfg := defaultCfg()
-	p := New(cfg, runner, "test-shell")
+	p := New(cfg, runner, "test-shell", nil)
 	p.SetSize(80, 24)
 	return p
 }
@@ -148,7 +148,7 @@ func TestPanelImplementsCloser(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	runner := newMockRunner(nil)
-	p := New(defaultCfg(), runner, "bash")
+	p := New(defaultCfg(), runner, "bash", nil)
 	assert.Equal(t, "terminal", p.Title())
 	assert.NotNil(t, p.KeyBindings())
 	assert.Equal(t, modeNormal, p.Mode())
@@ -156,7 +156,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewNilRunner(t *testing.T) {
-	p := New(defaultCfg(), nil, "")
+	p := New(defaultCfg(), nil, "", nil)
 	assert.Equal(t, "terminal", p.Title())
 }
 
@@ -172,7 +172,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestInitNilRunner(t *testing.T) {
-	p := New(defaultCfg(), nil, "")
+	p := New(defaultCfg(), nil, "", nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd, "Init with nil runner should return nil")
 }
@@ -317,7 +317,7 @@ func TestExitInsertModeCustomPrefixKey(t *testing.T) {
 	runner := newMockRunner(nil)
 	cfg := defaultCfg()
 	cfg.PrefixKey = "ctrl+a"
-	p := New(cfg, runner, "test-shell")
+	p := New(cfg, runner, "test-shell", nil)
 	p.SetSize(80, 24)
 	p.Focus()
 	p.mode = modeInsert
@@ -477,7 +477,7 @@ func TestViewZeroDimensions(t *testing.T) {
 }
 
 func TestViewNilRunner(t *testing.T) {
-	p := New(defaultCfg(), nil, "")
+	p := New(defaultCfg(), nil, "", nil)
 	p.SetSize(80, 24)
 	view := p.View(80, 24)
 	assert.Contains(t, view, "No terminal")
@@ -609,7 +609,7 @@ func TestTickDetectsProcessExit(t *testing.T) {
 }
 
 func TestTickNilRunner(t *testing.T) {
-	p := New(defaultCfg(), nil, "")
+	p := New(defaultCfg(), nil, "", nil)
 	p.ticking = true
 
 	_, cmd := p.Update(tickMsg{time: time.Now()})
@@ -630,7 +630,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestCloseNilRunner(t *testing.T) {
-	p := New(defaultCfg(), nil, "")
+	p := New(defaultCfg(), nil, "", nil)
 	// Should not panic.
 	p.Close()
 }
@@ -678,7 +678,7 @@ func TestKeyBindings(t *testing.T) {
 func TestKeyBindingsCustomPrefixKey(t *testing.T) {
 	cfg := defaultCfg()
 	cfg.PrefixKey = "ctrl+a"
-	p := New(cfg, newMockRunner(nil), "sh")
+	p := New(cfg, newMockRunner(nil), "sh", nil)
 	bindings := p.KeyBindings()
 
 	found := false

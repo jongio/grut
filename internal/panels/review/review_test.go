@@ -131,7 +131,7 @@ func sampleReviewFiles() []ReviewFile {
 
 // newTestPanel creates a review panel initialised for testing.
 func newTestPanel(gc gitOps) *Panel {
-	p := New(gc)
+	p := New(gc, nil)
 	p.Init(context.Background())
 	return p
 }
@@ -141,7 +141,7 @@ func newTestPanel(gc gitOps) *Panel {
 // ---------------------------------------------------------------------------
 
 func TestNew(t *testing.T) {
-	p := New(nil)
+	p := New(nil, nil)
 	assert.NotNil(t, p)
 	assert.Equal(t, "review", p.Title())
 }
@@ -151,7 +151,7 @@ func TestImplementsPanel(t *testing.T) {
 }
 
 func TestInitReturnsNil(t *testing.T) {
-	p := New(nil)
+	p := New(nil, nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd)
 }
@@ -717,7 +717,7 @@ func TestViewZeroDimensions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyBindings(t *testing.T) {
-	p := New(nil)
+	p := New(nil, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 

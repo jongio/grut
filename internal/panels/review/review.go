@@ -6,6 +6,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"image/color"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -16,6 +17,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // gitOps defines the git operations needed by the review panel.
@@ -80,7 +82,8 @@ type Panel struct {
 	// Right-click context menu
 	actionsCfg config.ActionsConfig
 	// Dependencies
-	git         gitOps
+	git   gitOps
+	theme *theme.Theme
 	ctx         context.Context
 	err         error  // last error from load
 	summary     string // cached summary text
@@ -103,11 +106,26 @@ type Panel struct {
 
 // New creates a new review panel with the given git client.
 // gc may be nil; the panel will show an error until a client is available.
-func New(gc gitOps) *Panel {
+func New(gc gitOps, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "review"},
 		git:       gc,
+		theme:     th,
 	}
+}
+
+func (p *Panel) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
 }
 
 // Init implements panels.Panel.
@@ -188,21 +206,21 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#888888")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("Loading changes...")
 	}
 	if p.err != nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#FF5555")).
+			Foreground(colorOf(p.themeColors().NormalRed, "#C44B4B")).
 			Render(fmt.Sprintf("Error: %s", p.err))
 	}
 	if len(p.files) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#888888")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("No changes to review")
 	}
 	if p.showSummary {

@@ -54,7 +54,7 @@ func keyMsg(code rune) tea.KeyPressMsg {
 
 func newTestPanel(t *testing.T, mock *mockTracker) *Agents {
 	t.Helper()
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd, "Init should return a command")
 	// Execute the load command synchronously.
@@ -69,7 +69,7 @@ func newTestPanel(t *testing.T, mock *mockTracker) *Agents {
 
 func TestNew(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Equal(t, "agents", p.Title())
 	assert.NotNil(t, p.expanded)
 	assert.NotNil(t, p.outputCache)
@@ -77,7 +77,7 @@ func TestNew(t *testing.T) {
 
 func TestInterfaceCompliance(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 
 	// Verify Panel interface.
 	var _ panels.Panel = p
@@ -92,7 +92,7 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 			{PID: 100, Command: "test", Status: mcp.AgentRunning},
 		},
 	}
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 }
@@ -103,7 +103,7 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 
 func TestView_ZeroDimensions(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 	assert.Empty(t, p.View(0, 0))
 	assert.Empty(t, p.View(-1, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -119,7 +119,7 @@ func TestView_NoAgents(t *testing.T) {
 
 func TestView_Loading(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 	p.loading = true
 	view := p.View(80, 24)
 	assert.Contains(t, view, "Loading agents")
@@ -379,7 +379,7 @@ func TestRefresh(t *testing.T) {
 
 func TestClose_KillsAll(t *testing.T) {
 	mock := &mockTracker{agents: []mcp.AgentInfo{}}
-	p := New(mock)
+	p := New(mock, nil)
 	p.Close()
 	assert.True(t, mock.killAllCalled)
 }
@@ -390,7 +390,7 @@ func TestClose_KillsAll(t *testing.T) {
 
 func TestKeyBindings(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 
@@ -411,7 +411,7 @@ func TestKeyBindings(t *testing.T) {
 
 func TestFocusBlur(t *testing.T) {
 	mock := &mockTracker{}
-	p := New(mock)
+	p := New(mock, nil)
 
 	assert.False(t, p.Focused)
 	p.Focus()

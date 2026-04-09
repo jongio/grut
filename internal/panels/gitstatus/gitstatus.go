@@ -19,6 +19,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // ---------------------------------------------------------------------------
@@ -161,19 +162,23 @@ type GitStatus struct {
 	diffGen   uint64 // incremented on each diff load request
 	loading   bool   // true while an async status load is in flight
 	rowsDirty bool   // true when rows need rebuilding before next render
+	theme     *theme.Theme
+	colors    panelColors
 }
 
 // Compile-time interface check.
 var _ panels.Panel = (*GitStatus)(nil)
 
 // New creates a new GitStatus panel.
-func New(client GitClient) *GitStatus {
+func New(client GitClient, th *theme.Theme) *GitStatus {
 	return &GitStatus{
 		BasePanel:     panels.BasePanel{PanelTitle: "gitstatus"},
 		git:           client,
 		selected:      make(map[string]bool),
 		expandedFiles: make(map[string]bool),
 		diffCache:     make(map[string][]git.Hunk),
+		theme:         th,
+		colors:        initColors(th),
 	}
 }
 
@@ -309,21 +314,21 @@ func (p *GitStatus) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("Loading git status...")
 	}
 	if p.err != nil && len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#FF5555")).
+			Foreground(lipgloss.Color(p.colors.Removed)).
 			Render(fmt.Sprintf("Error: %v", p.err))
 	}
 	if len(p.rows) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#50FA7B")).
+			Foreground(lipgloss.Color(p.colors.Staged)).
 			Render("Working tree clean")
 	}
 	lines := make([]string, 0, height)
@@ -333,8 +338,8 @@ func (p *GitStatus) View(width, height int) string {
 	}
 	// Pre-compute row background styles once per frame instead of per row.
 	rs := rowStyles{
-		cursor:   lipgloss.NewStyle().Width(width).Background(lipgloss.Color(colors.CursorBg)),
-		selected: lipgloss.NewStyle().Width(width).Background(lipgloss.Color(colors.SelectedBg)),
+		cursor:   lipgloss.NewStyle().Width(width).Background(lipgloss.Color(p.colors.CursorBg)),
+		selected: lipgloss.NewStyle().Width(width).Background(lipgloss.Color(p.colors.SelectedBg)),
 		normal:   lipgloss.NewStyle().Width(width),
 	}
 	for i := p.offset; i < end; i++ {
@@ -1177,8 +1182,8 @@ func (p *GitStatus) invalidateDiffCaches() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-// colors for the git status panel (Dracula palette baseline).
-var colors = struct {
+// panelColors holds resolved color strings for the git status panel.
+type panelColors struct {
 	SectionHeader string
 	Staged        string
 	Unstaged      string
@@ -1190,18 +1195,60 @@ var colors = struct {
 	Added         string
 	Removed       string
 	HunkHeader    string
-}{
-	SectionHeader: "#BD93F9",
-	Staged:        "#50FA7B",
-	Unstaged:      "#FFB86C",
-	Untracked:     "#8BE9FD",
-	CursorBg:      "#44475A",
-	SelectedBg:    "#3E4452",
-	Dim:           "#666666",
-	Default:       "#BBBBBB",
-	Added:         "#50FA7B",
-	Removed:       "#FF5555",
-	HunkHeader:    "#6272A4",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		SectionHeader: "#C9A227",
+		Staged:        "#6B9E56",
+		Unstaged:      "#C9875A",
+		Untracked:     "#7A9EBF",
+		CursorBg:      "#2A2A2A",
+		SelectedBg:    "#222222",
+		Dim:           "#555555",
+		Default:       "#999999",
+		Added:         "#6B9E56",
+		Removed:       "#C44B4B",
+		HunkHeader:    "#555555",
+	}
+	if th == nil {
+		return c
+	}
+	tc := th.Colors
+	if tc.NormalYellow != "" {
+		c.SectionHeader = tc.NormalYellow
+	}
+	if tc.GitStaged != "" {
+		c.Staged = tc.GitStaged
+	}
+	if tc.GitUnstaged != "" {
+		c.Unstaged = tc.GitUnstaged
+	}
+	if tc.GitUntracked != "" {
+		c.Untracked = tc.GitUntracked
+	}
+	if tc.SelectionBg != "" {
+		c.CursorBg = tc.SelectionBg
+	}
+	if tc.CursorLine != "" {
+		c.SelectedBg = tc.CursorLine
+	}
+	if tc.BrightBlack != "" {
+		c.Dim = tc.BrightBlack
+	}
+	if tc.FileDefault != "" {
+		c.Default = tc.FileDefault
+	}
+	if tc.DiffAdded != "" {
+		c.Added = tc.DiffAdded
+	}
+	if tc.DiffRemoved != "" {
+		c.Removed = tc.DiffRemoved
+	}
+	if tc.DiffHunk != "" {
+		c.HunkHeader = tc.DiffHunk
+	}
+	return c
 }
 
 // rowStyles holds pre-computed styles for the three possible row backgrounds.
@@ -1236,7 +1283,7 @@ func (p *GitStatus) renderRow(r *row, width int, isCursor bool, rs *rowStyles) s
 func (p *GitStatus) renderSectionHeader(r *row, width int) string {
 	label := fmt.Sprintf("── %s ──", r.section.String())
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.SectionHeader)).
+		Foreground(lipgloss.Color(p.colors.SectionHeader)).
 		Bold(true).
 		Width(width).
 		Render(label)
@@ -1271,7 +1318,7 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 				Foreground(lipgloss.Color(p.fileColor(r.section))).
 				Render(dirContent))
 			out.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color(colors.Dim)).
+				Foreground(lipgloss.Color(p.colors.Dim)).
 				Render(dirLabel))
 			return out.String()
 		}
@@ -1286,7 +1333,7 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 			Foreground(lipgloss.Color(fg)).
 			Render(b.String()))
 		out.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render(" ▼"))
 		return out.String()
 	}
@@ -1302,7 +1349,7 @@ func (p *GitStatus) renderHunkRow(r *row, _ int) string {
 		b.WriteString(r.hunkEntry.Header)
 	}
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.HunkHeader)).
+		Foreground(lipgloss.Color(p.colors.HunkHeader)).
 		Render(b.String())
 }
 
@@ -1316,13 +1363,13 @@ func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
 	switch r.diffLine.Type {
 	case git.DiffLineAdded:
 		b.WriteByte('+')
-		fg = colors.Added
+		fg = p.colors.Added
 	case git.DiffLineRemoved:
 		b.WriteByte('-')
-		fg = colors.Removed
+		fg = p.colors.Removed
 	default:
 		b.WriteByte(' ')
-		fg = colors.Dim
+		fg = p.colors.Dim
 	}
 	b.WriteString(r.diffLine.Content)
 	return lipgloss.NewStyle().
@@ -1367,12 +1414,12 @@ func statusCodeLabel(sc git.StatusCode) string {
 func (p *GitStatus) fileColor(sec section) string {
 	switch sec {
 	case sectionStaged:
-		return colors.Staged
+		return p.colors.Staged
 	case sectionUnstaged:
-		return colors.Unstaged
+		return p.colors.Unstaged
 	case sectionUntracked:
-		return colors.Untracked
+		return p.colors.Untracked
 	default:
-		return colors.Default
+		return p.colors.Default
 	}
 }

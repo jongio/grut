@@ -106,7 +106,7 @@ func specialKeyMsg(code rune) tea.KeyPressMsg {
 // watcher is NOT started because its event loop blocks.
 func newTestFT(t *testing.T, cfg config.FileTreeConfig, dir string) *FileTree {
 	t.Helper()
-	ft := New(cfg, dir)
+	ft := New(cfg, dir, nil)
 	ft.ctx = context.Background()
 	// Synchronously load root children and rebuild the visible list.
 	loadChildrenStatic(ft.root, cfg)
@@ -2661,7 +2661,7 @@ func TestCursorPath_Valid(t *testing.T) {
 func TestClose_WithWatcher(t *testing.T) {
 	dir := createTestTree(t)
 	cfg := defaultCfg()
-	ft := New(cfg, dir)
+	ft := New(cfg, dir, nil)
 	ft.ctx = context.Background()
 	ft.watcher = newWatcher(defaultDebounce, defaultPollInterval)
 	ft.watcher.addDir(dir)
@@ -2718,7 +2718,7 @@ func TestCommitDeselectedMsg(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSetGitClient_SetsIgnoreChecker(t *testing.T) {
-	ft := New(defaultCfg(), t.TempDir())
+	ft := New(defaultCfg(), t.TempDir(), nil)
 	mock := &mockGitClientWithIgnore{repoRoot: t.TempDir()}
 	ft.SetGitClient(mock)
 
@@ -2726,7 +2726,7 @@ func TestSetGitClient_SetsIgnoreChecker(t *testing.T) {
 }
 
 func TestSetGitClient_NoIgnoreChecker(t *testing.T) {
-	ft := New(defaultCfg(), t.TempDir())
+	ft := New(defaultCfg(), t.TempDir(), nil)
 	mock := &mockGitClient{}
 	ft.SetGitClient(mock)
 
@@ -2778,7 +2778,7 @@ func TestIsPathIgnored_EmptyMap(t *testing.T) {
 }
 
 func TestLoadGitIgnored_NilChecker(t *testing.T) {
-	ft := New(defaultCfg(), t.TempDir())
+	ft := New(defaultCfg(), t.TempDir(), nil)
 	ft.ignoreChecker = nil
 
 	cmd := ft.loadGitIgnored()

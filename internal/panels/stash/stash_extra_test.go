@@ -10,7 +10,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockGit{})
+	p := New(&mockGit{}, nil)
 	cfg := config.ActionsConfig{
 		DoubleClick: map[string]string{"stash_entry": "apply"},
 		Confirmed:   map[string]bool{"stash_entry": true},
@@ -84,7 +84,7 @@ func TestRenderPreview_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(&mockGit{})
+			p := New(&mockGit{}, nil)
 			p.previewContent = tt.content
 			p.previewOffset = tt.previewOffset
 

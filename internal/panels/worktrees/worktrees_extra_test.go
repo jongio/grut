@@ -14,7 +14,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockGitOps{}, testGitConfig(), "/repo")
+	p := New(&mockGitOps{}, testGitConfig(), "/repo", nil)
 	cfg := config.ActionsConfig{
 		RightClick: map[string]string{"worktree": "switch"},
 		Confirmed:  map[string]bool{"worktree": true},
@@ -67,7 +67,7 @@ func TestEnsureCursorVisible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(&mockGitOps{}, testGitConfig(), "/repo")
+			p := New(&mockGitOps{}, testGitConfig(), "/repo", nil)
 			p.Height = tt.height
 			p.cursor = tt.cursor
 			p.offset = tt.offset

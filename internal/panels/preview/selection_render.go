@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"image/color"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -15,8 +16,11 @@ var builderPool = sync.Pool{
 	New: func() any { return new(strings.Builder) },
 }
 
-// selectionBg is the background color used for text selection highlighting.
-var selectionBg = lipgloss.Color("#44475A")
+// selectionBgColor returns the background color used for text selection
+// highlighting, falling back to the default when no theme is set.
+func (p *Preview) selectionBgColor() color.Color {
+	return colorOf(p.themeColors().SelectionBg, "#2A2A2A")
+}
 
 // applySelectionHighlight wraps the selected portion of a rendered line
 // with a background-color ANSI style. absLine is the absolute line index
@@ -27,7 +31,7 @@ var selectionBg = lipgloss.Color("#44475A")
 // The cols in sel/selE are rune offsets in the stripped (ANSI-free) text.
 // This function must map those offsets back to byte positions in the
 // ANSI-containing string.
-func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) string {
+func (p *Preview) applySelectionHighlight(line string, absLine int, sel, selE *selPoint) string {
 	if sel == nil || selE == nil {
 		return line
 	}
@@ -56,7 +60,7 @@ func applySelectionHighlight(line string, absLine int, sel, selE *selPoint) stri
 	// Build the highlighted line by walking through the original string
 	// character by character, tracking rune position while preserving
 	// ANSI sequences.
-	hlStyle := lipgloss.NewStyle().Background(selectionBg)
+	hlStyle := lipgloss.NewStyle().Background(p.selectionBgColor())
 	before, _ := builderPool.Get().(*strings.Builder)
 	if before == nil {
 		before = new(strings.Builder)

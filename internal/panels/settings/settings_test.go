@@ -16,21 +16,21 @@ var testThemes = []string{"default", "catppuccin", "tokyonight", "gruvbox"}
 
 func TestNew(t *testing.T) {
 	t.Run("stores current position and theme", func(t *testing.T) {
-		p := New(layout.PreviewBottom, "catppuccin", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewBottom, "catppuccin", testThemes, config.ActionsConfig{}, nil)
 		assert.Equal(t, fieldPreviewPosition, p.cursorIndex())
 		assert.Equal(t, layout.PreviewBottom, p.currentPosition())
 		assert.Equal(t, "catppuccin", p.currentThemeName())
 	})
 
 	t.Run("title is settings", func(t *testing.T) {
-		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 		assert.Equal(t, "settings", p.Title())
 	})
 }
 
 func TestNavigationKeys(t *testing.T) {
 	t.Run("j moves cursor down", func(t *testing.T) {
-		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 		assert.Equal(t, fieldPreviewPosition, p.cursorIndex())
 
 		updated, _ := p.Update(tea.KeyPressMsg{Code: 'j'})
@@ -39,7 +39,7 @@ func TestNavigationKeys(t *testing.T) {
 	})
 
 	t.Run("k moves cursor up", func(t *testing.T) {
-		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 		// Move to theme first.
 		updated, _ := p.Update(tea.KeyPressMsg{Code: 'j'})
 		panel := updated.(*Panel)
@@ -51,7 +51,7 @@ func TestNavigationKeys(t *testing.T) {
 	})
 
 	t.Run("cursor does not go below last field", func(t *testing.T) {
-		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 		// Navigate to the very last field.
 		lastField := p.fieldCount() - 1
 		for p.cursorIndex() < lastField {
@@ -67,7 +67,7 @@ func TestNavigationKeys(t *testing.T) {
 	})
 
 	t.Run("cursor does not go above first field", func(t *testing.T) {
-		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+		p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 		assert.Equal(t, fieldPreviewPosition, p.cursorIndex())
 
 		updated, _ := p.Update(tea.KeyPressMsg{Code: 'k'})
@@ -77,7 +77,7 @@ func TestNavigationKeys(t *testing.T) {
 }
 
 func TestEnterCyclesPreviewPosition(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.NotNil(t, cmd, "enter should produce a command")
@@ -89,7 +89,7 @@ func TestEnterCyclesPreviewPosition(t *testing.T) {
 }
 
 func TestEnterCyclesTheme(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	// Move to theme field.
 	updated, _ := p.Update(tea.KeyPressMsg{Code: 'j'})
@@ -105,7 +105,7 @@ func TestEnterCyclesTheme(t *testing.T) {
 }
 
 func TestEscEmitsToggleSettingsMsg(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	require.NotNil(t, cmd, "escape should produce a command")
@@ -116,7 +116,7 @@ func TestEscEmitsToggleSettingsMsg(t *testing.T) {
 }
 
 func TestViewRendersNonEmpty(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	view := p.View(60, 40)
 	assert.NotEmpty(t, view, "view should produce output")
@@ -127,7 +127,7 @@ func TestViewRendersNonEmpty(t *testing.T) {
 }
 
 func TestViewReturnsEmptyForZeroDimensions(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	assert.Empty(t, p.View(0, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -135,19 +135,19 @@ func TestViewReturnsEmptyForZeroDimensions(t *testing.T) {
 }
 
 func TestKeyBindingsReturnsBindings(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	bindings := p.KeyBindings()
 	assert.Len(t, bindings, 4)
 }
 
 func TestInitReturnsNil(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	cmd := p.Init(context.Background())
 	assert.Nil(t, cmd)
 }
 
 func TestCycleThemeWraps(t *testing.T) {
-	p := New(layout.PreviewRight, "gruvbox", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "gruvbox", testThemes, config.ActionsConfig{}, nil)
 	// Move to theme field.
 	updated, _ := p.Update(tea.KeyPressMsg{Code: 'j'})
 	panel := updated.(*Panel)
@@ -163,7 +163,7 @@ func TestCycleThemeWraps(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoubleClickActionsDisplayed(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	view := p.View(60, 80)
 	assert.Contains(t, view, "Double-Click Actions", "view should show double-click actions heading")
@@ -178,7 +178,7 @@ func TestDoubleClickActionsDisplayed(t *testing.T) {
 }
 
 func TestCycleDoubleClickAction(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 	require.NotEmpty(t, items)
 
@@ -205,7 +205,7 @@ func TestCycleDoubleClickAction(t *testing.T) {
 }
 
 func TestDoubleClickActionCycleWraps(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 	require.NotEmpty(t, items)
 
@@ -230,7 +230,7 @@ func TestDoubleClickActionCycleWraps(t *testing.T) {
 }
 
 func TestResetPrompts(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	// Navigate to reset prompts field (after all action fields).
 	resetField := p.fieldResetPrompts()
@@ -249,7 +249,7 @@ func TestResetPrompts(t *testing.T) {
 }
 
 func TestNavigationWithActions(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 
 	// Total fields: preview + theme + len(items) double-click + len(items) right-click + resetPrompts
@@ -286,7 +286,7 @@ func TestActionOverridesFromConfig(t *testing.T) {
 		},
 	}
 
-	p := New(layout.PreviewRight, "default", testThemes, cfg)
+	p := New(layout.PreviewRight, "default", testThemes, cfg, nil)
 	assert.Equal(t, overrideAction, p.currentActionOverride(string(items[0])),
 		"should load override from config")
 }
@@ -296,7 +296,7 @@ func TestActionOverridesFromConfig(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSettingsShowsRightClickSection(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 
 	view := p.View(60, 80)
 	assert.Contains(t, view, "Right-Click Actions", "view should show right-click actions heading")
@@ -313,7 +313,7 @@ func TestSettingsShowsRightClickSection(t *testing.T) {
 }
 
 func TestSettingsRightClickDefaultIsContextMenu(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 	require.NotEmpty(t, items)
 
@@ -328,7 +328,7 @@ func TestSettingsRightClickDefaultIsContextMenu(t *testing.T) {
 }
 
 func TestSettingsRightClickCycleAction(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 	require.NotEmpty(t, items)
 
@@ -356,7 +356,7 @@ func TestSettingsRightClickCycleAction(t *testing.T) {
 }
 
 func TestSettingsRightClickCycleWraps(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 	require.NotEmpty(t, items)
 
@@ -395,13 +395,13 @@ func TestSettingsRightClickOverridesFromConfig(t *testing.T) {
 		},
 	}
 
-	p := New(layout.PreviewRight, "default", testThemes, cfg)
+	p := New(layout.PreviewRight, "default", testThemes, cfg, nil)
 	assert.Equal(t, overrideAction, p.currentRightClickOverride(string(items[0])),
 		"should load right-click override from config")
 }
 
 func TestSettingsNavigationWithRightClickActions(t *testing.T) {
-	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{})
+	p := New(layout.PreviewRight, "default", testThemes, config.ActionsConfig{}, nil)
 	items := actions.ConfigurableItems()
 
 	// Total fields: preview + theme + len(items) double-click + len(items) right-click + resetPrompts

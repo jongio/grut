@@ -358,7 +358,7 @@ func TestEngineCloseFocusedPanel(t *testing.T) {
 func TestEngineCloseFocusedPanelLastFails(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",
@@ -425,7 +425,7 @@ func TestEngineMultiTabPanelRects(t *testing.T) {
 func TestEngineSinglePanelFocusCycling(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",
@@ -990,7 +990,7 @@ func TestEngineUpdateBroadcast(t *testing.T) {
 func TestEngineUpdateFocused_EmptyPanels(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",
@@ -1010,7 +1010,7 @@ func TestEngineUpdateFocused_EmptyPanels(t *testing.T) {
 func TestEnginePanelRectsNilTab(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",
@@ -1336,7 +1336,7 @@ func TestEngineHandleMouseClick_LeftClick(t *testing.T) {
 func TestEngineFocusedPanel_Empty(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",
@@ -1415,7 +1415,7 @@ func TestEngineCloseFocusedPanel_Success(t *testing.T) {
 func TestEngineCloseFocusedPanel_LastPanel(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("solo", func() panels.Panel {
-		return panels.NewPlaceholder("solo")
+		return panels.NewPlaceholder("solo", nil)
 	})
 	preset := Preset{
 		Name:   "single",

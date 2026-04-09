@@ -15,7 +15,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockTracker{})
+	p := New(&mockTracker{}, nil)
 	cfg := config.ActionsConfig{
 		RightClick: map[string]string{"agent": "toggle_output"},
 		Confirmed:  map[string]bool{"agent": true},
@@ -78,7 +78,7 @@ func TestEnsureCursorVisible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := New(&mockTracker{})
+			p := New(&mockTracker{}, nil)
 			p.Height = tt.height
 			p.cursor = tt.cursor
 			p.offset = tt.offset
@@ -204,7 +204,7 @@ func TestExecuteRightClickAction_UnknownAction(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTickCmd_AlwaysReturnsTick(t *testing.T) {
-	p := New(&mockTracker{})
+	p := New(&mockTracker{}, nil)
 	cmd := p.tickCmd()
 	assert.NotNil(t, cmd, "tickCmd always returns a tick command")
 }

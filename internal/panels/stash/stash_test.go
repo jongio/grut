@@ -91,7 +91,7 @@ func sampleEntries() []git.StashEntry {
 // newTestPanel creates a Panel pre-loaded with entries for testing.
 func newTestPanel(t *testing.T, mg *mockGit) *Panel {
 	t.Helper()
-	p := New(mg)
+	p := New(mg, nil)
 	p.entries = mg.entries
 	p.SetSize(80, 24)
 	return p
@@ -120,7 +120,7 @@ func TestPanelImplementsPanel(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	assert.Equal(t, "stash (0)", p.Title())
 	assert.NotNil(t, p.KeyBindings())
 	assert.Empty(t, p.entries)
@@ -128,7 +128,7 @@ func TestNew(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	mg := &mockGit{entries: sampleEntries()}
-	p := New(mg)
+	p := New(mg, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 
@@ -141,7 +141,7 @@ func TestInit(t *testing.T) {
 
 func TestInitError(t *testing.T) {
 	mg := &mockGit{listErr: errors.New("git not found")}
-	p := New(mg)
+	p := New(mg, nil)
 	cmd := p.Init(context.Background())
 	msg := runCmd(t, cmd)
 	loaded, ok := msg.(stashLoadedMsg)
@@ -712,7 +712,7 @@ func TestPreviewEmptyStash(t *testing.T) {
 
 func TestPreviewKeyBinding(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	bindings := p.KeyBindings()
 
 	var found bool
@@ -822,7 +822,7 @@ func TestModalResultNoPending(t *testing.T) {
 
 func TestFocusBlur(t *testing.T) {
 	mg := &mockGit{}
-	p := New(mg)
+	p := New(mg, nil)
 	assert.False(t, p.Focused)
 
 	p.Focus()

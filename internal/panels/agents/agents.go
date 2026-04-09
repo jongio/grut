@@ -6,6 +6,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,7 @@ const opRightClickPick = "right_click_pick"
 type Agents struct {
 	actionsCfg config.ActionsConfig
 	tracker    Tracker
+	theme      *theme.Theme
 	ctx        context.Context
 	err        error        // last error
 	expanded   map[int]bool // PIDs with output expanded
@@ -91,13 +94,35 @@ var (
 )
 
 // New creates a new Agents panel with the given tracker.
-func New(tracker Tracker) *Agents {
+func New(tracker Tracker, th *theme.Theme) *Agents {
 	return &Agents{
 		BasePanel:   panels.BasePanel{PanelTitle: "agents"},
 		tracker:     tracker,
 		expanded:    make(map[int]bool),
 		outputCache: make(map[int]agentOutput),
+		theme:       th,
 	}
+}
+
+func (p *Agents) themeColors() theme.Colors {
+	if p.theme != nil {
+		return p.theme.Colors
+	}
+	return theme.Colors{}
+}
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
+}
+
+func orDefault(themed, fallback string) string {
+	if themed != "" {
+		return themed
+	}
+	return fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -165,21 +190,21 @@ func (p *Agents) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("Loading agents...")
 	}
 	if p.err != nil && len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#FF5555")).
+			Foreground(colorOf(p.themeColors().NormalRed, "#C44B4B")).
 			Render(fmt.Sprintf("Error: %v", p.err))
 	}
 	if len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color("#666666")).
+			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No agents tracked")
 	}
 	// Build visible rows.
@@ -448,18 +473,19 @@ func (p *Agents) buildVisibleRows(width int) []string {
 
 func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) string {
 	// Status icon.
+	tc := p.themeColors()
 	var statusIcon string
 	var statusColor string
 	switch agent.Status {
 	case mcp.AgentRunning:
 		statusIcon = "●"
-		statusColor = "#50FA7B" // green
+		statusColor = orDefault(tc.NormalGreen, "#6B9E56")
 	case mcp.AgentExited:
 		statusIcon = "✓"
-		statusColor = "#8BE9FD" // cyan
+		statusColor = orDefault(tc.BrightBlue, "#7A9EBF")
 	case mcp.AgentFailed:
 		statusIcon = "✗"
-		statusColor = "#FF5555" // red
+		statusColor = orDefault(tc.NormalRed, "#C44B4B")
 	}
 	// Duration.
 	dur := formatDuration(agent.Duration)
@@ -483,8 +509,8 @@ func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) s
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
-			Background(lipgloss.Color("#44475A")).
-			Foreground(lipgloss.Color("#F8F8F2"))
+			Background(colorOf(tc.SelectionBg, "#2A2A2A")).
+			Foreground(colorOf(tc.Foreground, "#D4D4D4"))
 	} else {
 		style = style.Foreground(lipgloss.Color(statusColor))
 	}
@@ -497,10 +523,10 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 	maxLines := 10 // cap visible output lines per stream
 	outputStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(lipgloss.Color("#6272A4")) // muted
+		Foreground(colorOf(p.themeColors().BrightBlack, "#555555")) // muted
 	stderrStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(lipgloss.Color("#FF79C6")) // pink for stderr
+		Foreground(colorOf(p.themeColors().NormalYellow, "#C9A227")) // pink for stderr
 	if len(out.stdout) > 0 {
 		rows = append(rows, outputStyle.Render(indent+"── stdout ──"))
 		lines := out.stdout

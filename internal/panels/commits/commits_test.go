@@ -75,7 +75,7 @@ func defaultCommits() []git.Commit {
 }
 
 func newTestPanel(mock *mockGitOps) *Panel {
-	p := New(mock)
+	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	if cmd != nil {
 		msg := cmd()
@@ -332,7 +332,7 @@ func TestPagination(t *testing.T) {
 	}
 
 	mock := &mockGitOps{commits: manyCommits}
-	p := New(mock)
+	p := New(mock, nil)
 	p.pageSize = 5 // Small page for testing.
 
 	cmd := p.Init(context.Background())
@@ -414,7 +414,7 @@ func TestTitleDefault(t *testing.T) {
 
 func TestLoadingState(t *testing.T) {
 	mock := &mockGitOps{commits: defaultCommits()}
-	p := New(mock)
+	p := New(mock, nil)
 
 	// Before Init runs, loading is false and commits empty.
 	cmd := p.Init(context.Background())

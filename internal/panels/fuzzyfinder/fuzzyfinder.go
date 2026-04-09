@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"image/color"
 	"path"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -24,9 +26,17 @@ type FuzzyFinder struct {
 	items   []Item        // all items from all sources
 	matches []fuzzy.Match // filtered results
 	panels.BasePanel
-	cursor  int // index into matches
-	offset  int // scroll offset for results
-	qCursor int // cursor position in query
+	cursor           int // index into matches
+	offset           int // scroll offset for results
+	qCursor          int // cursor position in query
+	theme            *theme.Theme
+	promptStyle      lipgloss.Style
+	placeholderStyle lipgloss.Style
+	matchHighlight   lipgloss.Style
+	descStyle        lipgloss.Style
+	statusStyle      lipgloss.Style
+	separatorStyle   lipgloss.Style
+	cursorBg         string
 }
 
 // Compile-time interface check.
@@ -34,10 +44,22 @@ var _ panels.Panel = (*FuzzyFinder)(nil)
 
 // New creates a new FuzzyFinder with the given sources. Items are loaded
 // eagerly from all sources at construction time.
-func New(sources ...Source) *FuzzyFinder {
+func New(th *theme.Theme, sources ...Source) *FuzzyFinder {
+	tc := theme.Colors{}
+	if th != nil {
+		tc = th.Colors
+	}
 	ff := &FuzzyFinder{
-		BasePanel: panels.BasePanel{PanelTitle: "fuzzyfinder"},
-		sources:   sources,
+		BasePanel:        panels.BasePanel{PanelTitle: "fuzzyfinder"},
+		sources:          sources,
+		theme:            th,
+		promptStyle:      lipgloss.NewStyle().Foreground(colorOf(tc.NormalGreen, "#6B9E56")).Bold(true),
+		placeholderStyle: lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
+		matchHighlight:   lipgloss.NewStyle().Foreground(colorOf(tc.NormalYellow, "#C9A227")).Bold(true),
+		descStyle:        lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
+		statusStyle:      lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
+		separatorStyle:   lipgloss.NewStyle().Foreground(colorOf(tc.SelectionBg, "#2A2A2A")),
+		cursorBg:         orDefault(tc.SelectionBg, "#2A2A2A"),
 	}
 	ff.loadItems()
 	ff.filter()
@@ -172,7 +194,7 @@ func (ff *FuzzyFinder) View(width, height int) string {
 	inputLine := ff.renderInput(width)
 	lines = append(lines, inputLine)
 	// Separator
-	sep := separatorStyle.Render(strings.Repeat("─", width))
+	sep := ff.separatorStyle.Render(strings.Repeat("─", width))
 	lines = append(lines, sep)
 	// Results area: total height minus input (1) + separator (1) + status (1).
 	resultH := height - 3
@@ -198,7 +220,7 @@ func (ff *FuzzyFinder) View(width, height int) string {
 	}
 	// Status bar
 	status := fmt.Sprintf(" %d/%d", len(ff.matches), len(ff.items))
-	statusLine := statusStyle.Width(width).Render(status)
+	statusLine := ff.statusStyle.Width(width).Render(status)
 	lines = append(lines, statusLine)
 	return strings.Join(lines, "\n")
 }
@@ -360,10 +382,10 @@ func (ff *FuzzyFinder) ensureCursorVisible() {
 // Rendering
 // ---------------------------------------------------------------------------
 func (ff *FuzzyFinder) renderInput(width int) string {
-	prompt := promptStyle.Render("> ")
+	prompt := ff.promptStyle.Render("> ")
 	display := ff.query
 	if display == "" {
-		display = placeholderStyle.Render("Search...")
+		display = ff.placeholderStyle.Render("Search...")
 	}
 	line := prompt + display
 	return lipgloss.NewStyle().Width(width).MaxWidth(width).Render(line)
@@ -379,33 +401,38 @@ func (ff *FuzzyFinder) renderMatch(item Item, matchedIndexes []int, width int, i
 	b.WriteString("  ") // indent
 	for i, ch := range item.Text {
 		if matchSet[i] {
-			b.WriteString(matchHighlight.Render(string(ch)))
+			b.WriteString(ff.matchHighlight.Render(string(ch)))
 		} else {
 			b.WriteRune(ch)
 		}
 	}
 	if item.Description != "" {
 		b.WriteString("  ")
-		b.WriteString(descStyle.Render(item.Description))
+		b.WriteString(ff.descStyle.Render(item.Description))
 	}
 	content := b.String()
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color(cursorBg)).Bold(true)
+		style = style.Background(lipgloss.Color(ff.cursorBg)).Bold(true)
 	}
 	return style.Render(content)
 }
 
-// Styles — matching the Dracula palette used throughout grut.
-var (
-	promptStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Bold(true)
-	placeholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	matchHighlight   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6")).Bold(true)
-	descStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	separatorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#44475A"))
-	cursorBg         = "#44475A"
-)
+// Styles — matching the Forge palette used throughout grut.
+
+func colorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
+}
+
+func orDefault(themed, fallback string) string {
+	if themed != "" {
+		return themed
+	}
+	return fallback
+}
 
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)

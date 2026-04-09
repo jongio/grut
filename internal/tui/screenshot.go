@@ -394,7 +394,7 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 			return nil, err
 		}
 		injectGitHubDemoData(m)
-		m.fuzzyFinder = fuzzyfinder.New()
+		m.fuzzyFinder = fuzzyfinder.New(th)
 		m.fuzzyFinder.Focus()
 		w, h := m.fuzzyFinderDims()
 		m.fuzzyFinder.SetSize(w, h)

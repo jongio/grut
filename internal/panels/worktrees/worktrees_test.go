@@ -89,7 +89,7 @@ func testGitConfig() config.GitConfig {
 // worktree load synchronously, simulating the Init() → worktreesLoadedMsg cycle.
 func newTestPanel(t *testing.T, mock *mockGitOps, checker PathChecker) *Panel {
 	t.Helper()
-	p := New(mock, testGitConfig(), "/fake/repo")
+	p := New(mock, testGitConfig(), "/fake/repo", nil)
 	if checker != nil {
 		p.pathCheck = checker
 	}
@@ -114,14 +114,14 @@ func TestPanelImplementsPanel(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	mock := &mockGitOps{}
-	p := New(mock, testGitConfig(), "/repo")
+	p := New(mock, testGitConfig(), "/repo", nil)
 	assert.Equal(t, "worktrees", p.Title())
 	assert.NotNil(t, p.git)
 }
 
 func TestInit_ReturnsLoadCmd(t *testing.T) {
 	mock := &mockGitOps{worktrees: sampleWorktrees()}
-	p := New(mock, testGitConfig(), "/repo")
+	p := New(mock, testGitConfig(), "/repo", nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 }
@@ -152,7 +152,7 @@ func TestLoadWorktrees_CursorOnFirst(t *testing.T) {
 
 func TestLoadWorktrees_Error(t *testing.T) {
 	mock := &mockGitOps{listErr: errors.New("git not found")}
-	p := New(mock, testGitConfig(), "/repo")
+	p := New(mock, testGitConfig(), "/repo", nil)
 	cmd := p.Init(context.Background())
 	msg := cmd()
 
@@ -740,7 +740,7 @@ func TestWorktreeChangedMsg_TriggersRefresh(t *testing.T) {
 
 func TestKeyBindings(t *testing.T) {
 	mock := &mockGitOps{}
-	p := New(mock, testGitConfig(), "/repo")
+	p := New(mock, testGitConfig(), "/repo", nil)
 
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)

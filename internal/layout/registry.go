@@ -100,7 +100,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 	// Panels still using placeholders
 	for _, name := range []string{"status"} {
 		r.Register(name, func() panels.Panel {
-			return panels.NewPlaceholder(name)
+			return panels.NewPlaceholder(name, th)
 		})
 	}
 	// setActionsCfg injects the actions configuration into panels that
@@ -117,7 +117,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		if err != nil {
 			cwd = "."
 		}
-		ft := filetree.New(cfg.FileTree, cwd)
+		ft := filetree.New(cfg.FileTree, cwd, th)
 		if gc != nil {
 			ft.SetGitClient(gc)
 		}
@@ -125,7 +125,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 	})
 	// Preview panel — real implementation
 	r.Register("preview", func() panels.Panel {
-		p := preview.New(cfg.Preview)
+		p := preview.New(cfg.Preview, th)
 		if gc != nil {
 			p.SetGitClient(gc)
 		}
@@ -133,7 +133,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 	})
 	// Fuzzy finder panel — real implementation (used as overlay by app model)
 	r.Register("fuzzyfinder", func() panels.Panel {
-		return fuzzyfinder.New()
+		return fuzzyfinder.New(th)
 	})
 	// Git status panel — real implementation
 	r.Register("gitstatus", func() panels.Panel {
@@ -144,9 +144,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		client, err := git.NewClient(cwd)
 		if err != nil {
 			// Fall back to placeholder if git is unavailable.
-			return panels.NewPlaceholder("gitstatus")
+			return panels.NewPlaceholder("gitstatus", th)
 		}
-		return setActionsCfg(gitstatus.New(client))
+		return setActionsCfg(gitstatus.New(client, th))
 	})
 	// Branch panel — real implementation
 	r.Register("branches", func() panels.Panel {
@@ -157,9 +157,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		client, err := git.NewClient(cwd)
 		if err != nil {
 			// Fall back to placeholder if git is unavailable.
-			return panels.NewPlaceholder("branches")
+			return panels.NewPlaceholder("branches", th)
 		}
-		return branches.New(client, cfg.Git, cwd)
+		return branches.New(client, cfg.Git, cwd, th)
 	})
 	// Git diff panel — real implementation
 	r.Register("gitdiff", func() panels.Panel {
@@ -173,9 +173,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("gitlog")
+			return panels.NewPlaceholder("gitlog", th)
 		}
-		return setActionsCfg(gitlog.New(client, cfg.Git))
+		return setActionsCfg(gitlog.New(client, cfg.Git, th))
 	})
 	// Commits panel — selection-driven commit history
 	r.Register("commits", func() panels.Panel {
@@ -185,9 +185,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("commits")
+			return panels.NewPlaceholder("commits", th)
 		}
-		return setActionsCfg(commits.New(client))
+		return setActionsCfg(commits.New(client, th))
 	})
 	// Conflict resolution panel — real implementation
 	r.Register("conflicts", func() panels.Panel {
@@ -197,9 +197,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("conflicts")
+			return panels.NewPlaceholder("conflicts", th)
 		}
-		return setActionsCfg(conflicts.New(client))
+		return setActionsCfg(conflicts.New(client, th))
 	})
 	// Worktree management panel — real implementation
 	r.Register("worktrees", func() panels.Panel {
@@ -209,9 +209,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("worktrees")
+			return panels.NewPlaceholder("worktrees", th)
 		}
-		return worktrees.New(client, cfg.Git, cwd)
+		return worktrees.New(client, cfg.Git, cwd, th)
 	})
 	// Stash management panel — real implementation
 	r.Register("stash", func() panels.Panel {
@@ -221,9 +221,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("stash")
+			return panels.NewPlaceholder("stash", th)
 		}
-		return setActionsCfg(stash.New(client))
+		return setActionsCfg(stash.New(client, th))
 	})
 	// Git info panel — git tabs only (branches, worktrees, remotes, stash, tags, reflog)
 	r.Register("gitinfo", func() panels.Panel {
@@ -233,9 +233,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("gitinfo")
+			return panels.NewPlaceholder("gitinfo", th)
 		}
-		return gitinfo.New(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode)
+		return gitinfo.New(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode, th)
 	})
 	// GitHub panel — GitHub tabs only (issues, PRs, actions, workflows, releases)
 	r.Register("github", func() panels.Panel {
@@ -245,20 +245,20 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("github")
+			return panels.NewPlaceholder("github", th)
 		}
-		return gitinfo.NewGitHub(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode)
+		return gitinfo.NewGitHub(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode, th)
 	})
 	// Diff review panel — real implementation
 	r.Register("review", func() panels.Panel {
-		return setActionsCfg(review.New(gc))
+		return setActionsCfg(review.New(gc, th))
 	})
 	// Agent monitor panel — real implementation
 	r.Register("agents", func() panels.Panel {
 		maxProcs := cfg.MCP.Security.MaxAgentProcesses
 		timeout := cfg.MCP.Security.AgentTimeout
 		tracker := mcp.NewAgentTracker(maxProcs, timeout)
-		return setActionsCfg(agents.New(tracker))
+		return setActionsCfg(agents.New(tracker, th))
 	})
 	// Context builder panel — real implementation
 	r.Register("context", func() panels.Panel {
@@ -268,9 +268,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		builder, err := ctxbuilder.NewBuilder(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("context")
+			return panels.NewPlaceholder("context", th)
 		}
-		return setActionsCfg(ctxpanel.New(builder))
+		return setActionsCfg(ctxpanel.New(builder, th))
 	})
 	// Embedded terminal panel — real implementation
 	r.Register("terminal", func() panels.Panel {
@@ -280,9 +280,9 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		runner, err := terminal.New(shell, cfg.Terminal.Scrollback)
 		if err != nil {
-			return panels.NewPlaceholder("terminal")
+			return panels.NewPlaceholder("terminal", th)
 		}
-		return termpanel.New(cfg.Terminal, runner, shell)
+		return termpanel.New(cfg.Terminal, runner, shell, th)
 	})
 	// Extension management panel — real implementation
 	r.Register("extensions", func() panels.Panel {
@@ -292,8 +292,8 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		}
 		mgr := extension.NewManager(installDir)
 		if err := mgr.LoadAll(); err != nil {
-			return panels.NewPlaceholder("extensions")
+			return panels.NewPlaceholder("extensions", th)
 		}
-		return setActionsCfg(extpanel.New(mgr))
+		return setActionsCfg(extpanel.New(mgr, th))
 	})
 }

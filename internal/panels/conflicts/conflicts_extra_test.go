@@ -9,7 +9,7 @@ import (
 )
 
 func TestSetActionsCfg(t *testing.T) {
-	p := New(&mockGit{})
+	p := New(&mockGit{}, nil)
 	cfg := config.ActionsConfig{
 		RightClick: map[string]string{"conflict_file": "open"},
 		Confirmed:  map[string]bool{"conflict_file": true},

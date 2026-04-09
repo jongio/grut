@@ -84,7 +84,7 @@ func makeCommits(n int) []git.Commit {
 func TestNew(t *testing.T) {
 	client := &mockGitClient{}
 	cfg := config.GitConfig{MaxLogEntries: 100}
-	p := New(client, cfg)
+	p := New(client, cfg, nil)
 
 	assert.Equal(t, 100, p.pageSize)
 	assert.Equal(t, "Commits", p.Title())
@@ -93,7 +93,7 @@ func TestNew(t *testing.T) {
 func TestNew_DefaultPageSize(t *testing.T) {
 	client := &mockGitClient{}
 	cfg := config.GitConfig{}
-	p := New(client, cfg)
+	p := New(client, cfg, nil)
 
 	assert.Equal(t, defaultPageSize, p.pageSize)
 }
@@ -106,7 +106,7 @@ func TestInit_LoadsCommits(t *testing.T) {
 		},
 	}
 
-	p := New(client, config.GitConfig{})
+	p := New(client, config.GitConfig{}, nil)
 	cmd := p.Init(context.Background())
 
 	require.NotNil(t, cmd)
@@ -121,7 +121,7 @@ func TestInit_LoadsCommits(t *testing.T) {
 }
 
 func TestHandleCommitsLoaded(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.loading = true
 	p.pageSize = 500
@@ -144,7 +144,7 @@ func TestHandleCommitsLoaded(t *testing.T) {
 }
 
 func TestHandleCommitsLoaded_Append(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 5
 
@@ -162,7 +162,7 @@ func TestHandleCommitsLoaded_Append(t *testing.T) {
 }
 
 func TestView_EmptyState(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 
 	view := p.View(80, 24)
@@ -170,7 +170,7 @@ func TestView_EmptyState(t *testing.T) {
 }
 
 func TestView_LoadingState(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.loading = true
 
@@ -179,14 +179,14 @@ func TestView_LoadingState(t *testing.T) {
 }
 
 func TestView_ZeroDimensions(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	assert.Equal(t, "", p.View(0, 0))
 	assert.Equal(t, "", p.View(-1, 10))
 	assert.Equal(t, "", p.View(10, -1))
 }
 
 func TestCommitEntryFormatting(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 
 	c := git.Commit{
@@ -212,7 +212,7 @@ func TestCommitEntryFormatting(t *testing.T) {
 }
 
 func TestCommitEntryFormatting_NoRefs(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 
 	c := git.Commit{
 		ShortHash: "abc123d",
@@ -230,7 +230,7 @@ func TestCommitEntryFormatting_NoRefs(t *testing.T) {
 }
 
 func TestRefDecorations(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 
 	tests := []struct {
 		name string
@@ -279,7 +279,7 @@ func TestRefDecorations(t *testing.T) {
 }
 
 func TestNavigation(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.focused = true
 	p.height = 20
@@ -317,7 +317,7 @@ func TestNavigation(t *testing.T) {
 }
 
 func TestPageNavigation(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.focused = true
 	p.height = 10
@@ -348,7 +348,7 @@ func TestPagination_LoadMore(t *testing.T) {
 		},
 	}
 
-	p := New(client, config.GitConfig{})
+	p := New(client, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.focused = true
 	p.height = 20
@@ -369,7 +369,7 @@ func TestPagination_LoadMore(t *testing.T) {
 }
 
 func TestPagination_Debounce(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 5
 
@@ -382,7 +382,7 @@ func TestPagination_Debounce(t *testing.T) {
 }
 
 func TestPagination_AllLoaded(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.allLoaded = true
 
@@ -391,7 +391,7 @@ func TestPagination_AllLoaded(t *testing.T) {
 }
 
 func TestSearch(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -410,7 +410,7 @@ func TestSearch(t *testing.T) {
 }
 
 func TestSearch_ByAuthor(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -425,7 +425,7 @@ func TestSearch_ByAuthor(t *testing.T) {
 }
 
 func TestSearch_ClearResets(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(10)})
@@ -441,7 +441,7 @@ func TestSearch_ClearResets(t *testing.T) {
 }
 
 func TestDetailView(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -477,7 +477,7 @@ func TestDetailView(t *testing.T) {
 }
 
 func TestKeyBindings(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
 
@@ -499,7 +499,7 @@ func TestKeyBindings(t *testing.T) {
 }
 
 func TestRebuildDisplay_LinearHistory(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -517,7 +517,7 @@ func TestRebuildDisplay_LinearHistory(t *testing.T) {
 }
 
 func TestRebuildDisplay_WithBranch(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -555,7 +555,7 @@ func TestTruncateOrPad(t *testing.T) {
 }
 
 func TestRenderLog_WithCommits(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.height = 20
 	p.width = 100
@@ -581,7 +581,7 @@ func TestHandleBranchSelected_NewBranch(t *testing.T) {
 			return makeCommits(5), nil
 		},
 	}
-	p := New(client, config.GitConfig{})
+	p := New(client, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -607,7 +607,7 @@ func TestHandleBranchSelected_NewBranch(t *testing.T) {
 }
 
 func TestHandleBranchSelected_SameBranch(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.selectedRef = "main"
 	p.cursor = 3
@@ -620,7 +620,7 @@ func TestHandleBranchSelected_SameBranch(t *testing.T) {
 }
 
 func TestHandleBranchSelected_ResetToHead(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.selectedRef = "feature/test"
 	p.cursor = 5
@@ -634,7 +634,7 @@ func TestHandleBranchSelected_ResetToHead(t *testing.T) {
 }
 
 func TestHandleSearchKey_Enter(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -653,7 +653,7 @@ func TestHandleSearchKey_Enter(t *testing.T) {
 }
 
 func TestHandleSearchKey_Escape(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -672,7 +672,7 @@ func TestHandleSearchKey_Escape(t *testing.T) {
 }
 
 func TestHandleSearchKey_Backspace(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -697,7 +697,7 @@ func TestHandleSearchKey_Backspace(t *testing.T) {
 }
 
 func TestHandleSearchKey_TypeCharacter(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -718,7 +718,7 @@ func TestHandleSearchKey_TypeCharacter(t *testing.T) {
 }
 
 func TestHandleDetailKey_ScrollDown(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.height = 10
@@ -740,7 +740,7 @@ func TestHandleDetailKey_ScrollDown(t *testing.T) {
 }
 
 func TestHandleDetailKey_ScrollUp(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.height = 10
@@ -765,7 +765,7 @@ func TestHandleDetailKey_ScrollUp(t *testing.T) {
 }
 
 func TestHandleDetailKey_PageDown(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.height = 4
@@ -787,7 +787,7 @@ func TestHandleDetailKey_PageDown(t *testing.T) {
 }
 
 func TestHandleDetailKey_PageUp(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.height = 4
@@ -811,7 +811,7 @@ func TestHandleDetailKey_PageUp(t *testing.T) {
 }
 
 func TestHandleDetailKey_Exit(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -840,7 +840,7 @@ func TestHandleDetailKey_Exit(t *testing.T) {
 }
 
 func TestFocusBlur(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.Focus()
 	assert.True(t, p.focused)
 
@@ -849,7 +849,7 @@ func TestFocusBlur(t *testing.T) {
 }
 
 func TestHandleKey_IgnoredWhenBlurred(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(5)})
@@ -861,14 +861,14 @@ func TestHandleKey_IgnoredWhenBlurred(t *testing.T) {
 }
 
 func TestSetSize(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.SetSize(120, 40)
 	assert.Equal(t, 120, p.width)
 	assert.Equal(t, 40, p.height)
 }
 
 func TestCopyHash(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -887,7 +887,7 @@ func TestCopyHash(t *testing.T) {
 }
 
 func TestCopyHash_OutOfBounds(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.cursor = -1
 
@@ -896,7 +896,7 @@ func TestCopyHash_OutOfBounds(t *testing.T) {
 }
 
 func TestCopyHash_InSearchMode(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -920,7 +920,7 @@ func TestCopyHash_InSearchMode(t *testing.T) {
 }
 
 func TestSearch_NoMatches(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(10)})
@@ -933,7 +933,7 @@ func TestSearch_NoMatches(t *testing.T) {
 }
 
 func TestSearch_ByHash(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -950,7 +950,7 @@ func TestSearch_ByHash(t *testing.T) {
 }
 
 func TestSearch_CaseInsensitive(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -968,7 +968,7 @@ func TestSearch_CaseInsensitive(t *testing.T) {
 }
 
 func TestShowDetail_WithFilteredView(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -990,7 +990,7 @@ func TestShowDetail_WithFilteredView(t *testing.T) {
 }
 
 func TestShowDetail_NoCommits(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.cursor = 0
 
@@ -999,7 +999,7 @@ func TestShowDetail_NoCommits(t *testing.T) {
 }
 
 func TestShowDetail_CursorOutOfBounds(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(5)})
@@ -1010,7 +1010,7 @@ func TestShowDetail_CursorOutOfBounds(t *testing.T) {
 }
 
 func TestRenderCommitLine_NarrowWidth(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 
 	c := git.Commit{
 		ShortHash: "abc123d",
@@ -1026,7 +1026,7 @@ func TestRenderCommitLine_NarrowWidth(t *testing.T) {
 }
 
 func TestRenderCommitLine_CursorHighlight(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 
 	c := git.Commit{
 		ShortHash: "abc123d",
@@ -1046,7 +1046,7 @@ func TestRenderCommitLine_CursorHighlight(t *testing.T) {
 }
 
 func TestEnsureCursorVisible_ScrollsDown(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.height = 5
 	p.pageSize = 500
@@ -1062,7 +1062,7 @@ func TestEnsureCursorVisible_ScrollsDown(t *testing.T) {
 }
 
 func TestEnsureCursorVisible_ScrollsUp(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.height = 5
 	p.pageSize = 500
@@ -1078,7 +1078,7 @@ func TestEnsureCursorVisible_ScrollsUp(t *testing.T) {
 }
 
 func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.height = 0
 	p.pageSize = 500
@@ -1093,7 +1093,7 @@ func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
 }
 
 func TestMaxCursor_WithFilter(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -1112,7 +1112,7 @@ func TestMaxCursor_WithFilter(t *testing.T) {
 }
 
 func TestActiveDisplay_Filtered(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 
@@ -1132,7 +1132,7 @@ func TestActiveDisplay_Filtered(t *testing.T) {
 }
 
 func TestView_DetailMode(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(5)})
@@ -1143,7 +1143,7 @@ func TestView_DetailMode(t *testing.T) {
 }
 
 func TestHandleKey_SearchMode(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.focused = true
@@ -1156,7 +1156,7 @@ func TestHandleKey_SearchMode(t *testing.T) {
 }
 
 func TestUpdate_BranchSelectedMsg(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.pageSize = 500
 	p.handleCommitsLoaded(commitsLoadedMsg{commits: makeCommits(5)})
@@ -1168,7 +1168,7 @@ func TestUpdate_BranchSelectedMsg(t *testing.T) {
 }
 
 func TestUpdate_BranchChangedMsg(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.selectedRef = "feature/x"
 	p.pageSize = 500
@@ -1199,7 +1199,7 @@ func newTestPanelWithCommits(t *testing.T, n int) *Panel {
 			return commits, nil
 		},
 	}
-	p := New(client, config.GitConfig{})
+	p := New(client, config.GitConfig{}, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -1321,7 +1321,7 @@ func TestRepoChangedMsg_ResetsAndReloads(t *testing.T) {
 // TestRenderCommitLine_ANSIInjection verifies that ANSI escape sequences
 // in untrusted git data (subject, author, refs) are stripped before display.
 func TestRenderCommitLine_ANSIInjection(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 
 	c := git.Commit{
 		ShortHash: "abc1234",
@@ -1344,7 +1344,7 @@ func TestRenderCommitLine_ANSIInjection(t *testing.T) {
 // TestDetailView_ANSIInjection verifies that commit detail view strips ANSI
 // from subject, author, email, refs, and body.
 func TestDetailView_ANSIInjection(t *testing.T) {
-	p := New(&mockGitClient{}, config.GitConfig{})
+	p := New(&mockGitClient{}, config.GitConfig{}, nil)
 	p.ctx = context.Background()
 	p.width = 80
 	p.height = 40
