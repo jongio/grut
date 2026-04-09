@@ -60,6 +60,15 @@ type Closer interface {
 	Close()
 }
 
+// SelectionCopier is an optional interface for panels that support text
+// selection and clipboard copy. When the focused panel implements this
+// interface and HasSelection returns true, Ctrl+C copies the selected
+// text instead of quitting.
+type SelectionCopier interface {
+	HasSelection() bool
+	CopySelection() (Panel, tea.Cmd)
+}
+
 // BasePanel provides default implementations for Focus, Blur, SetSize, Title,
 // and KeyBindings. Panels that embed BasePanel only need to implement Init,
 // Update, and View (F07).

@@ -15,7 +15,7 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <ul>
     <li><strong>Syntax highlighting</strong> — 100+ languages via Chroma with theme-aware colors</li>
     <li><strong>Markdown rendering</strong> — Issue and PR bodies rendered with full markdown formatting</li>
-    <li><strong>Text selection</strong> — Click and drag to select text, double-click to select a word, <kbd>y</kbd> to copy to clipboard</li>
+    <li><strong>Text selection</strong> — Click and drag to select text, double-click to select a word, <kbd>y</kbd> or <kbd>Ctrl+C</kbd> to copy to clipboard</li>
     <li><strong>Diff mode</strong> — Automatically shows diffs when git filter is active or a commit is selected</li>
     <li><strong>Image preview</strong> — Displays image metadata for binary image files</li>
     <li><strong>Line numbers</strong> — Toggleable line numbers with configurable display</li>
@@ -27,7 +27,7 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
     { key: 'J / K', action: 'Scroll preview by half-page' },
     { key: 'w', action: 'Toggle word wrap' },
     { key: 'z', action: 'Zoom preview to full screen' },
-    { key: 'y', action: 'Copy selection to clipboard' },
+    { key: 'y / Ctrl+C', action: 'Copy selection to clipboard' },
     { key: 'Esc', action: 'Clear selection' },
   ]} />
 

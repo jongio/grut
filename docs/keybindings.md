@@ -155,7 +155,7 @@ Always active regardless of focused panel.
 | `j` / `k` | Scroll content |
 | `g` / `G` | Jump to top / bottom |
 | `d` / `u` | Page down / up |
-| `y` | Copy selection to clipboard |
+| `y` / `Ctrl+C` | Copy selection to clipboard |
 | `Esc` | Clear selection |
 
 Click and drag to select text. Double-click to select a word.
