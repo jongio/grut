@@ -126,7 +126,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 	})
 	// Preview panel — real implementation
 	r.Register("preview", func() panels.Panel {
-		p := preview.New(cfg.Preview, th)
+		p := preview.New(cfg.Preview, cfg.Editor, th)
 		if gc != nil {
 			p.SetGitClient(gc)
 		}

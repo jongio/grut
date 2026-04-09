@@ -33,6 +33,7 @@ type Config struct {
 	MCP        MCPConfig        `toml:"mcp"`
 	GitHub     GitHubConfig     `toml:"github"`
 	Preview    PreviewConfig    `toml:"preview"`
+	Editor     EditorConfig     `toml:"editor"`
 	Logging    LoggingConfig    `toml:"logging"`
 	FileTree   FileTreeConfig   `toml:"file_tree"`
 	Bookmarks  BookmarksConfig  `toml:"bookmarks"`
@@ -71,6 +72,14 @@ type PreviewConfig struct {
 	LineNumbers        bool   `toml:"line_numbers"`
 	WordWrap           bool   `toml:"word_wrap"`
 	RenderMarkdown     bool   `toml:"render_markdown"`
+}
+
+// EditorConfig controls the inline file editor in the preview panel.
+type EditorConfig struct {
+	TabSize    int  `toml:"tab_size"`
+	InsertTabs bool `toml:"insert_tabs"` // true = hard tabs, false = spaces
+	AutoIndent bool `toml:"auto_indent"`
+	AutoSave   bool `toml:"auto_save"`
 }
 
 // GitConfig holds git integration settings.
