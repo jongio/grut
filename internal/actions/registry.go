@@ -37,9 +37,8 @@ const (
 type ActionID string
 
 const (
-	ActionCheckout        ActionID = "checkout"
-	ActionSwitch          ActionID = "switch"
-	ActionOpenTerminal    ActionID = "open_terminal"
+	ActionCheckout     ActionID = "checkout"
+	ActionOpenTerminal ActionID = "open_terminal"
 	ActionOpenInBrowser   ActionID = "open_in_browser"
 	ActionOpenInEditor    ActionID = "open_in_editor"
 	ActionPromptAction    ActionID = "prompt_action"
@@ -90,7 +89,7 @@ type ItemActions struct {
 var Registry = map[ItemType]ItemActions{
 	ItemLocalBranch:  {Default: ActionCheckout, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyName, ActionOpenInBrowser}, Description: "switch to this branch"},
 	ItemRemoteBranch: {Default: ActionCheckout, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyName}, Description: "check out this remote branch locally"},
-	ItemWorktree:     {Default: ActionSwitch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionChangeDirectory, ActionOpenTerminal, ActionCopyPath}, Description: "switch to this worktree"},
+	ItemWorktree:     {Default: ActionChangeDirectory, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenTerminal, ActionCopyPath}, Description: "change to this worktree's directory"},
 	ItemRemote:       {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL}, Description: "open this remote in your browser"},
 	ItemStashEntry:   {Default: ActionPromptAction, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionApply, ActionPop, ActionDrop}, Description: "choose a stash action (apply/pop/drop)"},
 	ItemIssue:        {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL, ActionCopyNumber}, Description: "open this issue in your browser"},
@@ -126,7 +125,6 @@ var allItemTypes = []ItemType{
 // actionLabels maps each action ID to a human-readable label.
 var actionLabels = map[ActionID]string{
 	ActionCheckout:        "checkout",
-	ActionSwitch:          "switch",
 	ActionOpenTerminal:    "open terminal",
 	ActionOpenInBrowser:   "open in browser",
 	ActionOpenInEditor:    "open in editor",

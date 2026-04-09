@@ -16,7 +16,7 @@ import (
 func TestSetActionsCfg(t *testing.T) {
 	p := New(&mockGitOps{}, testGitConfig(), "/repo", nil)
 	cfg := config.ActionsConfig{
-		RightClick: map[string]string{"worktree": "switch"},
+		RightClick: map[string]string{"worktree": "change_directory"},
 		Confirmed:  map[string]bool{"worktree": true},
 	}
 
@@ -83,11 +83,11 @@ func TestEnsureCursorVisible(t *testing.T) {
 // executeRightClickAction
 // ---------------------------------------------------------------------------
 
-func TestExecuteRightClickAction_Switch(t *testing.T) {
+func TestExecuteRightClickAction_ChangeDirectory_Default(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 1
 
-	_, cmd := p.executeRightClickAction(actions.ActionSwitch, "")
+	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory, "")
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(panels.ChangeDirectoryMsg)
@@ -150,34 +150,34 @@ func TestOpenTerminal_OutOfBounds(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// requestSwitch — additional branches
+// changeDirectory — additional branches
 // ---------------------------------------------------------------------------
 
-func TestRequestSwitch_MissingPath(t *testing.T) {
+func TestChangeDirectory_MissingPath(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.items[1].isMissing = true
 	p.cursor = 1
 
-	_, cmd := p.requestSwitch("")
+	_, cmd := p.changeDirectory("")
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
 	assert.True(t, ok)
-	assert.Contains(t, toast.Message, "Cannot switch")
+	assert.Contains(t, toast.Message, "Cannot cd")
 }
 
-func TestRequestSwitch_NewTerminalMode(t *testing.T) {
+func TestChangeDirectory_NewTerminalMode(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cfg.WorktreeOpenMode = "new_terminal"
 	p.cursor = 1
 
-	_, cmd := p.requestSwitch("")
+	_, cmd := p.changeDirectory("")
 	assert.NotNil(t, cmd, "should emit terminal open command")
 }
 
-func TestRequestSwitch_NoItems(t *testing.T) {
+func TestChangeDirectory_NoItems(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: []git.Worktree{}}, alwaysExists)
-	_, cmd := p.requestSwitch("")
+	_, cmd := p.changeDirectory("")
 	assert.Nil(t, cmd)
 }
 
@@ -193,7 +193,7 @@ func TestHandleModalResult_RightClickPick(t *testing.T) {
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
 		Accept: true,
-		Value:  string(actions.ActionSwitch),
+		Value:  string(actions.ActionChangeDirectory),
 	})
 	assert.NotNil(t, cmd)
 }
@@ -215,7 +215,7 @@ func TestHandleModalResult_FirstUseConfirm(t *testing.T) {
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
 		Accept:   true,
-		Value:    string(actions.ActionSwitch),
+		Value:    string(actions.ActionChangeDirectory),
 		Remember: true,
 	})
 	assert.NotNil(t, cmd)
@@ -225,7 +225,7 @@ func TestHandleModalResult_FirstUseConfirm_UsesPendingPath(t *testing.T) {
 	// Regression test: after double-click triggers first-use confirmation,
 	// the cursor may become stale before the modal result arrives.
 	// The fix stores pendingPath at double-click time and threads it through
-	// to requestSwitch, so even if the cursor is invalidated the correct
+	// to changeDirectory, so even if the cursor is invalidated the correct
 	// worktree path is used.
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.pending = opFirstUseConfirm
@@ -237,14 +237,14 @@ func TestHandleModalResult_FirstUseConfirm_UsesPendingPath(t *testing.T) {
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
 		Accept:   true,
-		Value:    string(actions.ActionSwitch),
+		Value:    string(actions.ActionChangeDirectory),
 		Remember: false,
 	})
 	require.NotNil(t, cmd, "should produce ChangeDirectoryMsg even with stale cursor")
 	msg := cmd()
-	switchMsg, ok := msg.(panels.ChangeDirectoryMsg)
+	cdMsg, ok := msg.(panels.ChangeDirectoryMsg)
 	require.True(t, ok, "expected ChangeDirectoryMsg, got %T", msg)
-	assert.Equal(t, "/home/user/grut-feat", switchMsg.Path)
+	assert.Equal(t, "/home/user/grut-feat", cdMsg.Path)
 }
 
 func TestHandleModalResult_FirstUseConfirm_ChangeDirectory_UsesPendingPath(t *testing.T) {
@@ -302,48 +302,6 @@ func TestDefaultPathChecker(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// changeDirectory
+// changeDirectory — basic emit (covered by TestChangeDirectory_* above
+// and TestExecuteRightClickAction_ChangeDirectory_Default)
 // ---------------------------------------------------------------------------
-
-func TestChangeDirectory_EmitsChangeDirectoryMsg(t *testing.T) {
-	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
-	p.cursor = 1
-
-	_, cmd := p.changeDirectory("")
-	require.NotNil(t, cmd)
-	msg := cmd()
-	cdMsg, ok := msg.(panels.ChangeDirectoryMsg)
-	require.True(t, ok, "expected ChangeDirectoryMsg")
-	assert.Equal(t, "/home/user/grut-feat", cdMsg.Path)
-}
-
-func TestChangeDirectory_MissingPath(t *testing.T) {
-	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
-	p.items[1].isMissing = true
-	p.cursor = 1
-
-	_, cmd := p.changeDirectory("")
-	require.NotNil(t, cmd)
-	msg := cmd()
-	toast, ok := msg.(notify.ShowToastMsg)
-	require.True(t, ok)
-	assert.Equal(t, notify.Warn, toast.Level)
-	assert.Contains(t, toast.Message, "missing")
-}
-
-func TestChangeDirectory_NoItems(t *testing.T) {
-	p := newTestPanel(t, &mockGitOps{worktrees: []git.Worktree{}}, alwaysExists)
-	_, cmd := p.changeDirectory("")
-	assert.Nil(t, cmd)
-}
-
-func TestExecuteRightClickAction_ChangeDirectory(t *testing.T) {
-	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
-	p.cursor = 1
-
-	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory, "")
-	require.NotNil(t, cmd)
-	msg := cmd()
-	_, ok := msg.(panels.ChangeDirectoryMsg)
-	assert.True(t, ok, "expected ChangeDirectoryMsg")
-}

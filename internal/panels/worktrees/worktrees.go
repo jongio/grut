@@ -257,7 +257,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Switch to worktree", Action: "switch"},
+		{Key: "enter", Description: "Change directory", Action: "change_directory"},
 		{Key: "n", Description: "New worktree", Action: "create"},
 		{Key: "d/x", Description: "Remove worktree", Action: "item_delete"},
 		{Key: "R", Description: "Refresh", Action: "refresh"},
@@ -328,7 +328,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.moveCursorUp()
 		return p, p.worktreeSelectedCmd()
 	case "enter":
-		return p.requestSwitch("")
+		return p.changeDirectory("")
 	case "n":
 		return p.requestCreate()
 	case "d", "x":
@@ -355,7 +355,7 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 	return p, p.worktreeSelectedCmd()
 }
 
-// handleMouseDoubleClick switches to the worktree at the clicked row.
+// handleMouseDoubleClick changes directory to the worktree at the clicked row.
 func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	idx := p.offset + msg.ContentRow
 	if idx < 0 || idx >= len(p.items) {
@@ -383,8 +383,6 @@ func (p *Panel) SetActionsCfg(cfg config.ActionsConfig) { p.actionsCfg = cfg }
 // async modal delay.
 func (p *Panel) executeRightClickAction(action actions.ActionID, pathOverride string) (panels.Panel, tea.Cmd) {
 	switch action { //nolint:exhaustive // only relevant cases handled
-	case actions.ActionSwitch:
-		return p.requestSwitch(pathOverride)
 	case actions.ActionChangeDirectory:
 		return p.changeDirectory(pathOverride)
 	case actions.ActionOpenTerminal:
@@ -434,7 +432,8 @@ func (p *Panel) copyPath(pathOverride string) (panels.Panel, tea.Cmd) {
 }
 
 // changeDirectory emits a ChangeDirectoryMsg so the app re-roots into
-// the selected worktree.
+// the selected worktree. When WorktreeOpenMode is "new_terminal", it opens
+// a terminal at that path instead.
 func (p *Panel) changeDirectory(pathOverride string) (panels.Panel, tea.Cmd) {
 	var path string
 	if pathOverride != "" {
@@ -450,6 +449,15 @@ func (p *Panel) changeDirectory(pathOverride string) (panels.Panel, tea.Cmd) {
 			}
 		}
 		path = item.worktree.Path
+	}
+	if p.cfg.WorktreeOpenMode == "new_terminal" {
+		return p, func() tea.Msg {
+			if err := panels.OpenInTerminal(path); err != nil {
+				errMsg := err.Error()
+				return notify.ShowToastMsg{Message: "Terminal error: " + errMsg, Level: notify.Error}
+			}
+			return notify.ShowToastMsg{Message: "Opened terminal at " + path, Level: notify.Success}
+		}
 	}
 	return p, func() tea.Msg {
 		return panels.ChangeDirectoryMsg{Path: path}
@@ -534,35 +542,6 @@ func (p *Panel) worktreeSelectedCmd() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Worktree operations
 // ---------------------------------------------------------------------------
-func (p *Panel) requestSwitch(pathOverride string) (panels.Panel, tea.Cmd) {
-	var path string
-	if pathOverride != "" {
-		path = pathOverride
-	} else {
-		item := p.selectedWorktree()
-		if item == nil {
-			return p, nil
-		}
-		if item.isMissing {
-			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: "Cannot switch: path missing", Level: notify.Warn}
-			}
-		}
-		path = item.worktree.Path
-	}
-	if p.cfg.WorktreeOpenMode == "new_terminal" {
-		return p, func() tea.Msg {
-			if err := panels.OpenInTerminal(path); err != nil {
-				errMsg := err.Error()
-				return notify.ShowToastMsg{Message: "Terminal error: " + errMsg, Level: notify.Error}
-			}
-			return notify.ShowToastMsg{Message: "Opened terminal at " + path, Level: notify.Success}
-		}
-	}
-	return p, func() tea.Msg {
-		return panels.ChangeDirectoryMsg{Path: path}
-	}
-}
 
 func (p *Panel) requestCreate() (panels.Panel, tea.Cmd) {
 	p.pending = opCreate

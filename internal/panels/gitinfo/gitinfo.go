@@ -2003,17 +2003,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		}
 	case kindWorktree:
 		switch action { //nolint:exhaustive // only relevant cases handled
-		case actions.ActionSwitch:
-			return p.requestWorktreeSwitch()
 		case actions.ActionChangeDirectory:
-			wt := p.selectedWorktree()
-			if wt == nil {
-				return p, nil
-			}
-			path := wt.Path
-			return p, func() tea.Msg {
-				return panels.ChangeDirectoryMsg{Path: path}
-			}
+			return p.requestWorktreeSwitch()
 		case actions.ActionOpenTerminal:
 			path := item.worktree.Path
 			return p, func() tea.Msg {

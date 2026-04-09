@@ -770,14 +770,14 @@ func TestExecuteRightClickAction_RemoteBranch_CopyName(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
-func TestExecuteRightClickAction_Worktree_Switch(t *testing.T) {
+func TestExecuteRightClickAction_Worktree_ChangeDirectory(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindWorktree, worktree: git.Worktree{Path: "/tmp/wt", Branch: "feature"}},
 	}
 	p.tabCursor[p.activeTab] = 0
-	_, cmd := p.executeRightClickAction(actions.ActionSwitch)
+	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory)
 	assert.NotNil(t, cmd)
 }
 

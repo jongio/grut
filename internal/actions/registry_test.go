@@ -18,7 +18,7 @@ func TestDefaultAction(t *testing.T) {
 	}{
 		{ItemLocalBranch, ActionCheckout},
 		{ItemRemoteBranch, ActionCheckout},
-		{ItemWorktree, ActionSwitch},
+		{ItemWorktree, ActionChangeDirectory},
 		{ItemRemote, ActionOpenInBrowser},
 		{ItemStashEntry, ActionPromptAction},
 		{ItemIssue, ActionOpenInBrowser},

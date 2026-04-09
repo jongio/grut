@@ -752,7 +752,7 @@ func TestKeyBindings(t *testing.T) {
 	}
 	assert.True(t, actions["cursor_down"])
 	assert.True(t, actions["cursor_up"])
-	assert.True(t, actions["switch"])
+	assert.True(t, actions["change_directory"])
 	assert.True(t, actions["create"])
 	assert.True(t, actions["item_delete"])
 	assert.True(t, actions["refresh"])
