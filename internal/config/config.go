@@ -96,6 +96,7 @@ type GitHubConfig struct {
 	PollInterval           int    `toml:"poll_interval"`
 	ReviewDiffContextLines int    `toml:"review_diff_context_lines"`
 	AutoCheckoutPRBranch   bool   `toml:"auto_checkout_pr_branch"`
+	PageSize               int    `toml:"page_size"`
 }
 
 // TerminalConfig holds embedded terminal settings.

@@ -50,3 +50,12 @@ func extractOwnerRepo(url, sep string) (owner, repo string, ok bool) {
 	}
 	return segments[0], segments[1], true
 }
+
+// EffectivePageSize returns the configured page size for GitHub API list
+// operations, defaulting to 30 if unconfigured or invalid.
+func (c *GitHubConfig) EffectivePageSize() int {
+	if c.PageSize > 0 {
+		return c.PageSize
+	}
+	return 30
+}

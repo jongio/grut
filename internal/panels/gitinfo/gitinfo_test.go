@@ -2506,6 +2506,26 @@ func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*
 	return nil, nil
 }
 
+func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, _ *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+	return m.issues, ghclient.PageResult{}, m.issuesErr
+}
+
+func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+	return m.prs, ghclient.PageResult{}, m.prsErr
+}
+
+func (m *mockGHClientFull) ListWorkflowRunsPage(_ context.Context, _, _ string, _ *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, ghclient.PageResult, error) {
+	return m.runs, ghclient.PageResult{}, m.runsErr
+}
+
+func (m *mockGHClientFull) ListWorkflowsPage(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.Workflow, ghclient.PageResult, error) {
+	return nil, ghclient.PageResult{}, nil
+}
+
+func (m *mockGHClientFull) ListReleasesPage(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.RepositoryRelease, ghclient.PageResult, error) {
+	return nil, ghclient.PageResult{}, nil
+}
+
 // newGHPanelWithClient creates a panel with a real mock ghClient for full GitHub testing.
 func newGHPanelWithClient(mock *mockGitOps, ghMock *mockGHClientFull) *Panel {
 	p := newTestGitHubPanel(mock)
