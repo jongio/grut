@@ -499,8 +499,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "h/←", Description: "Collapse dir / go to parent", Action: "collapse"},
 		{Key: ".", Description: "Toggle hidden files", Action: "toggle_hidden"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
-		{Key: "g", Description: "Toggle git-changed filter", Action: "toggle_git_filter"},
-		{Key: "b", Description: "Toggle branch diff filter", Action: "toggle_branch_diff_filter"},
+		{Key: "g", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -766,17 +765,10 @@ func (ft *FileTree) exitBranchFilesMode() {
 	ft.savedCursorPath = ""
 }
 
-// toggleBranchDiffFilter toggles the "b" mode: shows only files that differ
-// from the configured base branch (e.g., main). Uses three-dot diff to show
-// changes introduced on the current branch since it diverged.
-func (ft *FileTree) toggleBranchDiffFilter() (panels.Panel, tea.Cmd) {
-	if ft.gitClient == nil {
-		return ft, nil
-	}
-	// If already in branch-diff filter mode, turn it off.
-	if ft.branchDiffFilter {
-		return ft.exitBranchDiffWithCmd()
-	}
+// activateBranchDiffFilter enters branch-diff mode: shows only files that
+// differ from the configured base branch (e.g., main). Uses three-dot diff
+// to show changes introduced on the current branch since it diverged.
+func (ft *FileTree) activateBranchDiffFilter() (panels.Panel, tea.Cmd) {
 	base := ft.baseBranch
 	if base == "" {
 		base = "main"
@@ -788,6 +780,45 @@ func (ft *FileTree) toggleBranchDiffFilter() (panels.Panel, tea.Cmd) {
 		files, err := gc.DiffFileNames(ctx, base, "HEAD")
 		return branchFilesLoadedMsg{files: files, branch: base, err: err}
 	}
+}
+
+// cycleFileFilter cycles through file filter modes:
+//
+//	all files → git changed → branch diff → all files
+//
+// If a non-cycle filter mode is active (e.g., branch selected from gitinfo
+// panel), pressing the cycle key exits to "all files" first.
+func (ft *FileTree) cycleFileFilter() (panels.Panel, tea.Cmd) {
+	if ft.gitClient == nil {
+		return ft, nil
+	}
+	// If in a panel-driven branch mode (not from our cycle), exit first.
+	if ft.branchFilesMode && !ft.branchDiffFilter {
+		return ft.exitBranchDiffWithCmd()
+	}
+	// Cycle: branchDiff → all
+	if ft.branchDiffFilter {
+		return ft.exitBranchDiffWithCmd()
+	}
+	// Cycle: gitFilter → branchDiff
+	if ft.gitFilter {
+		cursorPath := ft.cursorPath()
+		ft.gitFilter = false
+		ft.gitChangedPaths = nil
+		ft.gitChangedDirs = nil
+		ft.rebuildVisible()
+		ft.restoreCursorToPath(cursorPath)
+		cmds := []tea.Cmd{
+			func() tea.Msg { return panels.GitFilterActiveMsg{Active: false} },
+		}
+		_, branchCmd := ft.activateBranchDiffFilter()
+		if branchCmd != nil {
+			cmds = append(cmds, branchCmd)
+		}
+		return ft, tea.Batch(cmds...)
+	}
+	// Cycle: all → gitFilter (reuse existing logic)
+	return ft.toggleGitFilter()
 }
 
 // exitBranchDiffWithCmd exits branch-files mode and emits the appropriate
@@ -840,9 +871,7 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case ".":
 		ft.toggleHidden()
 	case "g":
-		return ft.toggleGitFilter()
-	case "b":
-		return ft.toggleBranchDiffFilter()
+		return ft.cycleFileFilter()
 	case "G":
 		ft.goToBottom()
 	case "d":

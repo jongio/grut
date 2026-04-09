@@ -637,10 +637,10 @@ func TestGitFilterBindingChangedToG(t *testing.T) {
 	bindings, err := LoadScheme("default")
 	require.NoError(t, err)
 
-	// Verify "g" → "toggle_git_filter" in filetree context.
+	// Verify "g" → "cycle_file_filter" in filetree context.
 	found := findBinding(bindings, "g", ModePanel, "filetree")
 	require.NotNil(t, found, "default scheme should have 'g' binding in filetree context")
-	assert.Equal(t, "toggle_git_filter", found.Action)
+	assert.Equal(t, "cycle_file_filter", found.Action)
 }
 
 func TestVimSchemeHasCursorNavBindings(t *testing.T) {
