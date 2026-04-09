@@ -63,6 +63,62 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 	return allIssues, nil
 }
 
+// ---------------------------------------------------------------------------
+// Paged cache-entry types
+// ---------------------------------------------------------------------------
+
+type issuePage struct {
+	issues []*gh.Issue
+	page   PageResult
+}
+
+type prPage struct {
+	prs  []*gh.PullRequest
+	page PageResult
+}
+
+type workflowRunPage struct {
+	runs []*gh.WorkflowRun
+	page PageResult
+}
+
+type workflowPage struct {
+	workflows []*gh.Workflow
+	page      PageResult
+}
+
+type releasePage struct {
+	releases []*gh.RepositoryRelease
+	page     PageResult
+}
+
+func (c *clientImpl) ListIssuesPage(ctx context.Context, owner, repo string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, PageResult, error) {
+	local := gh.IssueListByRepoOptions{}
+	if opts != nil {
+		local = *opts
+	}
+	if local.Page == 0 {
+		local.Page = 1
+	}
+	key := fmt.Sprintf("issues-page:%s/%s:%+v", owner, repo, local)
+	if v, ok := c.cache.Get(key); ok {
+		entry, ok := v.(issuePage)
+		if !ok {
+			return nil, PageResult{}, fmt.Errorf("unexpected cache type for issues page")
+		}
+		return entry.issues, entry.page, nil
+	}
+
+	issues, resp, err := c.gh.Issues.ListByRepo(ctx, owner, repo, &local)
+	if err != nil {
+		return nil, PageResult{}, fmt.Errorf("list issues page: %w", err)
+	}
+
+	pr := PageResult{NextPage: resp.NextPage, TotalCount: -1}
+	c.cache.Set(key, issuePage{issues: issues, page: pr})
+	return issues, pr, nil
+}
+
 func (c *clientImpl) GetIssue(ctx context.Context, owner, repo string, number int) (*gh.Issue, error) {
 	key := fmt.Sprintf("issue:%s/%s:%d", owner, repo, number)
 	if v, ok := c.cache.Get(key); ok {
@@ -191,6 +247,33 @@ func (c *clientImpl) ListPRs(ctx context.Context, owner, repo string, opts *gh.P
 
 	c.cache.Set(key, allPRs)
 	return allPRs, nil
+}
+
+func (c *clientImpl) ListPRsPage(ctx context.Context, owner, repo string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, PageResult, error) {
+	local := gh.PullRequestListOptions{}
+	if opts != nil {
+		local = *opts
+	}
+	if local.Page == 0 {
+		local.Page = 1
+	}
+	key := fmt.Sprintf("prs-page:%s/%s:%+v", owner, repo, local)
+	if v, ok := c.cache.Get(key); ok {
+		entry, ok := v.(prPage)
+		if !ok {
+			return nil, PageResult{}, fmt.Errorf("unexpected cache type for PRs page")
+		}
+		return entry.prs, entry.page, nil
+	}
+
+	prs, resp, err := c.gh.PullRequests.List(ctx, owner, repo, &local)
+	if err != nil {
+		return nil, PageResult{}, fmt.Errorf("list PRs page: %w", err)
+	}
+
+	pr := PageResult{NextPage: resp.NextPage, TotalCount: -1}
+	c.cache.Set(key, prPage{prs: prs, page: pr})
+	return prs, pr, nil
 }
 
 func (c *clientImpl) GetPR(ctx context.Context, owner, repo string, number int) (*gh.PullRequest, error) {
@@ -437,6 +520,33 @@ func (c *clientImpl) ListWorkflowRuns(ctx context.Context, owner, repo string, o
 	return runs, nil
 }
 
+func (c *clientImpl) ListWorkflowRunsPage(ctx context.Context, owner, repo string, opts *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, PageResult, error) {
+	local := gh.ListWorkflowRunsOptions{}
+	if opts != nil {
+		local = *opts
+	}
+	if local.Page == 0 {
+		local.Page = 1
+	}
+	key := fmt.Sprintf("runs-page:%s/%s:%+v", owner, repo, local)
+	if v, ok := c.cache.Get(key); ok {
+		entry, ok := v.(workflowRunPage)
+		if !ok {
+			return nil, PageResult{}, fmt.Errorf("unexpected cache type for workflow runs page")
+		}
+		return entry.runs, entry.page, nil
+	}
+
+	result, resp, err := c.gh.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, &local)
+	if err != nil {
+		return nil, PageResult{}, fmt.Errorf("list workflow runs page: %w", err)
+	}
+
+	pr := PageResult{NextPage: resp.NextPage, TotalCount: result.GetTotalCount()}
+	c.cache.Set(key, workflowRunPage{runs: result.WorkflowRuns, page: pr})
+	return result.WorkflowRuns, pr, nil
+}
+
 func (c *clientImpl) GetWorkflowRun(ctx context.Context, owner, repo string, runID int64) (*gh.WorkflowRun, error) {
 	key := fmt.Sprintf("run:%s/%s:%d", owner, repo, runID)
 	if v, ok := c.cache.Get(key); ok {
@@ -619,6 +729,33 @@ func (c *clientImpl) ListWorkflows(ctx context.Context, owner, repo string, opts
 	return allWorkflows, nil
 }
 
+func (c *clientImpl) ListWorkflowsPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.Workflow, PageResult, error) {
+	local := gh.ListOptions{}
+	if opts != nil {
+		local = *opts
+	}
+	if local.Page == 0 {
+		local.Page = 1
+	}
+	key := fmt.Sprintf("workflows-page:%s/%s:%+v", owner, repo, local)
+	if v, ok := c.cache.Get(key); ok {
+		entry, ok := v.(workflowPage)
+		if !ok {
+			return nil, PageResult{}, fmt.Errorf("unexpected cache type for workflows page")
+		}
+		return entry.workflows, entry.page, nil
+	}
+
+	result, resp, err := c.gh.Actions.ListWorkflows(ctx, owner, repo, &local)
+	if err != nil {
+		return nil, PageResult{}, fmt.Errorf("list workflows page: %w", err)
+	}
+
+	pr := PageResult{NextPage: resp.NextPage, TotalCount: -1}
+	c.cache.Set(key, workflowPage{workflows: result.Workflows, page: pr})
+	return result.Workflows, pr, nil
+}
+
 // ---------------------------------------------------------------------------
 // ReleaseReader
 // ---------------------------------------------------------------------------
@@ -654,6 +791,33 @@ func (c *clientImpl) ListReleases(ctx context.Context, owner, repo string, opts 
 
 	c.cache.Set(key, allReleases)
 	return allReleases, nil
+}
+
+func (c *clientImpl) ListReleasesPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.RepositoryRelease, PageResult, error) {
+	local := gh.ListOptions{}
+	if opts != nil {
+		local = *opts
+	}
+	if local.Page == 0 {
+		local.Page = 1
+	}
+	key := fmt.Sprintf("releases-page:%s/%s:%+v", owner, repo, local)
+	if v, ok := c.cache.Get(key); ok {
+		entry, ok := v.(releasePage)
+		if !ok {
+			return nil, PageResult{}, fmt.Errorf("unexpected cache type for releases page")
+		}
+		return entry.releases, entry.page, nil
+	}
+
+	releases, resp, err := c.gh.Repositories.ListReleases(ctx, owner, repo, &local)
+	if err != nil {
+		return nil, PageResult{}, fmt.Errorf("list releases page: %w", err)
+	}
+
+	pr := PageResult{NextPage: resp.NextPage, TotalCount: -1}
+	c.cache.Set(key, releasePage{releases: releases, page: pr})
+	return releases, pr, nil
 }
 
 func (c *clientImpl) GetRelease(ctx context.Context, owner, repo string, id int64) (*gh.RepositoryRelease, error) {

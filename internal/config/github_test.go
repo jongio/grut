@@ -25,3 +25,24 @@ func TestParseGitHubRemote(t *testing.T) {
 		})
 	}
 }
+
+func TestEffectivePageSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		pageSize int
+		want     int
+	}{
+		{"zero returns default", 0, 30},
+		{"negative returns default", -1, 30},
+		{"positive returns configured", 50, 50},
+		{"one returns configured", 1, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &GitHubConfig{PageSize: tt.pageSize}
+			if got := c.EffectivePageSize(); got != tt.want {
+				t.Errorf("EffectivePageSize() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

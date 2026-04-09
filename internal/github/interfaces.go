@@ -6,9 +6,16 @@ import (
 	gh "github.com/google/go-github/v68/github"
 )
 
+// PageResult holds pagination metadata for paged list operations.
+type PageResult struct {
+	NextPage   int // 0 means no more pages
+	TotalCount int // total count if available from API (-1 if unknown)
+}
+
 // IssueReader provides read-only access to GitHub issues.
 type IssueReader interface {
 	ListIssues(ctx context.Context, owner, repo string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, error)
+	ListIssuesPage(ctx context.Context, owner, repo string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, PageResult, error)
 	GetIssue(ctx context.Context, owner, repo string, number int) (*gh.Issue, error)
 	GetIssueComments(ctx context.Context, owner, repo string, number int) ([]*gh.IssueComment, error)
 }
@@ -25,6 +32,7 @@ type IssueWriter interface {
 // PRReader provides read-only access to GitHub pull requests.
 type PRReader interface {
 	ListPRs(ctx context.Context, owner, repo string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, error)
+	ListPRsPage(ctx context.Context, owner, repo string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, PageResult, error)
 	GetPR(ctx context.Context, owner, repo string, number int) (*gh.PullRequest, error)
 	GetPRFiles(ctx context.Context, owner, repo string, number int) ([]*gh.CommitFile, error)
 	GetPRComments(ctx context.Context, owner, repo string, number int) ([]*gh.PullRequestComment, error)
@@ -46,7 +54,9 @@ type PRWriter interface {
 // ActionReader provides read-only access to GitHub Actions workflow runs and jobs.
 type ActionReader interface {
 	ListWorkflows(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.Workflow, error)
+	ListWorkflowsPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.Workflow, PageResult, error)
 	ListWorkflowRuns(ctx context.Context, owner, repo string, opts *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, error)
+	ListWorkflowRunsPage(ctx context.Context, owner, repo string, opts *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, PageResult, error)
 	GetWorkflowRun(ctx context.Context, owner, repo string, runID int64) (*gh.WorkflowRun, error)
 	ListWorkflowJobs(ctx context.Context, owner, repo string, runID int64) ([]*gh.WorkflowJob, error)
 	GetJobLogs(ctx context.Context, owner, repo string, jobID int64) (string, error)
@@ -64,6 +74,7 @@ type ActionWriter interface {
 // ReleaseReader provides read-only access to GitHub releases.
 type ReleaseReader interface {
 	ListReleases(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.RepositoryRelease, error)
+	ListReleasesPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.RepositoryRelease, PageResult, error)
 	GetRelease(ctx context.Context, owner, repo string, id int64) (*gh.RepositoryRelease, error)
 	GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*gh.RepositoryRelease, error)
 }

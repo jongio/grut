@@ -280,6 +280,21 @@ const (
 // watch animation frame rate.
 const actionsWatchTickInterval = 1000 * time.Millisecond
 
+// ghLoadMoreThreshold triggers a page fetch when the cursor is within
+// this many items of the end of the loaded list.
+const ghLoadMoreThreshold = 5
+
+// ghDebounceInterval prevents rapid-fire API calls during fast scrolling.
+const ghDebounceInterval = 200 * time.Millisecond
+
+// tabPagination tracks lazy-loading state for one GitHub tab.
+type tabPagination struct {
+	lastLoadAt time.Time // debounce timer
+	nextPage   int       // next API page number (0 = no more)
+	loading    bool      // true while a page fetch is in flight
+	allLoaded  bool      // true when the last page has been reached
+}
+
 // IssueFilterKind identifies the active quick-filter for the Issues tab.
 type IssueFilterKind int
 
@@ -386,6 +401,48 @@ type ghDataLoadedMsg struct {
 	workflows   []ghWorkflowItem
 	releases    []ghReleaseItem
 	repoPrivate bool
+}
+
+// ghMetaLoadedMsg carries repo metadata and current user info.
+type ghMetaLoadedMsg struct {
+	err         error
+	user        string
+	repoPrivate bool
+}
+
+// ghIssuesPageMsg carries one page of issues from the GitHub API.
+type ghIssuesPageMsg struct {
+	issues   []ghIssueItem
+	nextPage int
+	replace  bool // true = first page (replace all), false = append
+}
+
+// ghPRsPageMsg carries one page of PRs from the GitHub API.
+type ghPRsPageMsg struct {
+	prs      []ghPRItem
+	nextPage int
+	replace  bool
+}
+
+// ghActionsPageMsg carries one page of workflow runs from the GitHub API.
+type ghActionsPageMsg struct {
+	actions  []ghActionItem
+	nextPage int
+	replace  bool
+}
+
+// ghWorkflowsPageMsg carries one page of workflow definitions.
+type ghWorkflowsPageMsg struct {
+	workflows []ghWorkflowItem
+	nextPage  int
+	replace   bool
+}
+
+// ghReleasesPageMsg carries one page of releases.
+type ghReleasesPageMsg struct {
+	releases []ghReleaseItem
+	nextPage int
+	replace  bool
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +593,9 @@ type Panel struct {
 	repoPrivate bool
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
+	// Per-tab pagination state for lazy-loading GitHub tabs.
+	tabPaging  [tabCount]tabPagination
+	ghPageSize int // effective page size from config or default
 }
 
 // Compile-time interface check.
@@ -668,7 +728,19 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	// Load git data + GitHub data in parallel.
 	cmds := []tea.Cmd{p.loadData()}
 	if p.ghClient != nil {
-		cmds = append(cmds, p.loadGitHubData(), p.githubPollTickCmd())
+		p.ghPageSize = p.ghCfg.EffectivePageSize()
+		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
+			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
+		}
+		cmds = append(cmds,
+			p.loadGitHubMeta(),
+			p.loadIssuesPage(1, true),
+			p.loadPRsPage(1, true),
+			p.loadActionsPage(1, true),
+			p.loadWorkflowsPage(1, true),
+			p.loadReleasesPage(1, true),
+			p.githubPollTickCmd(),
+		)
 	}
 	return tea.Batch(cmds...)
 }
@@ -706,6 +778,10 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	p.actionsWatching = false
 	p.actionsWatchFrame = 0
 	p.repoPrivate = false
+	// Reset pagination state.
+	for i := range p.tabPaging {
+		p.tabPaging[i] = tabPagination{}
+	}
 	// Re-resolve GitHub owner/repo for the new directory.
 	ctx := p.ctx
 	if ctx == nil {
@@ -725,7 +801,19 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	}
 	cmds := []tea.Cmd{p.loadData()}
 	if p.ghClient != nil {
-		cmds = append(cmds, p.loadGitHubData(), p.githubPollTickCmd())
+		p.ghPageSize = p.ghCfg.EffectivePageSize()
+		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
+			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
+		}
+		cmds = append(cmds,
+			p.loadGitHubMeta(),
+			p.loadIssuesPage(1, true),
+			p.loadPRsPage(1, true),
+			p.loadActionsPage(1, true),
+			p.loadWorkflowsPage(1, true),
+			p.loadReleasesPage(1, true),
+			p.githubPollTickCmd(),
+		)
 	}
 	return p, tea.Batch(cmds...)
 }
@@ -807,8 +895,32 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleDataLoaded(msg)
 	case ghDataLoadedMsg:
 		return p.handleGHDataLoaded(msg)
+	case ghMetaLoadedMsg:
+		return p.handleMetaLoaded(msg)
+	case ghIssuesPageMsg:
+		return p.handleIssuesPage(msg)
+	case ghPRsPageMsg:
+		return p.handlePRsPage(msg)
+	case ghActionsPageMsg:
+		return p.handleActionsPage(msg)
+	case ghWorkflowsPageMsg:
+		return p.handleWorkflowsPage(msg)
+	case ghReleasesPageMsg:
+		return p.handleReleasesPage(msg)
 	case githubPollTickMsg:
-		return p, tea.Batch(p.loadGitHubData(), p.githubPollTickCmd())
+		// Reset pagination state for fresh page-1 loads.
+		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
+			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
+		}
+		return p, tea.Batch(
+			p.loadGitHubMeta(),
+			p.loadIssuesPage(1, true),
+			p.loadPRsPage(1, true),
+			p.loadActionsPage(1, true),
+			p.loadWorkflowsPage(1, true),
+			p.loadReleasesPage(1, true),
+			p.githubPollTickCmd(),
+		)
 	case actionsWatchTickMsg:
 		if !p.actionsWatching {
 			return p, nil // stop ticking — no in-progress runs
@@ -927,6 +1039,14 @@ func (p *Panel) View(width, height int) string {
 	}
 	for i := offset; i < end; i++ {
 		lines = append(lines, p.renderLine(items[i], width, i == cursor))
+	}
+	// Loading indicator for GitHub tabs.
+	if p.activeTab >= tabIssues && p.activeTab <= tabReleases && p.tabPaging[p.activeTab].loading && len(lines) < contentHeight {
+		loadingLine := lipgloss.NewStyle().
+			Width(width).
+			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Render("  Loading...")
+		lines = append(lines, loadingLine)
 	}
 	// Pad remaining height with blank lines.
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
@@ -1214,7 +1334,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 	case "d":
 		p.pageDown()
-		return p, p.activeTabSelectionCmd()
+		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
 	case "u":
 		p.pageUp()
 		return p, p.activeTabSelectionCmd()
@@ -1228,7 +1348,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.copyHashToClipboard()
 	case "j", "down":
 		p.moveCursorDown()
-		return p, p.activeTabSelectionCmd()
+		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
 	case "k", "up":
 		p.moveCursorUp()
 		return p, p.activeTabSelectionCmd()
@@ -1251,7 +1371,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p, p.activeTabSelectionCmd()
 	case "G":
 		p.moveToLast()
-		return p, p.activeTabSelectionCmd()
+		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
 	case "P":
 		if p.activeTab == tabTags {
 			return p.doTagPush()
@@ -1442,7 +1562,7 @@ func (p *Panel) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) 
 			p.tabOffset[tab] = maxOffset
 		}
 	}
-	return p, nil
+	return p, p.loadMoreIfNeeded()
 }
 
 // handleTabBarClick switches the active tab based on the column position
@@ -2860,11 +2980,11 @@ func (p *Panel) renderTabBar(width int) string {
 	}
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()
-	issuesCount := fmt.Sprintf("%d", len(p.tabItems[tabIssues]))
+	issuesCount := p.ghTabCountStr(tabIssues)
 	if p.issueFilter != issueFilterAll {
 		issuesCount = p.issueFilter.String()
 	}
-	prsCount := fmt.Sprintf("%d", len(p.tabItems[tabPRs]))
+	prsCount := p.ghTabCountStr(tabPRs)
 	if p.prFilter != prFilterAll {
 		prsCount = p.prFilter.String()
 	}
@@ -2872,8 +2992,8 @@ func (p *Panel) renderTabBar(width int) string {
 		{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
 		{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
 		{id: tabActions, name: "Actions", short: "Act", count: actionsCount},
-		{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
-		{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		{id: tabWorkflows, name: "Workflows", short: "Wf", count: p.ghTabCountStr(tabWorkflows)},
+		{id: tabReleases, name: "Releases", short: "Rel", count: p.ghTabCountStr(tabReleases)},
 	}
 	// In ModeGitHub, prepend Branches and Tags to the GitHub tab row.
 	if p.mode == ModeGitHub {
@@ -3464,6 +3584,475 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 	p.tabOffset[tabWorkflows] = 0
 	p.tabCursor[tabReleases] = 0
 	p.tabOffset[tabReleases] = 0
+}
+
+// ---------------------------------------------------------------------------
+// Per-tab pagination loaders
+// ---------------------------------------------------------------------------
+
+// loadGitHubMeta fetches repo info and current user asynchronously.
+func (p *Panel) loadGitHubMeta() tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	return func() tea.Msg {
+		var result ghMetaLoadedMsg
+		repoInfo, err := client.RepoInfo(ctx, owner, repo)
+		if err != nil {
+			slog.Warn("github: fetch repo info failed", "owner", owner, "repo", repo, "err", err)
+		} else if repoInfo != nil {
+			result.repoPrivate = repoInfo.GetPrivate()
+		}
+		user, err := client.CurrentUser(ctx)
+		if err != nil {
+			slog.Warn("github: fetch current user failed", "err", err)
+		} else if user != nil && user.Login != nil {
+			result.user = *user.Login
+		}
+		return result
+	}
+}
+
+// loadIssuesPage fetches a single page of issues.
+func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	pageSize := p.ghPageSize
+	return func() tea.Msg {
+		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
+			State:       prStateOpen,
+			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
+		})
+		if err != nil {
+			slog.Warn("github: fetch issues page failed", "owner", owner, "repo", repo, "page", page, "err", err)
+			return ghIssuesPageMsg{nextPage: 0, replace: replace}
+		}
+		var items []ghIssueItem
+		for _, iss := range issues {
+			if iss.PullRequestLinks != nil {
+				continue // skip PRs returned in issue list
+			}
+			var labels []string
+			for _, l := range iss.Labels {
+				if l.Name != nil {
+					labels = append(labels, *l.Name)
+				}
+			}
+			author := ""
+			if iss.User != nil {
+				author = iss.User.GetLogin()
+			}
+			assignee := ""
+			if len(iss.Assignees) > 0 && iss.Assignees[0] != nil {
+				assignee = iss.Assignees[0].GetLogin()
+			}
+			items = append(items, ghIssueItem{
+				Number:   iss.GetNumber(),
+				Title:    iss.GetTitle(),
+				Body:     iss.GetBody(),
+				State:    iss.GetState(),
+				Labels:   labels,
+				Author:   author,
+				Assignee: assignee,
+				HTMLURL:  iss.GetHTMLURL(),
+			})
+		}
+		return ghIssuesPageMsg{issues: items, nextPage: pr.NextPage, replace: replace}
+	}
+}
+
+// loadPRsPage fetches a single page of pull requests with mergeable state enrichment.
+func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	pageSize := p.ghPageSize
+	return func() tea.Msg {
+		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
+			State:       prStateOpen,
+			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
+		})
+		if err != nil {
+			slog.Warn("github: fetch PRs page failed", "owner", owner, "repo", repo, "page", page, "err", err)
+			return ghPRsPageMsg{nextPage: 0, replace: replace}
+		}
+		var items []ghPRItem
+		for _, ghPR := range prs {
+			state := ghPR.GetState()
+			if ghPR.GetDraft() {
+				state = "draft"
+			}
+			if ghPR.GetMerged() {
+				state = prStateMerged
+			}
+			author := ""
+			if ghPR.User != nil {
+				author = ghPR.User.GetLogin()
+			}
+			items = append(items, ghPRItem{
+				Number:     ghPR.GetNumber(),
+				Title:      ghPR.GetTitle(),
+				State:      state,
+				HeadBranch: ghPR.GetHead().GetRef(),
+				Author:     author,
+				HTMLURL:    ghPR.GetHTMLURL(),
+			})
+		}
+		// Enrich open PRs with mergeable state (parallel individual fetches).
+		if len(items) > 0 {
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			for i, item := range items {
+				if item.State != prStateOpen {
+					continue
+				}
+				wg.Add(1)
+				go func(idx int, num int) {
+					defer wg.Done()
+					detail, detailErr := client.GetPR(ctx, owner, repo, num)
+					if detailErr != nil {
+						slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", detailErr)
+						return
+					}
+					mu.Lock()
+					items[idx].MergeableState = detail.GetMergeableState()
+					mu.Unlock()
+				}(i, item.Number)
+			}
+			wg.Wait()
+		}
+		return ghPRsPageMsg{prs: items, nextPage: pr.NextPage, replace: replace}
+	}
+}
+
+// loadActionsPage fetches a single page of workflow runs.
+func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	pageSize := p.ghPageSize
+	return func() tea.Msg {
+		runs, pr, err := client.ListWorkflowRunsPage(ctx, owner, repo, &gh.ListWorkflowRunsOptions{
+			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
+		})
+		if err != nil {
+			slog.Warn("github: fetch actions page failed", "owner", owner, "repo", repo, "page", page, "err", err)
+			return ghActionsPageMsg{nextPage: 0, replace: replace}
+		}
+		var items []ghActionItem
+		for _, run := range runs {
+			items = append(items, ghActionItem{
+				RunID:        run.GetID(),
+				WorkflowName: run.GetName(),
+				RunNumber:    run.GetRunNumber(),
+				Status:       run.GetStatus(),
+				Conclusion:   run.GetConclusion(),
+				Branch:       run.GetHeadBranch(),
+				CreatedAt:    run.GetCreatedAt().Format("Jan 2 15:04"),
+				HTMLURL:      run.GetHTMLURL(),
+			})
+		}
+		return ghActionsPageMsg{actions: items, nextPage: pr.NextPage, replace: replace}
+	}
+}
+
+// loadWorkflowsPage fetches a single page of workflow definitions.
+func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	pageSize := p.ghPageSize
+	return func() tea.Msg {
+		workflows, pr, err := client.ListWorkflowsPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
+		if err != nil {
+			slog.Warn("github: fetch workflows page failed", "owner", owner, "repo", repo, "page", page, "err", err)
+			return ghWorkflowsPageMsg{nextPage: 0, replace: replace}
+		}
+		var items []ghWorkflowItem
+		for _, wf := range workflows {
+			items = append(items, ghWorkflowItem{
+				ID:      wf.GetID(),
+				Name:    wf.GetName(),
+				Path:    wf.GetPath(),
+				State:   wf.GetState(),
+				HTMLURL: wf.GetHTMLURL(),
+			})
+		}
+		return ghWorkflowsPageMsg{workflows: items, nextPage: pr.NextPage, replace: replace}
+	}
+}
+
+// loadReleasesPage fetches a single page of releases.
+func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
+	client := p.ghClient
+	owner, repo := p.ghOwner, p.ghRepo
+	ctx := p.ctx
+	pageSize := p.ghPageSize
+	return func() tea.Msg {
+		releases, pr, err := client.ListReleasesPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
+		if err != nil {
+			slog.Warn("github: fetch releases page failed", "owner", owner, "repo", repo, "page", page, "err", err)
+			return ghReleasesPageMsg{nextPage: 0, replace: replace}
+		}
+		var items []ghReleaseItem
+		for _, rel := range releases {
+			author := ""
+			if rel.Author != nil {
+				author = rel.Author.GetLogin()
+			}
+			assetsCount := 0
+			if rel.Assets != nil {
+				assetsCount = len(rel.Assets)
+			}
+			name := rel.GetName()
+			if name == "" {
+				name = rel.GetTagName()
+			}
+			items = append(items, ghReleaseItem{
+				ID:          rel.GetID(),
+				TagName:     rel.GetTagName(),
+				Name:        name,
+				Author:      author,
+				CreatedAt:   rel.GetCreatedAt().Format("Jan 2 15:04"),
+				Draft:       rel.GetDraft(),
+				Prerelease:  rel.GetPrerelease(),
+				Body:        rel.GetBody(),
+				AssetsCount: assetsCount,
+				HTMLURL:     rel.GetHTMLURL(),
+			})
+		}
+		return ghReleasesPageMsg{releases: items, nextPage: pr.NextPage, replace: replace}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Per-tab page handlers
+// ---------------------------------------------------------------------------
+
+// handleMetaLoaded processes repo metadata and user info.
+func (p *Panel) handleMetaLoaded(msg ghMetaLoadedMsg) (panels.Panel, tea.Cmd) {
+	if msg.user != "" {
+		p.ghUser = msg.user
+	}
+	p.repoPrivate = msg.repoPrivate
+	return p, nil
+}
+
+// handleIssuesPage processes a page of issues.
+func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
+	p.tabPaging[tabIssues].loading = false
+	p.tabPaging[tabIssues].nextPage = msg.nextPage
+	if msg.nextPage == 0 {
+		p.tabPaging[tabIssues].allLoaded = true
+	}
+	savedCursor := p.tabCursor[tabIssues]
+	savedOffset := p.tabOffset[tabIssues]
+	if msg.replace {
+		p.allIssues = msg.issues
+	} else {
+		p.allIssues = append(p.allIssues, msg.issues...)
+	}
+	p.applyIssueFilter()
+	if !msg.replace {
+		p.tabCursor[tabIssues] = savedCursor
+		p.tabOffset[tabIssues] = savedOffset
+	}
+	return p, nil
+}
+
+// handlePRsPage processes a page of pull requests.
+func (p *Panel) handlePRsPage(msg ghPRsPageMsg) (panels.Panel, tea.Cmd) {
+	p.tabPaging[tabPRs].loading = false
+	p.tabPaging[tabPRs].nextPage = msg.nextPage
+	if msg.nextPage == 0 {
+		p.tabPaging[tabPRs].allLoaded = true
+	}
+	savedCursor := p.tabCursor[tabPRs]
+	savedOffset := p.tabOffset[tabPRs]
+	if msg.replace {
+		p.allPRs = msg.prs
+	} else {
+		p.allPRs = append(p.allPRs, msg.prs...)
+	}
+	p.crossRefPRsActions()
+	p.applyPRFilter()
+	if !msg.replace {
+		p.tabCursor[tabPRs] = savedCursor
+		p.tabOffset[tabPRs] = savedOffset
+	}
+	return p, nil
+}
+
+// handleActionsPage processes a page of workflow runs.
+func (p *Panel) handleActionsPage(msg ghActionsPageMsg) (panels.Panel, tea.Cmd) {
+	p.tabPaging[tabActions].loading = false
+	p.tabPaging[tabActions].nextPage = msg.nextPage
+	if msg.nextPage == 0 {
+		p.tabPaging[tabActions].allLoaded = true
+	}
+	if msg.replace {
+		p.tabItems[tabActions] = nil
+	}
+	for _, action := range msg.actions {
+		p.tabItems[tabActions] = append(p.tabItems[tabActions], listItem{
+			kind:      kindActionRun,
+			actionRun: action,
+		})
+	}
+	if msg.replace {
+		p.tabCursor[tabActions] = 0
+		p.tabOffset[tabActions] = 0
+	}
+	// Cross-reference PRs with newly loaded actions.
+	p.crossRefPRsActions()
+	// Re-apply PR filter to pick up updated action status.
+	savedPRCursor := p.tabCursor[tabPRs]
+	savedPROffset := p.tabOffset[tabPRs]
+	p.applyPRFilter()
+	p.tabCursor[tabPRs] = savedPRCursor
+	p.tabOffset[tabPRs] = savedPROffset
+	// Update actions watching state.
+	wasWatching := p.actionsWatching
+	p.actionsWatching = false
+	for _, item := range p.tabItems[tabActions] {
+		if item.actionRun.Status == "in_progress" || item.actionRun.Status == "queued" {
+			p.actionsWatching = true
+			break
+		}
+	}
+	if p.actionsWatching && !wasWatching {
+		p.actionsWatchFrame = 0
+		return p, p.actionsWatchTickCmd()
+	}
+	return p, nil
+}
+
+// handleWorkflowsPage processes a page of workflow definitions.
+func (p *Panel) handleWorkflowsPage(msg ghWorkflowsPageMsg) (panels.Panel, tea.Cmd) {
+	p.tabPaging[tabWorkflows].loading = false
+	p.tabPaging[tabWorkflows].nextPage = msg.nextPage
+	if msg.nextPage == 0 {
+		p.tabPaging[tabWorkflows].allLoaded = true
+	}
+	if msg.replace {
+		p.tabItems[tabWorkflows] = nil
+	}
+	for _, wf := range msg.workflows {
+		p.tabItems[tabWorkflows] = append(p.tabItems[tabWorkflows], listItem{
+			kind:     kindWorkflow,
+			workflow: wf,
+		})
+	}
+	if msg.replace {
+		p.tabCursor[tabWorkflows] = 0
+		p.tabOffset[tabWorkflows] = 0
+	}
+	return p, nil
+}
+
+// handleReleasesPage processes a page of releases.
+func (p *Panel) handleReleasesPage(msg ghReleasesPageMsg) (panels.Panel, tea.Cmd) {
+	p.tabPaging[tabReleases].loading = false
+	p.tabPaging[tabReleases].nextPage = msg.nextPage
+	if msg.nextPage == 0 {
+		p.tabPaging[tabReleases].allLoaded = true
+	}
+	if msg.replace {
+		p.tabItems[tabReleases] = nil
+	}
+	for _, rel := range msg.releases {
+		p.tabItems[tabReleases] = append(p.tabItems[tabReleases], listItem{
+			kind:    kindRelease,
+			release: rel,
+		})
+	}
+	if msg.replace {
+		p.tabCursor[tabReleases] = 0
+		p.tabOffset[tabReleases] = 0
+	}
+	return p, nil
+}
+
+// ---------------------------------------------------------------------------
+// Pagination helpers
+// ---------------------------------------------------------------------------
+
+// crossRefPRsActions matches action run statuses to PRs by head branch.
+func (p *Panel) crossRefPRsActions() {
+	if len(p.allPRs) == 0 || len(p.tabItems[tabActions]) == 0 {
+		return
+	}
+	actionByBranch := make(map[string]ghActionItem, len(p.tabItems[tabActions]))
+	for _, item := range p.tabItems[tabActions] {
+		if item.kind != kindActionRun {
+			continue
+		}
+		if _, exists := actionByBranch[item.actionRun.Branch]; !exists {
+			actionByBranch[item.actionRun.Branch] = item.actionRun
+		}
+	}
+	for i, pr := range p.allPRs {
+		if action, ok := actionByBranch[pr.HeadBranch]; ok {
+			p.allPRs[i].ActionStatus = action.Status
+			p.allPRs[i].ActionConclusion = action.Conclusion
+		}
+	}
+}
+
+// loadMoreIfNeeded triggers pagination for the active GitHub tab when the
+// cursor or viewport is near the bottom of loaded data.
+func (p *Panel) loadMoreIfNeeded() tea.Cmd {
+	tab := p.activeTab
+	if tab < tabIssues || tab > tabReleases {
+		return nil // git tabs don't need pagination
+	}
+	paging := &p.tabPaging[tab]
+	if paging.loading || paging.allLoaded || paging.nextPage == 0 {
+		return nil
+	}
+	items := p.tabItems[tab]
+	if len(items) == 0 {
+		return nil
+	}
+	cursor := p.tabCursor[tab]
+	offset := p.tabOffset[tab]
+	tbh := p.tabBarHeight()
+	viewH := p.Height - tbh
+	viewEnd := offset + viewH
+	triggerIdx := len(items) - ghLoadMoreThreshold
+	if cursor < triggerIdx && viewEnd < triggerIdx {
+		return nil
+	}
+	now := time.Now()
+	if now.Sub(paging.lastLoadAt) < ghDebounceInterval {
+		return nil
+	}
+	paging.loading = true
+	paging.lastLoadAt = now
+	switch tab {
+	case tabIssues:
+		return p.loadIssuesPage(paging.nextPage, false)
+	case tabPRs:
+		return p.loadPRsPage(paging.nextPage, false)
+	case tabActions:
+		return p.loadActionsPage(paging.nextPage, false)
+	case tabWorkflows:
+		return p.loadWorkflowsPage(paging.nextPage, false)
+	case tabReleases:
+		return p.loadReleasesPage(paging.nextPage, false)
+	}
+	return nil
+}
+
+// ghTabCountStr returns the display count for a GitHub tab, appending "+"
+// when additional pages have not been loaded yet.
+func (p *Panel) ghTabCountStr(tab tabID) string {
+	count := fmt.Sprintf("%d", len(p.tabItems[tab]))
+	if tab >= tabIssues && tab <= tabReleases && !p.tabPaging[tab].allLoaded && p.tabPaging[tab].nextPage > 0 {
+		count += "+"
+	}
+	return count
 }
 
 // ---------------------------------------------------------------------------

@@ -1127,6 +1127,225 @@ func TestClient_MarkRead_InvalidatesAllCache(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Paged list method tests
+// ---------------------------------------------------------------------------
+
+func TestClient_ListIssuesPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/issues", r.URL.Path)
+		assert.Equal(t, "1", r.URL.Query().Get("page"))
+		issues := []*gh.Issue{
+			{Number: ptr(1), Title: ptr("Bug")},
+			{Number: ptr(2), Title: ptr("Feature")},
+		}
+		// Simulate a Link header with next page by setting the header.
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Link", `<https://api.github.com/repos/owner/repo/issues?page=2>; rel="next"`)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(issues)
+	})
+
+	ctx := context.Background()
+	issues, pr, err := client.ListIssuesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	require.Len(t, issues, 2)
+	assert.Equal(t, 2, pr.NextPage)
+	assert.Equal(t, -1, pr.TotalCount)
+}
+
+func TestClient_ListIssuesPage_LastPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		respondJSON(w, http.StatusOK, []*gh.Issue{
+			{Number: ptr(3), Title: ptr("Last")},
+		})
+	})
+
+	ctx := context.Background()
+	issues, pr, err := client.ListIssuesPage(ctx, "owner", "repo", &gh.IssueListByRepoOptions{
+		ListOptions: gh.ListOptions{Page: 2, PerPage: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	assert.Equal(t, 0, pr.NextPage)
+}
+
+func TestClient_ListIssuesPage_Cached(t *testing.T) {
+	callCount := 0
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		respondJSON(w, http.StatusOK, []*gh.Issue{
+			{Number: ptr(1), Title: ptr("Cached")},
+		})
+	})
+
+	ctx := context.Background()
+	_, _, err := client.ListIssuesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	_, _, err = client.ListIssuesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "second call should use cache")
+}
+
+func TestClient_ListPRsPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/pulls", r.URL.Path)
+		prs := []*gh.PullRequest{
+			{Number: ptr(10), Title: ptr("Add feature")},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Link", `<https://api.github.com/repos/owner/repo/pulls?page=2>; rel="next"`)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(prs)
+	})
+
+	ctx := context.Background()
+	prs, pr, err := client.ListPRsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	require.Len(t, prs, 1)
+	assert.Equal(t, 2, pr.NextPage)
+	assert.Equal(t, -1, pr.TotalCount)
+}
+
+func TestClient_ListPRsPage_Cached(t *testing.T) {
+	callCount := 0
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		respondJSON(w, http.StatusOK, []*gh.PullRequest{
+			{Number: ptr(10), Title: ptr("PR")},
+		})
+	})
+
+	ctx := context.Background()
+	_, _, err := client.ListPRsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	_, _, err = client.ListPRsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "second call should use cache")
+}
+
+func TestClient_ListWorkflowRunsPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/actions/runs", r.URL.Path)
+		result := &gh.WorkflowRuns{
+			TotalCount: ptr(42),
+			WorkflowRuns: []*gh.WorkflowRun{
+				{ID: ptr(int64(100)), Name: ptr("CI")},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Link", `<https://api.github.com/repos/owner/repo/actions/runs?page=3>; rel="next"`)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(result)
+	})
+
+	ctx := context.Background()
+	runs, pr, err := client.ListWorkflowRunsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, 3, pr.NextPage)
+	assert.Equal(t, 42, pr.TotalCount)
+}
+
+func TestClient_ListWorkflowRunsPage_Cached(t *testing.T) {
+	callCount := 0
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		result := &gh.WorkflowRuns{
+			TotalCount:   ptr(1),
+			WorkflowRuns: []*gh.WorkflowRun{{ID: ptr(int64(1))}},
+		}
+		respondJSON(w, http.StatusOK, result)
+	})
+
+	ctx := context.Background()
+	_, _, err := client.ListWorkflowRunsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	_, _, err = client.ListWorkflowRunsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "second call should use cache")
+}
+
+func TestClient_ListWorkflowsPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/actions/workflows", r.URL.Path)
+		result := struct {
+			TotalCount int            `json:"total_count"`
+			Workflows  []*gh.Workflow `json:"workflows"`
+		}{
+			TotalCount: 1,
+			Workflows:  []*gh.Workflow{{ID: ptr(int64(1)), Name: ptr("CI")}},
+		}
+		respondJSON(w, http.StatusOK, result)
+	})
+
+	ctx := context.Background()
+	workflows, pr, err := client.ListWorkflowsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+	assert.Equal(t, 0, pr.NextPage) // no Link header → 0
+	assert.Equal(t, -1, pr.TotalCount)
+}
+
+func TestClient_ListWorkflowsPage_Cached(t *testing.T) {
+	callCount := 0
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		result := struct {
+			TotalCount int            `json:"total_count"`
+			Workflows  []*gh.Workflow `json:"workflows"`
+		}{
+			TotalCount: 1,
+			Workflows:  []*gh.Workflow{{ID: ptr(int64(1))}},
+		}
+		respondJSON(w, http.StatusOK, result)
+	})
+
+	ctx := context.Background()
+	_, _, err := client.ListWorkflowsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	_, _, err = client.ListWorkflowsPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "second call should use cache")
+}
+
+func TestClient_ListReleasesPage(t *testing.T) {
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/releases", r.URL.Path)
+		releases := []*gh.RepositoryRelease{
+			{ID: ptr(int64(1)), TagName: ptr("v1.0.0")},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Link", `<https://api.github.com/repos/owner/repo/releases?page=2>; rel="next"`)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(releases)
+	})
+
+	ctx := context.Background()
+	releases, pr, err := client.ListReleasesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	require.Len(t, releases, 1)
+	assert.Equal(t, 2, pr.NextPage)
+	assert.Equal(t, -1, pr.TotalCount)
+}
+
+func TestClient_ListReleasesPage_Cached(t *testing.T) {
+	callCount := 0
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		respondJSON(w, http.StatusOK, []*gh.RepositoryRelease{
+			{ID: ptr(int64(1)), TagName: ptr("v1.0.0")},
+		})
+	})
+
+	ctx := context.Background()
+	_, _, err := client.ListReleasesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	_, _, err = client.ListReleasesPage(ctx, "owner", "repo", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "second call should use cache")
+}
+
+// ---------------------------------------------------------------------------
 // Env var cleanup helper to prevent test pollution
 // ---------------------------------------------------------------------------
 
