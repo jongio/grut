@@ -780,3 +780,26 @@ type ItemOpenMsg struct{}
 // ItemCopyMsg requests the focused panel to copy the selected item's
 // identifier (hash, URL, path, name) to the clipboard.
 type ItemCopyMsg struct{}
+
+// ---------------------------------------------------------------------------
+// Inline editor messages
+// ---------------------------------------------------------------------------
+
+// FileModifiedMsg is broadcast after a file is written to disk by the
+// inline editor. Panels that display file content or git status should
+// refresh their state for the affected path.
+type FileModifiedMsg struct {
+	Path string
+}
+
+// EditModeEnteredMsg notifies other panels that the preview panel
+// entered inline edit mode for a file.
+type EditModeEnteredMsg struct {
+	Path string
+}
+
+// EditModeExitedMsg notifies other panels that the preview panel
+// exited inline edit mode.
+type EditModeExitedMsg struct {
+	Path string
+}

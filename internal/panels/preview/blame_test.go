@@ -133,7 +133,7 @@ func TestFormatBlameAnnotationShortHash(t *testing.T) {
 // --- Blame toggle tests ---
 
 func TestBlameToggleOn(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.Focus()
 	p.filePath = "test.go"
 	p.lines = []string{"line 1", "line 2"}
@@ -153,7 +153,7 @@ func TestBlameToggleOn(t *testing.T) {
 }
 
 func TestBlameToggleOff(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.Focus()
 	p.filePath = "test.go"
 	p.blameMode = true
@@ -169,7 +169,7 @@ func TestBlameToggleOff(t *testing.T) {
 }
 
 func TestBlameToggleIgnoredWithNoFile(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.Focus()
 	// No file loaded
 
@@ -179,7 +179,7 @@ func TestBlameToggleIgnoredWithNoFile(t *testing.T) {
 }
 
 func TestBlameToggleIgnoredWhenBlurred(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	// Not focused
 	p.filePath = "test.go"
 
@@ -191,7 +191,7 @@ func TestBlameToggleIgnoredWhenBlurred(t *testing.T) {
 // --- BlameLoadedMsg tests ---
 
 func TestBlameLoadedMsgSuccess(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.blameMode = true
 
 	blameData := []git.BlameLine{
@@ -205,7 +205,7 @@ func TestBlameLoadedMsgSuccess(t *testing.T) {
 }
 
 func TestBlameLoadedMsgError(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.blameMode = true
 
 	p.Update(panels.BlameLoadedMsg{Err: fmt.Errorf("not a tracked file")})
@@ -216,7 +216,7 @@ func TestBlameLoadedMsgError(t *testing.T) {
 // --- Blame rendering tests ---
 
 func TestBlameRendering(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.SetSize(80, 10)
 	p.filePath = "test.go"
 	p.blameMode = true
@@ -237,7 +237,7 @@ func TestBlameRendering(t *testing.T) {
 }
 
 func TestBlameRenderingEmptyBlameLines(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.SetSize(80, 10)
 	p.filePath = "test.go"
 	p.blameMode = true
@@ -250,7 +250,7 @@ func TestBlameRenderingEmptyBlameLines(t *testing.T) {
 }
 
 func TestBlameRenderingNarrowWidth(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.SetSize(40, 5)
 	p.filePath = "test.go"
 	p.blameMode = true
@@ -266,7 +266,7 @@ func TestBlameRenderingNarrowWidth(t *testing.T) {
 // --- Blame reset on file change ---
 
 func TestBlameResetOnFileChange(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.blameMode = true
 	p.blameLines = []git.BlameLine{
 		{Hash: "abc", Author: "A", Date: time.Now(), LineNo: 1, Content: "x"},
@@ -280,14 +280,14 @@ func TestBlameResetOnFileChange(t *testing.T) {
 // --- Content line count tests ---
 
 func TestContentLineCountNormalMode(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.lines = []string{"a", "b", "c"}
 
 	assert.Equal(t, 3, p.contentLineCount())
 }
 
 func TestContentLineCountBlameMode(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.lines = []string{"a", "b", "c"}
 	p.blameMode = true
 	p.blameLines = []git.BlameLine{
@@ -299,7 +299,7 @@ func TestContentLineCountBlameMode(t *testing.T) {
 }
 
 func TestContentLineCountBlameModeEmptyLines(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.lines = []string{"a", "b"}
 	p.blameMode = true
 	p.blameLines = nil // blame mode but no data yet
@@ -310,7 +310,7 @@ func TestContentLineCountBlameModeEmptyLines(t *testing.T) {
 // --- Blame scrolling tests ---
 
 func TestBlameScrolling(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.Focus()
 	p.SetSize(80, 5) // viewport height = 4 (minus scroll indicator)
 	p.filePath = "test.go"
@@ -364,7 +364,7 @@ func TestBisectStatusMsgInactive(t *testing.T) {
 // --- KeyBindings includes blame ---
 
 func TestKeyBindingsIncludesBlame(t *testing.T) {
-	p := New(defaultCfg(), nil)
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	bindings := p.KeyBindings()
 
 	found := false

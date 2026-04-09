@@ -33,6 +33,7 @@ const (
 	maxReviewCategories = 50        // AI review category count
 	maxCustomShortcuts  = 100       // custom shortcut definitions
 	maxBookmarkPaths    = 1000      // bookmark entries
+	maxEditorTabSize    = 16        // editor tab size
 	maxLogSizeMB        = 1000      // log file max size
 	maxLogBackups       = 100       // log file backup count
 )
@@ -69,6 +70,14 @@ func Validate(cfg *Config) error {
 	}
 	if cfg.Preview.MaxFileSize > maxMaxFileSize*1024*1024 {
 		errs = append(errs, fieldErr("preview.max_file_size", "must be <= %d bytes (%d MB), got %d", maxMaxFileSize*1024*1024, maxMaxFileSize, cfg.Preview.MaxFileSize))
+	}
+
+	// --- editor ---
+	if cfg.Editor.TabSize < 1 {
+		errs = append(errs, fieldErr("editor.tab_size", "must be >= 1, got %d", cfg.Editor.TabSize))
+	}
+	if cfg.Editor.TabSize > maxEditorTabSize {
+		errs = append(errs, fieldErr("editor.tab_size", "must be <= %d, got %d", maxEditorTabSize, cfg.Editor.TabSize))
 	}
 
 	// --- git ---

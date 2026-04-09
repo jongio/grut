@@ -25,6 +25,7 @@ import (
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/markdown"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -69,6 +70,12 @@ type Preview struct {
 	selAnchor *selPoint // where the click/drag began (absolute line + rune col)
 	selEnd    *selPoint // where the drag/shift-move reached
 	selecting bool      // true while mouse button is held and dragging
+	// Inline editor state (edit mode)
+	editMode   bool              // true when in edit mode
+	editBuf    *TextBuffer       // editable text buffer (nil when not editing)
+	cursorLine int               // cursor line (0-based, in buffer)
+	cursorCol  int               // cursor column (rune offset, 0-based)
+	editCfg    config.EditorConfig // editor configuration
 }
 
 // fileLoadedMsg is the result of an async file load operation (F01).
@@ -91,9 +98,10 @@ type diffLoadedMsg struct {
 var _ panels.Panel = (*Preview)(nil)
 
 // New creates a new Preview panel with the given configuration.
-func New(cfg config.PreviewConfig, th *theme.Theme) *Preview {
+func New(cfg config.PreviewConfig, editorCfg config.EditorConfig, th *theme.Theme) *Preview {
 	return &Preview{
 		cfg:            cfg,
+		editCfg:        editorCfg,
 		lineNumbers:    cfg.LineNumbers,
 		wordWrap:       cfg.WordWrap,
 		renderMarkdown: cfg.RenderMarkdown,
@@ -160,7 +168,42 @@ func (p *Preview) Init(_ context.Context) tea.Cmd {
 // keyboard events for scrolling and toggling display options.
 func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
+	// Handle edit-mode-specific modal results (dirty guard).
+	case notify.ModalResultMsg:
+		if p.editMode {
+			return handleModalResult(p, msg)
+		}
+
+	// Handle file saved result.
+	case fileSavedMsg:
+		if msg.path == p.filePath {
+			if p.editBuf != nil {
+				p.editBuf.MarkClean()
+			}
+			cmds := []tea.Cmd{
+				func() tea.Msg {
+					return notify.ShowToastMsg{Message: "Saved " + filepath.Base(p.filePath), Level: notify.Info}
+				},
+				func() tea.Msg {
+					return panels.FileModifiedMsg{Path: p.filePath}
+				},
+			}
+			if p.gitClient != nil {
+				cmds = append(cmds, p.loadDiffCmd(p.filePath))
+			}
+			return p, tea.Batch(cmds...)
+		}
+
 	case panels.FileSelectedMsg:
+		// If in edit mode with unsaved changes, prompt before switching.
+		if p.editMode && p.editBuf != nil && p.editBuf.Dirty() {
+			return p, dirtyGuardCmd(p, "switch")
+		}
+		if p.editMode {
+			// Clean exit from edit mode before switching files.
+			p.editMode = false
+			p.editBuf = nil
+		}
 		// Clear GitHub content mode if active — file selection takes precedence.
 		p.ghMode = false
 		p.ghTitle = ""
@@ -360,7 +403,13 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if !p.focused {
 			return p, nil
 		}
+		// Edit mode keyboard handling takes priority.
+		if p.editMode {
+			return handleEditKeyPress(p, msg)
+		}
 		switch msg.String() {
+		case "e":
+			return p, enterEditMode(p)
 		case "j", "down":
 			p.scrollDown(1)
 		case "k", "up":
@@ -431,6 +480,10 @@ func (p *Preview) View(width, height int) string {
 	if p.isBinary || p.isLarge {
 		return p.renderMetadata(width, height)
 	}
+	// Edit mode rendering
+	if p.editMode && p.editBuf != nil {
+		return renderEditContent(p, width, height)
+	}
 	// Blame mode
 	if p.blameMode && len(p.blameLines) > 0 {
 		return p.renderBlameContent(width, height)
@@ -468,12 +521,31 @@ func (p *Preview) Title() string {
 	if p.filePath == "" {
 		return "preview"
 	}
-	return filepath.Base(p.filePath)
+	name := filepath.Base(p.filePath)
+	if p.editMode && p.editBuf != nil && p.editBuf.Dirty() {
+		return name + " [+]"
+	}
+	if p.editMode {
+		return name + " [edit]"
+	}
+	return name
 }
 
 // KeyBindings implements panels.Panel.
 func (p *Preview) KeyBindings() []panels.KeyBinding {
+	if p.editMode {
+		return []panels.KeyBinding{
+			{Key: "Esc", Description: "Exit edit mode", Action: "exit_edit"},
+			{Key: "Ctrl+S", Description: "Save file", Action: "save"},
+			{Key: "Ctrl+Z", Description: "Undo", Action: "undo"},
+			{Key: "Ctrl+Y", Description: "Redo", Action: "redo"},
+			{Key: "Ctrl+D", Description: "Duplicate line", Action: "duplicate_line"},
+			{Key: "Tab", Description: "Insert indent", Action: "indent"},
+			{Key: "Shift+Tab", Description: "Remove indent", Action: "dedent"},
+		}
+	}
 	return []panels.KeyBinding{
+		{Key: "e", Description: "Edit file", Action: "edit"},
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
 		{Key: "d/PgDn", Description: "Page down", Action: "page_down"},
