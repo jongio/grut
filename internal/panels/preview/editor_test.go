@@ -21,7 +21,7 @@ func testPreview() *Preview {
 		TabSize:    4,
 		AutoIndent: true,
 	}
-	p := New(defaultCfg(), edCfg)
+	p := New(defaultCfg(), edCfg, nil)
 	p.width = 80
 	p.height = 24
 	p.focused = true

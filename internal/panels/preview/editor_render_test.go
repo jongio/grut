@@ -276,7 +276,7 @@ func TestClampEditScroll_ContentTallerThanLines(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTitle_EditMode(t *testing.T) {
-	p := New(defaultCfg(), defaultEditorCfg())
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.filePath = "/tmp/test.go"
 	p.editMode = true
 
@@ -287,7 +287,7 @@ func TestTitle_EditModeDirty(t *testing.T) {
 	buf := NewTextBuffer([]string{"hello"})
 	buf.InsertRune(0, 0, 'x')
 
-	p := New(defaultCfg(), defaultEditorCfg())
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.filePath = "/tmp/test.go"
 	p.editMode = true
 	p.editBuf = buf
@@ -298,7 +298,7 @@ func TestTitle_EditModeDirty(t *testing.T) {
 func TestTitle_EditModeClean(t *testing.T) {
 	buf := NewTextBuffer([]string{"hello"})
 
-	p := New(defaultCfg(), defaultEditorCfg())
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.filePath = "/tmp/test.go"
 	p.editMode = true
 	p.editBuf = buf
@@ -311,7 +311,7 @@ func TestTitle_EditModeClean(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyBindings_ReadMode(t *testing.T) {
-	p := New(defaultCfg(), defaultEditorCfg())
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	bindings := p.KeyBindings()
 
 	// Read mode should include "e" for edit and standard navigation.
@@ -324,7 +324,7 @@ func TestKeyBindings_ReadMode(t *testing.T) {
 }
 
 func TestKeyBindings_EditMode(t *testing.T) {
-	p := New(defaultCfg(), defaultEditorCfg())
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.editMode = true
 	bindings := p.KeyBindings()
 
