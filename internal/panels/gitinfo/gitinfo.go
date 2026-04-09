@@ -23,6 +23,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -390,7 +391,7 @@ type ghDataLoadedMsg struct {
 // ---------------------------------------------------------------------------
 // Default colors (Dracula-inspired, consistent with other panels)
 // ---------------------------------------------------------------------------
-var defaultColors = struct {
+type panelColors struct {
 	Current    string
 	Local      string
 	Remote     string
@@ -419,36 +420,75 @@ var defaultColors = struct {
 	RelDraft   string
 	RelPre     string
 	Workflow   string
-}{
-	Current:    "#50FA7B",
-	Local:      "#F8F8F2",
-	Remote:     "#BD93F9",
-	Header:     "#8BE9FD",
-	Hash:       "#6272A4",
-	CursorBg:   "#44475A",
-	Dim:        "#666666",
-	Worktree:   "#FFB86C",
-	RemoteC:    "#FF79C6",
-	URL:        "#6272A4",
-	Issue:      "#F8F8F2",
-	PR:         "#50FA7B",
-	PRConflict: "#FF5555",
-	PRUnstable: "#F1FA8C",
-	PRBlocked:  "#FFB86C",
-	PRUnknown:  "#6272A4",
-	PRClosed:   "#994444",
-	PRDraft:    "#FFB86C",
-	PRMerged:   "#BD93F9",
-	ActionOK:   "#50FA7B",
-	ActionFail: "#FF5555",
-	ActionRun:  "#F1FA8C",
-	Tag:        "#FF79C6",
-	RemoteTag:  "#BD93F9",
-	Release:    "#50FA7B",
-	RelDraft:   "#6272A4",
-	RelPre:     "#FFB86C",
-	Workflow:   "#8BE9FD",
 }
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Current:    "#6B9E56",
+		Local:      "#D4D4D4",
+		Remote:     "#C9A227",
+		Header:     "#7A9EBF",
+		Hash:       "#555555",
+		CursorBg:   "#2A2A2A",
+		Dim:        "#555555",
+		Worktree:   "#C9875A",
+		RemoteC:    "#C9A227",
+		URL:        "#555555",
+		Issue:      "#D4D4D4",
+		PR:         "#6B9E56",
+		PRConflict: "#C44B4B",
+		PRUnstable: "#D4B84A",
+		PRBlocked:  "#C9875A",
+		PRUnknown:  "#555555",
+		PRClosed:   "#8B3A3A",
+		PRDraft:    "#C9875A",
+		PRMerged:   "#C9A227",
+		ActionOK:   "#6B9E56",
+		ActionFail: "#C44B4B",
+		ActionRun:  "#D4B84A",
+		Tag:        "#C9A227",
+		RemoteTag:  "#C9A227",
+		Release:    "#6B9E56",
+		RelDraft:   "#555555",
+		RelPre:     "#C9875A",
+		Workflow:   "#7A9EBF",
+	}
+	if th != nil {
+		c.Current = th.Colors.GitBranch
+		c.Local = th.Colors.Foreground
+		c.Remote = th.Colors.NormalYellow
+		c.Header = th.Colors.BrightBlue
+		c.Hash = th.Colors.BrightBlack
+		c.CursorBg = th.Colors.SelectionBg
+		c.Dim = th.Colors.BrightBlack
+		c.Worktree = th.Colors.NormalMagenta
+		c.RemoteC = th.Colors.NormalYellow
+		c.URL = th.Colors.BrightBlack
+		c.Issue = th.Colors.Foreground
+		c.PR = th.Colors.NormalGreen
+		c.PRConflict = th.Colors.GitConflict
+		c.PRUnstable = th.Colors.NormalYellow
+		c.PRBlocked = th.Colors.NormalMagenta
+		c.PRUnknown = th.Colors.BrightBlack
+		c.PRClosed = th.Colors.NormalRed
+		c.PRDraft = th.Colors.NormalMagenta
+		c.PRMerged = th.Colors.NormalYellow
+		c.ActionOK = th.Colors.NormalGreen
+		c.ActionFail = th.Colors.NormalRed
+		c.ActionRun = th.Colors.NormalYellow
+		c.Tag = th.Colors.GitTag
+		c.RemoteTag = th.Colors.GitTag
+		c.Release = th.Colors.NormalGreen
+		c.RelDraft = th.Colors.BrightBlack
+		c.RelPre = th.Colors.NormalMagenta
+		c.Workflow = th.Colors.BrightBlue
+	}
+	return c
+}
+
+// defaultColors provides hardcoded fallback colors used by package-level
+// helper functions (prColor, prActionIcon) that are called from tests.
+var defaultColors = initColors(nil)
 
 // ---------------------------------------------------------------------------
 // Panel
@@ -480,6 +520,8 @@ type Panel struct {
 	ghCfg         config.GitHubConfig
 	panels.BasePanel
 	cfg               config.GitConfig
+	colors            panelColors
+	theme             *theme.Theme
 	tabCursor         [tabCount]int   // cursor per tab
 	tabOffset         [tabCount]int   // viewport offset per tab
 	mode              PanelMode       // which tab subset to display
@@ -573,7 +615,7 @@ func (p *Panel) SetActiveTab(name string) {
 
 // New creates a new gitinfo panel showing only git tabs (branches,
 // worktrees, remotes, stash, tags, reflog).
-func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string) *Panel {
+func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel:  panels.BasePanel{PanelTitle: "gitinfo"},
 		mode:       ModeGit,
@@ -583,12 +625,14 @@ func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actions
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
+		colors:     initColors(th),
+		theme:      th,
 	}
 }
 
 // NewGitHub creates a gitinfo panel showing only GitHub tabs (issues,
 // PRs, actions, workflows, releases).
-func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string) *Panel {
+func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel:  panels.BasePanel{PanelTitle: "github"},
 		mode:       ModeGitHub,
@@ -599,6 +643,8 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
+		colors:     initColors(th),
+		theme:      th,
 	}
 }
 
@@ -868,7 +914,7 @@ func (p *Panel) View(width, height int) string {
 		empty := lipgloss.NewStyle().
 			Width(width).Height(contentHeight).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render(label)
 		return tabBar + "\n" + empty
 	}
@@ -2758,14 +2804,14 @@ func (p *Panel) renderTabBar(width int) string {
 	p.lastWidth = width
 	activeNameStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(defaultColors.Header)).
+		Foreground(lipgloss.Color(p.colors.Header)).
 		Underline(true)
 	activeCountStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(defaultColors.Hash))
+		Foreground(lipgloss.Color(p.colors.Hash))
 	inactiveStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(defaultColors.Dim))
+		Foreground(lipgloss.Color(p.colors.Dim))
 	sepStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(defaultColors.Dim))
+		Foreground(lipgloss.Color(p.colors.Dim))
 	sep := sepStyle.Render(" · ")
 	type tabDef struct {
 		name  string
@@ -2921,14 +2967,14 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	line := leftSide + gap + rightSide
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	if b.IsCurrent {
-		style = style.Foreground(lipgloss.Color(defaultColors.Current)).Bold(true)
+		style = style.Foreground(lipgloss.Color(p.colors.Current)).Bold(true)
 	} else if b.IsRemote {
-		style = style.Foreground(lipgloss.Color(defaultColors.Remote))
+		style = style.Foreground(lipgloss.Color(p.colors.Remote))
 	} else {
-		style = style.Foreground(lipgloss.Color(defaultColors.Local))
+		style = style.Foreground(lipgloss.Color(p.colors.Local))
 	}
 	return style.Render(line)
 }
@@ -2969,9 +3015,9 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 	}
 	line := leftSide + gap + rightSide
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.Worktree))
+		Foreground(lipgloss.Color(p.colors.Worktree))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
@@ -2979,9 +3025,9 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 func (p *Panel) renderRemote(item listItem, width int, isCursor bool) string {
 	leftSide := "  " + panels.StripANSI(item.remote.Name)
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.RemoteC)).Bold(true)
+		Foreground(lipgloss.Color(p.colors.RemoteC)).Bold(true)
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(leftSide)
 }
@@ -2989,9 +3035,9 @@ func (p *Panel) renderRemote(item listItem, width int, isCursor bool) string {
 func (p *Panel) renderRemoteSub(item listItem, width int, isCursor bool) string {
 	leftSide := "    " + panels.StripANSI(item.text)
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.URL))
+		Foreground(lipgloss.Color(p.colors.URL))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(leftSide)
 }
@@ -3010,9 +3056,9 @@ func (p *Panel) renderStashEntry(item listItem, width int, isCursor bool) string
 		}
 	}
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.Worktree))
+		Foreground(lipgloss.Color(p.colors.Worktree))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(label)
 }
@@ -3035,9 +3081,9 @@ func (p *Panel) renderReflogEntry(item listItem, width int, isCursor bool) strin
 		}
 	}
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.Dim))
+		Foreground(lipgloss.Color(p.colors.Dim))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(label)
 }
@@ -4135,53 +4181,61 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	}
 	line := leftSide + gap + rightSide
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
-		Foreground(lipgloss.Color(defaultColors.Issue))
+		Foreground(lipgloss.Color(p.colors.Issue))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
 
-// prColor returns the foreground color for a PR based on its state and
-// mergeable status.
-func prColor(pr ghPRItem) string {
+// prColorFrom returns the foreground color for a PR based on its state and
+// mergeable status, using the given color palette.
+func prColorFrom(c panelColors, pr ghPRItem) string {
 	switch pr.State {
 	case "draft":
-		return defaultColors.PRDraft
+		return c.PRDraft
 	case prStateMerged:
-		return defaultColors.PRMerged
+		return c.PRMerged
 	case "closed":
-		return defaultColors.PRClosed
+		return c.PRClosed
 	default: // prStateOpen
 		switch pr.MergeableState {
 		case "dirty":
-			return defaultColors.PRConflict
+			return c.PRConflict
 		case "unstable":
-			return defaultColors.PRUnstable
+			return c.PRUnstable
 		case "blocked":
-			return defaultColors.PRBlocked
+			return c.PRBlocked
 		case "unknown":
-			return defaultColors.PRUnknown
+			return c.PRUnknown
 		default: // "clean" or ""
-			return defaultColors.PR
+			return c.PR
 		}
 	}
 }
 
-// prActionIcon returns the status icon and its color for the action run
-// associated with a PR. Returns empty strings when no action run exists.
-func prActionIcon(pr ghPRItem) (icon string, color string) {
+// prColor returns the foreground color using package-level defaults (for tests).
+func prColor(pr ghPRItem) string { return prColorFrom(defaultColors, pr) }
+
+// prActionIconFrom returns the status icon and its color for the action run
+// associated with a PR, using the given color palette.
+func prActionIconFrom(c panelColors, pr ghPRItem) (icon string, color string) {
 	switch pr.ActionConclusion {
 	case conclusionSuccess:
-		return checkMark, defaultColors.ActionOK
+		return checkMark, c.ActionOK
 	case conclusionFailure, conclusionTimedOut:
-		return crossMark, defaultColors.ActionFail
+		return crossMark, c.ActionFail
 	}
 	switch pr.ActionStatus {
 	case "in_progress", "queued":
-		return "●", defaultColors.ActionRun
+		return "●", c.ActionRun
 	}
 	return "", ""
+}
+
+// prActionIcon returns the status icon using package-level defaults (for tests).
+func prActionIcon(pr ghPRItem) (icon string, color string) {
+	return prActionIconFrom(defaultColors, pr)
 }
 
 // renderPR renders a GitHub PR line: "  #41 Add GitHub client   draft"
@@ -4193,7 +4247,7 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	number := fmt.Sprintf("#%d ", pr.Number)
 
 	// Action status icon (shown after state text).
-	actionIcon, actionColor := prActionIcon(pr)
+	actionIcon, actionColor := prActionIconFrom(p.colors, pr)
 	iconSuffix := ""
 	iconVisualWidth := 0
 	if actionIcon != "" {
@@ -4229,12 +4283,12 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 
 	// Build the line: if we have an action icon, render it with its own color
 	// so it stands out from the PR state color.
-	fg := prColor(pr)
+	fg := prColorFrom(p.colors, pr)
 	var line string
 	if iconSuffix != "" {
 		iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(actionColor))
 		if isCursor {
-			iconStyle = iconStyle.Background(lipgloss.Color(defaultColors.CursorBg))
+			iconStyle = iconStyle.Background(lipgloss.Color(p.colors.CursorBg))
 		}
 		line = leftSide + gap + rightSide + iconStyle.Render(iconSuffix)
 	} else {
@@ -4244,7 +4298,7 @@ func (p *Panel) renderPR(item listItem, width int, isCursor bool) string {
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
@@ -4259,17 +4313,17 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 	switch run.Conclusion {
 	case conclusionSuccess:
 		icon = checkMark
-		fg = defaultColors.ActionOK
+		fg = p.colors.ActionOK
 	case conclusionFailure, conclusionTimedOut:
 		icon = crossMark
-		fg = defaultColors.ActionFail
+		fg = p.colors.ActionFail
 	default:
 		if run.Status == "in_progress" || run.Status == "queued" {
 			icon = "●"
-			fg = defaultColors.ActionRun
+			fg = p.colors.ActionRun
 		} else {
 			icon = "●"
-			fg = defaultColors.Dim
+			fg = p.colors.Dim
 		}
 	}
 	prefix := "  "
@@ -4304,7 +4358,7 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
@@ -4318,13 +4372,13 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	switch wf.State {
 	case "active":
 		icon = "●"
-		fg = defaultColors.Workflow
+		fg = p.colors.Workflow
 	case "disabled_manually", "disabled_inactivity":
 		icon = "○"
-		fg = defaultColors.Dim
+		fg = p.colors.Dim
 	default:
 		icon = "○"
-		fg = defaultColors.Dim
+		fg = p.colors.Dim
 	}
 	prefix := "  "
 	left := fmt.Sprintf("%s %s", icon, panels.StripANSI(wf.Name))
@@ -4354,7 +4408,7 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
@@ -4368,13 +4422,13 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	switch {
 	case rel.Draft:
 		icon = "●"
-		fg = defaultColors.RelDraft
+		fg = p.colors.RelDraft
 	case rel.Prerelease:
 		icon = "⚠"
-		fg = defaultColors.RelPre
+		fg = p.colors.RelPre
 	default:
 		icon = checkMark
-		fg = defaultColors.Release
+		fg = p.colors.Release
 	}
 	prefix := "  "
 	left := fmt.Sprintf("%s %s", icon, panels.StripANSI(rel.TagName))
@@ -4412,7 +4466,7 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }
@@ -4450,14 +4504,14 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	}
 	line := leftSide + gap + rightSide
 	// Color based on tag type.
-	fg := defaultColors.Tag
+	fg := p.colors.Tag
 	if item.kind == kindRemoteTag {
-		fg = defaultColors.RemoteTag
+		fg = p.colors.RemoteTag
 	}
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width).
 		Foreground(lipgloss.Color(fg))
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
 }

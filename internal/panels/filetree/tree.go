@@ -518,17 +518,17 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 	content := b.String()
 
 	// Colours.
-	fg := defaultColors.Default
+	fg := ft.colors.Default
 	ignored := ft.isPathIgnored(n.path)
 	switch {
 	case ignored:
-		fg = defaultColors.Dim
+		fg = ft.colors.Dim
 	case n.isDir:
-		fg = defaultColors.Directory
+		fg = ft.colors.Directory
 	case n.isSymlink:
-		fg = defaultColors.Symlink
+		fg = ft.colors.Symlink
 	case n.isExecutable:
-		fg = defaultColors.Executable
+		fg = ft.colors.Executable
 	}
 
 	// Determine git status indicator for this node.
@@ -537,20 +537,20 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 	gitIndicatorW := 0 // visible column width of " " + indicator
 	if ft.gitClient != nil && !n.isDir && ft.gitFileStatus != nil {
 		if indicator, ok := ft.gitFileStatus[n.path]; ok {
-			gitColor = "#F8F8F2"
+			gitColor = "#D4D4D4"
 			switch indicator {
 			case "M":
-				gitColor = "#FFB86C"
+				gitColor = "#C9875A"
 			case "A":
-				gitColor = "#50FA7B"
+				gitColor = "#6B9E56"
 			case "D":
-				gitColor = "#FF5555"
+				gitColor = "#C44B4B"
 			case "?":
-				gitColor = "#6272A4"
+				gitColor = "#555555"
 			case "R", "C":
-				gitColor = "#8BE9FD"
+				gitColor = "#7A9EBF"
 			case "U":
-				gitColor = "#FF79C6"
+				gitColor = "#C9A227"
 			}
 			gitIndicator = gitStatusIcon(indicator, ft.cfg.IconMode)
 			gitIndicatorW = 1 + displayWidth(gitIndicator) // " " + icon
@@ -559,7 +559,7 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 	// Show ignored indicator when no other git status is present.
 	if ignored && gitIndicator == "" {
 		gitIndicator = gitStatusIcon("!", ft.cfg.IconMode)
-		gitColor = defaultColors.Dim
+		gitColor = ft.colors.Dim
 		gitIndicatorW = 1 + displayWidth(gitIndicator)
 	}
 
@@ -591,10 +591,10 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 	// Apply colours.
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
 	if ft.selected[n.path] {
-		style = style.Background(lipgloss.Color(defaultColors.SelectedBg))
+		style = style.Background(lipgloss.Color(ft.colors.SelectedBg))
 	}
 	if isCursor && ft.focused {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg)).Bold(true)
+		style = style.Background(lipgloss.Color(ft.colors.CursorBg)).Bold(true)
 	}
 
 	// Render the content line. If there's a git indicator, render the main

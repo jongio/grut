@@ -19,15 +19,14 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // Messages emitted by the filetree panel.
 // DirChangedMsg is sent when a directory is expanded.
 type DirChangedMsg struct{ Path string }
 
-// defaultColors provides fallback colors when no theme is specified.
-// These match the default Dracula palette and are used as a baseline.
-var defaultColors = struct {
+type panelColors struct {
 	Directory  string
 	Default    string
 	Executable string
@@ -35,14 +34,28 @@ var defaultColors = struct {
 	CursorBg   string
 	SelectedBg string
 	Dim        string
-}{
-	Directory:  "#8BE9FD",
-	Default:    "#BBBBBB",
-	Executable: "#50FA7B",
-	Symlink:    "#BD93F9",
-	CursorBg:   "#44475A",
-	SelectedBg: "#3E4452",
-	Dim:        "#666666",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Directory:  "#7A9EBF",
+		Default:    "#999999",
+		Executable: "#6B9E56",
+		Symlink:    "#C9A227",
+		CursorBg:   "#2A2A2A",
+		SelectedBg: "#222222",
+		Dim:        "#555555",
+	}
+	if th != nil {
+		c.Directory = th.Colors.FileDirectory
+		c.Default = th.Colors.FileDefault
+		c.Executable = th.Colors.FileExecutable
+		c.Symlink = th.Colors.FileSymlink
+		c.CursorBg = th.Colors.SelectionBg
+		c.SelectedBg = th.Colors.CursorLine
+		c.Dim = th.Colors.BrightBlack
+	}
+	return c
 }
 
 // keyEsc is the key name for the Escape key, used in mode-exit checks.
@@ -101,7 +114,9 @@ type FileTree struct {
 	commitFiles     []string // relative paths from diff-tree
 	branchFiles     []string // relative paths from branch diff
 	prFiles         []panels.PRFile
-	cfg             config.FileTreeConfig
+	cfg    config.FileTreeConfig
+	colors panelColors
+	theme  *theme.Theme
 	// File operation state.
 	clip       clipboard // cut/copy clipboard
 	cursor     int       // index into visible
@@ -129,7 +144,7 @@ var _ panels.Panel = (*FileTree)(nil)
 var _ panels.Closer = (*FileTree)(nil)
 
 // New creates a new FileTree panel rooted at rootPath.
-func New(cfg config.FileTreeConfig, rootPath string) *FileTree {
+func New(cfg config.FileTreeConfig, rootPath string, th *theme.Theme) *FileTree {
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		absRoot = rootPath
@@ -143,6 +158,8 @@ func New(cfg config.FileTreeConfig, rootPath string) *FileTree {
 			isDir: true,
 			depth: -1,
 		},
+		colors:     initColors(th),
+		theme:      th,
 		selected:   make(map[string]bool),
 		showHidden: cfg.ShowHidden,
 	}
@@ -412,7 +429,7 @@ func (ft *FileTree) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(ft.colors.Dim)).
 			Render(label)
 	}
 	lines := make([]string, 0, height)

@@ -14,6 +14,7 @@ import (
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // SetPreviewPositionMsg is emitted when the user selects a preview position.
@@ -67,19 +68,30 @@ var previewOptions = []layout.PreviewPosition{
 // separatorWidth is the number of ─ characters drawn under section headings.
 const separatorWidth = 20
 
-// colors used by the settings panel, matching the Dracula palette.
-var colors = struct {
+type panelColors struct {
 	Heading   string
 	Selected  string
 	Active    string
 	Dim       string
 	Separator string
-}{
-	Heading:   "#FFB86C",
-	Selected:  "#50FA7B",
-	Active:    "#BD93F9",
-	Dim:       "#666666",
-	Separator: "#44475A",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Heading:   "#C9875A",
+		Selected:  "#6B9E56",
+		Active:    "#C9A227",
+		Dim:       "#555555",
+		Separator: "#2A2A2A",
+	}
+	if th != nil {
+		c.Heading = th.Colors.BrightBlue
+		c.Selected = th.Colors.NormalGreen
+		c.Active = th.Colors.BorderFocused
+		c.Dim = th.Colors.BrightBlack
+		c.Separator = th.Colors.SelectionBg
+	}
+	return c
 }
 
 // Panel is the settings overlay. It implements [panels.Panel].
@@ -91,6 +103,8 @@ type Panel struct {
 	themeNames          []string             // available theme names
 	configurableItems   []actions.ItemType   // cached from actions.ConfigurableItems()
 	panels.BasePanel
+	colors     panelColors
+	theme      *theme.Theme
 	cursor     settingField           // which setting row is highlighted
 	offset     int                    // scroll offset for viewport
 	totalLines int                    // total rendered content lines (updated each View)
@@ -101,7 +115,7 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new settings overlay panel.
-func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []string, actionsCfg config.ActionsConfig) *Panel {
+func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []string, actionsCfg config.ActionsConfig, th *theme.Theme) *Panel {
 	items := actions.ConfigurableItems()
 	// Seed in-memory overrides from persisted config.
 	overrides := make(map[string]string, len(items))
@@ -128,6 +142,8 @@ func New(currentPos layout.PreviewPosition, currentTheme string, themeNames []st
 		configurableItems:   items,
 		actionOverrides:     overrides,
 		rightClickOverrides: rcOverrides,
+		colors:              initColors(th),
+		theme:               th,
 	}
 }
 
@@ -257,11 +273,11 @@ type viewStyles struct {
 // viewStyles creates the style set for the current render pass.
 func (p *Panel) viewStyles() viewStyles {
 	return viewStyles{
-		heading:  lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Heading)).Bold(true),
-		selected: lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Selected)).Bold(true),
-		active:   lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Active)),
-		dim:      lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Dim)),
-		sep:      lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Separator)),
+		heading:  lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Heading)).Bold(true),
+		selected: lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Selected)).Bold(true),
+		active:   lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Active)),
+		dim:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim)),
+		sep:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Separator)),
 	}
 }
 

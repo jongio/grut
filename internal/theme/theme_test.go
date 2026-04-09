@@ -28,11 +28,11 @@ func TestLoadDefaultThemePreservesHardcodedColors(t *testing.T) {
 	th, err := Load("default")
 	require.NoError(t, err)
 
-	// The default theme should carry forward the original hardcoded values.
-	assert.Equal(t, "#7D56F4", th.Colors.BorderFocused)
-	assert.Equal(t, "#444444", th.Colors.BorderUnfocused)
-	assert.Equal(t, "#333333", th.Colors.StatusBarBg)
-	assert.Equal(t, "#FAFAFA", th.Colors.StatusBarFg)
+	// The default theme should carry forward the Forge palette values.
+	assert.Equal(t, "#C9A227", th.Colors.BorderFocused)
+	assert.Equal(t, "#333333", th.Colors.BorderUnfocused)
+	assert.Equal(t, "#1A1A1A", th.Colors.StatusBarBg)
+	assert.Equal(t, "#D4D4D4", th.Colors.StatusBarFg)
 }
 
 // ---------------------------------------------------------------------------

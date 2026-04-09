@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // section groups related keybindings under a heading.
@@ -129,31 +130,44 @@ var sections = []section{
 			{key: "j/k", desc: "Scroll content"},
 			{key: "g/G", desc: "Jump to top/bottom"},
 			{key: "d/u", desc: "Page down/up"},
-			{key: "y", desc: "Copy selection"},
+			{key: "y/Ctrl+C", desc: "Copy selection"},
 			{key: "Esc", desc: "Clear selection"},
 		},
 	},
 }
 
-// colors used by the help panel, matching the Dracula palette.
-var colors = struct {
+type panelColors struct {
 	Heading   string
 	Key       string
 	Desc      string
 	Dim       string
 	Separator string
-}{
-	Heading:   "#FFB86C",
-	Key:       "#50FA7B",
-	Desc:      "#F8F8F2",
-	Dim:       "#666666",
-	Separator: "#44475A",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Heading:   "#C9875A",
+		Key:       "#6B9E56",
+		Desc:      "#D4D4D4",
+		Dim:       "#555555",
+		Separator: "#2A2A2A",
+	}
+	if th != nil {
+		c.Heading = th.Colors.BrightBlue
+		c.Key = th.Colors.NormalGreen
+		c.Desc = th.Colors.Foreground
+		c.Dim = th.Colors.BrightBlack
+		c.Separator = th.Colors.SelectionBg
+	}
+	return c
 }
 
 // Panel is the help overlay. It implements [panels.Panel].
 type Panel struct {
 	lines []string // pre-rendered content lines (unstyled text)
 	panels.BasePanel
+	colors panelColors
+	theme  *theme.Theme
 	offset int // scroll offset
 }
 
@@ -161,9 +175,11 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new help overlay panel.
-func New() *Panel {
+func New(th *theme.Theme) *Panel {
 	p := &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "help"},
+		colors:    initColors(th),
+		theme:     th,
 	}
 	p.buildLines()
 	return p
@@ -219,17 +235,17 @@ func (p *Panel) View(width, height int) string {
 		return ""
 	}
 	headingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Heading)).
+		Foreground(lipgloss.Color(p.colors.Heading)).
 		Bold(true)
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Key)).
+		Foreground(lipgloss.Color(p.colors.Key)).
 		Bold(true)
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Desc))
+		Foreground(lipgloss.Color(p.colors.Desc))
 	sepStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Separator))
+		Foreground(lipgloss.Color(p.colors.Separator))
 	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Dim))
+		Foreground(lipgloss.Color(p.colors.Dim))
 	emptyLine := lipgloss.NewStyle().Width(width).Render("")
 	end := p.offset + height
 	if end > len(p.lines) {

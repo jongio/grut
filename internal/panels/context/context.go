@@ -17,23 +17,36 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
-// colors used by the context panel.
-var colors = struct {
+type panelColors struct {
 	Path     string
 	Tokens   string
 	Header   string
 	CursorBg string
 	Dim      string
 	Accent   string
-}{
-	Path:     "#8BE9FD",
-	Tokens:   "#FFB86C",
-	Header:   "#F8F8F2",
-	CursorBg: "#44475A",
-	Dim:      "#666666",
-	Accent:   "#50FA7B",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Path:     "#7A9EBF",
+		Tokens:   "#C9875A",
+		Header:   "#D4D4D4",
+		CursorBg: "#2A2A2A",
+		Dim:      "#555555",
+		Accent:   "#6B9E56",
+	}
+	if th != nil {
+		c.Path = th.Colors.BrightBlue
+		c.Tokens = th.Colors.NormalMagenta
+		c.Header = th.Colors.Foreground
+		c.CursorBg = th.Colors.SelectionBg
+		c.Dim = th.Colors.BrightBlack
+		c.Accent = th.Colors.NormalGreen
+	}
+	return c
 }
 
 // Pending operation identifiers for modal result dispatch.
@@ -49,6 +62,8 @@ type Panel struct {
 	pendingOp   string
 	pendingName string
 	panels.BasePanel
+	colors panelColors
+	theme  *theme.Theme
 	cursor int
 	offset int
 }
@@ -57,10 +72,12 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new context builder panel backed by the given builder.
-func New(builder *ctxbuilder.Builder) *Panel {
+func New(builder *ctxbuilder.Builder, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "context"},
 		builder:   builder,
+		colors:    initColors(th),
+		theme:     th,
 	}
 }
 
@@ -111,7 +128,7 @@ func (p *Panel) View(width, height int) string {
 		emptyMsg := lipgloss.NewStyle().
 			Width(width).Height(listHeight).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(colors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No files in context\n\nPress C in filetree to add files")
 		statusBar := p.renderStatusBar(width, 0, 0)
 		return emptyMsg + "\n" + statusBar
@@ -460,17 +477,17 @@ func (p *Panel) clampCursor() {
 func (p *Panel) renderLine(f ctxbuilder.ContextFile, width int, isCursor bool) string {
 	var b strings.Builder
 	b.WriteString("  ")
-	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Path))
+	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Path))
 	b.WriteString(pathStyle.Render(f.Path))
 	b.WriteString("  ")
-	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Tokens))
+	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Tokens))
 	b.WriteString(tokenStyle.Render(fmt.Sprintf("%d tokens", f.Tokens)))
 	content := b.String()
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width)
 	if isCursor && p.Focused {
-		style = style.Background(lipgloss.Color(colors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(content)
 }
@@ -485,7 +502,7 @@ func (p *Panel) renderStatusBar(width, fileCount, tokenCount int) string {
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width).
-		Foreground(lipgloss.Color(colors.Accent)).
+		Foreground(lipgloss.Color(p.colors.Accent)).
 		Bold(true)
 	return style.Render(text)
 }

@@ -16,23 +16,36 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
-// colors used by the bookmarks panel.
-var colors = struct {
+type panelColors struct {
 	Title    string
 	Path     string
 	Name     string
 	CursorBg string
 	Dim      string
 	Border   string
-}{
-	Title:    "#FFB86C",
-	Path:     "#8BE9FD",
-	Name:     "#F8F8F2",
-	CursorBg: "#44475A",
-	Dim:      "#666666",
-	Border:   "#BD93F9",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Title:    "#C9875A",
+		Path:     "#7A9EBF",
+		Name:     "#D4D4D4",
+		CursorBg: "#2A2A2A",
+		Dim:      "#555555",
+		Border:   "#C9A227",
+	}
+	if th != nil {
+		c.Title = th.Colors.NormalMagenta
+		c.Path = th.Colors.BrightBlue
+		c.Name = th.Colors.Foreground
+		c.CursorBg = th.Colors.SelectionBg
+		c.Dim = th.Colors.BrightBlack
+		c.Border = th.Colors.BorderFocused
+	}
+	return c
 }
 
 // Pending operation identifiers for modal result dispatch.
@@ -49,6 +62,8 @@ type Panel struct {
 	pendingName string
 	items       []bm.Bookmark
 	panels.BasePanel
+	colors panelColors
+	theme  *theme.Theme
 	cursor int
 	offset int
 }
@@ -57,10 +72,12 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new bookmarks overlay panel backed by the given manager.
-func New(manager *bm.Manager) *Panel {
+func New(manager *bm.Manager, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "bookmarks"},
 		manager:   manager,
+		colors:    initColors(th),
+		theme:     th,
 	}
 }
 
@@ -98,7 +115,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(colors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No bookmarks\n\nPress b in filetree to add one")
 	}
 	lines := make([]string, 0, height)
@@ -390,17 +407,17 @@ func (p *Panel) renderLine(bk bm.Bookmark, width int, isCursor bool) string {
 	var b strings.Builder
 	// "  name  path" format.
 	b.WriteString("  ")
-	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Name)).Bold(true)
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Name)).Bold(true)
 	b.WriteString(nameStyle.Render(bk.Name))
 	b.WriteString("  ")
-	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colors.Path))
+	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Path))
 	b.WriteString(pathStyle.Render(bk.Path))
 	content := b.String()
 	style := lipgloss.NewStyle().
 		Width(width).
 		MaxWidth(width)
 	if isCursor && p.Focused {
-		style = style.Background(lipgloss.Color(colors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(content)
 }

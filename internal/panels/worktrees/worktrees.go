@@ -20,6 +20,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // GitOps defines the git operations required by the worktree panel.
@@ -79,10 +80,7 @@ type worktreeOpResultMsg struct {
 	name string // branch or path involved
 }
 
-// ---------------------------------------------------------------------------
-// Default colors (Dracula-inspired, matching branches panel)
-// ---------------------------------------------------------------------------
-var defaultColors = struct {
+type panelColors struct {
 	Current  string
 	Normal   string
 	Hash     string
@@ -90,14 +88,28 @@ var defaultColors = struct {
 	Missing  string
 	CursorBg string
 	Dim      string
-}{
-	Current:  "#50FA7B",
-	Normal:   "#F8F8F2",
-	Hash:     "#6272A4",
-	Branch:   "#BD93F9",
-	Missing:  "#FF5555",
-	CursorBg: "#44475A",
-	Dim:      "#666666",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Current:  "#6B9E56",
+		Normal:   "#D4D4D4",
+		Hash:     "#555555",
+		Branch:   "#C9A227",
+		Missing:  "#C44B4B",
+		CursorBg: "#2A2A2A",
+		Dim:      "#555555",
+	}
+	if th != nil {
+		c.Current = th.Colors.NormalGreen
+		c.Normal = th.Colors.Foreground
+		c.Hash = th.Colors.BrightBlack
+		c.Branch = th.Colors.GitBranch
+		c.Missing = th.Colors.NormalRed
+		c.CursorBg = th.Colors.SelectionBg
+		c.Dim = th.Colors.BrightBlack
+	}
+	return c
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +126,8 @@ type Panel struct {
 	pendingName string         // item type name for first-use confirm
 	items       []worktreeItem // flat display list
 	panels.BasePanel
+	colors  panelColors
+	theme   *theme.Theme
 	cfg     config.GitConfig
 	cursor  int       // index into items
 	offset  int       // viewport scroll offset
@@ -124,13 +138,15 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new worktree panel.
-func New(gitOps GitOps, cfg config.GitConfig, repoRoot string) *Panel {
+func New(gitOps GitOps, cfg config.GitConfig, repoRoot string, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "worktrees"},
 		git:       gitOps,
 		cfg:       cfg,
 		pathCheck: defaultPathChecker,
 		repoRoot:  repoRoot,
+		colors:    initColors(th),
+		theme:     th,
 	}
 }
 
@@ -217,7 +233,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No worktrees")
 	}
 	lines := make([]string, 0, height)
@@ -712,14 +728,14 @@ func (p *Panel) renderLine(item worktreeItem, width int, isCursor bool) string {
 	// Apply styles.
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	if item.isMissing {
-		style = style.Foreground(lipgloss.Color(defaultColors.Missing))
+		style = style.Foreground(lipgloss.Color(p.colors.Missing))
 	} else if item.isMain {
-		style = style.Foreground(lipgloss.Color(defaultColors.Current)).Bold(true)
+		style = style.Foreground(lipgloss.Color(p.colors.Current)).Bold(true)
 	} else {
-		style = style.Foreground(lipgloss.Color(defaultColors.Normal))
+		style = style.Foreground(lipgloss.Color(p.colors.Normal))
 	}
 	return style.Render(line)
 }

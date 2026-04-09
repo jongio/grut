@@ -18,6 +18,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -41,8 +42,7 @@ const debounceInterval = 200 * time.Millisecond
 // in the log list view. Wider names are truncated to keep the layout compact.
 const authorColMaxWidth = 14
 
-// defaultColors provides fallback colors for git log rendering.
-var defaultColors = struct {
+type panelColors struct {
 	Hash     string
 	Date     string
 	Author   string
@@ -53,17 +53,34 @@ var defaultColors = struct {
 	Graph    string
 	SearchBg string
 	SearchFg string
-}{
-	Hash:     "#F1FA8C",
-	Date:     "#666666",
-	Author:   "#50FA7B",
-	Refs:     "#8BE9FD",
-	Subject:  "#BBBBBB",
-	Dim:      "#666666",
-	CursorBg: "#44475A",
-	Graph:    "#6272A4",
-	SearchBg: "#44475A",
-	SearchFg: "#F8F8F2",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Hash:     "#D4B84A",
+		Date:     "#555555",
+		Author:   "#6B9E56",
+		Refs:     "#7A9EBF",
+		Subject:  "#999999",
+		Dim:      "#555555",
+		CursorBg: "#2A2A2A",
+		Graph:    "#555555",
+		SearchBg: "#2A2A2A",
+		SearchFg: "#D4D4D4",
+	}
+	if th != nil {
+		c.Hash = th.Colors.NormalYellow
+		c.Date = th.Colors.BrightBlack
+		c.Author = th.Colors.NormalGreen
+		c.Refs = th.Colors.BrightBlue
+		c.Subject = th.Colors.NormalWhite
+		c.Dim = th.Colors.BrightBlack
+		c.CursorBg = th.Colors.SelectionBg
+		c.Graph = th.Colors.BrightBlack
+		c.SearchBg = th.Colors.SelectionBg
+		c.SearchFg = th.Colors.SelectionFg
+	}
+	return c
 }
 
 // displayLine represents a single rendered line in the viewport.
@@ -92,6 +109,8 @@ type Panel struct {
 	filteredCmtY []int
 	detailLines  []string
 	cfg          config.GitConfig
+	colors       panelColors
+	theme        *theme.Theme
 	cursor       int // index into commits
 	offset       int // viewport offset into display
 	width        int
@@ -112,7 +131,7 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new git log panel.
-func New(client git.StatusReader, cfg config.GitConfig) *Panel {
+func New(client git.StatusReader, cfg config.GitConfig, th *theme.Theme) *Panel {
 	ps := defaultPageSize
 	if cfg.MaxLogEntries > 0 {
 		ps = cfg.MaxLogEntries
@@ -121,6 +140,8 @@ func New(client git.StatusReader, cfg config.GitConfig) *Panel {
 		gitClient: client,
 		cfg:       cfg,
 		pageSize:  ps,
+		colors:    initColors(th),
+		theme:     th,
 	}
 }
 
@@ -208,14 +229,14 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("Loading commits...")
 	}
 	if len(p.commits) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No commits")
 	}
 	return p.renderLog(width, height)
@@ -402,14 +423,14 @@ func (p *Panel) renderLog(width, height int) string {
 			lines = append(lines, p.renderCommitLine(p.commits[d.commitIdx], d.text, width, i == cursorDL))
 		} else {
 			// Connector line — just show the graph portion.
-			graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Graph))
+			graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Graph))
 			line := graphStyle.Render(d.text)
 			lines = append(lines, truncateOrPad(line, width))
 		}
 	}
 	// Loading indicator.
 	if p.loading && len(lines) < height {
-		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
+		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
 		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
 	// Search bar at top if in search mode.
@@ -433,12 +454,12 @@ func (p *Panel) renderLog(width, height int) string {
 }
 
 func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Date))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Author))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Subject))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Refs)).Bold(true)
-	graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Graph))
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Date))
+	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Author))
+	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
+	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Refs)).Bold(true)
+	graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Graph))
 	// Build right-side fixed columns first to determine how much space subject gets.
 	// SHA is always pinned to the right. Author and date appear as width allows.
 	hashCol := panels.StripANSI(c.ShortHash)
@@ -524,7 +545,7 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	}
 	line += gap + rightSide
 	if isCursor {
-		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(defaultColors.CursorBg))
+		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(p.colors.CursorBg))
 		line = cursorStyle.Width(width).Render(line)
 	}
 	return truncateOrPad(line, width)
@@ -541,8 +562,8 @@ func (p *Panel) styleSubjectWithRefs(text string, _ string, subjectStyle, refSty
 
 func (p *Panel) renderSearchBar(width int) string {
 	searchStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(defaultColors.SearchBg)).
-		Foreground(lipgloss.Color(defaultColors.SearchFg))
+		Background(lipgloss.Color(p.colors.SearchBg)).
+		Foreground(lipgloss.Color(p.colors.SearchFg))
 	prompt := " /" + p.searchQuery
 	matchCount := len(p.filteredIdx)
 	if p.searchQuery != "" {
@@ -895,11 +916,11 @@ func (p *Panel) showDetail() {
 		}
 	}
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Author))
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Date))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Refs))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
+	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Author))
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Date))
+	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Refs))
 	var lines []string
 	lines = append(lines, headerStyle.Render("Commit Details"))
 	lines = append(lines, dimStyle.Render(strings.Repeat("─", 40)))
@@ -915,7 +936,7 @@ func (p *Panel) showDetail() {
 		lines = append(lines, "Refs:    "+refStyle.Render(strings.Join(sanitizedRefs, ", ")))
 	}
 	if len(c.Parents) > 0 {
-		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
+		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
 	}
 	lines = append(lines, "")

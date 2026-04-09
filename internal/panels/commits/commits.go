@@ -22,6 +22,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // defaultPageSize is the number of commits to load per page.
@@ -51,8 +52,7 @@ type gitOps interface {
 	Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error)
 }
 
-// defaultColors provides fallback colors for commit rendering.
-var defaultColors = struct {
+type panelColors struct {
 	Hash     string
 	Date     string
 	Author   string
@@ -62,16 +62,32 @@ var defaultColors = struct {
 	Refs     string
 	SearchBg string
 	SearchFg string
-}{
-	Hash:     "#F1FA8C",
-	Date:     "#666666",
-	Author:   "#50FA7B",
-	Subject:  "#BBBBBB",
-	Dim:      "#666666",
-	CursorBg: "#44475A",
-	Refs:     "#8BE9FD",
-	SearchBg: "#44475A",
-	SearchFg: "#F8F8F2",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Hash:     "#D4B84A",
+		Date:     "#555555",
+		Author:   "#6B9E56",
+		Subject:  "#999999",
+		Dim:      "#555555",
+		CursorBg: "#2A2A2A",
+		Refs:     "#7A9EBF",
+		SearchBg: "#2A2A2A",
+		SearchFg: "#D4D4D4",
+	}
+	if th != nil {
+		c.Hash = th.Colors.NormalYellow
+		c.Date = th.Colors.BrightBlack
+		c.Author = th.Colors.NormalGreen
+		c.Subject = th.Colors.NormalWhite
+		c.Dim = th.Colors.BrightBlack
+		c.CursorBg = th.Colors.SelectionBg
+		c.Refs = th.Colors.BrightBlue
+		c.SearchBg = th.Colors.SelectionBg
+		c.SearchFg = th.Colors.SelectionFg
+	}
+	return c
 }
 
 // Panel is the commits panel. It implements [panels.Panel].
@@ -112,16 +128,20 @@ type Panel struct {
 	// PR-commits mode: shows commits in a pull request.
 	prCommitsMode bool
 	focused       bool
+	colors        panelColors
+	theme         *theme.Theme
 }
 
 // Compile-time interface check.
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new commits panel.
-func New(client gitOps) *Panel {
+func New(client gitOps, th *theme.Theme) *Panel {
 	return &Panel{
 		gitClient: client,
 		pageSize:  defaultPageSize,
+		colors:    initColors(th),
+		theme:     th,
 	}
 }
 
@@ -235,14 +255,14 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("Loading commits...")
 	}
 	if len(p.commits) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No commits")
 	}
 	return p.renderList(width, height)
@@ -557,7 +577,7 @@ func (p *Panel) renderList(width, height int) string {
 	}
 	// Loading indicator.
 	if p.loading && len(lines) < height {
-		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
+		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
 		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
 	// Search bar at bottom if in search mode.
@@ -580,8 +600,8 @@ func (p *Panel) renderList(width, height int) string {
 }
 
 func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Subject))
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
+	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
 	// Highlight the selected commit (the one whose files are shown).
 	isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
 	if isSelected {
@@ -607,7 +627,7 @@ func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string 
 	}
 	line := subjectRendered + strings.Repeat(" ", pad) + hash
 	if isCursor || isSelected {
-		bg := defaultColors.CursorBg
+		bg := p.colors.CursorBg
 		if isSelected && !isCursor {
 			bg = "#3B3F52" // subtler highlight for selected-but-not-cursor
 		}
@@ -619,8 +639,8 @@ func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string 
 
 func (p *Panel) renderSearchBar(width int) string {
 	searchStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(defaultColors.SearchBg)).
-		Foreground(lipgloss.Color(defaultColors.SearchFg))
+		Background(lipgloss.Color(p.colors.SearchBg)).
+		Foreground(lipgloss.Color(p.colors.SearchFg))
 	prompt := " /" + p.searchQuery
 	matchCount := len(p.filteredIdx)
 	if p.searchQuery != "" {
@@ -950,11 +970,11 @@ func (p *Panel) showDetail() tea.Cmd {
 	}
 	c := p.commitAt(p.cursor)
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Dim))
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Author))
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Date))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Refs))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
+	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Author))
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Date))
+	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Refs))
 	var lines []string
 	lines = append(lines, headerStyle.Render("Commit Details"))
 	lines = append(lines, dimStyle.Render(strings.Repeat("─", 40)))
@@ -970,7 +990,7 @@ func (p *Panel) showDetail() tea.Cmd {
 		lines = append(lines, "Refs:    "+refStyle.Render(strings.Join(sanitizedRefs, ", ")))
 	}
 	if len(c.Parents) > 0 {
-		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(defaultColors.Hash))
+		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
 	}
 	lines = append(lines, "")

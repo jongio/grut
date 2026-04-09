@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // DismissMsg is sent when the user dismisses the welcome screen.
@@ -27,8 +28,7 @@ const animInterval = 50 * time.Millisecond
 // keyColumnWidth is the display-width allocated for the keybinding column.
 const keyColumnWidth = 14
 
-// colors used by the welcome panel, matching the Dracula palette.
-var colors = struct {
+type panelColors struct {
 	Banner    string
 	Heading   string
 	Key       string
@@ -37,15 +37,33 @@ var colors = struct {
 	Dim       string
 	Separator string
 	Star      string
-}{
-	Banner:    "#BD93F9",
-	Heading:   "#FFB86C",
-	Key:       "#50FA7B",
-	Desc:      "#F8F8F2",
-	Accent:    "#FF79C6",
-	Dim:       "#666666",
-	Separator: "#44475A",
-	Star:      "#F1FA8C",
+	BtnFg     string
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Banner:    "#C9A227",
+		Heading:   "#C9875A",
+		Key:       "#6B9E56",
+		Desc:      "#D4D4D4",
+		Accent:    "#C9A227",
+		Dim:       "#555555",
+		Separator: "#2A2A2A",
+		Star:      "#D4B84A",
+		BtnFg:     "#0D0D0D",
+	}
+	if th != nil {
+		c.Banner = th.Colors.BorderFocused
+		c.Heading = th.Colors.BrightBlue
+		c.Key = th.Colors.NormalGreen
+		c.Desc = th.Colors.Foreground
+		c.Accent = th.Colors.BorderFocused
+		c.Dim = th.Colors.BrightBlack
+		c.Separator = th.Colors.SelectionBg
+		c.Star = th.Colors.NormalYellow
+		c.BtnFg = th.Colors.Background
+	}
+	return c
 }
 
 // Button indices for the footer button bar.
@@ -61,6 +79,8 @@ var buttonLabels = [btnCount]string{"OK", "Help"}
 // Panel is the welcome overlay. It implements [panels.Panel].
 type Panel struct {
 	panels.BasePanel
+	colors      panelColors
+	theme       *theme.Theme
 	lines       []string // pre-rendered content lines
 	offset      int      // scroll offset
 	animFrame   int      // current animation frame (lines revealed so far)
@@ -86,9 +106,11 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new welcome overlay panel.
-func New() *Panel {
+func New(th *theme.Theme) *Panel {
 	p := &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "welcome"},
+		colors:    initColors(th),
+		theme:     th,
 	}
 	p.initStyles()
 	p.buildLines()
@@ -98,37 +120,37 @@ func New() *Panel {
 // initStyles initializes cached lipgloss styles to avoid per-frame allocations.
 func (p *Panel) initStyles() {
 	p.bannerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Banner)).
+		Foreground(lipgloss.Color(p.colors.Banner)).
 		Bold(true)
 	p.flashStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Accent)).
+		Foreground(lipgloss.Color(p.colors.Accent)).
 		Bold(true)
 	p.subtitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Desc)).
+		Foreground(lipgloss.Color(p.colors.Desc)).
 		Italic(true)
 	p.headingStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Heading)).
+		Foreground(lipgloss.Color(p.colors.Heading)).
 		Bold(true)
 	p.keyStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Key)).
+		Foreground(lipgloss.Color(p.colors.Key)).
 		Bold(true)
 	p.accentKeyStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Accent)).
+		Foreground(lipgloss.Color(p.colors.Accent)).
 		Bold(true)
 	p.descStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Desc))
+		Foreground(lipgloss.Color(p.colors.Desc))
 	p.sepStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Separator))
+		Foreground(lipgloss.Color(p.colors.Separator))
 	p.starStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Star)).
+		Foreground(lipgloss.Color(p.colors.Star)).
 		Bold(true)
 	p.focusedBtnSty = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#282A36")).
-		Background(lipgloss.Color(colors.Accent)).
+		Foreground(lipgloss.Color(p.colors.BtnFg)).
+		Background(lipgloss.Color(p.colors.Accent)).
 		Padding(0, 1)
 	p.normalBtnSty = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colors.Dim)).
+		Foreground(lipgloss.Color(p.colors.Dim)).
 		Padding(0, 1)
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/rightclick"
+	"github.com/jongio/grut/internal/theme"
 )
 
 // GitOps defines the git operations required by the branch panel.
@@ -74,7 +75,7 @@ type branchOpResultMsg struct {
 // ---------------------------------------------------------------------------
 // Default colors (Dracula-inspired)
 // ---------------------------------------------------------------------------
-var defaultColors = struct {
+type panelColors struct {
 	Current  string
 	Local    string
 	Remote   string
@@ -83,15 +84,30 @@ var defaultColors = struct {
 	Tracking string
 	CursorBg string
 	Dim      string
-}{
-	Current:  "#50FA7B",
-	Local:    "#F8F8F2",
-	Remote:   "#BD93F9",
-	Header:   "#8BE9FD",
-	Hash:     "#6272A4",
-	Tracking: "#FFB86C",
-	CursorBg: "#44475A",
-	Dim:      "#666666",
+}
+
+func initColors(th *theme.Theme) panelColors {
+	c := panelColors{
+		Current:  "#6B9E56",
+		Local:    "#D4D4D4",
+		Remote:   "#C9A227",
+		Header:   "#7A9EBF",
+		Hash:     "#555555",
+		Tracking: "#C9875A",
+		CursorBg: "#2A2A2A",
+		Dim:      "#555555",
+	}
+	if th != nil {
+		c.Current = th.Colors.GitBranch
+		c.Local = th.Colors.Foreground
+		c.Remote = th.Colors.NormalYellow
+		c.Header = th.Colors.BrightBlue
+		c.Hash = th.Colors.BrightBlack
+		c.Tracking = th.Colors.NormalMagenta
+		c.CursorBg = th.Colors.SelectionBg
+		c.Dim = th.Colors.BrightBlack
+	}
+	return c
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +124,8 @@ type Panel struct {
 	pendingName   string     // item type name for first-use confirm
 	items         []listItem // flat display list (headers + branches)
 	panels.BasePanel
+	colors    panelColors
+	theme     *theme.Theme
 	cfg             config.GitConfig
 	cursor          int       // index into items (skips headers)
 	offset          int       // viewport scroll offset
@@ -120,7 +138,7 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new branch panel.
-func New(gitOps GitOps, cfg config.GitConfig, repoRoot string) *Panel {
+func New(gitOps GitOps, cfg config.GitConfig, repoRoot string, th *theme.Theme) *Panel {
 	return &Panel{
 		BasePanel:       panels.BasePanel{PanelTitle: "branches"},
 		git:             gitOps,
@@ -128,6 +146,8 @@ func New(gitOps GitOps, cfg config.GitConfig, repoRoot string) *Panel {
 		repoRoot:        repoRoot,
 		annotations:     make(map[string]string),
 		showAnnotations: true,
+		colors:          initColors(th),
+		theme:           th,
 	}
 }
 
@@ -236,7 +256,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(defaultColors.Dim)).
+			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render("No branches")
 	}
 	lines := make([]string, 0, height)
@@ -829,7 +849,7 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	if item.isHeader {
 		return lipgloss.NewStyle().
 			Width(width).
-			Foreground(lipgloss.Color(defaultColors.Header)).
+			Foreground(lipgloss.Color(p.colors.Header)).
 			Bold(true).
 			Render("── " + item.header + " ──")
 	}
@@ -871,14 +891,14 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 	// Apply styles.
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
-		style = style.Background(lipgloss.Color(defaultColors.CursorBg))
+		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	if b.IsCurrent {
-		style = style.Foreground(lipgloss.Color(defaultColors.Current)).Bold(true)
+		style = style.Foreground(lipgloss.Color(p.colors.Current)).Bold(true)
 	} else if b.IsRemote {
-		style = style.Foreground(lipgloss.Color(defaultColors.Remote))
+		style = style.Foreground(lipgloss.Color(p.colors.Remote))
 	} else {
-		style = style.Foreground(lipgloss.Color(defaultColors.Local))
+		style = style.Foreground(lipgloss.Color(p.colors.Local))
 	}
 	return style.Render(line)
 }

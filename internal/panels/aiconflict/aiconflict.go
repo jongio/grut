@@ -434,63 +434,63 @@ func (p *Panel) headerHex() string {
 	if p.theme != nil && p.theme.Colors.DiffHeader != "" {
 		return p.theme.Colors.DiffHeader
 	}
-	return "#BD93F9"
+	return "#C9A227"
 }
 
 func (p *Panel) regionHex() string {
 	if p.theme != nil && p.theme.Colors.DiffHunk != "" {
 		return p.theme.Colors.DiffHunk
 	}
-	return "#6272A4"
+	return "#555555"
 }
 
 func (p *Panel) oursHex() string {
 	if p.theme != nil && p.theme.Colors.DiffAdded != "" {
 		return p.theme.Colors.DiffAdded
 	}
-	return "#50FA7B"
+	return "#6B9E56"
 }
 
 func (p *Panel) theirsHex() string {
 	if p.theme != nil && p.theme.Colors.DiffRemoved != "" {
 		return p.theme.Colors.DiffRemoved
 	}
-	return "#FF5555"
+	return "#C44B4B"
 }
 
 func (p *Panel) aiHex() string {
 	if p.theme != nil && p.theme.Colors.NormalCyan != "" {
 		return p.theme.Colors.NormalCyan
 	}
-	return "#8BE9FD"
+	return "#5E8E8B"
 }
 
 func (p *Panel) dimHex() string {
 	if p.theme != nil && p.theme.Colors.BrightBlack != "" {
 		return p.theme.Colors.BrightBlack
 	}
-	return "#6272A4"
+	return "#555555"
 }
 
 func (p *Panel) successHex() string {
 	if p.theme != nil && p.theme.Colors.NotifySuccess != "" {
 		return p.theme.Colors.NotifySuccess
 	}
-	return "#50FA7B"
+	return "#6B9E56"
 }
 
 func (p *Panel) hintHex() string {
 	if p.theme != nil && p.theme.Colors.StatusBarFg != "" {
 		return p.theme.Colors.StatusBarFg
 	}
-	return "#F8F8F2"
+	return "#D4D4D4"
 }
 
 func (p *Panel) hintBgHex() string {
 	if p.theme != nil && p.theme.Colors.StatusBarBg != "" {
 		return p.theme.Colors.StatusBarBg
 	}
-	return "#44475A"
+	return "#2A2A2A"
 }
 
 // ---------------------------------------------------------------------------
