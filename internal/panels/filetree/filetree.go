@@ -110,6 +110,8 @@ type FileTree struct {
 	prLabel         string
 	branchName      string   // selected branch name
 	branchLabel     string   // e.g. "branch: feature/auth"
+	branchBaseRef   string   // base ref for branch comparison (e.g., "main")
+	baseBranch      string   // configured default/base branch for "b" toggle
 	visible         []*node  // flattened list of currently visible nodes
 	commitFiles     []string // relative paths from diff-tree
 	branchFiles     []string // relative paths from branch diff
@@ -135,6 +137,8 @@ type FileTree struct {
 	prFilesMode bool
 	// Branch-files mode: shows files changed on a selected branch.
 	branchFilesMode bool
+	// Branch-diff filter: user toggled "b" to see origination diff.
+	branchDiffFilter bool
 }
 
 // Compile-time interface check.
@@ -175,6 +179,12 @@ func (ft *FileTree) SetGitClient(gc git.StatusReader) {
 	if ic, ok := gc.(git.IgnoreChecker); ok {
 		ft.ignoreChecker = ic
 	}
+}
+
+// SetBaseBranch configures the default base branch for the "b" toggle
+// (branch diff filter). Typically set from config.GitConfig.DefaultBranch.
+func (ft *FileTree) SetBaseBranch(branch string) {
+	ft.baseBranch = branch
 }
 
 // handleRepoChanged replaces the git client so git-aware features (file
@@ -490,6 +500,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: ".", Description: "Toggle hidden files", Action: "toggle_hidden"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "g", Description: "Toggle git-changed filter", Action: "toggle_git_filter"},
+		{Key: "b", Description: "Toggle branch diff filter", Action: "toggle_branch_diff_filter"},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -558,9 +569,11 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 	// Exit branch-files mode if active.
 	if ft.branchFilesMode {
 		ft.branchFilesMode = false
+		ft.branchDiffFilter = false
 		ft.branchFiles = nil
 		ft.branchName = ""
 		ft.branchLabel = ""
+		ft.branchBaseRef = ""
 		ft.branchChangedPaths = nil
 		ft.branchChangedDirs = nil
 	}
@@ -616,9 +629,11 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 	// Exit branch-files mode if active.
 	if ft.branchFilesMode {
 		ft.branchFilesMode = false
+		ft.branchDiffFilter = false
 		ft.branchFiles = nil
 		ft.branchName = ""
 		ft.branchLabel = ""
+		ft.branchBaseRef = ""
 		ft.branchChangedPaths = nil
 		ft.branchChangedDirs = nil
 	}
@@ -673,7 +688,7 @@ func (ft *FileTree) handleBranchSelected(msg panels.BranchSelectedMsg) (panels.P
 	ctx := ft.ctx
 	name := msg.Name
 	return ft, func() tea.Msg {
-		files, err := gc.DiffFileNames(ctx, "HEAD", name)
+		files, err := gc.DiffFileNames(ctx, name, "HEAD")
 		return branchFilesLoadedMsg{files: files, branch: name, err: err}
 	}
 }
@@ -689,7 +704,12 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 	ft.branchFilesMode = true
 	ft.branchFiles = msg.files
 	ft.branchName = msg.branch
-	ft.branchLabel = "branch: " + msg.branch
+	ft.branchBaseRef = msg.branch
+	if ft.branchDiffFilter {
+		ft.branchLabel = "diff vs " + msg.branch
+	} else {
+		ft.branchLabel = "branch: " + msg.branch
+	}
 	// Exit commit-files mode if active.
 	if ft.commitFilesMode {
 		ft.commitFilesMode = false
@@ -721,20 +741,68 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
-	return ft, ft.emitCursorFileSelected()
+	cmds := []tea.Cmd{ft.emitCursorFileSelected()}
+	if ft.branchDiffFilter {
+		baseBranch := ft.branchBaseRef
+		cmds = append(cmds, func() tea.Msg {
+			return panels.BranchDiffFilterActiveMsg{Active: true, BaseBranch: baseBranch}
+		})
+	}
+	return ft, tea.Batch(cmds...)
 }
 
 // exitBranchFilesMode restores the normal file tree view.
 func (ft *FileTree) exitBranchFilesMode() {
 	ft.branchFilesMode = false
+	ft.branchDiffFilter = false
 	ft.branchFiles = nil
 	ft.branchName = ""
 	ft.branchLabel = ""
+	ft.branchBaseRef = ""
 	ft.branchChangedPaths = nil
 	ft.branchChangedDirs = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
+}
+
+// toggleBranchDiffFilter toggles the "b" mode: shows only files that differ
+// from the configured base branch (e.g., main). Uses three-dot diff to show
+// changes introduced on the current branch since it diverged.
+func (ft *FileTree) toggleBranchDiffFilter() (panels.Panel, tea.Cmd) {
+	if ft.gitClient == nil {
+		return ft, nil
+	}
+	// If already in branch-diff filter mode, turn it off.
+	if ft.branchDiffFilter {
+		return ft.exitBranchDiffWithCmd()
+	}
+	base := ft.baseBranch
+	if base == "" {
+		base = "main"
+	}
+	ft.branchDiffFilter = true
+	gc := ft.gitClient
+	ctx := ft.ctx
+	return ft, func() tea.Msg {
+		files, err := gc.DiffFileNames(ctx, base, "HEAD")
+		return branchFilesLoadedMsg{files: files, branch: base, err: err}
+	}
+}
+
+// exitBranchDiffWithCmd exits branch-files mode and emits the appropriate
+// deactivation messages.
+func (ft *FileTree) exitBranchDiffWithCmd() (panels.Panel, tea.Cmd) {
+	wasDiffFilter := ft.branchDiffFilter
+	ft.exitBranchFilesMode()
+	var cmds []tea.Cmd
+	cmds = append(cmds, ft.emitCursorFileSelected())
+	if wasDiffFilter {
+		cmds = append(cmds, func() tea.Msg {
+			return panels.BranchDiffFilterActiveMsg{Active: false}
+		})
+	}
+	return ft, tea.Batch(cmds...)
 }
 
 // ---------------------------------------------------------------------------
@@ -756,8 +824,7 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	}
 	// In branch-files mode, Escape returns to normal tree view.
 	if ft.branchFilesMode && msg.String() == keyEsc {
-		ft.exitBranchFilesMode()
-		return ft, ft.emitCursorFileSelected()
+		return ft.exitBranchDiffWithCmd()
 	}
 	switch msg.String() {
 	case "j", "down":
@@ -774,6 +841,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		ft.toggleHidden()
 	case "g":
 		return ft.toggleGitFilter()
+	case "b":
+		return ft.toggleBranchDiffFilter()
 	case "G":
 		ft.goToBottom()
 	case "d":
@@ -941,6 +1010,8 @@ func (ft *FileTree) moveCursorUp() {
 
 // emitCursorFileSelected returns a cmd that sends FileSelectedMsg for the
 // currently focused node, so the preview panel updates on every cursor move.
+// In branch-files mode, it emits ShowDiffMsg with ref comparison context so
+// the diff panel shows the branch comparison instead of working tree diff.
 func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
 		return nil
@@ -951,6 +1022,27 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 		return func() tea.Msg { return panels.FolderSelectedMsg{Path: path} }
 	}
 	path := n.path
+	// In branch-files mode, emit ShowDiffMsg with ref comparison context
+	// so the diff panel shows the branch diff, not the working tree diff.
+	if ft.branchFilesMode && ft.branchBaseRef != "" {
+		relPath, err := filepath.Rel(ft.rootPath, path)
+		if err != nil {
+			relPath = path
+		}
+		relPath = filepath.ToSlash(relPath)
+		baseRef := ft.branchBaseRef
+		return tea.Batch(
+			func() tea.Msg { return panels.FileSelectedMsg{Path: path} },
+			func() tea.Msg {
+				return panels.ShowDiffMsg{
+					Path:     relPath,
+					CommitA:  baseRef,
+					CommitB:  "HEAD",
+					ThreeDot: true,
+				}
+			},
+		)
+	}
 	return func() tea.Msg { return panels.FileSelectedMsg{Path: path} }
 }
 

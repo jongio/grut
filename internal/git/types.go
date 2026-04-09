@@ -80,6 +80,7 @@ type DiffOpts struct {
 	NameOnly  bool // Only show file names
 	StatOnly  bool // Only show stat summary
 	IgnoreAll bool // Ignore all whitespace changes
+	ThreeDot  bool // Use three-dot notation (CommitA...CommitB) for merge-base comparison
 }
 
 // FileDiff represents the diff output for a single file.

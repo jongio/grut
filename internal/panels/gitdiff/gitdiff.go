@@ -44,6 +44,11 @@ type GitDiff struct {
 	theme *theme.Theme
 	// Request state
 	path string // file path being diffed
+	// Ref comparison state (for branch/tag diff mode)
+	compareCommitA string // base ref (e.g., "main")
+	compareCommitB string // head ref (e.g., "HEAD")
+	compareMode    bool   // when true, use ref comparison instead of working tree
+	compareThree   bool   // use three-dot notation
 	// Diff data
 	diffs []git.FileDiff // all file diffs returned by git
 	// Pre-rendered content (rebuilt on data/mode/size change)
@@ -103,10 +108,42 @@ func (d *GitDiff) Init(ctx context.Context) tea.Cmd {
 func (d *GitDiff) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case panels.ShowDiffMsg:
+		if msg.CommitA != "" && msg.CommitB != "" {
+			d.compareMode = true
+			d.compareCommitA = msg.CommitA
+			d.compareCommitB = msg.CommitB
+			d.compareThree = msg.ThreeDot
+			return d, d.startRefDiffLoad(msg.Path, msg.CommitA, msg.CommitB, msg.ThreeDot)
+		}
+		d.compareMode = false
 		return d, d.startDiffLoad(msg.Path, msg.Staged)
 	case panels.FileSelectedMsg:
-		// When a file is selected (e.g., from filetree), show its unstaged diff.
+		if d.compareMode {
+			// In compare mode, ShowDiffMsg handles diff loading with proper
+			// ref comparison context. Ignore FileSelectedMsg to avoid
+			// overwriting with a working tree diff.
+			return d, nil
+		}
 		return d, d.startDiffLoad(msg.Path, false)
+	case panels.BranchDiffFilterActiveMsg:
+		if !msg.Active {
+			d.compareMode = false
+			d.compareCommitA = ""
+			d.compareCommitB = ""
+			d.compareThree = false
+		}
+		return d, nil
+	case panels.BranchDeselectedMsg:
+		d.compareMode = false
+		d.compareCommitA = ""
+		d.compareCommitB = ""
+		d.compareThree = false
+		return d, nil
+	case panels.GitFilterActiveMsg:
+		if msg.Active {
+			d.compareMode = false
+		}
+		return d, nil
 	case panels.AIReviewReadyMsg:
 		d.reviewFindings = d.filterFindingsForFile(msg.Findings)
 		d.rebuildLines()
@@ -159,6 +196,10 @@ func (d *GitDiff) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	d.loading = false
 	d.reviewFindings = nil
 	d.showReviewAnnotations = false
+	d.compareMode = false
+	d.compareCommitA = ""
+	d.compareCommitB = ""
+	d.compareThree = false
 	return d, nil
 }
 
@@ -175,6 +216,43 @@ func (d *GitDiff) startDiffLoad(path string, staged bool) tea.Cmd {
 	d.fileStarts = nil
 	d.loading = true
 	return d.loadDiffCmd(path, staged)
+}
+
+// startRefDiffLoad loads a diff between two refs (branch comparison mode).
+func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool) tea.Cmd {
+	d.path = path
+	d.staged = false
+	d.scrollY = 0
+	d.fileIdx = 0
+	d.err = nil
+	d.diffs = nil
+	d.lines = nil
+	d.hunkStarts = nil
+	d.fileStarts = nil
+	d.loading = true
+	d.diffGen++
+	gen := d.diffGen
+	gitClient := d.gitClient
+	ctx := d.ctx
+	return func() tea.Msg {
+		result := diffLoadedMsg{path: path, generation: gen}
+		if gitClient == nil {
+			result.err = fmt.Errorf("no git client configured")
+			return result
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
+			CommitA:  commitA,
+			CommitB:  commitB,
+			ThreeDot: threeDot,
+			Path:     path,
+		})
+		result.diffs = diffs
+		result.err = err
+		return result
+	}
 }
 
 // handleKey processes keyboard input when the panel is focused.

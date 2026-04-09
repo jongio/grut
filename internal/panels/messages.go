@@ -116,9 +116,13 @@ type CherryPickMsg struct {
 
 // ShowDiffMsg requests showing a diff for the specified file path.
 // Staged indicates whether to show the staged (index vs HEAD) diff.
+// When CommitA and CommitB are set, shows a ref comparison diff instead.
 type ShowDiffMsg struct {
-	Path   string
-	Staged bool
+	Path     string
+	CommitA  string // base ref for comparison (e.g., "main")
+	CommitB  string // head ref for comparison (e.g., "HEAD")
+	Staged   bool
+	ThreeDot bool // use three-dot (merge-base) comparison
 }
 
 // UndoMsg is sent when the user requests an undo operation (ctrl+z).
@@ -161,6 +165,14 @@ type GitChangedFilesMsg struct {
 // When active, the preview panel shows diff-only instead of file content.
 type GitFilterActiveMsg struct {
 	Active bool
+}
+
+// BranchDiffFilterActiveMsg notifies panels whether branch-diff filter mode
+// is active (the "b" toggle). When active, the filetree shows only files
+// that differ from the base branch.
+type BranchDiffFilterActiveMsg struct {
+	Active     bool
+	BaseBranch string // e.g., "main"
 }
 
 // PreviewScrollMsg requests the preview panel to scroll by Delta lines.
