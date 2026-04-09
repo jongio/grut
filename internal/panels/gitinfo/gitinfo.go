@@ -1167,7 +1167,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 		)
 	case "worktree_switch":
 		cmds = append(cmds, func() tea.Msg {
-			return panels.SwitchWorktreeMsg{Path: name}
+			return panels.ChangeDirectoryMsg{Path: name}
 		})
 	case "remote_added":
 		cmds = append(cmds,

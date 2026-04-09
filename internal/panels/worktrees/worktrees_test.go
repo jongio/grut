@@ -372,7 +372,7 @@ func TestSwitch_EmitsSwitchMsg(t *testing.T) {
 	require.NotNil(t, cmd)
 
 	msg := cmd()
-	switchMsg, ok := msg.(panels.SwitchWorktreeMsg)
+	switchMsg, ok := msg.(panels.ChangeDirectoryMsg)
 	require.True(t, ok)
 	assert.Equal(t, "/home/user/grut-feat", switchMsg.Path)
 }

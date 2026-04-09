@@ -560,7 +560,7 @@ func (p *Panel) requestSwitch(pathOverride string) (panels.Panel, tea.Cmd) {
 		}
 	}
 	return p, func() tea.Msg {
-		return panels.SwitchWorktreeMsg{Path: path}
+		return panels.ChangeDirectoryMsg{Path: path}
 	}
 }
 

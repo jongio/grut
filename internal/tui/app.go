@@ -326,8 +326,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bookmarkPanel = nil
 		cmd := m.engine.Update(msg)
 		return m, cmd
-	case panels.SwitchWorktreeMsg:
-		return m.Update(panels.ChangeDirectoryMsg(msg))
 	case panels.ChangeDirectoryMsg:
 		targetPath, err := filepath.Abs(msg.Path)
 		if err != nil {

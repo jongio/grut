@@ -90,8 +90,8 @@ func TestExecuteRightClickAction_Switch(t *testing.T) {
 	_, cmd := p.executeRightClickAction(actions.ActionSwitch, "")
 	assert.NotNil(t, cmd)
 	msg := cmd()
-	_, ok := msg.(panels.SwitchWorktreeMsg)
-	assert.True(t, ok, "expected SwitchWorktreeMsg")
+	_, ok := msg.(panels.ChangeDirectoryMsg)
+	assert.True(t, ok, "expected ChangeDirectoryMsg")
 }
 
 func TestExecuteRightClickAction_CopyPath(t *testing.T) {
@@ -240,10 +240,10 @@ func TestHandleModalResult_FirstUseConfirm_UsesPendingPath(t *testing.T) {
 		Value:    string(actions.ActionSwitch),
 		Remember: false,
 	})
-	require.NotNil(t, cmd, "should produce SwitchWorktreeMsg even with stale cursor")
+	require.NotNil(t, cmd, "should produce ChangeDirectoryMsg even with stale cursor")
 	msg := cmd()
-	switchMsg, ok := msg.(panels.SwitchWorktreeMsg)
-	require.True(t, ok, "expected SwitchWorktreeMsg, got %T", msg)
+	switchMsg, ok := msg.(panels.ChangeDirectoryMsg)
+	require.True(t, ok, "expected ChangeDirectoryMsg, got %T", msg)
 	assert.Equal(t, "/home/user/grut-feat", switchMsg.Path)
 }
 

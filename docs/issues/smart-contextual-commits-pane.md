@@ -39,7 +39,7 @@ All inter-panel communication flows through the layout engine's broadcast system
 ### New Messages Needed
 
 - **`FolderSelectedMsg{Path string}`** — emitted by filetree when a directory is selected (currently `emitCursorFileSelected()` skips directories with `if n.isDir { return nil }`).
-- **`WorktreeSelectedMsg{Path, Branch string}`** — emitted by gitinfo worktrees tab on cursor selection (currently only `SwitchWorktreeMsg` exists for actual switching).
+- **`WorktreeSelectedMsg{Path, Branch string}`** — emitted by gitinfo worktrees tab on cursor selection (currently only `ChangeDirectoryMsg` exists for actual switching).
 - **`RemoteSelectedMsg{Name, Branch string}`** — emitted by gitinfo remotes tab on cursor selection (currently no selection message for remotes).
 - **`StashSelectedMsg{Index int, Hash string}`** — emitted by gitinfo stash tab on cursor selection (currently no selection message for stash entries).
 

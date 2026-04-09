@@ -687,7 +687,7 @@ func TestChangeDirectoryMsgInvalidPath(t *testing.T) {
 	assert.Equal(t, notify.Error, toast.Level)
 }
 
-func TestSwitchWorktreeMsg_DelegatesToChangeDirectory(t *testing.T) {
+func TestChangeDirectoryMsg_ChangesCWD(t *testing.T) {
 	m := newTestModel(t)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m = updated.(Model)
@@ -701,13 +701,13 @@ func TestSwitchWorktreeMsg_DelegatesToChangeDirectory(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(tmpDir)) })
 	t.Cleanup(func() { require.NoError(t, os.Chdir(origDir)) })
 
-	updated, cmd := m.Update(panels.SwitchWorktreeMsg{Path: tmpDir})
+	updated, cmd := m.Update(panels.ChangeDirectoryMsg{Path: tmpDir})
 	_ = updated.(Model)
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
-	assert.Equal(t, tmpDir, cwd, "SwitchWorktreeMsg should change CWD")
-	assert.NotNil(t, cmd, "SwitchWorktreeMsg should return commands")
+	assert.Equal(t, tmpDir, cwd, "ChangeDirectoryMsg should change CWD")
+	assert.NotNil(t, cmd, "ChangeDirectoryMsg should return commands")
 }
 
 // ---------------------------------------------------------------------------

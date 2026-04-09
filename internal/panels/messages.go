@@ -305,12 +305,6 @@ type WorktreeChangedMsg struct{}
 // panels can react (e.g. refresh remote-dependent state).
 type RemoteChangedMsg struct{}
 
-// SwitchWorktreeMsg is emitted when the user selects a worktree to switch to.
-// The Path field holds the filesystem path of the target worktree.
-type SwitchWorktreeMsg struct {
-	Path string
-}
-
 // TagChangedMsg is emitted after tag operations (create, delete) so that
 // other panels can refresh their tag-dependent state.
 type TagChangedMsg struct{}

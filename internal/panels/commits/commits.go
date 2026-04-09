@@ -217,7 +217,7 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRCommitsLoaded(msg)
 	case panels.PRDeselectedMsg:
 		return p.exitPRCommitsMode()
-	case panels.SwitchWorktreeMsg:
+	case panels.ChangeDirectoryMsg:
 		return p.handleSwitchWorktree(msg)
 	case panels.WorktreeChangedMsg:
 		return p.handleWorktreeChanged()
@@ -373,7 +373,7 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	return p, p.loadCommitsCmd(0, false)
 }
 
-func (p *Panel) handleSwitchWorktree(msg panels.SwitchWorktreeMsg) (panels.Panel, tea.Cmd) {
+func (p *Panel) handleSwitchWorktree(msg panels.ChangeDirectoryMsg) (panels.Panel, tea.Cmd) {
 	// When switching worktrees, reload from HEAD. A subsequent
 	// BranchChangedMsg will set the specific ref if needed.
 	p.ref = ""

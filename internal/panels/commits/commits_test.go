@@ -135,11 +135,11 @@ func TestBranchChangedMsg(t *testing.T) {
 	}
 }
 
-func TestSwitchWorktreeMsg(t *testing.T) {
+func TestChangeDirectoryMsg(t *testing.T) {
 	mock := &mockGitOps{commits: defaultCommits()}
 	p := newTestPanel(mock)
 
-	_, cmd := p.Update(panels.SwitchWorktreeMsg{Path: "/test/worktree"})
+	_, cmd := p.Update(panels.ChangeDirectoryMsg{Path: "/test/worktree"})
 	if cmd == nil {
 		t.Fatal("expected a command to reload commits")
 	}
