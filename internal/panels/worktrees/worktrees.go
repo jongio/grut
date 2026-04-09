@@ -328,7 +328,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.moveCursorUp()
 		return p, p.worktreeSelectedCmd()
 	case "enter":
-		return p.requestSwitch()
+		return p.requestSwitch("")
 	case "n":
 		return p.requestCreate()
 	case "d", "x":
@@ -367,36 +367,45 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
+		p.pendingPath = p.items[idx].worktree.Path
 		return p, rightclick.FirstUseCmd(itemType)
 	}
 	action := actions.ActionID(p.actionsCfg.GetDoubleClickAction(string(itemType)))
-	return p.executeRightClickAction(action)
+	return p.executeRightClickAction(action, "")
 }
 
 // SetActionsCfg injects the actions configuration for right-click menus.
 func (p *Panel) SetActionsCfg(cfg config.ActionsConfig) { p.actionsCfg = cfg }
 
-// executeRightClickAction dispatches a right-click action to the appropriate method.
-func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, tea.Cmd) {
+// executeRightClickAction dispatches a right-click action to the appropriate
+// method. When pathOverride is non-empty it is used directly instead of
+// looking up the item via p.cursor, which may have become stale during an
+// async modal delay.
+func (p *Panel) executeRightClickAction(action actions.ActionID, pathOverride string) (panels.Panel, tea.Cmd) {
 	switch action { //nolint:exhaustive // only relevant cases handled
 	case actions.ActionSwitch:
-		return p.requestSwitch()
+		return p.requestSwitch(pathOverride)
 	case actions.ActionChangeDirectory:
-		return p.changeDirectory()
+		return p.changeDirectory(pathOverride)
 	case actions.ActionOpenTerminal:
-		return p.openTerminal()
+		return p.openTerminal(pathOverride)
 	case actions.ActionCopyPath:
-		return p.copyPath()
+		return p.copyPath(pathOverride)
 	}
 	return p, nil
 }
 
 // openTerminal opens a terminal at the worktree's path.
-func (p *Panel) openTerminal() (panels.Panel, tea.Cmd) {
-	if p.cursor < 0 || p.cursor >= len(p.items) {
-		return p, nil
+func (p *Panel) openTerminal(pathOverride string) (panels.Panel, tea.Cmd) {
+	var wtPath string
+	if pathOverride != "" {
+		wtPath = pathOverride
+	} else {
+		if p.cursor < 0 || p.cursor >= len(p.items) {
+			return p, nil
+		}
+		wtPath = p.items[p.cursor].worktree.Path
 	}
-	wtPath := p.items[p.cursor].worktree.Path
 	return p, func() tea.Msg {
 		if err := panels.OpenInTerminal(wtPath); err != nil {
 			return notify.ShowToastMsg{Message: "Terminal failed: " + err.Error(), Level: notify.Error}
@@ -406,11 +415,16 @@ func (p *Panel) openTerminal() (panels.Panel, tea.Cmd) {
 }
 
 // copyPath copies the worktree path to the clipboard.
-func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
-	if p.cursor < 0 || p.cursor >= len(p.items) {
-		return p, nil
+func (p *Panel) copyPath(pathOverride string) (panels.Panel, tea.Cmd) {
+	var wtPath string
+	if pathOverride != "" {
+		wtPath = pathOverride
+	} else {
+		if p.cursor < 0 || p.cursor >= len(p.items) {
+			return p, nil
+		}
+		wtPath = p.items[p.cursor].worktree.Path
 	}
-	wtPath := p.items[p.cursor].worktree.Path
 	return p, func() tea.Msg {
 		if err := panels.CopyToClipboard(p.ctx, wtPath); err != nil {
 			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
@@ -421,17 +435,22 @@ func (p *Panel) copyPath() (panels.Panel, tea.Cmd) {
 
 // changeDirectory emits a ChangeDirectoryMsg so the app re-roots into
 // the selected worktree.
-func (p *Panel) changeDirectory() (panels.Panel, tea.Cmd) {
-	item := p.selectedWorktree()
-	if item == nil {
-		return p, nil
-	}
-	if item.isMissing {
-		return p, func() tea.Msg {
-			return notify.ShowToastMsg{Message: "Cannot cd: path missing", Level: notify.Warn}
+func (p *Panel) changeDirectory(pathOverride string) (panels.Panel, tea.Cmd) {
+	var path string
+	if pathOverride != "" {
+		path = pathOverride
+	} else {
+		item := p.selectedWorktree()
+		if item == nil {
+			return p, nil
 		}
+		if item.isMissing {
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Cannot cd: path missing", Level: notify.Warn}
+			}
+		}
+		path = item.worktree.Path
 	}
-	path := item.worktree.Path
 	return p, func() tea.Msg {
 		return panels.ChangeDirectoryMsg{Path: path}
 	}
@@ -515,17 +534,22 @@ func (p *Panel) worktreeSelectedCmd() tea.Cmd {
 // ---------------------------------------------------------------------------
 // Worktree operations
 // ---------------------------------------------------------------------------
-func (p *Panel) requestSwitch() (panels.Panel, tea.Cmd) {
-	item := p.selectedWorktree()
-	if item == nil {
-		return p, nil
-	}
-	if item.isMissing {
-		return p, func() tea.Msg {
-			return notify.ShowToastMsg{Message: "Cannot switch: path missing", Level: notify.Warn}
+func (p *Panel) requestSwitch(pathOverride string) (panels.Panel, tea.Cmd) {
+	var path string
+	if pathOverride != "" {
+		path = pathOverride
+	} else {
+		item := p.selectedWorktree()
+		if item == nil {
+			return p, nil
 		}
+		if item.isMissing {
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Cannot switch: path missing", Level: notify.Warn}
+			}
+		}
+		path = item.worktree.Path
 	}
-	path := item.worktree.Path
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
 			if err := panels.OpenInTerminal(path); err != nil {
@@ -616,9 +640,9 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, pendingName, msg.Value)
 		}
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.executeRightClickAction(actions.ActionID(msg.Value), pendingPath)
 	case opRightClickPick:
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.executeRightClickAction(actions.ActionID(msg.Value), pendingPath)
 	}
 	return p, nil
 }

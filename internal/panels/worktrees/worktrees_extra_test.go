@@ -87,7 +87,7 @@ func TestExecuteRightClickAction_Switch(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 1
 
-	_, cmd := p.executeRightClickAction(actions.ActionSwitch)
+	_, cmd := p.executeRightClickAction(actions.ActionSwitch, "")
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(panels.SwitchWorktreeMsg)
@@ -98,7 +98,7 @@ func TestExecuteRightClickAction_CopyPath(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 0
 
-	_, cmd := p.executeRightClickAction(actions.ActionCopyPath)
+	_, cmd := p.executeRightClickAction(actions.ActionCopyPath, "")
 	// cmd invokes clipboard; just ensure it's non-nil
 	assert.NotNil(t, cmd)
 }
@@ -107,13 +107,13 @@ func TestExecuteRightClickAction_OpenTerminal(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 0
 
-	_, cmd := p.executeRightClickAction(actions.ActionOpenTerminal)
+	_, cmd := p.executeRightClickAction(actions.ActionOpenTerminal, "")
 	assert.NotNil(t, cmd)
 }
 
 func TestExecuteRightClickAction_UnknownAction(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
-	_, cmd := p.executeRightClickAction(actions.ActionID("unknown"))
+	_, cmd := p.executeRightClickAction(actions.ActionID("unknown"), "")
 	assert.Nil(t, cmd)
 }
 
@@ -125,7 +125,7 @@ func TestCopyPath_OutOfBounds(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = -1
 
-	_, cmd := p.copyPath()
+	_, cmd := p.copyPath("")
 	assert.Nil(t, cmd)
 }
 
@@ -133,7 +133,7 @@ func TestCopyPath_ValidCursor(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 0
 
-	_, cmd := p.copyPath()
+	_, cmd := p.copyPath("")
 	assert.NotNil(t, cmd)
 }
 
@@ -145,7 +145,7 @@ func TestOpenTerminal_OutOfBounds(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 99
 
-	_, cmd := p.openTerminal()
+	_, cmd := p.openTerminal("")
 	assert.Nil(t, cmd)
 }
 
@@ -158,7 +158,7 @@ func TestRequestSwitch_MissingPath(t *testing.T) {
 	p.items[1].isMissing = true
 	p.cursor = 1
 
-	_, cmd := p.requestSwitch()
+	_, cmd := p.requestSwitch("")
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
@@ -171,13 +171,13 @@ func TestRequestSwitch_NewTerminalMode(t *testing.T) {
 	p.cfg.WorktreeOpenMode = "new_terminal"
 	p.cursor = 1
 
-	_, cmd := p.requestSwitch()
+	_, cmd := p.requestSwitch("")
 	assert.NotNil(t, cmd, "should emit terminal open command")
 }
 
 func TestRequestSwitch_NoItems(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: []git.Worktree{}}, alwaysExists)
-	_, cmd := p.requestSwitch()
+	_, cmd := p.requestSwitch("")
 	assert.Nil(t, cmd)
 }
 
@@ -188,6 +188,7 @@ func TestRequestSwitch_NoItems(t *testing.T) {
 func TestHandleModalResult_RightClickPick(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.pending = opRightClickPick
+	p.pendingPath = "/home/user/grut-feat"
 	p.cursor = 1
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
@@ -209,6 +210,7 @@ func TestHandleModalResult_FirstUseConfirm(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.pending = opFirstUseConfirm
 	p.pendingName = "worktree"
+	p.pendingPath = "/home/user/grut-feat"
 	p.cursor = 1
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{
@@ -217,6 +219,73 @@ func TestHandleModalResult_FirstUseConfirm(t *testing.T) {
 		Remember: true,
 	})
 	assert.NotNil(t, cmd)
+}
+
+func TestHandleModalResult_FirstUseConfirm_UsesPendingPath(t *testing.T) {
+	// Regression test: after double-click triggers first-use confirmation,
+	// the cursor may become stale before the modal result arrives.
+	// The fix stores pendingPath at double-click time and threads it through
+	// to requestSwitch, so even if the cursor is invalidated the correct
+	// worktree path is used.
+	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
+	p.pending = opFirstUseConfirm
+	p.pendingName = "worktree"
+	p.pendingPath = "/home/user/grut-feat"
+
+	// Simulate cursor becoming stale (pointing beyond items).
+	p.cursor = 999
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{
+		Accept:   true,
+		Value:    string(actions.ActionSwitch),
+		Remember: false,
+	})
+	require.NotNil(t, cmd, "should produce SwitchWorktreeMsg even with stale cursor")
+	msg := cmd()
+	switchMsg, ok := msg.(panels.SwitchWorktreeMsg)
+	require.True(t, ok, "expected SwitchWorktreeMsg, got %T", msg)
+	assert.Equal(t, "/home/user/grut-feat", switchMsg.Path)
+}
+
+func TestHandleModalResult_FirstUseConfirm_ChangeDirectory_UsesPendingPath(t *testing.T) {
+	// Same regression test but for the change-directory action.
+	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
+	p.pending = opFirstUseConfirm
+	p.pendingName = "worktree"
+	p.pendingPath = "/home/user/grut-fix"
+
+	// Stale cursor.
+	p.cursor = 999
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{
+		Accept:   true,
+		Value:    string(actions.ActionChangeDirectory),
+		Remember: false,
+	})
+	require.NotNil(t, cmd, "should produce ChangeDirectoryMsg even with stale cursor")
+	msg := cmd()
+	cdMsg, ok := msg.(panels.ChangeDirectoryMsg)
+	require.True(t, ok, "expected ChangeDirectoryMsg, got %T", msg)
+	assert.Equal(t, "/home/user/grut-fix", cdMsg.Path)
+}
+
+func TestMouseDoubleClick_FirstUse_StoresPendingPath(t *testing.T) {
+	// Verify that handleMouseDoubleClick stores pendingPath when showing
+	// the first-use confirmation dialog.
+	mock := &mockGitOps{worktrees: sampleWorktrees()}
+	p := newTestPanel(t, mock, alwaysExists)
+	p.SetSize(80, 20)
+	p.Focus()
+
+	// Ensure IsConfirmed returns false so the first-use flow is triggered.
+	p.actionsCfg = config.ActionsConfig{}
+
+	_, cmd := p.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 1, ContentCol: 5})
+
+	// The first-use flow should have stored the pendingPath.
+	assert.Equal(t, opFirstUseConfirm, p.pending)
+	assert.Equal(t, "/home/user/grut-feat", p.pendingPath)
+	assert.NotNil(t, cmd, "should emit FirstUseCmd")
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +309,7 @@ func TestChangeDirectory_EmitsChangeDirectoryMsg(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 1
 
-	_, cmd := p.changeDirectory()
+	_, cmd := p.changeDirectory("")
 	require.NotNil(t, cmd)
 	msg := cmd()
 	cdMsg, ok := msg.(panels.ChangeDirectoryMsg)
@@ -253,7 +322,7 @@ func TestChangeDirectory_MissingPath(t *testing.T) {
 	p.items[1].isMissing = true
 	p.cursor = 1
 
-	_, cmd := p.changeDirectory()
+	_, cmd := p.changeDirectory("")
 	require.NotNil(t, cmd)
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
@@ -264,7 +333,7 @@ func TestChangeDirectory_MissingPath(t *testing.T) {
 
 func TestChangeDirectory_NoItems(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: []git.Worktree{}}, alwaysExists)
-	_, cmd := p.changeDirectory()
+	_, cmd := p.changeDirectory("")
 	assert.Nil(t, cmd)
 }
 
@@ -272,7 +341,7 @@ func TestExecuteRightClickAction_ChangeDirectory(t *testing.T) {
 	p := newTestPanel(t, &mockGitOps{worktrees: sampleWorktrees()}, alwaysExists)
 	p.cursor = 1
 
-	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory)
+	_, cmd := p.executeRightClickAction(actions.ActionChangeDirectory, "")
 	require.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(panels.ChangeDirectoryMsg)
