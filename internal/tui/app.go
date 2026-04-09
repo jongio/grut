@@ -76,12 +76,13 @@ type Model struct {
 	branchBehind       int    // commits behind upstream (needs pull)
 	width              int
 	height             int
-	cwdEditCursor      int  // cursor position (rune index) within cwdEditValue
-	bookmarksShown     bool // whether bookmark overlay is visible
-	settingsShown      bool // whether settings overlay is visible
-	gitDirty           bool // true when working tree has uncommitted changes
-	ready              bool // true after first WindowSizeMsg
-	cwdEditing         bool // true when status bar CWD is in inline-edit mode
+	cwdEditCursor      int    // cursor position (rune index) within cwdEditValue
+	branchInfoGen      uint64 // generation counter - invalidates stale branchLoadedMsg
+	bookmarksShown     bool   // whether bookmark overlay is visible
+	settingsShown      bool   // whether settings overlay is visible
+	gitDirty           bool   // true when working tree has uncommitted changes
+	ready              bool   // true after first WindowSizeMsg
+	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
 }
 
 // New creates a new TUI model with the given layout engine, theme, keymap,
@@ -138,9 +139,10 @@ func (m Model) WithChat(c *chat.Model) Model {
 
 // branchLoadedMsg carries the initial branch name and tracking info for the status bar.
 type branchLoadedMsg struct {
-	Name   string
-	Ahead  int
-	Behind int
+	Name       string
+	Ahead      int
+	Behind     int
+	generation uint64 // matches branchInfoGen at the time loadBranchInfo was called
 }
 
 // gitDirtyMsg reports whether the working tree has uncommitted changes.
@@ -160,21 +162,8 @@ func (m Model) Init() tea.Cmd {
 		}
 	}
 	// Load current branch name for status bar.
-	if m.gitClient != nil {
-		gc := m.gitClient
-		ctx := m.ctx
-		cmds = append(cmds, func() tea.Msg {
-			branches, err := gc.BranchList(ctx)
-			if err != nil {
-				return branchLoadedMsg{}
-			}
-			for _, b := range branches {
-				if b.IsCurrent {
-					return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind}
-				}
-			}
-			return branchLoadedMsg{}
-		})
+	if cmd := m.loadBranchInfo(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	// Initialize the chat footer if present.
 	if m.chat != nil {
@@ -209,17 +198,18 @@ func (m Model) loadBranchInfo() tea.Cmd {
 		return nil
 	}
 	ctx := m.ctx
+	generation := m.branchInfoGen
 	return func() tea.Msg {
 		branches, err := gc.BranchList(ctx)
 		if err != nil {
-			return branchLoadedMsg{}
+			return branchLoadedMsg{generation: generation}
 		}
 		for _, b := range branches {
 			if b.IsCurrent {
-				return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind}
+				return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind, generation: generation}
 			}
 		}
-		return branchLoadedMsg{}
+		return branchLoadedMsg{generation: generation}
 	}
 }
 
@@ -249,6 +239,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	// Branch info for status bar.
 	case branchLoadedMsg:
+		// Ignore stale responses from a previous generation. A branch
+		// checkout bumps branchInfoGen; any in-flight loadBranchInfo
+		// from before the checkout carries the old gen and must be
+		// discarded so it doesn't overwrite the freshly set branch name.
+		if msg.generation != m.branchInfoGen {
+			return m, nil
+		}
 		m.currentBranch = msg.Name
 		m.branchAhead = msg.Ahead
 		m.branchBehind = msg.Behind
@@ -260,8 +257,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentBranch = msg.Name
 		m.branchAhead = 0
 		m.branchBehind = 0
+		m.branchInfoGen++
 		cmd := m.engine.Update(msg)
-		return m, tea.Batch(cmd, m.checkGitDirty(), m.loadBranchInfo())
+		return m, tea.Batch(
+			cmd,
+			m.checkGitDirty(),
+			m.loadBranchInfo(),
+			func() tea.Msg { return panels.RefreshGitStatusMsg{} },
+			func() tea.Msg { return panels.RefreshBranchesMsg{} },
+		)
 	// F27: Route notification messages to the notify manager.
 	case notify.ShowToastMsg:
 		cmd := m.notify.Update(msg)
@@ -367,6 +371,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Level:   notify.Info,
 			}
 		}
+		m.branchInfoGen++
 		return m, tea.Batch(navCmd, repoCmd, toastCmd, m.checkGitDirty(), m.loadBranchInfo())
 	case panels.BookmarkAddMsg:
 		return m.addBookmark(msg.Path)

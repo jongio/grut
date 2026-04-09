@@ -71,10 +71,10 @@ type Preview struct {
 	selEnd    *selPoint // where the drag/shift-move reached
 	selecting bool      // true while mouse button is held and dragging
 	// Inline editor state (edit mode)
-	editMode   bool              // true when in edit mode
-	editBuf    *TextBuffer       // editable text buffer (nil when not editing)
-	cursorLine int               // cursor line (0-based, in buffer)
-	cursorCol  int               // cursor column (rune offset, 0-based)
+	editMode   bool                // true when in edit mode
+	editBuf    *TextBuffer         // editable text buffer (nil when not editing)
+	cursorLine int                 // cursor line (0-based, in buffer)
+	cursorCol  int                 // cursor column (rune offset, 0-based)
 	editCfg    config.EditorConfig // editor configuration
 }
 

@@ -1979,6 +1979,7 @@ func TestLoadBranchInfoWithCurrentBranch(t *testing.T) {
 	assert.Equal(t, "main", bl.Name)
 	assert.Equal(t, 3, bl.Ahead)
 	assert.Equal(t, 1, bl.Behind)
+	assert.Equal(t, m.branchInfoGen, bl.generation, "returned msg should carry model's generation")
 }
 
 func TestLoadBranchInfoNoCurrent(t *testing.T) {
@@ -1994,6 +1995,7 @@ func TestLoadBranchInfoNoCurrent(t *testing.T) {
 	bl, ok := msg.(branchLoadedMsg)
 	require.True(t, ok)
 	assert.Empty(t, bl.Name, "should return empty when no current branch")
+	assert.Equal(t, m.branchInfoGen, bl.generation, "returned msg should carry model's generation")
 }
 
 func TestLoadBranchInfoWithError(t *testing.T) {
@@ -2007,6 +2009,7 @@ func TestLoadBranchInfoWithError(t *testing.T) {
 	bl, ok := msg.(branchLoadedMsg)
 	require.True(t, ok)
 	assert.Empty(t, bl.Name, "error should return empty branch")
+	assert.Equal(t, m.branchInfoGen, bl.generation, "returned msg should carry model's generation")
 }
 
 // ---------------------------------------------------------------------------
@@ -2987,16 +2990,6 @@ func TestCheckGitDirtyNilClient(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// loadBranchInfo with nil client
-// ---------------------------------------------------------------------------
-
-func TestLoadBranchInfoNilClient(t *testing.T) {
-	m := newTestModel(t)
-	cmd := m.loadBranchInfo()
-	assert.Nil(t, cmd, "loadBranchInfo with nil client should return nil")
-}
-
-// ---------------------------------------------------------------------------
 // saveSession with nil manager
 // ---------------------------------------------------------------------------
 
@@ -3112,8 +3105,10 @@ func TestChangeDirectoryMsgResetsGitFields(t *testing.T) {
 	m = updated.(Model)
 
 	tmpDir := t.TempDir() // not a git repo
+	genBefore := m.branchInfoGen
 	updated, cmd := m.Update(panels.ChangeDirectoryMsg{Path: tmpDir})
-	_ = updated.(Model) // verify type assertion succeeds
+	m = updated.(Model)
+	assert.Equal(t, genBefore+1, m.branchInfoGen, "ChangeDirectoryMsg should bump branchInfoGen")
 
 	cwd, cwdErr := os.Getwd()
 	require.NoError(t, cwdErr)

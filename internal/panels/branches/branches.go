@@ -124,8 +124,8 @@ type Panel struct {
 	pendingName   string     // item type name for first-use confirm
 	items         []listItem // flat display list (headers + branches)
 	panels.BasePanel
-	colors    panelColors
-	theme     *theme.Theme
+	colors          panelColors
+	theme           *theme.Theme
 	cfg             config.GitConfig
 	cursor          int       // index into items (skips headers)
 	offset          int       // viewport scroll offset

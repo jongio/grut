@@ -35,6 +35,7 @@ New contributors: **Copilot**, **Test** — welcome!
 - Panel borders use NormalBorder (square corners, no title)
 
 ### Fixed
+- Branch name in status bar no longer reverts to previous branch after checkout (stale async response race)
 - Eliminate Windows clipboard command injection (CWE-78)
 - Input validation for OpenInEditor and OpenInBrowser
 - Modal mouse click and Tab cycling support

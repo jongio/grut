@@ -18,7 +18,7 @@ func newTestPreview(lines []string) *Preview {
 	p := New(config.PreviewConfig{
 		Enabled:     true,
 		MaxFileSize: 1048576,
-}, defaultEditorCfg(), nil)
+	}, defaultEditorCfg(), nil)
 	p.lines = lines
 	p.width = 80
 	p.height = 24

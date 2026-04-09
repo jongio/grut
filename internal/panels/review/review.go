@@ -82,8 +82,8 @@ type Panel struct {
 	// Right-click context menu
 	actionsCfg config.ActionsConfig
 	// Dependencies
-	git   gitOps
-	theme *theme.Theme
+	git         gitOps
+	theme       *theme.Theme
 	ctx         context.Context
 	err         error  // last error from load
 	summary     string // cached summary text

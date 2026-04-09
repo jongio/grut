@@ -116,9 +116,9 @@ type FileTree struct {
 	commitFiles     []string // relative paths from diff-tree
 	branchFiles     []string // relative paths from branch diff
 	prFiles         []panels.PRFile
-	cfg    config.FileTreeConfig
-	colors panelColors
-	theme  *theme.Theme
+	cfg             config.FileTreeConfig
+	colors          panelColors
+	theme           *theme.Theme
 	// File operation state.
 	clip       clipboard // cut/copy clipboard
 	cursor     int       // index into visible

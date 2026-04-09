@@ -386,8 +386,145 @@ func TestStatusBarHidesAsyncOpWhenEmpty(t *testing.T) {
 	assert.NotContains(t, bar, "⟳", "status bar should not show spinner when no async op")
 }
 
-// ---------------------------------------------------------------------------
-// Auto-fetch tests
+// executeBatchCmd runs a tea.Cmd and, if it returns a tea.BatchMsg, executes
+// each inner command (with a short timeout to skip blocking ones). Returns
+// the collected messages.
+func executeBatchCmd(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	var msgs []tea.Msg
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func() { ch <- c() }()
+		select {
+		case m := <-ch:
+			if m != nil {
+				msgs = append(msgs, m)
+			}
+		case <-time.After(100 * time.Millisecond):
+			// skip blocking commands
+		}
+	}
+	return msgs
+}
+
+func TestBranchChangedMsgUpdatesStatusBar(t *testing.T) {
+	m := newTestModelReady(t)
+
+	// Simulate initial branch load (generation=0).
+	updated, _ := m.Update(branchLoadedMsg{Name: "main", generation: 0})
+	m = updated.(Model)
+	assert.Equal(t, "main", m.currentBranch)
+
+	// Simulate checkout → BranchChangedMsg.
+	updated, _ = m.Update(panels.BranchChangedMsg{Name: "feature"})
+	m = updated.(Model)
+	assert.Equal(t, "feature", m.currentBranch, "BranchChangedMsg should update currentBranch")
+	assert.Equal(t, uint64(1), m.branchInfoGen, "BranchChangedMsg should bump generation")
+
+	bar := m.renderStatusBar()
+	assert.Contains(t, bar, "feature", "status bar should show new branch after checkout")
+	assert.NotContains(t, bar, "main", "status bar should NOT show old branch")
+}
+
+func TestStaleBranchLoadedMsgDiscarded(t *testing.T) {
+	m := newTestModelReady(t)
+
+	// BranchChangedMsg bumps generation to 1.
+	updated, _ := m.Update(panels.BranchChangedMsg{Name: "feature"})
+	m = updated.(Model)
+	assert.Equal(t, "feature", m.currentBranch)
+
+	// A stale branchLoadedMsg from generation=0 should be discarded.
+	updated, _ = m.Update(branchLoadedMsg{Name: "main", generation: 0})
+	m = updated.(Model)
+	assert.Equal(t, "feature", m.currentBranch, "stale branchLoadedMsg must not overwrite")
+
+	// A current branchLoadedMsg from generation=1 should be accepted.
+	updated, _ = m.Update(branchLoadedMsg{Name: "feature", Ahead: 1, generation: 1})
+	m = updated.(Model)
+	assert.Equal(t, "feature", m.currentBranch)
+	assert.Equal(t, 1, m.branchAhead)
+}
+
+func TestRapidSequentialCheckoutsOnlyLatestSticks(t *testing.T) {
+	m := newTestModelReady(t)
+
+	// Three rapid checkouts without any branchLoadedMsg arriving in between.
+	updated, _ := m.Update(panels.BranchChangedMsg{Name: "feat-1"})
+	m = updated.(Model)
+	updated, _ = m.Update(panels.BranchChangedMsg{Name: "feat-2"})
+	m = updated.(Model)
+	updated, _ = m.Update(panels.BranchChangedMsg{Name: "feat-3"})
+	m = updated.(Model)
+
+	assert.Equal(t, "feat-3", m.currentBranch)
+	assert.Equal(t, uint64(3), m.branchInfoGen)
+
+	// Stale responses from earlier generations must all be discarded.
+	updated, _ = m.Update(branchLoadedMsg{Name: "feat-1", generation: 1})
+	m = updated.(Model)
+	assert.Equal(t, "feat-3", m.currentBranch, "generation=1 stale msg must be discarded")
+
+	updated, _ = m.Update(branchLoadedMsg{Name: "feat-2", generation: 2})
+	m = updated.(Model)
+	assert.Equal(t, "feat-3", m.currentBranch, "generation=2 stale msg must be discarded")
+
+	// Only generation=3 should be accepted.
+	updated, _ = m.Update(branchLoadedMsg{Name: "feat-3", Ahead: 2, generation: 3})
+	m = updated.(Model)
+	assert.Equal(t, "feat-3", m.currentBranch)
+	assert.Equal(t, 2, m.branchAhead)
+}
+
+func TestEmptyBranchLoadedMsgAccepted(t *testing.T) {
+	m := newTestModelReady(t)
+
+	// Initial load sets branch.
+	updated, _ := m.Update(branchLoadedMsg{Name: "main", generation: 0})
+	m = updated.(Model)
+	assert.Equal(t, "main", m.currentBranch)
+
+	// Simulate error or detached HEAD returning empty Name with matching generation.
+	updated, _ = m.Update(branchLoadedMsg{Name: "", generation: 0})
+	m = updated.(Model)
+	assert.Equal(t, "", m.currentBranch, "empty branch name should be accepted when generation matches")
+	assert.Equal(t, 0, m.branchAhead)
+	assert.Equal(t, 0, m.branchBehind)
+}
+
+func TestBranchChangedMsgEmitsRefreshSignals(t *testing.T) {
+	m := newTestModelReady(t)
+
+	_, cmd := m.Update(panels.BranchChangedMsg{Name: "feature"})
+	require.NotNil(t, cmd, "BranchChangedMsg should return a batch command")
+
+	// Execute all batched commands and collect the messages.
+	msgs := executeBatchCmd(t, cmd)
+
+	var hasRefreshGitStatus, hasRefreshBranches bool
+	for _, msg := range msgs {
+		switch msg.(type) {
+		case panels.RefreshGitStatusMsg:
+			hasRefreshGitStatus = true
+		case panels.RefreshBranchesMsg:
+			hasRefreshBranches = true
+		}
+	}
+	assert.True(t, hasRefreshGitStatus, "BranchChangedMsg should emit RefreshGitStatusMsg")
+	assert.True(t, hasRefreshBranches, "BranchChangedMsg should emit RefreshBranchesMsg")
+}
+
 // ---------------------------------------------------------------------------
 
 func TestAutoFetchTickCmdReturnsNilWhenNotConfigured(t *testing.T) {

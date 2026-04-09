@@ -37,8 +37,8 @@ const (
 type ActionID string
 
 const (
-	ActionCheckout     ActionID = "checkout"
-	ActionOpenTerminal ActionID = "open_terminal"
+	ActionCheckout        ActionID = "checkout"
+	ActionOpenTerminal    ActionID = "open_terminal"
 	ActionOpenInBrowser   ActionID = "open_in_browser"
 	ActionOpenInEditor    ActionID = "open_in_editor"
 	ActionPromptAction    ActionID = "prompt_action"
