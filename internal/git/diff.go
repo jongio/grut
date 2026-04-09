@@ -35,9 +35,21 @@ func (c *Client) Diff(ctx context.Context, opts DiffOpts) ([]FileDiff, error) {
 		if err := ValidateRef(opts.CommitA); err != nil {
 			return nil, fmt.Errorf("diff commitA: %w", err)
 		}
-		args = append(args, opts.CommitA)
-	}
-	if opts.CommitB != "" {
+		if opts.ThreeDot && opts.CommitB != "" {
+			if err := ValidateRef(opts.CommitB); err != nil {
+				return nil, fmt.Errorf("diff commitB: %w", err)
+			}
+			args = append(args, opts.CommitA+"..."+opts.CommitB)
+		} else {
+			args = append(args, opts.CommitA)
+			if opts.CommitB != "" {
+				if err := ValidateRef(opts.CommitB); err != nil {
+					return nil, fmt.Errorf("diff commitB: %w", err)
+				}
+				args = append(args, opts.CommitB)
+			}
+		}
+	} else if opts.CommitB != "" {
 		if err := ValidateRef(opts.CommitB); err != nil {
 			return nil, fmt.Errorf("diff commitB: %w", err)
 		}

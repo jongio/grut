@@ -121,6 +121,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		if gc != nil {
 			ft.SetGitClient(gc)
 		}
+		ft.SetBaseBranch(cfg.Git.DefaultBranch)
 		return setActionsCfg(ft)
 	})
 	// Preview panel — real implementation
