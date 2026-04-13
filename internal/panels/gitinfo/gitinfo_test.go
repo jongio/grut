@@ -42,6 +42,10 @@ func (m *mockGitOps) BranchDelete(_ context.Context, _ string, _ bool) error {
 }
 func (m *mockGitOps) BranchRename(_ context.Context, _, _ string) error { return nil }
 func (m *mockGitOps) Checkout(_ context.Context, _ string) error        { return nil }
+func (m *mockGitOps) Status(_ context.Context) ([]git.FileStatus, error) {
+	return nil, nil
+}
+func (m *mockGitOps) StashPush(_ context.Context, _ git.StashOpts) error { return nil }
 func (m *mockGitOps) WorktreeList(_ context.Context) ([]git.Worktree, error) {
 	return m.worktrees, nil
 }
@@ -3750,8 +3754,19 @@ func TestHandleModalResult_BranchCheckout_Accept(t *testing.T) {
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
 	require.NotNil(t, cmd, "accepting checkout should produce a cmd")
 	msg := cmd()
-	result, ok := msg.(opResultMsg)
-	require.True(t, ok, "expected opResultMsg, got %T", msg)
+	// First step: dirty-check message (mock Status returns nil = clean).
+	dirtyMsg, ok := msg.(checkoutDirtyMsg)
+	require.True(t, ok, "expected checkoutDirtyMsg, got %T", msg)
+	assert.Equal(t, "develop", dirtyMsg.ref)
+	assert.False(t, dirtyMsg.dirty)
+	assert.NoError(t, dirtyMsg.err)
+
+	// Second step: handleCheckoutDirty proceeds with checkout.
+	_, cmd2 := p.handleCheckoutDirty(dirtyMsg)
+	require.NotNil(t, cmd2)
+	msg2 := cmd2()
+	result, ok := msg2.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg, got %T", msg2)
 	assert.Equal(t, "checkout", result.op)
 	assert.Equal(t, "develop", result.name)
 	assert.NoError(t, result.err)
@@ -3763,6 +3778,63 @@ func TestHandleModalResult_BranchCheckout_Decline(t *testing.T) {
 	p.pendingName = "develop"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
 	assert.Nil(t, cmd, "declining checkout should produce no cmd")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestCheckoutDirty_CleanTree_ProceedsWithCheckout(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", dirty: false})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg, got %T", msg)
+	assert.Equal(t, "checkout", result.op)
+	assert.Equal(t, "feature", result.name)
+	assert.NoError(t, result.err)
+}
+
+func TestCheckoutDirty_DirtyTree_ShowsStashDialog(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", dirty: true})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, isModal := msg.(notify.ShowModalMsg)
+	assert.True(t, isModal, "expected stash confirm dialog, got %T", msg)
+	assert.Equal(t, opBranchCheckoutStash, p.pending)
+	assert.Equal(t, "feature", p.pendingName)
+}
+
+func TestCheckoutDirty_StatusError_FallsBackToCheckout(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", err: fmt.Errorf("status failed")})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg fallback, got %T", msg)
+	assert.Equal(t, "checkout", result.op)
+	assert.Equal(t, "feature", result.name)
+}
+
+func TestHandleModalResult_BranchCheckoutStash_Accept(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchCheckoutStash
+	p.pendingName = "feature"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg, got %T", msg)
+	assert.Equal(t, "checkout_stashed", result.op)
+	assert.Equal(t, "feature", result.name)
+	assert.NoError(t, result.err)
+}
+
+func TestHandleModalResult_BranchCheckoutStash_Decline(t *testing.T) {
+	p := newTestPanel(defaultMock())
+	p.pending = opBranchCheckoutStash
+	p.pendingName = "feature"
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "declining stash-and-switch should produce no cmd")
 	assert.Equal(t, opNone, p.pending)
 }
 

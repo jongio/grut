@@ -36,6 +36,8 @@ type gitOps interface {
 	BranchDelete(ctx context.Context, name string, force bool) error
 	BranchRename(ctx context.Context, oldName, newName string) error
 	Checkout(ctx context.Context, ref string) error
+	Status(ctx context.Context) ([]git.FileStatus, error)
+	StashPush(ctx context.Context, opts git.StashOpts) error
 	WorktreeList(ctx context.Context) ([]git.Worktree, error)
 	WorktreeAdd(ctx context.Context, path, branch string) error
 	WorktreeRemove(ctx context.Context, path string, force bool) error
@@ -350,6 +352,7 @@ const (
 	opBranchDelete                       // awaiting delete confirmation
 	opBranchRename                       // awaiting new name
 	opBranchCheckout                     // awaiting checkout confirmation
+	opBranchCheckoutStash                // awaiting dirty-tree stash-and-switch confirmation
 	opWorktreeCreate                     // awaiting new branch name for worktree
 	opWorktreeDelete                     // awaiting delete confirmation
 	opRemoteAdd                          // awaiting remote name
@@ -389,6 +392,13 @@ type opResultMsg struct {
 	err  error
 	op   string // e.g. "checkout", "branch_created", "worktree_added"
 	name string // name involved
+}
+
+// checkoutDirtyMsg is sent after checking dirty state before checkout.
+type checkoutDirtyMsg struct {
+	ref   string
+	dirty bool
+	err   error
 }
 
 // ghDataLoadedMsg carries the result of an async GitHub data load.
@@ -929,6 +939,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, p.actionsWatchTickCmd()
 	case opResultMsg:
 		return p.handleOpResult(msg)
+	case checkoutDirtyMsg:
+		return p.handleCheckoutDirty(msg)
 	case tea.KeyPressMsg:
 		return p.handleKey(msg)
 	case panels.PanelMouseClickMsg:
@@ -1137,6 +1149,14 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Switched to " + name, Level: notify.Success}
+			},
+		)
+	case "checkout_stashed":
+		cmds = append(cmds,
+			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
+			func() tea.Msg { return panels.StashChangedMsg{} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Stashed changes, switched to " + name, Level: notify.Success}
 			},
 		)
 	case "branch_created":
@@ -2219,6 +2239,38 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 	return p, notify.ShowConfirm("Switch Branch", fmt.Sprintf("Switch to branch %q?", ref))
 }
 
+func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		// Status check failed - try checkout anyway, git will report errors.
+		g := p.git
+		ctx := p.ctx
+		ref := msg.ref
+		return p, func() tea.Msg {
+			err := g.Checkout(ctx, ref)
+			return opResultMsg{op: "checkout", name: ref, err: err}
+		}
+	}
+	if msg.dirty {
+		p.pending = opBranchCheckoutStash
+		p.pendingName = msg.ref
+		return p, notify.ShowConfirm("Uncommitted Changes",
+			fmt.Sprintf("You have uncommitted changes. Stash and switch to %q?", msg.ref))
+	}
+	// Clean working tree - proceed with checkout.
+	g := p.git
+	ctx := p.ctx
+	ref := msg.ref
+	return p, func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				// Surface panics as error toasts instead of silently dying.
+			}
+		}()
+		err := g.Checkout(ctx, ref)
+		return opResultMsg{op: "checkout", name: ref, err: err}
+	}
+}
+
 func (p *Panel) doReflogCheckout() (panels.Panel, tea.Cmd) {
 	items := p.tabItems[tabReflog]
 	cursor := p.tabCursor[tabReflog]
@@ -2513,9 +2565,37 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			return opResultMsg{op: "remote_removed", name: name, err: err}
 		}
 	case opBranchCheckout:
+		ref := name
 		return p, func() tea.Msg {
-			err := g.Checkout(ctx, name)
-			return opResultMsg{op: "checkout", name: name, err: err}
+			defer func() {
+				if r := recover(); r != nil {
+					// Surface panics as error toasts instead of silently dying.
+				}
+			}()
+			files, err := g.Status(ctx)
+			if err != nil {
+				return checkoutDirtyMsg{ref: ref, err: err}
+			}
+			return checkoutDirtyMsg{ref: ref, dirty: len(files) > 0}
+		}
+	case opBranchCheckoutStash:
+		ref := name
+		return p, func() tea.Msg {
+			defer func() {
+				if r := recover(); r != nil {
+					// Surface panics as error toasts instead of silently dying.
+				}
+			}()
+			err := g.StashPush(ctx, git.StashOpts{Message: "grut: auto-stash before switching to " + ref})
+			if err != nil {
+				return opResultMsg{op: "checkout", name: ref, err: fmt.Errorf("stash failed: %w", err)}
+			}
+			err = g.Checkout(ctx, ref)
+			if err != nil {
+				_ = g.StashPop(ctx, 0) // restore stash on checkout failure
+				return opResultMsg{op: "checkout", name: ref, err: err}
+			}
+			return opResultMsg{op: "checkout_stashed", name: ref}
 		}
 	case opStashAction:
 		action := strings.TrimSpace(strings.ToLower(msg.Value))

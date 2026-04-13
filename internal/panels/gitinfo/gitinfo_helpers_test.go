@@ -665,7 +665,17 @@ func TestHandleModalResult_BranchCheckout(t *testing.T) {
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
 	require.NotNil(t, cmd)
 	msg := cmd()
-	result, ok := msg.(opResultMsg)
+	// First step returns dirty-check (mock Status returns nil = clean).
+	dirtyMsg, ok := msg.(checkoutDirtyMsg)
+	require.True(t, ok, "expected checkoutDirtyMsg, got %T", msg)
+	assert.Equal(t, "feature", dirtyMsg.ref)
+	assert.False(t, dirtyMsg.dirty)
+
+	// Second step proceeds with checkout.
+	_, cmd2 := p.handleCheckoutDirty(dirtyMsg)
+	require.NotNil(t, cmd2)
+	msg2 := cmd2()
+	result, ok := msg2.(opResultMsg)
 	require.True(t, ok)
 	assert.Equal(t, "checkout", result.op)
 	assert.Equal(t, "feature", result.name)
