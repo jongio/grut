@@ -93,6 +93,39 @@ import Screenshot from '../components/Screenshot.astro';
     </div>
   </section>
 
+  <!-- ═══════ Inline Editor ═══════ -->
+  <section class="feature-row reverse" aria-labelledby="feat-editor">
+    <div class="feature-text">
+      <h2 id="feat-editor">Inline Editor</h2>
+      <p>
+        Press <kbd>e</kbd> in the preview panel to edit files directly without
+        leaving grüt. <kbd>Ctrl+S</kbd> saves your changes, <kbd>Escape</kbd>
+        discards. Binary and oversized files are blocked automatically.
+      </p>
+      <a href="/grut/docs/file-preview/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/file-preview.png" alt="Inline editor mode in the preview panel" />
+    </div>
+  </section>
+
+  <!-- ═══════ Branch Diff ═══════ -->
+  <section class="feature-row" aria-labelledby="feat-branchdiff">
+    <div class="feature-text">
+      <h2 id="feat-branchdiff">Branch Diff</h2>
+      <p>
+        Press <kbd>g</kbd> to cycle through three filter modes: all files,
+        git-changed files, and branch diff — showing only files changed
+        compared to your default branch. Preview updates to show diffs
+        automatically.
+      </p>
+      <a href="/grut/docs/file-explorer/">Learn more →</a>
+    </div>
+    <div class="feature-media">
+      <Screenshot src="/grut/screenshots/default/git-diff.png" alt="Branch diff mode showing changed files" />
+    </div>
+  </section>
+
   <!-- ═══════ Themes ═══════ -->
   <section class="feature-row" aria-labelledby="feat-themes">
     <div class="feature-text">

@@ -61,6 +61,7 @@ import Screenshot from '../../components/Screenshot.astro';
     { key: 'o', action: 'Open file in external editor' },
     { key: '.', action: 'Toggle hidden files' },
     { key: 'f', action: 'Toggle git filter (changed files only)' },
+    { key: 'g', action: 'Cycle filter: all → git changed → branch diff' },
     { key: 'v', action: 'Toggle tree / list view' },
     { key: 'n', action: 'New file' },
     { key: 'N', action: 'New directory' },
@@ -136,8 +137,11 @@ import Screenshot from '../../components/Screenshot.astro';
     { key: 'j / k', action: 'Scroll content' },
     { key: 'g / G', action: 'Jump to top / bottom' },
     { key: 'd / u', action: 'Page down / up' },
-    { key: 'y', action: 'Copy selection to clipboard' },
-    { key: 'Esc', action: 'Clear selection' },
+    { key: 'w', action: 'Toggle word wrap' },
+    { key: 'e', action: 'Enter inline edit mode' },
+    { key: 'Ctrl+S', action: 'Save edits (edit mode)' },
+    { key: 'y / Ctrl+C', action: 'Copy selection to clipboard' },
+    { key: 'Esc', action: 'Clear selection / exit edit mode' },
   ]} />
   <p>Click and drag to select text. Double-click to select a word.</p>
 

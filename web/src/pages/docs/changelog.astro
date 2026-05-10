@@ -18,6 +18,14 @@ import Docs from '../../layouts/Docs.astro';
 
     <h3 class="change-category added">Added</h3>
     <ul>
+      <li>Inline editor mode — press <kbd>e</kbd> in the preview panel to edit files directly, <kbd>Ctrl+S</kbd> to save, <kbd>Escape</kbd> to discard</li>
+      <li>Branch diff filter — <kbd>g</kbd> cycles through three modes: all files → git changed → branch diff</li>
+      <li>Lazy-loading pagination for GitHub tabs (issues, PRs, Actions, releases)</li>
+      <li><kbd>Ctrl+C</kbd> copies selected text in preview instead of quitting</li>
+      <li>Text selection in preview pane — click+drag, double-click, <kbd>y</kbd> to copy</li>
+      <li>Checkout with dirty-tree detection and automatic stash-and-switch</li>
+      <li>Worktree double-click opens the selected worktree directory</li>
+      <li><code>--reset-welcome</code> flag to re-show the welcome screen on next launch</li>
       <li>Right-click context menu with action picker for all panels</li>
       <li>Configurable click actions with mouse support for all panels</li>
       <li>Settings dialog overlay for preview position (comma key)</li>
@@ -26,16 +34,22 @@ import Docs from '../../layouts/Docs.astro';
       <li>Configurable preview position cycling (<kbd>ctrl+b p</kbd>)</li>
       <li>Tab bar with canonical 1–5 preset ordering</li>
       <li>Mage build system with preflight checks (<code>mage install</code>, <code>mage preflight</code>)</li>
+      <li>22 security tests covering MCP tool injection, path traversal, and extension safety</li>
     </ul>
 
     <h3 class="change-category changed">Changed</h3>
     <ul>
+      <li>Go toolchain upgraded from 1.26.1 to 1.26.3 (7 stdlib CVE fixes)</li>
+      <li>Bubble Tea v2.0.6, Lipgloss v2.0.3, x/net v0.54.0</li>
+      <li>Preflight gate expanded from 11 to 14 checks</li>
       <li>Git preset simplified to 2-pane layout (filetree + preview)</li>
       <li>Panel borders use NormalBorder (square corners, no title)</li>
     </ul>
 
     <h3 class="change-category fixed">Fixed</h3>
     <ul>
+      <li>Branch name in status bar no longer reverts after checkout</li>
+      <li>Double-click first-use flow survives async modal delay</li>
       <li>Eliminate Windows clipboard command injection (CWE-78)</li>
       <li>Input validation for OpenInEditor and OpenInBrowser</li>
       <li>Modal mouse click and Tab cycling support</li>
@@ -44,9 +58,23 @@ import Docs from '../../layouts/Docs.astro';
       <li>Folders no longer auto-expand on startup</li>
     </ul>
 
+    <h3 class="change-category security">Security</h3>
+    <ul>
+      <li>Block access to <code>.git/</code>, <code>.env</code>, <code>*.pem</code>, <code>*.key</code> via MCP and AI chat</li>
+      <li>Reject credential-embedded URLs in browser validation</li>
+      <li>Block Windows UNC paths and reserved device names in MCP PathJail</li>
+      <li>Cap diff line length at 10,000 characters</li>
+      <li>Propagate Close errors in MCP file tools</li>
+    </ul>
+
     <h3 class="change-category performance">Performance</h3>
     <ul>
-      <li>Batch bottom border rendering calls</li>
+      <li>Bounded LRU caches, goroutine leak fix, agent auto-cleanup</li>
+      <li>Gitstatus render optimization with dirty flag and style cache</li>
+      <li>Struct field reordering eliminating 800+ bytes of padding across 70+ types</li>
+      <li>Gitdiff slice reuse: −39% sec/op (side-by-side), −16% B/op (inline)</li>
+      <li>Render loop: strings.Builder replaces string concat, ~196 fewer allocs/frame</li>
+      <li>Added <code>--pprof</code>, <code>--cpu-profile</code>, <code>--mem-profile</code> profiling flags</li>
     </ul>
   </section>
 
@@ -127,5 +155,6 @@ import Docs from '../../layouts/Docs.astro';
   .change-category.added { border-left-color: var(--color-success); color: var(--color-success); }
   .change-category.changed { border-left-color: var(--color-info); color: var(--color-info); }
   .change-category.fixed { border-left-color: var(--color-error); color: var(--color-error); }
+  .change-category.security { border-left-color: var(--color-primary); color: var(--color-primary); }
   .change-category.performance { border-left-color: var(--color-warning); color: var(--color-warning); }
 </style>

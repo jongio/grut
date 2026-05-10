@@ -18,9 +18,16 @@ Thanks to the following people for their contributions to this release:
 New contributors: **Copilot**, **Test** — welcome!
 
 ### Added
+- Inline editor mode — press `e` in the preview panel to edit files directly, `Ctrl+S` to save, `Escape` to discard
+- Branch diff filter — `g` now cycles through three modes: all files → git changed → branch diff (files changed compared to default branch)
+- Lazy-loading pagination for GitHub tabs — issues, PRs, Actions, and releases load on demand as you scroll
+- `Ctrl+C` copies selected text in preview instead of quitting (when a selection exists)
 - Text selection in preview pane — click+drag to select, double-click for word selection, `y` to copy to clipboard, Escape to clear
+- Worktree double-click opens the selected worktree directory
+- Checkout with dirty-tree detection — automatically stashes, switches branch, and re-applies
 - Automated contributor recognition in changelogs, GitHub Releases, and CONTRIBUTORS.md hall of fame
 - Welcome screen overlay with animated grüt banner and first-run keyboard reference
+- `--reset-welcome` flag to re-show the welcome screen on next launch
 - Right-click context menu with action picker for all panels
 - Configurable click actions with mouse support for all panels
 - Settings dialog overlay for preview position (comma key)
@@ -31,11 +38,18 @@ New contributors: **Copilot**, **Test** — welcome!
 - Mage build system with preflight checks (`mage install`, `mage preflight`)
 
 ### Changed
+- Go toolchain upgraded from 1.26.1 to 1.26.3 (7 stdlib CVE fixes)
+- Bubble Tea upgraded to v2.0.6, Lipgloss to v2.0.3
+- `x/net` upgraded to v0.54.0, `x/sys` and `x/text` updated
 - Git preset simplified to 2-pane layout (filetree + preview)
 - Panel borders use NormalBorder (square corners, no title)
+- Preflight gate expanded from 11 to 14 checks (added race, WSL, gofumpt)
+- Extracted 4 shared panel utilities (`EnsureCursorVisible`, `ClampCursor`, `ColorOf`, `OrDefault`) eliminating 27 duplicated functions
 
 ### Fixed
 - Branch name in status bar no longer reverts to previous branch after checkout (stale async response race)
+- Double-click first-use flow survives async modal delay by storing pending path
+- Git test suite isolated from user/system config to prevent hangs
 - Eliminate Windows clipboard command injection (CWE-78)
 - Input validation for OpenInEditor and OpenInBrowser
 - Modal mouse click and Tab cycling support
@@ -59,9 +73,18 @@ New contributors: **Copilot**, **Test** — welcome!
 - Filter secret environment variables from GitHub CLI subprocess execution
 - Redact credential-embedded git remote URLs (`https://token@host`) in AI context
 - Cap diff line length at 10,000 characters to prevent context bloat from binary files
-- Add `go mod verify` integrity check to preflight build gate (now 11 steps)
+- Add `go mod verify` integrity check to preflight build gate
+- Propagate `Close` errors in MCP file tools to prevent silent data corruption
+- Add 22 security tests covering git message validation, MCP tool injection, path traversal, and extension install safety
 
 ### Performance
+- Bounded LRU caches with size limits to prevent unbounded memory growth
+- Fix goroutine leak in filesystem watcher cleanup
+- Auto-cleanup exited AI agents from AgentTracker after 30-second grace period
+- Optimize gitstatus render path with dirty flag, style cache, and `strings.Builder`
+- Cache markdown renderer instance across frames instead of re-creating per render
+- Cap inline notification count to prevent render stalls
+- `--pprof PORT` flag for live profiling via `net/http/pprof`
 - Struct field reordering via `betteralign` across 70+ types, eliminating 800+ bytes of padding
   (`config.Config` −56 B, `git/types` −200 B, `chat.Model` −24 B, `mcp/agent_tracker` −80 B)
 - `gitdiff` slice reuse: `[:0]` reset on `rebuildLines()` instead of nil — backing arrays

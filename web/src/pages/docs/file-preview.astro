@@ -15,8 +15,10 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <ul>
     <li><strong>Syntax highlighting</strong> — 100+ languages via Chroma with theme-aware colors</li>
     <li><strong>Markdown rendering</strong> — Issue and PR bodies rendered with full markdown formatting</li>
+    <li><strong>Inline editor</strong> — Press <kbd>e</kbd> to edit files directly in the preview panel. <kbd>Ctrl+S</kbd> saves, <kbd>Escape</kbd> discards. Blocks binary and oversized files automatically.</li>
     <li><strong>Text selection</strong> — Click and drag to select text, double-click to select a word, <kbd>y</kbd> or <kbd>Ctrl+C</kbd> to copy to clipboard</li>
     <li><strong>Diff mode</strong> — Automatically shows diffs when git filter is active or a commit is selected</li>
+    <li><strong>Branch diff mode</strong> — Press <kbd>g</kbd> to cycle through filter modes: all files → git changed → branch diff (files changed compared to default branch)</li>
     <li><strong>Image preview</strong> — Displays image metadata for binary image files</li>
     <li><strong>Line numbers</strong> — Toggleable line numbers with configurable display</li>
   </ul>
@@ -26,9 +28,11 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
     { key: 'j / k', action: 'Scroll preview up/down' },
     { key: 'J / K', action: 'Scroll preview by half-page' },
     { key: 'w', action: 'Toggle word wrap' },
+    { key: 'e', action: 'Enter inline edit mode' },
+    { key: 'Ctrl+S', action: 'Save edits (edit mode)' },
     { key: 'z', action: 'Zoom preview to full screen' },
     { key: 'y / Ctrl+C', action: 'Copy selection to clipboard' },
-    { key: 'Esc', action: 'Clear selection' },
+    { key: 'Esc', action: 'Clear selection / exit edit mode' },
   ]} />
 
   <h2>Context Awareness</h2>

@@ -31,13 +31,14 @@ Files, Git, GitHub, and preview — all in one terminal, all aware of each other
 - **Context-Aware** — Panels react to your selections. Select a branch, file, worktree, remote, stash, or PR and every other panel updates to match.
 - **Commit-Files Mode** — Enter on a commit shows only that commit's changed files in the tree. Escape restores.
 - **PR Triple-Sync** — Select a PR and file tree, commits, and preview all update simultaneously.
-- **Git Filter** — `g` toggles the file tree to git-changed files only. Preview switches to diff mode automatically.
+- **Git Filter** — `g` cycles through three modes: all files → git-changed → branch diff. Preview switches to diff mode automatically.
 
 ### Files
 - **File Explorer** — Navigate your project with git status markers, Nerd Font icons, create/rename/delete
 - **Fuzzy Finder** — `/` for instant file search
 - **Syntax Highlighting** — 100+ languages via Chroma
 - **Preview** — Adapts to show file content, issue/PR bodies, workflow details, or diffs depending on selection. Click and drag to select text, `y` to copy.
+- **Inline Editor** — Press `e` in the preview panel to edit files directly. `Ctrl+S` saves, `Escape` discards.
 
 ### Git
 - **Status & Staging** — Stage, unstage, discard with single keystrokes. Partial staging for individual hunks and lines.
@@ -168,6 +169,7 @@ grut version      # Print the version
 | `--cpu-profile FILE` | Write CPU profile to FILE (dev/debug) |
 | `--mem-profile FILE` | Write memory profile to FILE (dev/debug) |
 | `--pprof PORT` | Start pprof server on localhost:PORT (dev/debug) |
+| `--reset-welcome` | Reset first-run state so the welcome screen shows on next launch |
 
 A background update check runs on every launch and notifies you when a new version is available.
 
@@ -203,7 +205,8 @@ See [docs/keybindings.md](docs/keybindings.md) for the complete reference.
 | `P` | Push |
 | `s` | Stage file |
 | `x` | Delete / cancel |
-| `g` | Toggle git filter |
+| `g` | Cycle filter: all → git changed → branch diff |
+| `e` | Edit file inline (in preview panel) |
 
 ## Configuration
 
@@ -250,7 +253,7 @@ go vet ./...     # Vet all packages
 
 ## Tech Stack
 
-- **Go 1.26** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
+- **Go 1.26.3** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
 - **Chroma v2** (syntax highlighting) + **Glamour** (markdown rendering)
 - **fsnotify** (filesystem watching) + **mimetype** (file type detection)
 - **TOML** configuration via go-toml/v2
