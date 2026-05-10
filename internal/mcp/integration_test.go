@@ -36,7 +36,8 @@ func initGitRepo(t *testing.T) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME=Test",
 			"GIT_AUTHOR_EMAIL=test@test.com",
 			"GIT_COMMITTER_NAME=Test",
@@ -183,7 +184,8 @@ func gitExec(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=Test",
@@ -574,7 +576,8 @@ func TestIntegration_PathTraversal_Blocked(t *testing.T) {
 			result := callToolResult(t, c, "file_read", map[string]any{"path": p})
 			assert.True(t, result.IsError, "path traversal should be blocked for %q", p)
 			text := textFromResult(t, result)
-			assert.True(t,
+			assert.True(
+				t,
 				strings.Contains(strings.ToLower(text), "escapes") ||
 					strings.Contains(strings.ToLower(text), "validation") ||
 					strings.Contains(strings.ToLower(text), "outside") ||

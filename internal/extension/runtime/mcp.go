@@ -338,14 +338,15 @@ var safeEnvAllowlist = map[string]struct{}{
 // filterEnvForSubprocess returns a filtered copy of the current environment
 // containing only safe variables. Secrets and tokens are excluded.
 func filterEnvForSubprocess() []string {
-	var filtered []string
-	for _, env := range os.Environ() {
-		name, _, ok := strings.Cut(env, "=")
+	env := os.Environ()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		name, _, ok := strings.Cut(e, "=")
 		if !ok {
 			continue
 		}
 		if _, allowed := safeEnvAllowlist[strings.ToUpper(name)]; allowed {
-			filtered = append(filtered, env)
+			filtered = append(filtered, e)
 		}
 	}
 	return filtered

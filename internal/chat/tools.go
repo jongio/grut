@@ -129,7 +129,8 @@ func stringArrayProp(desc string) map[string]any {
 // ---------------------------------------------------------------------------
 
 func (r *ToolRegistry) registerFileTools() {
-	r.register("file_read",
+	r.register(
+		"file_read",
 		"Read the contents of a file",
 		Safe,
 		objectSchema(map[string]any{
@@ -137,7 +138,8 @@ func (r *ToolRegistry) registerFileTools() {
 		}, []string{"path"}),
 	)
 
-	r.register("file_write",
+	r.register(
+		"file_write",
 		"Write content to a file, creating it if it does not exist",
 		Destructive,
 		objectSchema(map[string]any{
@@ -146,7 +148,8 @@ func (r *ToolRegistry) registerFileTools() {
 		}, []string{"path", "content"}),
 	)
 
-	r.register("file_delete",
+	r.register(
+		"file_delete",
 		"Delete a file from the repository",
 		Destructive,
 		objectSchema(map[string]any{
@@ -154,7 +157,8 @@ func (r *ToolRegistry) registerFileTools() {
 		}, []string{"path"}),
 	)
 
-	r.register("file_rename",
+	r.register(
+		"file_rename",
 		"Rename or move a file within the repository",
 		Destructive,
 		objectSchema(map[string]any{
@@ -163,7 +167,8 @@ func (r *ToolRegistry) registerFileTools() {
 		}, []string{"old_path", "new_path"}),
 	)
 
-	r.register("file_list",
+	r.register(
+		"file_list",
 		"List files and directories at the given path",
 		Safe,
 		objectSchema(map[string]any{
@@ -172,7 +177,8 @@ func (r *ToolRegistry) registerFileTools() {
 		}, []string{"path"}),
 	)
 
-	r.register("file_mkdir",
+	r.register(
+		"file_mkdir",
 		"Create a directory and any necessary parents",
 		Safe,
 		objectSchema(map[string]any{
@@ -186,13 +192,15 @@ func (r *ToolRegistry) registerFileTools() {
 // ---------------------------------------------------------------------------
 
 func (r *ToolRegistry) registerGitReadTools() {
-	r.register("git_status",
+	r.register(
+		"git_status",
 		"Returns the list of changed files with their git status codes",
 		Safe,
 		emptySchema(),
 	)
 
-	r.register("git_diff",
+	r.register(
+		"git_diff",
 		"Returns diff output for changed files",
 		Safe,
 		objectSchema(map[string]any{
@@ -201,7 +209,8 @@ func (r *ToolRegistry) registerGitReadTools() {
 		}, nil),
 	)
 
-	r.register("git_log",
+	r.register(
+		"git_log",
 		"Returns the commit log",
 		Safe,
 		objectSchema(map[string]any{
@@ -210,7 +219,8 @@ func (r *ToolRegistry) registerGitReadTools() {
 		}, nil),
 	)
 
-	r.register("git_blame",
+	r.register(
+		"git_blame",
 		"Returns per-line blame annotation for a file",
 		Safe,
 		objectSchema(map[string]any{
@@ -218,19 +228,22 @@ func (r *ToolRegistry) registerGitReadTools() {
 		}, []string{"path"}),
 	)
 
-	r.register("git_branch_list",
+	r.register(
+		"git_branch_list",
 		"Returns the list of local and remote branches",
 		Safe,
 		emptySchema(),
 	)
 
-	r.register("git_stash_list",
+	r.register(
+		"git_stash_list",
 		"Returns the list of stash entries",
 		Safe,
 		emptySchema(),
 	)
 
-	r.register("git_worktree_list",
+	r.register(
+		"git_worktree_list",
 		"Returns the list of git worktrees",
 		Safe,
 		emptySchema(),
@@ -242,7 +255,8 @@ func (r *ToolRegistry) registerGitReadTools() {
 // ---------------------------------------------------------------------------
 
 func (r *ToolRegistry) registerGitWriteTools() {
-	r.register("git_stage",
+	r.register(
+		"git_stage",
 		"Stage files for commit",
 		Safe,
 		objectSchema(map[string]any{
@@ -250,7 +264,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"paths"}),
 	)
 
-	r.register("git_unstage",
+	r.register(
+		"git_unstage",
 		"Unstage files from the index",
 		Safe,
 		objectSchema(map[string]any{
@@ -258,7 +273,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"paths"}),
 	)
 
-	r.register("git_commit",
+	r.register(
+		"git_commit",
 		"Create a commit with staged changes",
 		Safe,
 		objectSchema(map[string]any{
@@ -266,7 +282,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"message"}),
 	)
 
-	r.register("git_push",
+	r.register(
+		"git_push",
 		"Push commits to a remote",
 		Destructive,
 		objectSchema(map[string]any{
@@ -275,7 +292,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, nil),
 	)
 
-	r.register("git_pull",
+	r.register(
+		"git_pull",
 		"Pull changes from a remote",
 		Safe,
 		objectSchema(map[string]any{
@@ -283,7 +301,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, nil),
 	)
 
-	r.register("git_fetch",
+	r.register(
+		"git_fetch",
 		"Fetch refs and objects from a remote",
 		Safe,
 		objectSchema(map[string]any{
@@ -291,7 +310,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, nil),
 	)
 
-	r.register("git_checkout",
+	r.register(
+		"git_checkout",
 		"Checkout a branch, tag, or commit",
 		Safe,
 		objectSchema(map[string]any{
@@ -299,7 +319,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"ref"}),
 	)
 
-	r.register("git_branch_create",
+	r.register(
+		"git_branch_create",
 		"Create a new branch",
 		Safe,
 		objectSchema(map[string]any{
@@ -308,7 +329,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"name"}),
 	)
 
-	r.register("git_branch_delete",
+	r.register(
+		"git_branch_delete",
 		"Delete a branch",
 		Destructive,
 		objectSchema(map[string]any{
@@ -317,7 +339,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"name"}),
 	)
 
-	r.register("git_merge",
+	r.register(
+		"git_merge",
 		"Merge a branch into the current branch",
 		Safe,
 		objectSchema(map[string]any{
@@ -325,7 +348,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"branch"}),
 	)
 
-	r.register("git_rebase",
+	r.register(
+		"git_rebase",
 		"Rebase the current branch onto another ref",
 		Destructive,
 		objectSchema(map[string]any{
@@ -333,7 +357,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"onto"}),
 	)
 
-	r.register("git_stash_push",
+	r.register(
+		"git_stash_push",
 		"Stash the current working directory changes",
 		Safe,
 		objectSchema(map[string]any{
@@ -341,7 +366,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, nil),
 	)
 
-	r.register("git_stash_pop",
+	r.register(
+		"git_stash_pop",
 		"Apply and remove the top stash entry",
 		Safe,
 		objectSchema(map[string]any{
@@ -349,7 +375,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, nil),
 	)
 
-	r.register("git_reset",
+	r.register(
+		"git_reset",
 		"Reset the current HEAD to a specified state",
 		Destructive,
 		objectSchema(map[string]any{
@@ -358,7 +385,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"ref"}),
 	)
 
-	r.register("git_tag_create",
+	r.register(
+		"git_tag_create",
 		"Create a new tag",
 		Safe,
 		objectSchema(map[string]any{
@@ -368,7 +396,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"name"}),
 	)
 
-	r.register("git_tag_delete",
+	r.register(
+		"git_tag_delete",
 		"Delete a tag",
 		Destructive,
 		objectSchema(map[string]any{
@@ -376,7 +405,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 		}, []string{"name"}),
 	)
 
-	r.register("git_discard",
+	r.register(
+		"git_discard",
 		"Discard working tree changes for specified files",
 		Destructive,
 		objectSchema(map[string]any{
@@ -390,7 +420,8 @@ func (r *ToolRegistry) registerGitWriteTools() {
 // ---------------------------------------------------------------------------
 
 func (r *ToolRegistry) registerNavSearchTools() {
-	r.register("navigate_to",
+	r.register(
+		"navigate_to",
 		"Navigate to a file or directory in the repository",
 		Safe,
 		objectSchema(map[string]any{
@@ -398,7 +429,8 @@ func (r *ToolRegistry) registerNavSearchTools() {
 		}, []string{"path"}),
 	)
 
-	r.register("search_files",
+	r.register(
+		"search_files",
 		"Search for files matching a glob pattern",
 		Safe,
 		objectSchema(map[string]any{
@@ -407,7 +439,8 @@ func (r *ToolRegistry) registerNavSearchTools() {
 		}, []string{"pattern"}),
 	)
 
-	r.register("search_content",
+	r.register(
+		"search_content",
 		"Search file contents for a regex pattern",
 		Safe,
 		objectSchema(map[string]any{
@@ -416,7 +449,8 @@ func (r *ToolRegistry) registerNavSearchTools() {
 		}, []string{"pattern"}),
 	)
 
-	r.register("explain",
+	r.register(
+		"explain",
 		"Explain a git concept, command, or workflow",
 		Safe,
 		objectSchema(map[string]any{
@@ -430,7 +464,8 @@ func (r *ToolRegistry) registerNavSearchTools() {
 // ---------------------------------------------------------------------------
 
 func (r *ToolRegistry) registerBulkTools() {
-	r.register("bulk_stage",
+	r.register(
+		"bulk_stage",
 		"Stage files matching one or more glob patterns",
 		Safe,
 		objectSchema(map[string]any{
@@ -438,7 +473,8 @@ func (r *ToolRegistry) registerBulkTools() {
 		}, []string{"patterns"}),
 	)
 
-	r.register("bulk_delete",
+	r.register(
+		"bulk_delete",
 		"Delete multiple files from the repository",
 		Destructive,
 		objectSchema(map[string]any{
@@ -446,7 +482,8 @@ func (r *ToolRegistry) registerBulkTools() {
 		}, []string{"paths"}),
 	)
 
-	r.register("bulk_rename",
+	r.register(
+		"bulk_rename",
 		"Rename multiple files in a single operation",
 		Destructive,
 		objectSchema(map[string]any{

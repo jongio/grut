@@ -40,8 +40,10 @@ func validateGitMessage(msg string) error {
 // cherry-pick, stash, tag, worktree, and bisect operations.
 func registerGitOpsTools(s *Server) {
 	// git_merge
-	s.addTool("git_merge", categoryWrite,
-		mcplib.NewTool("git_merge",
+	s.addTool(
+		"git_merge", categoryWrite,
+		mcplib.NewTool(
+			"git_merge",
 			mcplib.WithDescription("Merge a branch into the current branch"),
 			mcplib.WithString("branch", mcplib.Required(), mcplib.Description("Branch to merge")),
 			mcplib.WithBoolean("no_ff", mcplib.Description("Create a merge commit even for fast-forward merges")),
@@ -67,8 +69,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_merge_abort
-	s.addTool("git_merge_abort", categoryWrite,
-		mcplib.NewTool("git_merge_abort",
+	s.addTool(
+		"git_merge_abort", categoryWrite,
+		mcplib.NewTool(
+			"git_merge_abort",
 			mcplib.WithDescription("Abort an in-progress merge"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -80,8 +84,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_rebase
-	s.addTool("git_rebase", categoryWrite,
-		mcplib.NewTool("git_rebase",
+	s.addTool(
+		"git_rebase", categoryWrite,
+		mcplib.NewTool(
+			"git_rebase",
 			mcplib.WithDescription("Rebase the current branch onto another ref"),
 			mcplib.WithString("onto", mcplib.Required(), mcplib.Description("Ref to rebase onto")),
 		),
@@ -101,8 +107,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_rebase_continue
-	s.addTool("git_rebase_continue", categoryWrite,
-		mcplib.NewTool("git_rebase_continue",
+	s.addTool(
+		"git_rebase_continue", categoryWrite,
+		mcplib.NewTool(
+			"git_rebase_continue",
 			mcplib.WithDescription("Continue an in-progress rebase after resolving conflicts"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -114,8 +122,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_rebase_abort
-	s.addTool("git_rebase_abort", categoryWrite,
-		mcplib.NewTool("git_rebase_abort",
+	s.addTool(
+		"git_rebase_abort", categoryWrite,
+		mcplib.NewTool(
+			"git_rebase_abort",
 			mcplib.WithDescription("Abort an in-progress rebase"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -127,8 +137,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_cherry_pick
-	s.addTool("git_cherry_pick", categoryWrite,
-		mcplib.NewTool("git_cherry_pick",
+	s.addTool(
+		"git_cherry_pick", categoryWrite,
+		mcplib.NewTool(
+			"git_cherry_pick",
 			mcplib.WithDescription("Apply a commit by its hash to the current branch"),
 			mcplib.WithString("commit", mcplib.Required(), mcplib.Description("Commit hash to cherry-pick")),
 		),
@@ -148,8 +160,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_list
-	s.addTool("git_stash_list", categoryRead,
-		mcplib.NewTool("git_stash_list",
+	s.addTool(
+		"git_stash_list", categoryRead,
+		mcplib.NewTool(
+			"git_stash_list",
 			mcplib.WithDescription("List all stash entries"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -173,8 +187,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_show
-	s.addTool("git_stash_show", categoryRead,
-		mcplib.NewTool("git_stash_show",
+	s.addTool(
+		"git_stash_show", categoryRead,
+		mcplib.NewTool(
+			"git_stash_show",
 			mcplib.WithDescription("Show the diff of a stash entry"),
 			mcplib.WithNumber("index", mcplib.Description("Stash index to show (default 0)")),
 		),
@@ -195,8 +211,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_push
-	s.addTool("git_stash_push", categoryWrite,
-		mcplib.NewTool("git_stash_push",
+	s.addTool(
+		"git_stash_push", categoryWrite,
+		mcplib.NewTool(
+			"git_stash_push",
 			mcplib.WithDescription("Stash the current working directory changes"),
 			mcplib.WithString("message", mcplib.Description("Stash message")),
 		),
@@ -218,8 +236,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_pop
-	s.addTool("git_stash_pop", categoryWrite,
-		mcplib.NewTool("git_stash_pop",
+	s.addTool(
+		"git_stash_pop", categoryWrite,
+		mcplib.NewTool(
+			"git_stash_pop",
 			mcplib.WithDescription("Apply and remove the top stash entry"),
 			mcplib.WithNumber("index", mcplib.Description("Stash index to pop (default 0)")),
 		),
@@ -236,8 +256,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_apply
-	s.addTool("git_stash_apply", categoryWrite,
-		mcplib.NewTool("git_stash_apply",
+	s.addTool(
+		"git_stash_apply", categoryWrite,
+		mcplib.NewTool(
+			"git_stash_apply",
 			mcplib.WithDescription("Apply a stash entry without removing it"),
 			mcplib.WithNumber("index", mcplib.Description("Stash index to apply (default 0)")),
 		),
@@ -254,8 +276,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stash_drop
-	s.addTool("git_stash_drop", categoryWrite,
-		mcplib.NewTool("git_stash_drop",
+	s.addTool(
+		"git_stash_drop", categoryWrite,
+		mcplib.NewTool(
+			"git_stash_drop",
 			mcplib.WithDescription("Remove a stash entry without applying it"),
 			mcplib.WithNumber("index", mcplib.Description("Stash index to drop (default 0)")),
 		),
@@ -272,8 +296,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_tag_create
-	s.addTool("git_tag_create", categoryWrite,
-		mcplib.NewTool("git_tag_create",
+	s.addTool(
+		"git_tag_create", categoryWrite,
+		mcplib.NewTool(
+			"git_tag_create",
 			mcplib.WithDescription("Create a new tag"),
 			mcplib.WithString("name", mcplib.Required(), mcplib.Description("Tag name")),
 			mcplib.WithString("ref", mcplib.Description("Ref to tag (default HEAD)")),
@@ -299,8 +325,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_tag_delete
-	s.addTool("git_tag_delete", categoryWrite,
-		mcplib.NewTool("git_tag_delete",
+	s.addTool(
+		"git_tag_delete", categoryWrite,
+		mcplib.NewTool(
+			"git_tag_delete",
 			mcplib.WithDescription("Delete a tag"),
 			mcplib.WithString("name", mcplib.Required(), mcplib.Description("Tag name to delete")),
 		),
@@ -317,8 +345,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_worktree_add
-	s.addTool("git_worktree_add", categoryWrite,
-		mcplib.NewTool("git_worktree_add",
+	s.addTool(
+		"git_worktree_add", categoryWrite,
+		mcplib.NewTool(
+			"git_worktree_add",
 			mcplib.WithDescription("Add a new worktree"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("Path for the new worktree")),
 			mcplib.WithString("branch", mcplib.Description("Branch to checkout in the worktree")),
@@ -341,8 +371,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_worktree_remove
-	s.addTool("git_worktree_remove", categoryWrite,
-		mcplib.NewTool("git_worktree_remove",
+	s.addTool(
+		"git_worktree_remove", categoryWrite,
+		mcplib.NewTool(
+			"git_worktree_remove",
 			mcplib.WithDescription("Remove a worktree"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("Worktree path to remove")),
 			mcplib.WithBoolean("force", mcplib.Description("Force removal even with changes")),
@@ -365,8 +397,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_bisect_start
-	s.addTool("git_bisect_start", categoryWrite,
-		mcplib.NewTool("git_bisect_start",
+	s.addTool(
+		"git_bisect_start", categoryWrite,
+		mcplib.NewTool(
+			"git_bisect_start",
 			mcplib.WithDescription("Start a bisect session"),
 			mcplib.WithString("bad", mcplib.Required(), mcplib.Description("Known bad commit")),
 			mcplib.WithString("good", mcplib.Required(), mcplib.Description("Known good commit")),
@@ -388,8 +422,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_bisect_good
-	s.addTool("git_bisect_good", categoryWrite,
-		mcplib.NewTool("git_bisect_good",
+	s.addTool(
+		"git_bisect_good", categoryWrite,
+		mcplib.NewTool(
+			"git_bisect_good",
 			mcplib.WithDescription("Mark the current revision as good during bisect"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -402,8 +438,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_bisect_bad
-	s.addTool("git_bisect_bad", categoryWrite,
-		mcplib.NewTool("git_bisect_bad",
+	s.addTool(
+		"git_bisect_bad", categoryWrite,
+		mcplib.NewTool(
+			"git_bisect_bad",
 			mcplib.WithDescription("Mark the current revision as bad during bisect"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -416,8 +454,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_bisect_reset
-	s.addTool("git_bisect_reset", categoryWrite,
-		mcplib.NewTool("git_bisect_reset",
+	s.addTool(
+		"git_bisect_reset", categoryWrite,
+		mcplib.NewTool(
+			"git_bisect_reset",
 			mcplib.WithDescription("End the bisect session and return to the original HEAD"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -429,8 +469,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_discard
-	s.addTool("git_discard", categoryWrite,
-		mcplib.NewTool("git_discard",
+	s.addTool(
+		"git_discard", categoryWrite,
+		mcplib.NewTool(
+			"git_discard",
 			mcplib.WithDescription("Discard unstaged changes for a file, restoring it to the index state"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path to discard changes for")),
 		),
@@ -451,8 +493,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_discard_all
-	s.addTool("git_discard_all", categoryWrite,
-		mcplib.NewTool("git_discard_all",
+	s.addTool(
+		"git_discard_all", categoryWrite,
+		mcplib.NewTool(
+			"git_discard_all",
 			mcplib.WithDescription("Discard all unstaged changes in the working tree"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -464,8 +508,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_revert
-	s.addTool("git_revert", categoryWrite,
-		mcplib.NewTool("git_revert",
+	s.addTool(
+		"git_revert", categoryWrite,
+		mcplib.NewTool(
+			"git_revert",
 			mcplib.WithDescription("Create a new commit that undoes the changes from a given commit"),
 			mcplib.WithString("hash", mcplib.Required(), mcplib.Description("Commit hash to revert")),
 		),
@@ -482,8 +528,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_revert_continue
-	s.addTool("git_revert_continue", categoryWrite,
-		mcplib.NewTool("git_revert_continue",
+	s.addTool(
+		"git_revert_continue", categoryWrite,
+		mcplib.NewTool(
+			"git_revert_continue",
 			mcplib.WithDescription("Continue a revert after resolving conflicts"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -495,8 +543,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_revert_abort
-	s.addTool("git_revert_abort", categoryWrite,
-		mcplib.NewTool("git_revert_abort",
+	s.addTool(
+		"git_revert_abort", categoryWrite,
+		mcplib.NewTool(
+			"git_revert_abort",
 			mcplib.WithDescription("Abort an in-progress revert and restore the previous state"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -508,8 +558,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_reset
-	s.addTool("git_reset", categoryWrite,
-		mcplib.NewTool("git_reset",
+	s.addTool(
+		"git_reset", categoryWrite,
+		mcplib.NewTool(
+			"git_reset",
 			mcplib.WithDescription("Reset the current branch to a ref. Modes: soft (HEAD only), mixed (HEAD + index), hard (HEAD + index + working tree)"),
 			mcplib.WithString("ref", mcplib.Required(), mcplib.Description("Target ref (commit hash, branch, tag, HEAD~N, etc.)")),
 			mcplib.WithString("mode", mcplib.Required(), mcplib.Description("Reset mode: soft, mixed, or hard")),
@@ -532,8 +584,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_stage_hunk
-	s.addTool("git_stage_hunk", categoryWrite,
-		mcplib.NewTool("git_stage_hunk",
+	s.addTool(
+		"git_stage_hunk", categoryWrite,
+		mcplib.NewTool(
+			"git_stage_hunk",
 			mcplib.WithDescription("Stage a single hunk from an unstaged file's diff. Get the hunk index from git_diff output (0-based)."),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path with unstaged changes")),
 			mcplib.WithNumber("hunk_index", mcplib.Required(), mcplib.Description("Zero-based index of the hunk to stage")),
@@ -566,8 +620,10 @@ func registerGitOpsTools(s *Server) {
 	)
 
 	// git_unstage_hunk
-	s.addTool("git_unstage_hunk", categoryWrite,
-		mcplib.NewTool("git_unstage_hunk",
+	s.addTool(
+		"git_unstage_hunk", categoryWrite,
+		mcplib.NewTool(
+			"git_unstage_hunk",
 			mcplib.WithDescription("Unstage a single hunk from a staged file's diff. Get the hunk index from git_diff --cached output (0-based)."),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path with staged changes")),
 			mcplib.WithNumber("hunk_index", mcplib.Required(), mcplib.Description("Zero-based index of the hunk to unstage")),

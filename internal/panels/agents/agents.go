@@ -6,7 +6,6 @@ package agents
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -111,20 +110,6 @@ func (p *Agents) themeColors() theme.Colors {
 	return theme.Colors{}
 }
 
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
-func orDefault(themed, fallback string) string {
-	if themed != "" {
-		return themed
-	}
-	return fallback
-}
-
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
@@ -190,21 +175,21 @@ func (p *Agents) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("Loading agents...")
 	}
 	if p.err != nil && len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().NormalRed, "#C44B4B")).
+			Foreground(panels.ColorOf(p.themeColors().NormalRed, "#C44B4B")).
 			Render(fmt.Sprintf("Error: %v", p.err))
 	}
 	if len(p.agents) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No agents tracked")
 	}
 	// Build visible rows.
@@ -405,24 +390,11 @@ func (p *Agents) moveCursorUp() {
 }
 
 func (p *Agents) clampCursor() {
-	if p.cursor >= len(p.agents) {
-		p.cursor = len(p.agents) - 1
-	}
-	if p.cursor < 0 {
-		p.cursor = 0
-	}
+	p.cursor = panels.ClampCursor(p.cursor, len(p.agents))
 }
 
 func (p *Agents) ensureCursorVisible() {
-	if p.Height <= 0 {
-		return
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+p.Height {
-		p.offset = p.cursor - p.Height + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, p.Height)
 }
 
 // ---------------------------------------------------------------------------
@@ -479,13 +451,13 @@ func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) s
 	switch agent.Status {
 	case mcp.AgentRunning:
 		statusIcon = "●"
-		statusColor = orDefault(tc.NormalGreen, "#6B9E56")
+		statusColor = panels.OrDefault(tc.NormalGreen, "#6B9E56")
 	case mcp.AgentExited:
 		statusIcon = "✓"
-		statusColor = orDefault(tc.BrightBlue, "#7A9EBF")
+		statusColor = panels.OrDefault(tc.BrightBlue, "#7A9EBF")
 	case mcp.AgentFailed:
 		statusIcon = "✗"
-		statusColor = orDefault(tc.NormalRed, "#C44B4B")
+		statusColor = panels.OrDefault(tc.NormalRed, "#C44B4B")
 	}
 	// Duration.
 	dur := formatDuration(agent.Duration)
@@ -509,8 +481,8 @@ func (p *Agents) renderAgentRow(agent mcp.AgentInfo, width int, isCursor bool) s
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
-			Background(colorOf(tc.SelectionBg, "#2A2A2A")).
-			Foreground(colorOf(tc.Foreground, "#D4D4D4"))
+			Background(panels.ColorOf(tc.SelectionBg, "#2A2A2A")).
+			Foreground(panels.ColorOf(tc.Foreground, "#D4D4D4"))
 	} else {
 		style = style.Foreground(lipgloss.Color(statusColor))
 	}
@@ -523,17 +495,18 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 	maxLines := 10 // cap visible output lines per stream
 	outputStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(colorOf(p.themeColors().BrightBlack, "#555555")) // muted
+		Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")) // muted
 	stderrStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(colorOf(p.themeColors().NormalYellow, "#C9A227")) // pink for stderr
+		Foreground(panels.ColorOf(p.themeColors().NormalYellow, "#C9A227")) // pink for stderr
 	if len(out.stdout) > 0 {
 		rows = append(rows, outputStyle.Render(indent+"── stdout ──"))
 		lines := out.stdout
 		if len(lines) > maxLines {
 			lines = lines[len(lines)-maxLines:]
 			rows = append(rows, outputStyle.Render(
-				fmt.Sprintf(indent+"  ... (%d lines omitted)", len(out.stdout)-maxLines)))
+				fmt.Sprintf(indent+"  ... (%d lines omitted)", len(out.stdout)-maxLines),
+			))
 		}
 		for _, line := range lines {
 			text := indent + "  " + line
@@ -549,7 +522,8 @@ func (p *Agents) renderOutputLines(out agentOutput, width int) []string {
 		if len(lines) > maxLines {
 			lines = lines[len(lines)-maxLines:]
 			rows = append(rows, stderrStyle.Render(
-				fmt.Sprintf(indent+"  ... (%d lines omitted)", len(out.stderr)-maxLines)))
+				fmt.Sprintf(indent+"  ... (%d lines omitted)", len(out.stderr)-maxLines),
+			))
 		}
 		for _, line := range lines {
 			text := indent + "  " + line

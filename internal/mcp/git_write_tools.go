@@ -13,8 +13,10 @@ import (
 // committing, branching, checkout, and remote operations.
 func registerGitWriteTools(s *Server) {
 	// git_stage
-	s.addTool("git_stage", categoryWrite,
-		mcplib.NewTool("git_stage",
+	s.addTool(
+		"git_stage", categoryWrite,
+		mcplib.NewTool(
+			"git_stage",
 			mcplib.WithDescription("Stage files for commit"),
 			mcplib.WithArray("paths", mcplib.Required(), mcplib.Description("File paths to stage"),
 				mcplib.Items(map[string]any{"type": "string"})),
@@ -36,8 +38,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_unstage
-	s.addTool("git_unstage", categoryWrite,
-		mcplib.NewTool("git_unstage",
+	s.addTool(
+		"git_unstage", categoryWrite,
+		mcplib.NewTool(
+			"git_unstage",
 			mcplib.WithDescription("Unstage files from the index"),
 			mcplib.WithArray("paths", mcplib.Required(), mcplib.Description("File paths to unstage"),
 				mcplib.Items(map[string]any{"type": "string"})),
@@ -59,8 +63,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_commit
-	s.addTool("git_commit", categoryWrite,
-		mcplib.NewTool("git_commit",
+	s.addTool(
+		"git_commit", categoryWrite,
+		mcplib.NewTool(
+			"git_commit",
 			mcplib.WithDescription("Create a commit with staged changes"),
 			mcplib.WithString("message", mcplib.Required(), mcplib.Description("Commit message")),
 			mcplib.WithBoolean("amend", mcplib.Description("Amend the previous commit")),
@@ -85,8 +91,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_branch_create
-	s.addTool("git_branch_create", categoryWrite,
-		mcplib.NewTool("git_branch_create",
+	s.addTool(
+		"git_branch_create", categoryWrite,
+		mcplib.NewTool(
+			"git_branch_create",
 			mcplib.WithDescription("Create a new branch"),
 			mcplib.WithString("name", mcplib.Required(), mcplib.Description("Branch name")),
 			mcplib.WithString("base", mcplib.Description("Base ref for the new branch (default HEAD)")),
@@ -109,8 +117,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_branch_delete
-	s.addTool("git_branch_delete", categoryWrite,
-		mcplib.NewTool("git_branch_delete",
+	s.addTool(
+		"git_branch_delete", categoryWrite,
+		mcplib.NewTool(
+			"git_branch_delete",
 			mcplib.WithDescription("Delete a branch"),
 			mcplib.WithString("name", mcplib.Required(), mcplib.Description("Branch name to delete")),
 			mcplib.WithBoolean("force", mcplib.Description("Force delete even if not fully merged")),
@@ -129,8 +139,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_branch_rename
-	s.addTool("git_branch_rename", categoryWrite,
-		mcplib.NewTool("git_branch_rename",
+	s.addTool(
+		"git_branch_rename", categoryWrite,
+		mcplib.NewTool(
+			"git_branch_rename",
 			mcplib.WithDescription("Rename a branch"),
 			mcplib.WithString("old_name", mcplib.Required(), mcplib.Description("Current branch name")),
 			mcplib.WithString("new_name", mcplib.Required(), mcplib.Description("New branch name")),
@@ -152,8 +164,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_checkout
-	s.addTool("git_checkout", categoryWrite,
-		mcplib.NewTool("git_checkout",
+	s.addTool(
+		"git_checkout", categoryWrite,
+		mcplib.NewTool(
+			"git_checkout",
 			mcplib.WithDescription("Checkout a branch, tag, or commit"),
 			mcplib.WithString("ref", mcplib.Required(), mcplib.Description("Git ref to checkout")),
 		),
@@ -173,8 +187,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_push
-	s.addTool("git_push", categoryWrite,
-		mcplib.NewTool("git_push",
+	s.addTool(
+		"git_push", categoryWrite,
+		mcplib.NewTool(
+			"git_push",
 			mcplib.WithDescription("Push commits to a remote"),
 			mcplib.WithString("remote", mcplib.Description("Remote name (default origin)")),
 			mcplib.WithString("branch", mcplib.Description("Branch to push")),
@@ -194,8 +210,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_pull
-	s.addTool("git_pull", categoryWrite,
-		mcplib.NewTool("git_pull",
+	s.addTool(
+		"git_pull", categoryWrite,
+		mcplib.NewTool(
+			"git_pull",
 			mcplib.WithDescription("Pull changes from a remote"),
 			mcplib.WithString("remote", mcplib.Description("Remote name (default origin)")),
 			mcplib.WithString("branch", mcplib.Description("Branch to pull")),
@@ -215,8 +233,10 @@ func registerGitWriteTools(s *Server) {
 	)
 
 	// git_fetch
-	s.addTool("git_fetch", categoryWrite,
-		mcplib.NewTool("git_fetch",
+	s.addTool(
+		"git_fetch", categoryWrite,
+		mcplib.NewTool(
+			"git_fetch",
 			mcplib.WithDescription("Fetch refs and objects from a remote"),
 			mcplib.WithString("remote", mcplib.Description("Remote name")),
 			mcplib.WithBoolean("prune", mcplib.Description("Prune deleted remote branches")),

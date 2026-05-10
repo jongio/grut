@@ -6,7 +6,6 @@ package stash
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -105,13 +104,6 @@ func (p *Panel) themeColors() theme.Colors {
 		return p.theme.Colors
 	}
 	return theme.Colors{}
-}
-
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
 }
 
 // SetActionsCfg stores the actions configuration for right-click menus.
@@ -270,7 +262,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No stash entries")
 	}
 	lines := make([]string, 0, height)
@@ -345,7 +337,7 @@ func (p *Panel) renderEntry(e git.StashEntry, width int, isCursor bool) string {
 	}
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
-		style = style.Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).Bold(true)
+		style = style.Background(panels.ColorOf(p.themeColors().SelectionBg, "#2A2A2A")).Bold(true)
 	}
 	return style.Render(line)
 }
@@ -374,13 +366,13 @@ func (p *Panel) renderPreview(width, height int) string {
 		style := lipgloss.NewStyle().Width(width)
 		switch {
 		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
-			style = style.Foreground(colorOf(p.themeColors().DiffAdded, "#6B9E56"))
+			style = style.Foreground(panels.ColorOf(p.themeColors().DiffAdded, "#6B9E56"))
 		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
-			style = style.Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
+			style = style.Foreground(panels.ColorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 		case strings.HasPrefix(line, "@@"):
-			style = style.Foreground(colorOf(p.themeColors().DiffHunk, "#7A9EBF"))
+			style = style.Foreground(panels.ColorOf(p.themeColors().DiffHunk, "#7A9EBF"))
 		case strings.HasPrefix(line, "diff "):
-			style = style.Foreground(colorOf(p.themeColors().DiffHeader, "#C9A227")).Bold(true)
+			style = style.Foreground(panels.ColorOf(p.themeColors().DiffHeader, "#C9A227")).Bold(true)
 		}
 		visible = append(visible, style.Render(line))
 	}
@@ -574,25 +566,11 @@ func (p *Panel) moveCursorUp() {
 }
 
 func (p *Panel) clampCursor() {
-	if p.cursor >= len(p.entries) {
-		p.cursor = len(p.entries) - 1
-	}
-	if p.cursor < 0 {
-		p.cursor = 0
-	}
+	p.cursor = panels.ClampCursor(p.cursor, len(p.entries))
 }
 
 func (p *Panel) ensureVisible() {
-	height := p.Height
-	if height <= 0 {
-		height = 20
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+height {
-		p.offset = p.cursor - height + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, p.Height)
 }
 
 // selectedEntry returns the stash entry under the cursor, or nil.

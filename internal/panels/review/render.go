@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/panels"
 )
 
 // ---------------------------------------------------------------------------
@@ -224,27 +225,27 @@ func (p *Panel) clampScroll(viewportHeight int) {
 // ---------------------------------------------------------------------------
 
 func (p *Panel) headerStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().BrightBlue, "#7A9EBF"))
+	return lipgloss.NewStyle().Bold(true).Foreground(panels.ColorOf(p.themeColors().BrightBlue, "#7A9EBF"))
 }
 
 func (p *Panel) selectedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
+	return lipgloss.NewStyle().Bold(true).Foreground(panels.ColorOf(p.themeColors().Foreground, "#D4D4D4"))
 }
 
 func (p *Panel) addedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffAdded, "#6B9E56"))
+	return lipgloss.NewStyle().Foreground(panels.ColorOf(p.themeColors().DiffAdded, "#6B9E56"))
 }
 
 func (p *Panel) removedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
+	return lipgloss.NewStyle().Foreground(panels.ColorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 }
 
 func (p *Panel) contextStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().DiffContext, "#999999"))
+	return lipgloss.NewStyle().Foreground(panels.ColorOf(p.themeColors().DiffContext, "#999999"))
 }
 
 func (p *Panel) dimStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().BrightBlack, "#666666"))
+	return lipgloss.NewStyle().Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666"))
 }
 
 // ---------------------------------------------------------------------------

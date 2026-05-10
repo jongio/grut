@@ -97,7 +97,7 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 			if dryRunFlag {
 				steps, err := engine.Plan(name, scArgs)
 				if err != nil {
-					return err
+					return fmt.Errorf("plan shortcut %q: %w", name, err)
 				}
 				fmt.Fprintf(w, "Dry run for %q:\n\n", name)
 				for i, step := range steps {
@@ -127,7 +127,7 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 			// Execute.
 			result, err := engine.Execute(cmd.Context(), name, scArgs)
 			if err != nil {
-				return err
+				return fmt.Errorf("execute shortcut %q: %w", name, err)
 			}
 
 			// Print results.

@@ -18,6 +18,7 @@ import (
 // maxLineBytes caps the length of a single output line to prevent memory
 // exhaustion from pathological output (e.g., a single multi-GiB line).
 const maxLineBytes = 1024 * 1024 // 1 MiB
+
 // Runner abstracts the terminal backend so that panels can use a mock
 // implementation in tests.
 type Runner interface {

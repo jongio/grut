@@ -522,7 +522,8 @@ func TestRenderModalContent_RendersMessages(t *testing.T) {
 	m.overlayMode = true
 	m.expanded = true
 	m.SetSize(80, 40)
-	m.messages = append(m.messages,
+	m.messages = append(
+		m.messages,
 		ai.ChatMessage{Role: "user", Content: "what files changed?"},
 		ai.ChatMessage{Role: "assistant", Content: "Two files were modified."},
 	)
@@ -539,7 +540,8 @@ func TestRenderModalContent_RendersToolMessages(t *testing.T) {
 	m.overlayMode = true
 	m.expanded = true
 	m.SetSize(80, 40)
-	m.messages = append(m.messages,
+	m.messages = append(
+		m.messages,
 		ai.ChatMessage{Role: "tool", Content: "git status output"},
 	)
 

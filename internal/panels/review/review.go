@@ -6,7 +6,6 @@ package review
 import (
 	"context"
 	"fmt"
-	"image/color"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -121,13 +120,6 @@ func (p *Panel) themeColors() theme.Colors {
 	return theme.Colors{}
 }
 
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
 // Init implements panels.Panel.
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
@@ -206,21 +198,21 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("Loading changes...")
 	}
 	if p.err != nil {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().NormalRed, "#C44B4B")).
+			Foreground(panels.ColorOf(p.themeColors().NormalRed, "#C44B4B")).
 			Render(fmt.Sprintf("Error: %s", p.err))
 	}
 	if len(p.files) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("No changes to review")
 	}
 	if p.showSummary {

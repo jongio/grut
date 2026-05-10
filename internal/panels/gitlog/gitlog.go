@@ -991,9 +991,9 @@ func (p *Panel) applySearch() {
 	query := strings.ToLower(p.searchQuery)
 	p.filteredIdx = p.filteredIdx[:0]
 	for i, c := range p.commits {
-		if strings.Contains(strings.ToLower(c.Subject), query) ||
-			strings.Contains(strings.ToLower(c.Author), query) ||
-			strings.Contains(strings.ToLower(c.ShortHash), query) {
+		if containsFold(c.Subject, query) ||
+			containsFold(c.Author, query) ||
+			containsFold(c.ShortHash, query) {
 			p.filteredIdx = append(p.filteredIdx, i)
 		}
 	}
@@ -1042,4 +1042,22 @@ func truncateOrPad(s string, width int) string {
 		return s + strings.Repeat(" ", width-w)
 	}
 	return s
+}
+
+// containsFold reports whether s contains the already-lowered substr
+// using case-insensitive comparison without allocating new strings.
+func containsFold(s, lowerSubstr string) bool {
+	n := len(lowerSubstr)
+	if n == 0 {
+		return true
+	}
+	if n > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-n; i++ {
+		if strings.EqualFold(s[i:i+n], lowerSubstr) {
+			return true
+		}
+	}
+	return false
 }

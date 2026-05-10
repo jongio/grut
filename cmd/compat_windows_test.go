@@ -247,7 +247,8 @@ func TestRootCmd_MinTTYRejected_Subprocess(t *testing.T) {
 			env = append(env, kv)
 		}
 	}
-	env = append(env,
+	env = append(
+		env,
 		"MSYSTEM=MINGW64",
 		"WT_SESSION=",
 		"TERM_PROGRAM=",

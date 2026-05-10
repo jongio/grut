@@ -36,14 +36,15 @@ var safeAgentEnvAllowlist = map[string]struct{}{
 // environment containing only safe variables. Secrets and tokens are excluded
 // to prevent credential leaks to untrusted agent subprocesses.
 func filterEnvForAgent() []string {
-	var filtered []string
-	for _, env := range os.Environ() {
-		name, _, ok := strings.Cut(env, "=")
+	env := os.Environ()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		name, _, ok := strings.Cut(e, "=")
 		if !ok {
 			continue
 		}
 		if _, allowed := safeAgentEnvAllowlist[strings.ToUpper(name)]; allowed {
-			filtered = append(filtered, env)
+			filtered = append(filtered, e)
 		}
 	}
 	return filtered

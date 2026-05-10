@@ -106,7 +106,7 @@ func (e *Engine) Execute(ctx context.Context, name string, args map[string]strin
 
 	resolved, err := resolveArgs(sc.Args, args)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve args for %q: %w", name, err)
 	}
 
 	result := &ExecutionResult{Shortcut: sc}

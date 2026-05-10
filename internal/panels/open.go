@@ -72,7 +72,7 @@ func ValidateBrowserURL(rawURL string) error {
 // It is a variable so tests can replace it with a no-op stub.
 var StartDetachedFn = func(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("start detached process: %w", err)
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil

@@ -79,7 +79,7 @@ Run all checks before submitting a PR:
 mage preflight
 ```
 
-This runs 12 checks: `fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode`
+This runs 14 checks: `fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode → benchmark smoke → benchmark regression`
 
 Some checks (golangci-lint, govulncheck, gofumpt, deadcode, WSL) are skipped if the tool is not installed, with instructions printed to install them.
 

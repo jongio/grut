@@ -20,7 +20,8 @@ func (c *Client) BranchList(ctx context.Context) ([]Branch, error) {
 		"%(refname)",
 	}, FieldSep)
 
-	out, err := c.run(ctx, "for-each-ref",
+	out, err := c.run(
+		ctx, "for-each-ref",
 		"--format="+format,
 		"refs/heads/",
 		"refs/remotes/",

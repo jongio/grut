@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"image/color"
 	"path"
 	"slices"
 	"strings"
@@ -53,13 +52,13 @@ func New(th *theme.Theme, sources ...Source) *FuzzyFinder {
 		BasePanel:        panels.BasePanel{PanelTitle: "fuzzyfinder"},
 		sources:          sources,
 		theme:            th,
-		promptStyle:      lipgloss.NewStyle().Foreground(colorOf(tc.NormalGreen, "#6B9E56")).Bold(true),
-		placeholderStyle: lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
-		matchHighlight:   lipgloss.NewStyle().Foreground(colorOf(tc.NormalYellow, "#C9A227")).Bold(true),
-		descStyle:        lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
-		statusStyle:      lipgloss.NewStyle().Foreground(colorOf(tc.BrightBlack, "#555555")),
-		separatorStyle:   lipgloss.NewStyle().Foreground(colorOf(tc.SelectionBg, "#2A2A2A")),
-		cursorBg:         orDefault(tc.SelectionBg, "#2A2A2A"),
+		promptStyle:      lipgloss.NewStyle().Foreground(panels.ColorOf(tc.NormalGreen, "#6B9E56")).Bold(true),
+		placeholderStyle: lipgloss.NewStyle().Foreground(panels.ColorOf(tc.BrightBlack, "#555555")),
+		matchHighlight:   lipgloss.NewStyle().Foreground(panels.ColorOf(tc.NormalYellow, "#C9A227")).Bold(true),
+		descStyle:        lipgloss.NewStyle().Foreground(panels.ColorOf(tc.BrightBlack, "#555555")),
+		statusStyle:      lipgloss.NewStyle().Foreground(panels.ColorOf(tc.BrightBlack, "#555555")),
+		separatorStyle:   lipgloss.NewStyle().Foreground(panels.ColorOf(tc.SelectionBg, "#2A2A2A")),
+		cursorBg:         panels.OrDefault(tc.SelectionBg, "#2A2A2A"),
 	}
 	ff.loadItems()
 	ff.filter()
@@ -419,20 +418,6 @@ func (ff *FuzzyFinder) renderMatch(item Item, matchedIndexes []int, width int, i
 }
 
 // Styles — matching the Forge palette used throughout grut.
-
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
-func orDefault(themed, fallback string) string {
-	if themed != "" {
-		return themed
-	}
-	return fallback
-}
 
 // ---------------------------------------------------------------------------
 // Test-only accessors (unexported; tests are in the same package)

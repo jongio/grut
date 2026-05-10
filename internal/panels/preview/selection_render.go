@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/jongio/grut/internal/panels"
 )
 
 // builderPool reuses strings.Builder instances to reduce per-line
@@ -19,7 +20,7 @@ var builderPool = sync.Pool{
 // selectionBgColor returns the background color used for text selection
 // highlighting, falling back to the default when no theme is set.
 func (p *Preview) selectionBgColor() color.Color {
-	return colorOf(p.themeColors().SelectionBg, "#2A2A2A")
+	return panels.ColorOf(p.themeColors().SelectionBg, "#2A2A2A")
 }
 
 // applySelectionHighlight wraps the selected portion of a rendered line

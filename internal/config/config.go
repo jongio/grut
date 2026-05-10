@@ -398,7 +398,8 @@ func warnIfWorldReadable(path string) {
 		return
 	}
 	if info.Mode().Perm()&0o004 != 0 {
-		slog.Warn("config file is world-readable; consider chmod 600",
+		slog.Warn(
+			"config file is world-readable; consider chmod 600",
 			"path", path,
 			"mode", info.Mode().Perm().String(),
 		)

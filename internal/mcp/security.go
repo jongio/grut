@@ -296,7 +296,8 @@ func (al *AuditLogger) Log(tool string, params map[string]any, status string, du
 			sanitized[k] = v
 		}
 	}
-	al.logger.Info("mcp_tool_call",
+	al.logger.Info(
+		"mcp_tool_call",
 		"tool", tool,
 		"params", sanitized,
 		"status", status,

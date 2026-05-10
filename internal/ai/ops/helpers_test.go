@@ -160,12 +160,18 @@ func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string,
 }
 
 // IndexMutator stubs.
-func (m *mockGitClient) Stage(_ context.Context, _ []string) error                        { return nil }
-func (m *mockGitClient) Unstage(_ context.Context, _ []string) error                      { return nil }
-func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error          { return nil }
-func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error        { return nil }
-func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error   { return nil }
+func (m *mockGitClient) Stage(_ context.Context, _ []string) error { return nil }
+
+func (m *mockGitClient) Unstage(_ context.Context, _ []string) error { return nil }
+
+func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error { return nil }
+
+func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error { return nil }
+
+func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error { return nil }
+
 func (m *mockGitClient) UnstageLine(_ context.Context, _ string, _ git.Hunk, _ int) error { return nil }
+
 func (m *mockGitClient) Commit(_ context.Context, _ string, _ git.CommitOpts) (string, error) {
 	return "abc123", nil
 }

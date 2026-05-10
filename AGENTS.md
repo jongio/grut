@@ -14,8 +14,8 @@ mage install            # Full deploy (test + build + install)
 
 ### Preflight Before Push (MANDATORY)
 
-Run `mage preflight` before any commit/push. It executes 12 checks matching CI:
-`fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode`.
+Run `mage preflight` before any commit/push. It executes 14 checks matching CI:
+`fmt → tidy → mod verify → vet → lint → build → test → race test → WSL test → vulncheck → gofumpt → deadcode → benchmark smoke → benchmark regression`.
 This catches formatting (`gofmt`), linting, and other issues that `go build` and `go vet` alone miss.
 
 ## Project Structure

@@ -20,7 +20,8 @@ func (c *Client) TagList(ctx context.Context) ([]Tag, error) {
 		"%(creatordate:iso8601)", // date
 	}, FieldSep)
 
-	out, err := c.run(ctx, "for-each-ref",
+	out, err := c.run(
+		ctx, "for-each-ref",
 		"--format="+format,
 		"--sort=-creatordate",
 		"refs/tags/",

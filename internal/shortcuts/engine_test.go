@@ -141,11 +141,15 @@ func (m *mockGitClient) TagList(_ context.Context) ([]git.Tag, error) {
 func (m *mockGitClient) TagCreate(_ context.Context, _, _, _ string) error {
 	return m.record("tag_create")
 }
+
 func (m *mockGitClient) TagDelete(_ context.Context, _ string) error { return m.record("tag_delete") }
+
 func (m *mockGitClient) TagListRemote(_ context.Context, _ string) ([]git.Tag, error) {
 	return nil, m.record("tag_list_remote")
 }
+
 func (m *mockGitClient) TagPush(_ context.Context, _, _ string) error { return m.record("tag_push") }
+
 func (m *mockGitClient) TagPushAll(_ context.Context, _ string) error {
 	return m.record("tag_push_all")
 }
@@ -157,8 +161,11 @@ func (m *mockGitClient) MergeAbort(_ context.Context) error { return m.record("m
 func (m *mockGitClient) Rebase(_ context.Context, _ string, _ git.RebaseOpts) error {
 	return m.record("rebase")
 }
-func (m *mockGitClient) RebaseContinue(_ context.Context) error       { return m.record("rebase_continue") }
-func (m *mockGitClient) RebaseAbort(_ context.Context) error          { return m.record("rebase_abort") }
+
+func (m *mockGitClient) RebaseContinue(_ context.Context) error { return m.record("rebase_continue") }
+
+func (m *mockGitClient) RebaseAbort(_ context.Context) error { return m.record("rebase_abort") }
+
 func (m *mockGitClient) CherryPick(_ context.Context, _ string) error { return m.record("cherry_pick") }
 
 func (m *mockGitClient) BisectStart(_ context.Context, _, _ string) error {
@@ -200,7 +207,8 @@ func (m *mockGitClient) DiscardAllUnstaged(_ context.Context) error {
 
 func (m *mockGitClient) Revert(_ context.Context, _ string) error { return m.record("revert") }
 func (m *mockGitClient) RevertContinue(_ context.Context) error   { return m.record("revert_continue") }
-func (m *mockGitClient) RevertAbort(_ context.Context) error      { return m.record("revert_abort") }
+
+func (m *mockGitClient) RevertAbort(_ context.Context) error { return m.record("revert_abort") }
 
 func (m *mockGitClient) Reset(_ context.Context, _ string, _ git.ResetMode) error {
 	return m.record("reset")

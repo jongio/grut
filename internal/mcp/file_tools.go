@@ -47,8 +47,10 @@ func newFileEntry(root, fullPath string, d fs.DirEntry) fileEntry {
 // All file operations are path-jailed to the git repository root.
 func registerFileTools(s *Server) {
 	// file_read
-	s.addTool("file_read", categoryRead,
-		mcplib.NewTool("file_read",
+	s.addTool(
+		"file_read", categoryRead,
+		mcplib.NewTool(
+			"file_read",
 			mcplib.WithDescription("Read the content of a file within the repository"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path relative to the repository root")),
 		),
@@ -91,8 +93,10 @@ func registerFileTools(s *Server) {
 	)
 
 	// file_write
-	s.addTool("file_write", categoryWrite,
-		mcplib.NewTool("file_write",
+	s.addTool(
+		"file_write", categoryWrite,
+		mcplib.NewTool(
+			"file_write",
 			mcplib.WithDescription("Write content to a file within the repository"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path relative to the repository root")),
 			mcplib.WithString("content", mcplib.Required(), mcplib.Description("Content to write to the file")),
@@ -141,7 +145,12 @@ func registerFileTools(s *Server) {
 			if openErr != nil {
 				return mcplib.NewToolResultErrorf("open file for write: %v", openErr), nil
 			}
-			defer f.Close()
+			closeFile := true
+			defer func() {
+				if closeFile {
+					f.Close()
+				}
+			}()
 			// Re-verify the opened fd is still inside the jail by checking
 			// that it is a regular file (not a symlink target outside jail).
 			fi, statErr := f.Stat()
@@ -154,13 +163,19 @@ func registerFileTools(s *Server) {
 			if _, writeErr := f.Write([]byte(content)); writeErr != nil {
 				return mcplib.NewToolResultErrorf("write file: %v", writeErr), nil
 			}
+			closeFile = false
+			if closeErr := f.Close(); closeErr != nil {
+				return mcplib.NewToolResultErrorf("close file: %v", closeErr), nil
+			}
 			return mcplib.NewToolResultText("file written: " + path), nil
 		},
 	)
 
 	// file_list
-	s.addTool("file_list", categoryRead,
-		mcplib.NewTool("file_list",
+	s.addTool(
+		"file_list", categoryRead,
+		mcplib.NewTool(
+			"file_list",
 			mcplib.WithDescription("List files and directories within the repository"),
 			mcplib.WithString("path", mcplib.Description("Directory path relative to repo root (default root)")),
 			mcplib.WithBoolean("recursive", mcplib.Description("List recursively")),

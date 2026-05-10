@@ -852,15 +852,7 @@ func (p *GitStatus) goToBottom() {
 }
 
 func (p *GitStatus) ensureCursorVisible() {
-	if p.Height <= 0 {
-		return
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+p.Height {
-		p.offset = p.cursor - p.Height + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, p.Height)
 }
 
 // ---------------------------------------------------------------------------

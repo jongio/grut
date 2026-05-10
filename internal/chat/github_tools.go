@@ -22,7 +22,8 @@ const maxGitHubOutputChars = 10000
 func (r *ToolRegistry) registerGitHubTools() {
 	// ── Read-only (Safe) ────────────────────────────────────────────
 
-	r.register("gh_issues",
+	r.register(
+		"gh_issues",
 		"List or search GitHub issues in this repository",
 		Safe,
 		objectSchema(map[string]any{
@@ -32,7 +33,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, nil),
 	)
 
-	r.register("gh_issue_view",
+	r.register(
+		"gh_issue_view",
 		"View a GitHub issue with its body and comments",
 		Safe,
 		objectSchema(map[string]any{
@@ -40,7 +42,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, []string{"number"}),
 	)
 
-	r.register("gh_prs",
+	r.register(
+		"gh_prs",
 		"List or search GitHub pull requests in this repository",
 		Safe,
 		objectSchema(map[string]any{
@@ -50,7 +53,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, nil),
 	)
 
-	r.register("gh_pr_view",
+	r.register(
+		"gh_pr_view",
 		"View a GitHub pull request with reviews, comments, and files",
 		Safe,
 		objectSchema(map[string]any{
@@ -58,7 +62,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, []string{"number"}),
 	)
 
-	r.register("gh_pr_diff",
+	r.register(
+		"gh_pr_diff",
 		"Get the diff of a GitHub pull request",
 		Safe,
 		objectSchema(map[string]any{
@@ -66,7 +71,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, []string{"number"}),
 	)
 
-	r.register("gh_actions",
+	r.register(
+		"gh_actions",
 		"List recent GitHub Actions workflow runs",
 		Safe,
 		objectSchema(map[string]any{
@@ -76,7 +82,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, nil),
 	)
 
-	r.register("gh_actions_logs",
+	r.register(
+		"gh_actions_logs",
 		"Get failed job logs for a GitHub Actions workflow run",
 		Safe,
 		objectSchema(map[string]any{
@@ -86,7 +93,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 
 	// ── Write (Destructive) ─────────────────────────────────────────
 
-	r.register("gh_comment",
+	r.register(
+		"gh_comment",
 		"Post a comment on a GitHub issue or pull request",
 		Destructive,
 		objectSchema(map[string]any{
@@ -95,7 +103,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, []string{"number", "body"}),
 	)
 
-	r.register("gh_pr_review",
+	r.register(
+		"gh_pr_review",
 		"Submit a review on a GitHub pull request",
 		Destructive,
 		objectSchema(map[string]any{
@@ -105,7 +114,8 @@ func (r *ToolRegistry) registerGitHubTools() {
 		}, []string{"number", "body", "action"}),
 	)
 
-	r.register("gh_actions_rerun",
+	r.register(
+		"gh_actions_rerun",
 		"Rerun failed jobs in a GitHub Actions workflow run",
 		Destructive,
 		objectSchema(map[string]any{
@@ -164,7 +174,8 @@ func (e *ToolExecutor) ghIssueView(ctx context.Context, args map[string]any) (st
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
-	out, err := e.ghExec(ctx,
+	out, err := e.ghExec(
+		ctx,
 		"issue", "view", strconv.Itoa(number),
 		"--json", "number,title,body,state,labels,assignees,author,comments,createdAt,updatedAt",
 	)
@@ -202,7 +213,8 @@ func (e *ToolExecutor) ghPRView(ctx context.Context, args map[string]any) (strin
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
-	out, err := e.ghExec(ctx,
+	out, err := e.ghExec(
+		ctx,
 		"pr", "view", strconv.Itoa(number),
 		"--json", "number,title,body,state,author,labels,reviewDecision,isDraft,headRefName,reviews,comments,files,commits,createdAt,updatedAt",
 	)

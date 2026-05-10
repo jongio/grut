@@ -5,8 +5,10 @@ package panels
 
 import (
 	"context"
+	"image/color"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Panel is the interface that all grut panels implement. Each panel occupies
@@ -100,3 +102,52 @@ func (b *BasePanel) KeyBindings() []KeyBinding { return nil }
 // ScrollDelta is the number of lines to scroll on each mouse-wheel tick.
 // All panels use this shared constant for consistent scroll behavior.
 const ScrollDelta = 3
+
+// EnsureCursorVisible adjusts offset so that cursor remains within the
+// visible window of the given height. Returns the corrected offset.
+// Panels that use simple cursor/offset scrolling should call this after
+// any cursor movement instead of reimplementing the same bounds logic.
+func EnsureCursorVisible(cursor, offset, height int) int {
+	if height <= 0 {
+		return offset
+	}
+	if cursor < offset {
+		return cursor
+	}
+	if cursor >= offset+height {
+		return cursor - height + 1
+	}
+	return offset
+}
+
+// ClampCursor constrains cursor to [0, length-1]. Returns 0 if length <= 0.
+func ClampCursor(cursor, length int) int {
+	if length <= 0 {
+		return 0
+	}
+	if cursor >= length {
+		return length - 1
+	}
+	if cursor < 0 {
+		return 0
+	}
+	return cursor
+}
+
+// ColorOf returns a lipgloss color from the themed value, falling back
+// to fallback when themed is empty. Panels use this to resolve theme
+// colors with sensible defaults.
+func ColorOf(themed, fallback string) color.Color {
+	if themed != "" {
+		return lipgloss.Color(themed)
+	}
+	return lipgloss.Color(fallback)
+}
+
+// OrDefault returns themed if non-empty, otherwise fallback.
+func OrDefault(themed, fallback string) string {
+	if themed != "" {
+		return themed
+	}
+	return fallback
+}

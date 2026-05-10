@@ -39,7 +39,8 @@ var embeddedCredPattern = regexp.MustCompile(`https://[^@\s]+@`)
 // standaloneTokenPattern matches known token prefixes that appear standalone
 // (not necessarily in key=value form).
 var standaloneTokenPattern = regexp.MustCompile(
-	`(?:ghp_|gho_|ghs_|ghu_|github_pat_|glpat-|xox[bps]-|sk-|AKIA)[a-zA-Z0-9_\-]{10,}`)
+	`(?:ghp_|gho_|ghs_|ghu_|github_pat_|glpat-|xox[bps]-|sk-|AKIA)[a-zA-Z0-9_\-]{10,}`,
+)
 
 // bearerPattern matches Authorization: Bearer and Basic header values.
 var bearerPattern = regexp.MustCompile(`(?i)(Bearer|Basic)\s+[A-Za-z0-9+/=._\-]{10,}`)

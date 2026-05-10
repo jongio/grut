@@ -10,8 +10,10 @@ import (
 // registerGitReadTools registers all read-only git tools on the server.
 func registerGitReadTools(s *Server) {
 	// git_status
-	s.addTool("git_status", categoryRead,
-		mcplib.NewTool("git_status",
+	s.addTool(
+		"git_status", categoryRead,
+		mcplib.NewTool(
+			"git_status",
 			mcplib.WithDescription("Returns the list of changed files with their git status codes"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -24,8 +26,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_diff
-	s.addTool("git_diff", categoryRead,
-		mcplib.NewTool("git_diff",
+	s.addTool(
+		"git_diff", categoryRead,
+		mcplib.NewTool(
+			"git_diff",
 			mcplib.WithDescription("Returns diff output for changed files"),
 			mcplib.WithBoolean("staged", mcplib.Description("Compare staged changes against HEAD")),
 			mcplib.WithString("path", mcplib.Description("Limit diff to a specific file path")),
@@ -62,8 +66,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_log
-	s.addTool("git_log", categoryRead,
-		mcplib.NewTool("git_log",
+	s.addTool(
+		"git_log", categoryRead,
+		mcplib.NewTool(
+			"git_log",
 			mcplib.WithDescription("Returns the commit log"),
 			mcplib.WithNumber("limit", mcplib.Description("Maximum number of commits to return (max 10000)")),
 			mcplib.WithString("path", mcplib.Description("Filter commits by file path")),
@@ -97,8 +103,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_blame
-	s.addTool("git_blame", categoryRead,
-		mcplib.NewTool("git_blame",
+	s.addTool(
+		"git_blame", categoryRead,
+		mcplib.NewTool(
+			"git_blame",
 			mcplib.WithDescription("Returns per-line blame annotation for a file"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path to blame")),
 		),
@@ -120,8 +128,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_branch_list
-	s.addTool("git_branch_list", categoryRead,
-		mcplib.NewTool("git_branch_list",
+	s.addTool(
+		"git_branch_list", categoryRead,
+		mcplib.NewTool(
+			"git_branch_list",
 			mcplib.WithDescription("Returns the list of local and remote branches"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -134,8 +144,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_tag_list
-	s.addTool("git_tag_list", categoryRead,
-		mcplib.NewTool("git_tag_list",
+	s.addTool(
+		"git_tag_list", categoryRead,
+		mcplib.NewTool(
+			"git_tag_list",
 			mcplib.WithDescription("Returns the list of tags"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -148,8 +160,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_worktree_list
-	s.addTool("git_worktree_list", categoryRead,
-		mcplib.NewTool("git_worktree_list",
+	s.addTool(
+		"git_worktree_list", categoryRead,
+		mcplib.NewTool(
+			"git_worktree_list",
 			mcplib.WithDescription("Returns the list of git worktrees"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -162,8 +176,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_reflog
-	s.addTool("git_reflog", categoryRead,
-		mcplib.NewTool("git_reflog",
+	s.addTool(
+		"git_reflog", categoryRead,
+		mcplib.NewTool(
+			"git_reflog",
 			mcplib.WithDescription("Returns reflog entries for a ref"),
 			mcplib.WithString("ref", mcplib.Description("Git ref to show reflog for (default HEAD)")),
 			mcplib.WithNumber("limit", mcplib.Description("Maximum number of entries to return")),
@@ -180,8 +196,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_is_repo
-	s.addTool("git_is_repo", categoryRead,
-		mcplib.NewTool("git_is_repo",
+	s.addTool(
+		"git_is_repo", categoryRead,
+		mcplib.NewTool(
+			"git_is_repo",
 			mcplib.WithDescription("Returns whether the current directory is inside a git repository"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -194,8 +212,10 @@ func registerGitReadTools(s *Server) {
 	)
 
 	// git_repo_root
-	s.addTool("git_repo_root", categoryRead,
-		mcplib.NewTool("git_repo_root",
+	s.addTool(
+		"git_repo_root", categoryRead,
+		mcplib.NewTool(
+			"git_repo_root",
 			mcplib.WithDescription("Returns the absolute path to the repository root"),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {

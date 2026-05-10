@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -153,7 +155,7 @@ func sortChildrenStatic(children []*node, dirFirst bool) {
 			}
 			return 1
 		}
-		return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+		return compareFold(a.name, b.name)
 	})
 }
 
@@ -168,8 +170,36 @@ func (ft *FileTree) sortChildren(children []*node) {
 			}
 			return 1
 		}
-		return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+		return compareFold(a.name, b.name)
 	})
+}
+
+// compareFold compares two strings case-insensitively without allocating,
+// using rune-by-rune Unicode lower-case folding.
+func compareFold(a, b string) int {
+	for {
+		if a == "" {
+			if b == "" {
+				return 0
+			}
+			return -1
+		}
+		if b == "" {
+			return 1
+		}
+		ra, sizeA := utf8.DecodeRuneInString(a)
+		rb, sizeB := utf8.DecodeRuneInString(b)
+		la := unicode.ToLower(ra)
+		lb := unicode.ToLower(rb)
+		if la != lb {
+			if la < lb {
+				return -1
+			}
+			return 1
+		}
+		a = a[sizeA:]
+		b = b[sizeB:]
+	}
 }
 
 // ---------------------------------------------------------------------------

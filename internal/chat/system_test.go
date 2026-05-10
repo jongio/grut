@@ -236,7 +236,9 @@ func (stubGitClient) Revert(context.Context, string) error { panic("stub: Revert
 func (stubGitClient) RevertContinue(context.Context) error {
 	panic("stub: RevertContinue not implemented")
 }
+
 func (stubGitClient) RevertAbort(context.Context) error { panic("stub: RevertAbort not implemented") }
+
 func (stubGitClient) Reset(context.Context, string, git.ResetMode) error {
 	panic("stub: Reset not implemented")
 }

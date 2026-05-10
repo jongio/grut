@@ -48,7 +48,7 @@ func keyMsg(key string) tea.KeyPressMsg {
 	switch key {
 	case "up":
 		return tea.KeyPressMsg{Code: tea.KeyUp}
-	case "down":
+	case keyDown:
 		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "pgup":
 		return tea.KeyPressMsg{Code: tea.KeyPgUp}

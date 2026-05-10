@@ -73,7 +73,8 @@ func buildGitHistory(dir string) error {
 	runAs := func(name, email string, args ...string) error {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(
+			os.Environ(),
 			"GIT_AUTHOR_NAME="+name,
 			"GIT_AUTHOR_EMAIL="+email,
 			"GIT_COMMITTER_NAME="+name,

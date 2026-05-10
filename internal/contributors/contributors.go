@@ -5,11 +5,12 @@ package contributors
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -107,7 +108,8 @@ func Extract(opts Options) ([]Contributor, error) {
 	ctx := context.Background()
 
 	// Get commit authors with dates.
-	authorOut, err := run(ctx, dir,
+	authorOut, err := run(
+		ctx, dir,
 		"log", rng,
 		"--format=%aN\x1e%aE\x1e%aI\x1f",
 	)
@@ -116,7 +118,8 @@ func Extract(opts Options) ([]Contributor, error) {
 	}
 
 	// Get commit bodies to parse Co-authored-by trailers.
-	trailerOut, err := run(ctx, dir,
+	trailerOut, err := run(
+		ctx, dir,
 		"log", rng,
 		"--format=%aI%n%b\x1f",
 	)
@@ -186,11 +189,11 @@ func Extract(opts Options) ([]Contributor, error) {
 	}
 
 	// Sort by commit count descending, then name ascending.
-	sort.Slice(contributors, func(i, j int) bool {
-		if contributors[i].CommitCount != contributors[j].CommitCount {
-			return contributors[i].CommitCount > contributors[j].CommitCount
+	slices.SortFunc(contributors, func(a, b Contributor) int {
+		if n := cmp.Compare(b.CommitCount, a.CommitCount); n != 0 {
+			return n
 		}
-		return contributors[i].Name < contributors[j].Name
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	return contributors, nil

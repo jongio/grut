@@ -109,7 +109,8 @@ func TestListThemesIgnoresNonTOML(t *testing.T) {
 	// Create a non-TOML file.
 	require.NoError(t, os.WriteFile(
 		filepath.Join(themeDir, "readme.txt"),
-		[]byte("not a theme"), 0o600))
+		[]byte("not a theme"), 0o600,
+	))
 
 	themes := ListThemes()
 	assert.NotContains(t, themes, "readme")
@@ -130,7 +131,8 @@ func TestCustomThemeOverridesBuiltin(t *testing.T) {
 	// Create a custom "default" theme with a distinctive color.
 	require.NoError(t, os.WriteFile(
 		filepath.Join(themeDir, "default.toml"),
-		[]byte(completeTestTOML), 0o600))
+		[]byte(completeTestTOML), 0o600,
+	))
 
 	th, err := Load("default")
 	require.NoError(t, err)

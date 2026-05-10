@@ -229,14 +229,16 @@ func Load(name string) (*Theme, error) {
 		// cannot read arbitrary files outside intended directories.
 		cleaned := filepath.Clean(name)
 		if containsDotDot(cleaned) {
-			slog.Warn("theme path contains traversal, falling back to default",
+			slog.Warn(
+				"theme path contains traversal, falling back to default",
 				"path", name,
 			)
 			return Load("default")
 		}
 		data, err := os.ReadFile(cleaned)
 		if err != nil {
-			slog.Warn("custom theme not found, falling back to default",
+			slog.Warn(
+				"custom theme not found, falling back to default",
 				"path", name,
 				"error", err,
 			)
@@ -259,7 +261,8 @@ func Load(name string) (*Theme, error) {
 	// Unknown name — fall back to "default" so a stale config value
 	// (e.g. a removed theme) doesn't prevent the app from launching.
 	if name != "default" {
-		slog.Warn("unknown theme, falling back to default",
+		slog.Warn(
+			"unknown theme, falling back to default",
 			"theme", name,
 			"available", builtinNames,
 		)

@@ -225,15 +225,7 @@ func (p *Panel) goToBottom() {
 
 func (p *Panel) ensureCursorVisible() {
 	viewHeight := p.Height - 1 // subtract status bar
-	if viewHeight <= 0 {
-		return
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+viewHeight {
-		p.offset = p.cursor - viewHeight + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, viewHeight)
 }
 
 // ---------------------------------------------------------------------------
@@ -466,12 +458,7 @@ func (p *Panel) previewCurrent() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 func (p *Panel) clampCursor() {
 	files := p.builder.Files()
-	if p.cursor >= len(files) {
-		p.cursor = len(files) - 1
-	}
-	if p.cursor < 0 {
-		p.cursor = 0
-	}
+	p.cursor = panels.ClampCursor(p.cursor, len(files))
 }
 
 func (p *Panel) renderLine(f ctxbuilder.ContextFile, width int, isCursor bool) string {

@@ -126,7 +126,8 @@ func (p *ClaudeProvider) buildParams(req CompletionRequest) anthropic.MessageNew
 	params.Messages = p.convertMessages(req.Messages)
 
 	if req.UserPrompt != "" {
-		params.Messages = append(params.Messages,
+		params.Messages = append(
+			params.Messages,
 			anthropic.NewUserMessage(anthropic.NewTextBlock(req.UserPrompt)),
 		)
 	}
@@ -147,7 +148,8 @@ func (p *ClaudeProvider) convertMessages(msgs []ChatMessage) []anthropic.Message
 	for _, msg := range msgs {
 		switch msg.Role {
 		case "user":
-			result = append(result,
+			result = append(
+				result,
 				anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)),
 			)
 
@@ -168,13 +170,15 @@ func (p *ClaudeProvider) convertMessages(msgs []ChatMessage) []anthropic.Message
 				}
 				result = append(result, anthropic.NewAssistantMessage(blocks...))
 			} else {
-				result = append(result,
+				result = append(
+					result,
 					anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)),
 				)
 			}
 
 		case "tool":
-			result = append(result,
+			result = append(
+				result,
 				anthropic.NewUserMessage(anthropic.ContentBlockParamUnion{
 					OfToolResult: &anthropic.ToolResultBlockParam{
 						ToolUseID: msg.ToolID,

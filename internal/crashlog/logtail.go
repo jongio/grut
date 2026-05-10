@@ -24,13 +24,13 @@ type ringBuffer struct {
 // write stores entry at the current position and advances the cursor.
 func (rb *ringBuffer) write(entry string) {
 	rb.mu.Lock()
+	defer rb.mu.Unlock()
 	rb.entries[rb.pos] = entry
 	rb.pos++
 	if rb.pos >= rb.size {
 		rb.pos = 0
 		rb.full = true
 	}
-	rb.mu.Unlock()
 }
 
 // snapshot returns the buffered entries in chronological order

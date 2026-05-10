@@ -6,7 +6,6 @@ package conflicts
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -140,13 +139,6 @@ func (p *Panel) themeColors() theme.Colors {
 	return theme.Colors{}
 }
 
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
 // SetActionsCfg stores the actions configuration for right-click menus.
 func (p *Panel) SetActionsCfg(cfg config.ActionsConfig) {
 	p.actionsCfg = cfg
@@ -275,12 +267,7 @@ func (p *Panel) adjustOffset() {
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+viewportHeight {
-		p.offset = p.cursor - viewportHeight + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, viewportHeight)
 }
 
 // clampCursor ensures the cursor is within bounds after file list changes.
@@ -290,9 +277,7 @@ func (p *Panel) clampCursor() {
 		p.offset = 0
 		return
 	}
-	if p.cursor >= len(p.files) {
-		p.cursor = len(p.files) - 1
-	}
+	p.cursor = panels.ClampCursor(p.cursor, len(p.files))
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +713,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().NormalGreen, "#6B9E56")).
+			Foreground(panels.ColorOf(p.themeColors().NormalGreen, "#6B9E56")).
 			Render("No conflicts")
 	}
 	// Reserve 2 lines for the status bar.
@@ -757,10 +742,10 @@ func (p *Panel) View(width, height int) string {
 // renderFileRow renders a single conflict file entry.
 func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 	marker := "✗"
-	markerColor := colorOf(p.themeColors().NormalRed, "#C44B4B") // red for unresolved
+	markerColor := panels.ColorOf(p.themeColors().NormalRed, "#C44B4B") // red for unresolved
 	if p.resolved[path] {
 		marker = "✓"
-		markerColor = colorOf(p.themeColors().NormalGreen, "#6B9E56") // green for resolved
+		markerColor = panels.ColorOf(p.themeColors().NormalGreen, "#6B9E56") // green for resolved
 	}
 	markerStyle := lipgloss.NewStyle().Foreground(markerColor)
 	label := markerStyle.Render(marker) + " " + path
@@ -776,8 +761,8 @@ func (p *Panel) renderFileRow(path string, width int, isCursor bool) string {
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor {
 		style = style.
-			Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).
-			Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
+			Background(panels.ColorOf(p.themeColors().SelectionBg, "#2A2A2A")).
+			Foreground(panels.ColorOf(p.themeColors().Foreground, "#D4D4D4"))
 	}
 	return style.Render(label)
 }
@@ -792,8 +777,8 @@ func (p *Panel) renderStatusBar(width int) string {
 	status := fmt.Sprintf(" %s — %d/%d conflicts remaining", p.mode, remaining, total)
 	style := lipgloss.NewStyle().
 		Width(width).
-		Background(colorOf(p.themeColors().NormalYellow, "#C9A227")).
-		Foreground(colorOf(p.themeColors().Background, "#0D0D0D")).
+		Background(panels.ColorOf(p.themeColors().NormalYellow, "#C9A227")).
+		Foreground(panels.ColorOf(p.themeColors().Background, "#0D0D0D")).
 		Bold(true)
 	return style.Render(status)
 }

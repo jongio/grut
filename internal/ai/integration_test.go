@@ -124,12 +124,19 @@ func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, er
 func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockGitClient) Stage(_ context.Context, _ []string) error                        { return nil }
-func (m *mockGitClient) Unstage(_ context.Context, _ []string) error                      { return nil }
-func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error          { return nil }
-func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error        { return nil }
-func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error   { return nil }
+
+func (m *mockGitClient) Stage(_ context.Context, _ []string) error { return nil }
+
+func (m *mockGitClient) Unstage(_ context.Context, _ []string) error { return nil }
+
+func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error { return nil }
+
+func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error { return nil }
+
+func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error { return nil }
+
 func (m *mockGitClient) UnstageLine(_ context.Context, _ string, _ git.Hunk, _ int) error { return nil }
+
 func (m *mockGitClient) Commit(ctx context.Context, msg string, opts git.CommitOpts) (string, error) {
 	if m.CommitFunc != nil {
 		return m.CommitFunc(ctx, msg, opts)

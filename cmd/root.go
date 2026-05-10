@@ -294,7 +294,8 @@ Environment:
 					for range ticker.C {
 						var ms runtime.MemStats
 						runtime.ReadMemStats(&ms)
-						slog.Info("memstats",
+						slog.Info(
+							"memstats",
 							"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
 							"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
 							"heap_objects", ms.HeapObjects,

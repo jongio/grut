@@ -62,7 +62,8 @@ func DetectConflicts(bindings []Binding) []Conflict {
 // warning via slog.
 func WarnConflicts(bindings []Binding) {
 	for _, c := range DetectConflicts(bindings) {
-		slog.Warn("duplicate key binding",
+		slog.Warn(
+			"duplicate key binding",
 			"key", c.Key,
 			"mode", c.Mode.String(),
 			"context", c.Context,

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,12 +124,6 @@ func (p *Preview) themeColors() theme.Colors {
 
 // colorOf returns a lipgloss color for the themed value if non-empty,
 // otherwise falls back to the provided default hex string.
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
 
 // handleRepoChanged replaces the git client and clears preview content
 // for the new repository after a directory change.
@@ -410,7 +403,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		switch msg.String() {
 		case "e":
 			return p, enterEditMode(p)
-		case "j", "down":
+		case "j", keyDown:
 			p.scrollDown(1)
 		case "k", "up":
 			p.scrollUp(1)
@@ -465,7 +458,7 @@ func (p *Preview) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#666666")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666")).
 			Render("Loading...")
 	}
 	// Empty state — skip when in GitHub content mode (ghMode has its own lines).
@@ -659,9 +652,9 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		addedStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffAdded, "#6B9E56"))
-		removedStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffRemoved, "#C44B4B"))
-		headerStyle := lipgloss.NewStyle().Foreground(colorOf(tc.DiffHeader, "#7A9EBF"))
+		addedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
+		removedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
+		headerStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
 		var lines []string
 		for _, d := range diffs {
 			for _, h := range d.Hunks {
@@ -909,7 +902,7 @@ func (p *Preview) viewportHeight() int {
 // newDimStyle creates the dim style for line numbers and indicators.
 // Created as a local value to avoid package-level mutable state (F23).
 func (p *Preview) newDimStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(colorOf(p.themeColors().BrightBlack, "#555555"))
+	return lipgloss.NewStyle().Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555"))
 }
 
 func (p *Preview) renderEmptyState(width, height int) string {
@@ -918,7 +911,7 @@ func (p *Preview) renderEmptyState(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(colorOf(p.themeColors().BrightBlack, "#666666"))
+		Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666"))
 	return style.Render(msg)
 }
 
@@ -928,7 +921,7 @@ func (p *Preview) renderError(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(colorOf(p.themeColors().DiffRemoved, "#C44B4B"))
+		Foreground(panels.ColorOf(p.themeColors().DiffRemoved, "#C44B4B"))
 	return style.Render(msg)
 }
 
@@ -945,7 +938,7 @@ func (p *Preview) renderMetadata(width, height int) string {
 		Width(width).
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(colorOf(p.themeColors().FileDefault, "#888888"))
+		Foreground(panels.ColorOf(p.themeColors().FileDefault, "#888888"))
 	return style.Render(content)
 }
 
@@ -958,7 +951,7 @@ func (p *Preview) renderContent(width, height int) string {
 			displayLines = p.diffLines
 		} else {
 			// Normal mode with diff: show both.
-			diffHeader := lipgloss.NewStyle().Bold(true).Foreground(colorOf(p.themeColors().DiffHeader, "#7A9EBF"))
+			diffHeader := lipgloss.NewStyle().Bold(true).Foreground(panels.ColorOf(p.themeColors().DiffHeader, "#7A9EBF"))
 			combined := make([]string, 0, len(p.diffLines)+len(p.lines)+3)
 			combined = append(combined, diffHeader.Render("── Git Diff ──"))
 			combined = append(combined, p.diffLines...)

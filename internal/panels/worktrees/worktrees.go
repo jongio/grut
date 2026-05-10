@@ -291,14 +291,16 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 	cmds := []tea.Cmd{p.loadWorktrees()}
 	switch op {
 	case "created":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Worktree created for " + name, Level: notify.Success}
 			},
 		)
 	case "removed":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Worktree removed: " + name, Level: notify.Success}
@@ -504,15 +506,7 @@ func (p *Panel) moveCursorUp() {
 }
 
 func (p *Panel) ensureCursorVisible() {
-	if p.Height <= 0 {
-		return
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+p.Height {
-		p.offset = p.cursor - p.Height + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, p.Height)
 }
 
 // selectedWorktree returns the worktree item at the cursor, or nil if

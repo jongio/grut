@@ -239,6 +239,13 @@ var deadcodeAllowlist = []string{
 	// fuzzyfinder/source — test-support cache invalidation API
 	"fileCache.invalidate",
 	"InvalidateFileCache",
+
+	// preview/editor — test-only save handler
+	"handleFileSaved",
+
+	// gitinfo — test-only color/icon helpers (used in gitinfo_test.go)
+	"prColor",
+	"prActionIcon",
 }
 
 // Default target when running `mage` with no args.
@@ -410,8 +417,9 @@ func Build() error {
 	return nil
 }
 
-// Preflight runs all pre-commit checks: format, tidy, vet, lint, build, test,
-// race detection, vulnerability scan, strict formatting, and dead code detection.
+// Preflight runs all pre-commit checks: format, tidy, mod verify, vet, lint,
+// build, test, race detection, WSL test, vulnerability scan, strict formatting,
+// dead code detection, benchmark smoke test, and benchmark regression check.
 // If preflight passes, CI will pass.
 func Preflight() error {
 	fmt.Println("\n=== 1/14 Formatting ===")
@@ -513,7 +521,8 @@ func Preflight() error {
 
 	fmt.Println("\n=== 13/14 Benchmark smoke test ===")
 	// Quick single-iteration run to verify all benchmarks compile and execute.
-	if err := run("go", "test", "-bench=.", "-benchmem", "-run=^$", "-count=1", "-timeout=5m",
+	if err := run(
+		"go", "test", "-bench=.", "-benchmem", "-run=^$", "-count=1", "-timeout=5m",
 		"./internal/git/",
 		"./internal/ai/",
 		"./internal/config/",

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 )
 
@@ -25,11 +26,19 @@ type scaffoldData struct {
 	Name string
 }
 
-// builtinTemplates is populated once at init from the embedded template files.
-var builtinTemplates []Template
+// builtinTemplates is lazily populated on first access from the embedded
+// template files.
+var (
+	builtinTemplates     []Template
+	builtinTemplatesOnce sync.Once
+)
 
-func init() {
-	builtinTemplates = loadBuiltinTemplates()
+// getBuiltinTemplates returns the builtin templates, loading them on first call.
+func getBuiltinTemplates() []Template {
+	builtinTemplatesOnce.Do(func() {
+		builtinTemplates = loadBuiltinTemplates()
+	})
+	return builtinTemplates
 }
 
 // mustReadTemplate reads an embedded template file and panics on failure.
@@ -90,8 +99,9 @@ func loadBuiltinTemplates() []Template {
 
 // ListTemplates returns all available scaffold templates.
 func ListTemplates() []Template {
-	out := make([]Template, len(builtinTemplates))
-	copy(out, builtinTemplates)
+	templates := getBuiltinTemplates()
+	out := make([]Template, len(templates))
+	copy(out, templates)
 	return out
 }
 
@@ -153,9 +163,10 @@ func Scaffold(dir, name, templateName string) error {
 
 // findTemplate looks up a template by name.
 func findTemplate(name string) *Template {
-	for i := range builtinTemplates {
-		if builtinTemplates[i].Name == name {
-			return &builtinTemplates[i]
+	templates := getBuiltinTemplates()
+	for i := range templates {
+		if templates[i].Name == name {
+			return &templates[i]
 		}
 	}
 	return nil

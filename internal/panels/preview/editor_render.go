@@ -2,6 +2,7 @@ package preview
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -39,7 +40,7 @@ func renderEditContent(p *Preview, width, height int) string {
 	}
 
 	// Line number gutter sizing: "NNN │ " where NNN is right-aligned.
-	numWidth := len(fmt.Sprintf("%d", totalLines))
+	numWidth := len(strconv.Itoa(totalLines))
 	if numWidth < 3 {
 		numWidth = 3
 	}
@@ -81,7 +82,9 @@ func renderEditContent(p *Preview, width, height int) string {
 		highlighted = ansi.Truncate(highlighted, contentWidth, "")
 
 		// Apply current line background highlight and build gutter.
-		numStr := fmt.Sprintf("%*d │ ", numWidth, lineNum)
+		// Build gutter string without fmt.Sprintf to avoid per-line allocation.
+		digits := strconv.Itoa(lineNum)
+		numStr := strings.Repeat(" ", numWidth-len(digits)) + digits + " │ "
 		if isCursorLine {
 			highlighted = lipgloss.NewStyle().Background(currentLineBg).Width(contentWidth).Render(highlighted)
 			highlighted = currentLineNumStyle.Render(numStr) + highlighted

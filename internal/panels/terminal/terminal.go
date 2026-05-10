@@ -6,7 +6,6 @@ package terminal
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -77,13 +76,6 @@ func (p *Panel) themeColors() theme.Colors {
 	return theme.Colors{}
 }
 
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
@@ -119,7 +111,7 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No terminal")
 	}
 	// Reserve space for status bar and (optionally) input prompt.
@@ -383,7 +375,7 @@ func (p *Panel) renderInput(width int) string {
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4")).
+		Foreground(panels.ColorOf(p.themeColors().Foreground, "#D4D4D4")).
 		Render(prompt)
 }
 
@@ -416,7 +408,7 @@ func (p *Panel) renderStatus(width int) string {
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Background(colorOf(p.themeColors().StatusBarBg, "#2A2A2A")).
-		Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4")).
+		Background(panels.ColorOf(p.themeColors().StatusBarBg, "#2A2A2A")).
+		Foreground(panels.ColorOf(p.themeColors().Foreground, "#D4D4D4")).
 		Render(status)
 }

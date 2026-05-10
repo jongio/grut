@@ -415,7 +415,6 @@ type ghDataLoadedMsg struct {
 
 // ghMetaLoadedMsg carries repo metadata and current user info.
 type ghMetaLoadedMsg struct {
-	err         error
 	user        string
 	repoPrivate bool
 }
@@ -742,7 +741,8 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			p.loadGitHubMeta(),
 			p.loadIssuesPage(1, true),
 			p.loadPRsPage(1, true),
@@ -815,7 +815,8 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			p.loadGitHubMeta(),
 			p.loadIssuesPage(1, true),
 			p.loadPRsPage(1, true),
@@ -1108,7 +1109,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}
 	if p.ghClient != nil {
-		bindings = append(bindings,
+		bindings = append(
+			bindings,
 			panels.KeyBinding{Key: "i", Description: "Issues tab", Action: "tab_issues"},
 			panels.KeyBinding{Key: "p", Description: "PRs tab", Action: "tab_prs"},
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
@@ -1145,14 +1147,16 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 	cmds := []tea.Cmd{p.loadData()}
 	switch op {
 	case "checkout":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Switched to " + name, Level: notify.Success}
 			},
 		)
 	case "checkout_stashed":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg { return panels.StashChangedMsg{} },
 			func() tea.Msg {
@@ -1172,14 +1176,16 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Branch renamed to: " + name, Level: notify.Success}
 		})
 	case "worktree_added":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Worktree created: " + name, Level: notify.Success}
 			},
 		)
 	case "worktree_removed":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Worktree removed: " + name, Level: notify.Success}
@@ -1190,14 +1196,16 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			return panels.ChangeDirectoryMsg{Path: name}
 		})
 	case "remote_added":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.RemoteChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Remote added: " + name, Level: notify.Success}
 			},
 		)
 	case "remote_removed":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.RemoteChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Remote removed: " + name, Level: notify.Success}
@@ -1208,49 +1216,56 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Fetched: " + name, Level: notify.Success}
 		})
 	case "stash_applied":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Applied " + name, Level: notify.Success}
 			},
 		)
 	case "stash_popped":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Popped " + name, Level: notify.Success}
 			},
 		)
 	case "stash_dropped":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Dropped " + name, Level: notify.Success}
 			},
 		)
 	case "tag_created":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Tag created: " + name, Level: notify.Success}
 			},
 		)
 	case "tag_deleted":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Tag deleted: " + name, Level: notify.Success}
 			},
 		)
 	case "tag_pushed":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Tag pushed: " + name, Level: notify.Success}
 			},
 		)
 	case "tag_checkout":
-		cmds = append(cmds,
+		cmds = append(
+			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Checked out tag: " + name + " (detached HEAD)", Level: notify.Success}
@@ -2263,7 +2278,7 @@ func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd
 	return p, func() tea.Msg {
 		defer func() {
 			if r := recover(); r != nil {
-				// Surface panics as error toasts instead of silently dying.
+				slog.Error("panic during checkout", "ref", ref, "panic", r)
 			}
 		}()
 		err := g.Checkout(ctx, ref)
@@ -2569,7 +2584,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p, func() tea.Msg {
 			defer func() {
 				if r := recover(); r != nil {
-					// Surface panics as error toasts instead of silently dying.
+					slog.Error("panic during branch checkout", "ref", ref, "panic", r)
 				}
 			}()
 			files, err := g.Status(ctx)
@@ -2583,7 +2598,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p, func() tea.Msg {
 			defer func() {
 				if r := recover(); r != nil {
-					// Surface panics as error toasts instead of silently dying.
+					slog.Error("panic during stash checkout", "ref", ref, "panic", r)
 				}
 			}()
 			err := g.StashPush(ctx, git.StashOpts{Message: "grut: auto-stash before switching to " + ref})
@@ -3329,7 +3344,8 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 	var tabs []tabEntry
 	// In ModeGitHub, Branches and Tags are prepended to the tab row.
 	if p.mode == ModeGitHub {
-		tabs = append(tabs,
+		tabs = append(
+			tabs,
 			tabEntry{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
 			tabEntry{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		)
@@ -3342,7 +3358,8 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 	if p.prFilter != prFilterAll {
 		prsCount = p.prFilter.String()
 	}
-	tabs = append(tabs,
+	tabs = append(
+		tabs,
 		tabEntry{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
 		tabEntry{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
 		tabEntry{id: tabActions, name: "Actions", short: "Act", count: p.actionsStatusIcon()},
@@ -4112,8 +4129,11 @@ func (p *Panel) loadMoreIfNeeded() tea.Cmd {
 		return p.loadWorkflowsPage(paging.nextPage, false)
 	case tabReleases:
 		return p.loadReleasesPage(paging.nextPage, false)
+	default:
+		// Non-paging tabs (branches, worktrees, remotes, stash, tags, reflog)
+		// don't use cursor-based GitHub pagination.
+		return nil
 	}
-	return nil
 }
 
 // ghTabCountStr returns the display count for a GitHub tab, appending "+"

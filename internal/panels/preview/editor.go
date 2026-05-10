@@ -15,6 +15,11 @@ import (
 	"github.com/jongio/grut/internal/panels"
 )
 
+// Key name constants for KeyPressMsg.String() comparisons.
+const (
+	keyDown = "down"
+)
+
 // fileSavedMsg is sent after a successful file save from edit mode.
 // The Update handler reacts by emitting FileModifiedMsg, refreshing
 // the diff, and showing a toast.
@@ -298,7 +303,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	case "up":
 		moveCursorUp(p)
 
-	case "down":
+	case keyDown:
 		moveCursorDown(p)
 
 	case "home", "ctrl+a":

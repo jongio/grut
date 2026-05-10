@@ -1116,15 +1116,7 @@ func (ft *FileTree) pageUp() {
 }
 
 func (ft *FileTree) ensureCursorVisible() {
-	if ft.height <= 0 {
-		return
-	}
-	if ft.cursor < ft.offset {
-		ft.offset = ft.cursor
-	}
-	if ft.cursor >= ft.offset+ft.height {
-		ft.offset = ft.cursor - ft.height + 1
-	}
+	ft.offset = panels.EnsureCursorVisible(ft.cursor, ft.offset, ft.height)
 }
 
 // ---------------------------------------------------------------------------

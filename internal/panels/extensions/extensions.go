@@ -6,7 +6,6 @@ package extensions
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"slices"
 	"strings"
 
@@ -114,13 +113,6 @@ func (p *Panel) themeColors() theme.Colors {
 	return theme.Colors{}
 }
 
-func colorOf(themed, fallback string) color.Color {
-	if themed != "" {
-		return lipgloss.Color(themed)
-	}
-	return lipgloss.Color(fallback)
-}
-
 // ---------------------------------------------------------------------------
 // panels.Panel interface
 // ---------------------------------------------------------------------------
@@ -193,14 +185,14 @@ func (p *Panel) View(width, height int) string {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("Loading extensions...")
 	}
 	if len(p.extensions) == 0 {
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(colorOf(p.themeColors().BrightBlack, "#555555")).
+			Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")).
 			Render("No extensions installed")
 	}
 	// Build visible rows.
@@ -383,24 +375,11 @@ func (p *Panel) moveCursorUp() {
 }
 
 func (p *Panel) clampCursor() {
-	if p.cursor >= len(p.extensions) {
-		p.cursor = len(p.extensions) - 1
-	}
-	if p.cursor < 0 {
-		p.cursor = 0
-	}
+	p.cursor = panels.ClampCursor(p.cursor, len(p.extensions))
 }
 
 func (p *Panel) ensureCursorVisible() {
-	if p.Height <= 0 {
-		return
-	}
-	if p.cursor < p.offset {
-		p.offset = p.cursor
-	}
-	if p.cursor >= p.offset+p.Height {
-		p.offset = p.cursor - p.Height + 1
-	}
+	p.offset = panels.EnsureCursorVisible(p.cursor, p.offset, p.Height)
 }
 
 // ---------------------------------------------------------------------------
@@ -561,12 +540,12 @@ func (p *Panel) renderExtensionRow(ext extension.ExtensionInfo, width int, isCur
 	style := lipgloss.NewStyle().Width(width)
 	if isCursor && p.Focused {
 		style = style.
-			Background(colorOf(p.themeColors().SelectionBg, "#2A2A2A")).
-			Foreground(colorOf(p.themeColors().Foreground, "#D4D4D4"))
+			Background(panels.ColorOf(p.themeColors().SelectionBg, "#2A2A2A")).
+			Foreground(panels.ColorOf(p.themeColors().Foreground, "#D4D4D4"))
 	} else if ext.Enabled {
-		style = style.Foreground(colorOf(p.themeColors().NormalGreen, "#6B9E56")) // green
+		style = style.Foreground(panels.ColorOf(p.themeColors().NormalGreen, "#6B9E56")) // green
 	} else {
-		style = style.Foreground(colorOf(p.themeColors().BrightBlack, "#555555")) // muted
+		style = style.Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#555555")) // muted
 	}
 	return style.Render(line)
 }
@@ -575,16 +554,18 @@ func (p *Panel) renderDetailLines(ext extension.ExtensionInfo, width int) []stri
 	indent := "    "
 	detailStyle := lipgloss.NewStyle().
 		Width(width).
-		Foreground(colorOf(p.themeColors().BrightBlue, "#7A9EBF")) // cyan
+		Foreground(panels.ColorOf(p.themeColors().BrightBlue, "#7A9EBF")) // cyan
 	var rows []string
 	if ext.Manifest.Description != "" {
 		rows = append(rows, detailStyle.Render(indent+ext.Manifest.Description))
 	}
 	rows = append(rows, detailStyle.Render(
-		fmt.Sprintf("%sRuntime: %s  Entry: %s", indent, ext.Manifest.Runtime, ext.Manifest.EntryPoint)))
+		fmt.Sprintf("%sRuntime: %s  Entry: %s", indent, ext.Manifest.Runtime, ext.Manifest.EntryPoint),
+	))
 	if len(ext.Manifest.Permissions) > 0 {
 		rows = append(rows, detailStyle.Render(
-			fmt.Sprintf("%sPermissions: %s", indent, strings.Join(ext.Manifest.Permissions, ", "))))
+			fmt.Sprintf("%sPermissions: %s", indent, strings.Join(ext.Manifest.Permissions, ", ")),
+		))
 	} else {
 		rows = append(rows, detailStyle.Render(indent+"Permissions: none"))
 	}
