@@ -70,6 +70,7 @@ type Model struct {
 	cancel             context.CancelFunc
 	asyncOp            string // current async operation label ("pushing...", etc.)
 	pendingAction      string // action waiting for modal input ("commit")
+	pendingDiscardPath string // file path for pending discard confirmation
 	currentBranch      string // cached git branch name for status bar
 	cwdEditValue       string // editable path text
 	branchAhead        int    // commits ahead of upstream (needs push)
@@ -303,6 +304,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFetch()
 	case panels.AsyncOpDoneMsg:
 		return m.handleAsyncOpDone(msg)
+	case discardFileDoneMsg:
+		return m.handleDiscardFileDone(msg)
+	case unstageFileDoneMsg:
+		return m.handleUnstageFileDone(msg)
 	case panels.AutoFetchTickMsg:
 		return m.handleAutoFetchTick()
 	// Undo/redo messages.
@@ -762,6 +767,10 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "item_copy":
 		cmd := m.engine.Update(panels.ItemCopyMsg{})
 		return m, cmd
+	case "discard_file":
+		return m.handleDiscardFile()
+	case "unstage_file":
+		return m.handleUnstageFile()
 	default:
 		// Panel-level actions (cursor_down, stage, etc.): route the
 		// original key event to the focused panel which handles its

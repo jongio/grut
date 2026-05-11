@@ -279,7 +279,7 @@ func TestRevealFile_ExistingFile(t *testing.T) {
 	ft.revealFile(target)
 
 	// After reveal, cursor should be on guide.md
-	path := ft.cursorPath()
+	path := ft.CursorPath()
 	assert.Equal(t, target, path)
 }
 

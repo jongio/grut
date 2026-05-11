@@ -155,6 +155,11 @@ type RefreshGitStatusMsg struct{}
 // the displayed content type.
 type RefreshPreviewMsg struct{}
 
+// RefreshGitChangedFilesMsg tells the filetree to reload its git-changed
+// file list. Sent after operations (discard, unstage) that change which
+// files appear in the git filter view.
+type RefreshGitChangedFilesMsg struct{}
+
 // GitChangedFilesMsg delivers the set of git-changed file paths to
 // panels that need to filter by git status (e.g. filetree).
 type GitChangedFilesMsg struct {
@@ -267,6 +272,18 @@ type PullRequestMsg struct{}
 
 // FetchRequestMsg is sent to trigger a git fetch from any panel.
 type FetchRequestMsg struct{}
+
+// DiscardFileMsg requests discarding unstaged changes for a specific file.
+// Handled at the app level so it works from any panel.
+type DiscardFileMsg struct {
+	Path string
+}
+
+// UnstageFileMsg requests unstaging a specific file (removing from index).
+// Handled at the app level so it works from any panel.
+type UnstageFileMsg struct {
+	Path string
+}
 
 // AmendRequestMsg is sent to trigger an amend of the last commit.
 // The panel opens a commit message modal; the app handles the actual amend.

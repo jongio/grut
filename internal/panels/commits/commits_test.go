@@ -444,13 +444,13 @@ func TestPageDownUp(t *testing.T) {
 	p.SetSize(80, 2) // Small viewport.
 
 	// Page down.
-	p.Update(tea.KeyPressMsg{Code: 'd'})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	if p.cursor != 1 { // height/2 = 1
 		t.Errorf("expected cursor=1 after page down, got %d", p.cursor)
 	}
 
 	// Page up.
-	p.Update(tea.KeyPressMsg{Code: 'u'})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if p.cursor != 0 {
 		t.Errorf("expected cursor=0 after page up, got %d", p.cursor)
 	}
@@ -933,21 +933,21 @@ func TestHandleDetailKey_PageDownUp(t *testing.T) {
 
 	p.showDetail()
 
-	// Page down with d.
-	p.Update(tea.KeyPressMsg{Code: 'd'})
+	// Page down with PgDn.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	expected := 10 / 2 // height/2 = 5
 	if p.detailOffset != expected {
-		t.Errorf("expected detailOffset=%d after d, got %d", expected, p.detailOffset)
+		t.Errorf("expected detailOffset=%d after PgDn, got %d", expected, p.detailOffset)
 	}
 
-	// Page up with u.
-	p.Update(tea.KeyPressMsg{Code: 'u'})
+	// Page up with PgUp.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if p.detailOffset != 0 {
-		t.Errorf("expected detailOffset=0 after u, got %d", p.detailOffset)
+		t.Errorf("expected detailOffset=0 after PgUp, got %d", p.detailOffset)
 	}
 
 	// Page up from 0 stays at 0.
-	p.Update(tea.KeyPressMsg{Code: 'u'})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if p.detailOffset != 0 {
 		t.Errorf("expected detailOffset=0 stays at 0, got %d", p.detailOffset)
 	}

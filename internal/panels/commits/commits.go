@@ -311,8 +311,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "enter", Description: "Show commit details", Action: "detail"},
-		{Key: "d/PgDn", Description: "Page down", Action: "page_down"},
-		{Key: "u/PgUp", Description: "Page up", Action: "page_up"},
+		{Key: "PgDn", Description: "Page down", Action: "page_down"},
+		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
@@ -778,9 +778,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.moveCursorUp()
 	case "enter": //nolint:goconst // inline string is more readable here
 		return p.selectCommit()
-	case "d", "pgdown":
+	case "pgdown":
 		p.pageDown()
-	case "u", "pgup":
+	case "pgup":
 		p.pageUp()
 	case "g":
 		p.goToTop()
@@ -858,12 +858,12 @@ func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.detailOffset > 0 {
 			p.detailOffset--
 		}
-	case "d", "pgdown":
+	case "pgdown":
 		p.detailOffset += p.height / 2
 		if p.detailOffset > len(p.detailLines)-1 {
 			p.detailOffset = max(0, len(p.detailLines)-1)
 		}
-	case "u", "pgup":
+	case "pgup":
 		p.detailOffset -= p.height / 2
 		if p.detailOffset < 0 {
 			p.detailOffset = 0

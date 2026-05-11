@@ -7,7 +7,7 @@ grut supports three keybinding schemes: **default**, **vim**, and **classic**. S
 keybinding_scheme = "default"  # "default", "vim", "classic", or path to custom .toml
 ```
 
-The bindings below document the **default** scheme. All schemes share the same global and number-key bindings. See `docs/keybindings.json` for the machine-readable source of truth.
+The bindings below document the **default** scheme. All schemes share the same global and number-key bindings. This file is generated from `internal/keybindings/keybindings.json` — do not edit by hand.
 
 ---
 
@@ -17,124 +17,132 @@ Always active regardless of focused panel.
 
 | Key | Action |
 |-----|--------|
-| `1` | Focus File Tree panel |
-| `2` | Focus Git Info panel |
-| `3` | Focus GitHub panel |
-| `4` | Focus Commits panel |
-| `5` | Focus Preview panel |
-| `Tab` | Focus next panel |
-| `Shift+Tab` | Focus previous panel |
+| `1-5` | Focus panel by number |
 | `R` | Refresh all data + preview |
-| `P` | Push |
+| `P` | Push to remote |
 | `F` | Fetch all remotes |
 | `?` | Help overlay |
 | `,` | Settings |
 | `/` | Fuzzy finder |
 | `:` | Command palette |
 | `~` | Change directory |
-| `Ctrl+c` | Quit |
-| `Ctrl+Space` | Toggle AI chat |
-| `Ctrl+z` | Undo last git action |
-| `Ctrl+y` | Redo |
+| `ctrl+space` | Toggle AI chat |
+| `ctrl+z` | Undo last git action |
+| `ctrl+y` | Redo |
+| `ctrl+c` | Quit |
 
 ---
 
-## Navigation (all panels)
+## Navigation
+
+Consistent in every focused panel.
 
 | Key | Action |
 |-----|--------|
-| `j` / `↓` | Cursor down |
-| `k` / `↑` | Cursor up |
-| `g` | Jump to top |
-| `G` | Jump to bottom |
-| `d` | Page down |
-| `u` | Page up |
+| `j/k` | Cursor down/up |
+| `g/G` | Jump to top/bottom |
+| `PgDn/PgUp` | Page down/up |
 | `Enter` | Select / open / expand |
 | `Esc` | Back / close submode |
+| `d` | Discard changes to selected file |
+| `u` | Unstage selected file |
 
 ---
 
-## File Tree (panel 1)
+## File Tree
+
+File Tree panel (panel 1).
 
 | Key | Action |
 |-----|--------|
-| `h` / `←` | Collapse directory |
-| `l` / `→` | Expand directory |
-| `Enter` | Expand dir / select file |
-| `o` | Open file in external editor |
+| `h/l` | Collapse/expand directory |
+| `o` | Open in external editor |
 | `.` | Toggle hidden files |
-| `g` | Toggle git filter (changed files only) |
-| `v` | Toggle tree / list view |
+| `f` | Toggle git filter |
+| `v` | Toggle tree/list view |
 | `n` | New file |
 | `N` | New directory |
-| `x` | Delete file / directory |
-| `e` / `F2` | Rename |
+| `x` | Delete file/directory |
+| `e / F2` | Rename |
 | `y` | Copy path to clipboard |
 | `c` | Copy file |
 | `p` | Paste file |
-| `s` | Stage file (in git filter mode) |
-| `Space` | Toggle stage / unstage |
-| `J` | Scroll preview down |
-| `K` | Scroll preview up |
+| `space` | Toggle stage/unstage |
+| `J/K` | Scroll preview down/up |
 
 ---
 
-## Git Info (panel 2)
+## Git Status
 
-### Tabs
-
-| Key | Tab |
-|-----|-----|
-| `b` | Branches |
-| `w` | Worktrees |
-| `r` | Remotes |
-| `s` | Stash |
-| `t` | Tags |
-| `l` | Reflog |
-
-### Actions
+Active when the file tree is in git filter mode (press f to cycle).
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Checkout / apply |
+| `s` | Stage file/hunk/line |
+| `u` | Unstage file/hunk/line |
+| `d` | Discard unstaged changes |
+| `c` | Commit staged changes |
+| `p` | Pull from remote |
+| `a` | Stage all |
+| `U` | Unstage all |
+| `space` | Toggle select for bulk |
+| `enter/l` | Expand file diff |
+| `h` | Enter hunk mode |
+| `Esc` | Exit hunk/line mode |
+
+---
+
+## Git Info
+
+Git Info panel (panel 2).
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Next tab |
+| `Shift+Tab` | Previous tab |
+| `b` | Branches tab |
+| `w` | Worktrees tab |
+| `r` | Remotes tab |
+| `s` | Stash tab |
+| `t` | Tags tab |
+| `l` | Reflog tab |
 | `n` | Create new item |
 | `x` | Delete selected |
-| `e` / `F2` | Rename |
+| `e / F2` | Rename |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
 | `f` | Fetch / filter |
+| `P` | Push tag |
 
 ---
 
-## GitHub (panel 3)
+## GitHub
 
-### Tabs
-
-| Key | Tab |
-|-----|-----|
-| `b` | Branches |
-| `t` | Tags |
-| `i` | Issues |
-| `p` | Pull Requests |
-| `a` | Actions |
-| `w` | Workflows |
-| `l` | Releases |
-
-### Actions
+GitHub panel (panel 3).
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Select (show in preview) |
+| `Tab` | Next tab |
+| `Shift+Tab` | Previous tab |
+| `b` | Branches tab |
+| `t` | Tags tab |
+| `i` | Issues tab |
+| `p` | Pull Requests tab |
+| `a` | Actions tab |
+| `w` | Workflows tab |
+| `l` | Releases tab |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
-| `m` | Merge PR (PRs tab only) |
-| `r` | Rerun (Actions tab only) |
-| `x` | Cancel (Actions tab only) |
-| `D` | Dispatch workflow (Workflows tab only) |
+| `m` | Merge PR (PRs tab) |
+| `r` | Rerun (Actions tab) |
+| `x` | Cancel (Actions tab) |
+| `D` | Dispatch workflow |
 
 ---
 
-## Commits (panel 4)
+## Commits
+
+Commits panel (panel 4).
 
 | Key | Action |
 |-----|--------|
@@ -148,16 +156,21 @@ Always active regardless of focused panel.
 
 ---
 
-## Preview (panel 5)
+## Preview
+
+Preview panel (panel 5).
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Scroll content |
-| `g` / `G` | Jump to top / bottom |
-| `d` / `u` | Page down / up |
-| `y` / `Ctrl+C` | Copy selection to clipboard |
+| `j/k` | Scroll content |
+| `g/G` | Jump to top/bottom |
+| `PgDn/PgUp` | Page down/up |
+| `W` | Toggle word wrap |
+| `n` | Toggle line numbers |
+| `m` | Toggle markdown render |
+| `B` | Toggle blame |
+| `y/Ctrl+C` | Copy selection |
 | `Esc` | Clear selection |
 
-Click and drag to select text. Double-click to select a word.
-
+Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.
 

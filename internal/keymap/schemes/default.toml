@@ -181,7 +181,7 @@ description = "Toggle hidden files"
 
 
 [[bindings]]
-key = "g"
+key = "f"
 action = "cycle_file_filter"
 mode = "panel"
 context = "filetree"
@@ -208,6 +208,20 @@ action = "discard"
 mode = "panel"
 context = "gitstatus"
 description = "Discard changes"
+
+# Global discard/unstage — operates on the file selected in the file tree.
+# Context-specific gitstatus bindings above take priority when gitstatus is focused.
+[[bindings]]
+key = "d"
+action = "discard_file"
+mode = "panel"
+description = "Discard changes to selected file"
+
+[[bindings]]
+key = "u"
+action = "unstage_file"
+mode = "panel"
+description = "Unstage selected file"
 
 [[bindings]]
 key = "c"

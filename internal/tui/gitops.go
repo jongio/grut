@@ -3,12 +3,17 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/filetree"
+	"github.com/jongio/grut/internal/panels/preview"
 )
 
 // asyncOpPushing is the status label shown during git push operations.
@@ -26,6 +31,15 @@ const pendingActionAmend = "amend"
 
 // pendingActionReword identifies the reword-commit pending action.
 const pendingActionReword = "reword"
+
+// pendingActionDiscard identifies the discard-file pending action.
+const pendingActionDiscard = "discard_file"
+
+// discardFileDoneMsg carries the result of an app-level discard operation.
+type discardFileDoneMsg struct{ err error }
+
+// unstageFileDoneMsg carries the result of an app-level unstage operation.
+type unstageFileDoneMsg struct{ err error }
 
 // asyncOpFetching is the status label shown during fetch operations.
 const asyncOpFetching = "fetching..."
@@ -269,6 +283,125 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 }
 
 // ---------------------------------------------------------------------------
+// Discard / Unstage (global — works from any panel)
+// ---------------------------------------------------------------------------
+
+// currentFilePath returns the repo-relative path of the file currently under
+// the cursor in the filetree panel, falling back to the preview panel's file.
+// Returns "" if no file is selected or the path cannot be made relative.
+func (m Model) currentFilePath() string {
+	var absPath string
+	allPanels := m.engine.Panels()
+	if ft, ok := allPanels["filetree"].(*filetree.FileTree); ok {
+		absPath = ft.CursorPath()
+	}
+	if absPath == "" {
+		if pv, ok := allPanels["preview"].(*preview.Preview); ok {
+			absPath = pv.FilePath()
+		}
+	}
+	if absPath == "" {
+		return ""
+	}
+	// Convert to repo-relative path for git operations.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(cwd, absPath)
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+// handleDiscardFile shows a confirmation dialog for discarding unstaged
+// changes to the file currently selected in the filetree.
+func (m Model) handleDiscardFile() (tea.Model, tea.Cmd) {
+	if m.gitClient == nil {
+		return m, showWarnToast("Git not available")
+	}
+	path := m.currentFilePath()
+	if path == "" {
+		return m, showWarnToast("No file selected")
+	}
+	m.pendingAction = pendingActionDiscard
+	m.pendingDiscardPath = path
+	return m, notify.ShowConfirm("Discard Changes",
+		fmt.Sprintf("Discard unstaged changes to %q?", filepath.Base(path)))
+}
+
+// handleUnstageFile unstages the file currently selected in the filetree.
+func (m Model) handleUnstageFile() (tea.Model, tea.Cmd) {
+	if m.gitClient == nil {
+		return m, showWarnToast("Git not available")
+	}
+	path := m.currentFilePath()
+	if path == "" {
+		return m, showWarnToast("No file selected")
+	}
+	gc := m.gitClient
+	ctx := m.ctx
+	return m, func() tea.Msg {
+		err := gc.Unstage(ctx, []string{path})
+		return unstageFileDoneMsg{err: err}
+	}
+}
+
+// executeDiscardFile runs the actual discard after confirmation.
+func (m Model) executeDiscardFile() (tea.Model, tea.Cmd) {
+	path := m.pendingDiscardPath
+	m.pendingDiscardPath = ""
+	if path == "" {
+		return m, nil
+	}
+	gc := m.gitClient
+	ctx := m.ctx
+	return m, func() tea.Msg {
+		err := gc.DiscardFile(ctx, path)
+		return discardFileDoneMsg{err: err}
+	}
+}
+
+// handleDiscardFileDone refreshes git status and preview after a discard.
+func (m Model) handleDiscardFileDone(msg discardFileDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		errMsg := msg.err.Error()
+		return m, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "discard failed: " + errMsg,
+				Level:   notify.Error,
+			}
+		}
+	}
+	return m, tea.Batch(
+		m.engine.Update(panels.RefreshGitStatusMsg{}),
+		m.engine.Update(panels.RefreshPreviewMsg{}),
+		m.engine.Update(panels.RefreshGitChangedFilesMsg{}),
+		showSuccessToast("Changes discarded"),
+	)
+}
+
+// handleUnstageFileDone refreshes git status and preview after an unstage.
+func (m Model) handleUnstageFileDone(msg unstageFileDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		errMsg := msg.err.Error()
+		return m, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "unstage failed: " + errMsg,
+				Level:   notify.Error,
+			}
+		}
+	}
+	return m, tea.Batch(
+		m.engine.Update(panels.RefreshGitStatusMsg{}),
+		m.engine.Update(panels.RefreshPreviewMsg{}),
+		m.engine.Update(panels.RefreshGitChangedFilesMsg{}),
+		showSuccessToast("File unstaged"),
+	)
+}
+
+// ---------------------------------------------------------------------------
 // Async operation completion
 // ---------------------------------------------------------------------------
 
@@ -328,6 +461,8 @@ func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cm
 		return m.executeAmend(msg.Value)
 	case pendingActionReword:
 		return m.executeReword(msg.Value)
+	case pendingActionDiscard:
+		return m.executeDiscardFile()
 	default:
 		return m, nil
 	}
@@ -406,6 +541,12 @@ func showWarnToast(msg string) tea.Cmd {
 func showInfoToast(msg string) tea.Cmd {
 	return func() tea.Msg {
 		return notify.ShowToastMsg{Message: msg, Level: notify.Info}
+	}
+}
+
+func showSuccessToast(msg string) tea.Cmd {
+	return func() tea.Msg {
+		return notify.ShowToastMsg{Message: msg, Level: notify.Success}
 	}
 }
 

@@ -50,7 +50,12 @@ func enterEditMode(p *Preview) tea.Cmd {
 		}
 	}
 
-	p.editBuf = NewTextBuffer(strings.Split(string(data), "\n"))
+	// Normalize line endings: strip \r so CRLF files don't corrupt
+	// the terminal rendering (lipgloss Width padding after \r overwrites
+	// content from column 0).
+	content := strings.ReplaceAll(string(data), "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	p.editBuf = NewTextBuffer(strings.Split(content, "\n"))
 	p.editMode = true
 	p.cursorLine = p.scrollY
 	p.cursorCol = 0

@@ -654,7 +654,7 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 // cursorPath returns the absolute path of the node at the current cursor
 // position. Returns "" when the visible list is empty or cursor is out of
 // range.
-func (ft *FileTree) cursorPath() string {
+func (ft *FileTree) CursorPath() string {
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		return ft.visible[ft.cursor].path
 	}

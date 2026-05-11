@@ -776,12 +776,12 @@ func TestHandleDetailKey_PageDown(t *testing.T) {
 	totalLines := len(p.detailLines)
 
 	// Page down = height/2.
-	p.handleDetailKey(tea.KeyPressMsg{Code: 'd'})
+	p.handleDetailKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	assert.Equal(t, 2, p.detailOffset) // 4/2 = 2
 
 	// Multiple page downs should clamp.
 	for range 20 {
-		p.handleDetailKey(tea.KeyPressMsg{Code: 'd'})
+		p.handleDetailKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	}
 	assert.LessOrEqual(t, p.detailOffset, totalLines-1)
 }
@@ -800,12 +800,12 @@ func TestHandleDetailKey_PageUp(t *testing.T) {
 	p.detailOffset = 6
 
 	// Page up = height/2.
-	p.handleDetailKey(tea.KeyPressMsg{Code: 'u'})
+	p.handleDetailKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	assert.Equal(t, 4, p.detailOffset) // 6 - 4/2 = 4
 
 	// Multiple page ups should clamp at 0.
 	for range 20 {
-		p.handleDetailKey(tea.KeyPressMsg{Code: 'u'})
+		p.handleDetailKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	}
 	assert.Equal(t, 0, p.detailOffset)
 }

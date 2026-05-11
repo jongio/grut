@@ -359,7 +359,21 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.GitStatusChangedMsg:
 		// Refresh per-file status indicators after stage/unstage so the
 		// title dirty indicator (*) stays in sync.
-		return ft, ft.loadGitFileStatus()
+		cmds := []tea.Cmd{ft.loadGitFileStatus()}
+		// If in git filter mode, also reload the changed-files list so
+		// discarded/unstaged files disappear from the filtered view.
+		if ft.gitFilter && ft.gitClient != nil {
+			ft.savedCursorPath = ft.CursorPath()
+			cmds = append(cmds, ft.loadGitChangedFiles())
+		}
+		return ft, tea.Batch(cmds...)
+	case panels.RefreshGitChangedFilesMsg:
+		// Direct request to reload git-changed files (e.g. after discard/unstage).
+		if ft.gitFilter && ft.gitClient != nil {
+			ft.savedCursorPath = ft.CursorPath()
+			return ft, ft.loadGitChangedFiles()
+		}
+		return ft, nil
 	case panels.GitChangedFilesMsg:
 		ft.gitChangedPaths = msg.Paths
 		ft.buildGitChangedDirs()
@@ -499,7 +513,8 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "h/←", Description: "Collapse dir / go to parent", Action: "collapse"},
 		{Key: ".", Description: "Toggle hidden files", Action: "toggle_hidden"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
-		{Key: "g", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
+		{Key: "g", Description: "Go to top", Action: "go_top"},
+		{Key: "f", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -802,7 +817,7 @@ func (ft *FileTree) cycleFileFilter() (panels.Panel, tea.Cmd) {
 	}
 	// Cycle: gitFilter → branchDiff
 	if ft.gitFilter {
-		cursorPath := ft.cursorPath()
+		cursorPath := ft.CursorPath()
 		ft.gitFilter = false
 		ft.gitChangedPaths = nil
 		ft.gitChangedDirs = nil
@@ -870,14 +885,16 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.collapseOrParent()
 	case ".":
 		ft.toggleHidden()
-	case "g":
+	case "f":
 		return ft.cycleFileFilter()
+	case "g":
+		ft.goToTop()
 	case "G":
 		ft.goToBottom()
-	case "d":
+	case "pgdown":
 		ft.pageDown()
 		return ft, ft.emitCursorFileSelected()
-	case "u":
+	case "pgup":
 		ft.pageUp()
 		return ft, ft.emitCursorFileSelected()
 	case " ", "space":
@@ -1199,7 +1216,7 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 		return ft, nil
 	}
 	// Save cursor path before switching modes.
-	cursorPath := ft.cursorPath()
+	cursorPath := ft.CursorPath()
 	ft.gitFilter = !ft.gitFilter
 	if ft.gitFilter {
 		// Save cursor path across the async boundary so
@@ -1293,7 +1310,7 @@ func (ft *FileTree) buildGitChangedDirs() {
 // git filter and preserving per-mode expand/collapse state.
 func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel, tea.Cmd) {
 	// Save cursor path before any mode switch so it can be restored.
-	cursorPath := ft.cursorPath()
+	cursorPath := ft.CursorPath()
 	if msg.PresetName == "git" {
 		if !ft.gitFilter {
 			// Save explorer expand state.

@@ -408,7 +408,7 @@ func TestPageDown(t *testing.T) {
 	p.SetDiffs([]git.FileDiff{sampleDiff()})
 	p.Focus()
 
-	p.Update(keyMsg("d"))
+	p.Update(keyMsg("pgdown"))
 	assert.Greater(t, p.scrollY, 0, "page down should scroll forward")
 }
 
@@ -419,7 +419,7 @@ func TestPageUp(t *testing.T) {
 	p.Focus()
 
 	p.scrollY = 5
-	p.Update(keyMsg("u"))
+	p.Update(keyMsg("pgup"))
 	assert.Less(t, p.scrollY, 5, "page up should scroll backward")
 }
 

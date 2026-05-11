@@ -603,12 +603,12 @@ func TestPageDown(t *testing.T) {
 	p.Focus()
 	loadFile(t, p, path)
 
-	// Page down with d
-	p.Update(keyMsg("d"))
+	// Page down with pgdown
+	p.Update(keyMsg("pgdown"))
 	assert.Greater(t, p.scrollY, 0)
 	scrollAfterD := p.scrollY
 
-	// Page down with pgdown
+	// Page down with pgdown again
 	p.Update(keyMsg("pgdown"))
 	assert.Greater(t, p.scrollY, scrollAfterD)
 }
@@ -633,11 +633,11 @@ func TestPageUp(t *testing.T) {
 	p.Update(keyMsg("G"))
 	bottomPos := p.scrollY
 
-	// Page up with u
-	p.Update(keyMsg("u"))
+	// Page up with pgup
+	p.Update(keyMsg("pgup"))
 	assert.Less(t, p.scrollY, bottomPos)
 
-	// Page up with pgup
+	// Page up with pgup again
 	posAfterU := p.scrollY
 	p.Update(keyMsg("pgup"))
 	assert.Less(t, p.scrollY, posAfterU)

@@ -407,9 +407,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollDown(1)
 		case "k", "up":
 			p.scrollUp(1)
-		case "d", "pgdown":
+		case "pgdown":
 			p.scrollDown(p.viewportHeight())
-		case "u", "pgup":
+		case "pgup":
 			p.scrollUp(p.viewportHeight())
 		case "g":
 			p.scrollY = 0
@@ -541,8 +541,8 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "e", Description: "Edit file", Action: "edit"},
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
-		{Key: "d/PgDn", Description: "Page down", Action: "page_down"},
-		{Key: "u/PgUp", Description: "Page up", Action: "page_up"},
+		{Key: "PgDn", Description: "Page down", Action: "page_down"},
+		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "goto_top"},
 		{Key: "G", Description: "Go to bottom", Action: "goto_bottom"},
 		{Key: "W", Description: "Toggle word wrap", Action: "toggle_wrap"},
@@ -613,7 +613,10 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			result.lines = append(buildMetadataLines(path, info), "", "Type: binary (null bytes detected)")
 			return result
 		}
-		source := string(data)
+		// Normalize line endings so \r doesn't corrupt rendering
+		// (lipgloss Width padding after \r overwrites content).
+		source := strings.ReplaceAll(string(data), "\r\n", "\n")
+		source = strings.ReplaceAll(source, "\r", "\n")
 		ext := strings.ToLower(filepath.Ext(path))
 		// Render based on file type
 		switch ext {

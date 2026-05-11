@@ -10,131 +10,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/jongio/grut/internal/keybindings"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
-
-// section groups related keybindings under a heading.
-type section struct {
-	title    string
-	bindings []binding
-}
-
-// binding is a single key→description mapping.
-type binding struct {
-	key  string
-	desc string
-}
-
-// sections defines the static help content displayed in the overlay.
-var sections = []section{
-	{
-		title: "Global",
-		bindings: []binding{
-			{key: "1-5", desc: "Focus panel by number"},
-			{key: "R", desc: "Refresh all data + preview"},
-			{key: "P", desc: "Push"},
-			{key: "F", desc: "Fetch all remotes"},
-			{key: "?", desc: "Help overlay"},
-			{key: ",", desc: "Settings"},
-			{key: "/", desc: "Fuzzy finder"},
-			{key: ":", desc: "Command palette"},
-			{key: "~", desc: "Change directory"},
-			{key: "ctrl+space", desc: "Toggle AI chat"},
-			{key: "ctrl+z", desc: "Undo last git action"},
-			{key: "ctrl+y", desc: "Redo"},
-			{key: "ctrl+c", desc: "Quit"},
-		},
-	},
-	{
-		title: "Navigation",
-		bindings: []binding{
-			{key: "j/k", desc: "Cursor down/up"},
-			{key: "g/G", desc: "Jump to top/bottom"},
-			{key: "d/u", desc: "Page down/up"},
-			{key: "Enter", desc: "Select / open / expand"},
-			{key: "Esc", desc: "Back / close submode"},
-		},
-	},
-	{
-		title: "File Tree",
-		bindings: []binding{
-			{key: "h/l", desc: "Collapse/expand directory"},
-			{key: "o", desc: "Open in external editor"},
-			{key: ".", desc: "Toggle hidden files"},
-			{key: "g", desc: "Toggle git filter"},
-			{key: "v", desc: "Toggle tree/list view"},
-			{key: "n", desc: "New file"},
-			{key: "N", desc: "New directory"},
-			{key: "x", desc: "Delete file/directory"},
-			{key: "e / F2", desc: "Rename"},
-			{key: "y", desc: "Copy path to clipboard"},
-			{key: "c", desc: "Copy file"},
-			{key: "p", desc: "Paste file"},
-			{key: "space", desc: "Toggle stage/unstage"},
-			{key: "J/K", desc: "Scroll preview down/up"},
-		},
-	},
-	{
-		title: "Git Info",
-		bindings: []binding{
-			{key: "Tab", desc: "Next tab"},
-			{key: "Shift+Tab", desc: "Previous tab"},
-			{key: "b", desc: "Branches tab"},
-			{key: "w", desc: "Worktrees tab"},
-			{key: "r", desc: "Remotes tab"},
-			{key: "s", desc: "Stash tab"},
-			{key: "t", desc: "Tags tab"},
-			{key: "l", desc: "Reflog tab"},
-			{key: "n", desc: "Create new item"},
-			{key: "x", desc: "Delete selected"},
-			{key: "e / F2", desc: "Rename"},
-			{key: "o", desc: "Open in browser"},
-			{key: "y", desc: "Copy to clipboard"},
-		},
-	},
-	{
-		title: "GitHub",
-		bindings: []binding{
-			{key: "Tab", desc: "Next tab"},
-			{key: "Shift+Tab", desc: "Previous tab"},
-			{key: "b", desc: "Branches tab"},
-			{key: "t", desc: "Tags tab"},
-			{key: "i", desc: "Issues tab"},
-			{key: "p", desc: "Pull Requests tab"},
-			{key: "a", desc: "Actions tab"},
-			{key: "w", desc: "Workflows tab"},
-			{key: "l", desc: "Releases tab"},
-			{key: "o", desc: "Open in browser"},
-			{key: "y", desc: "Copy to clipboard"},
-			{key: "r", desc: "Rerun (Actions tab)"},
-			{key: "x", desc: "Cancel (Actions tab)"},
-			{key: "D", desc: "Dispatch workflow"},
-		},
-	},
-	{
-		title: "Commits",
-		bindings: []binding{
-			{key: "Enter", desc: "View commit detail"},
-			{key: "Esc", desc: "Back to list"},
-			{key: "o", desc: "Open in browser"},
-			{key: "y", desc: "Copy SHA"},
-			{key: "A", desc: "Amend last commit"},
-			{key: "r", desc: "Reword last commit"},
-			{key: "/", desc: "Search commits"},
-		},
-	},
-	{
-		title: "Preview",
-		bindings: []binding{
-			{key: "j/k", desc: "Scroll content"},
-			{key: "g/G", desc: "Jump to top/bottom"},
-			{key: "d/u", desc: "Page down/up"},
-			{key: "y/Ctrl+C", desc: "Copy selection"},
-			{key: "Esc", desc: "Clear selection"},
-		},
-	},
-}
 
 type panelColors struct {
 	Heading   string
@@ -188,19 +67,20 @@ func New(th *theme.Theme) *Panel {
 // buildLines pre-computes the content lines for the help overlay.
 // Lines are stored as plain text; styling is applied during rendering.
 func (p *Panel) buildLines() {
+	secs := keybindings.Sections()
 	var lines []string
 	lines = append(lines, "") // top padding
-	for i, sec := range sections {
+	for i, sec := range secs {
 		// Section title.
-		lines = append(lines, "section:"+sec.title)
+		lines = append(lines, "section:"+sec.Title)
 		// Separator under title.
-		lines = append(lines, "sep:"+strings.Repeat("─", len(sec.title)))
+		lines = append(lines, "sep:"+strings.Repeat("─", len(sec.Title)))
 		// Bindings.
-		for _, b := range sec.bindings {
-			lines = append(lines, "bind:"+b.key+"\t"+b.desc)
+		for _, b := range sec.Bindings {
+			lines = append(lines, "bind:"+b.Key+"\t"+b.Action)
 		}
 		// Blank line between sections (except after the last).
-		if i < len(sections)-1 {
+		if i < len(secs)-1 {
 			lines = append(lines, "")
 		}
 	}

@@ -105,6 +105,32 @@ func TestEnterEditMode_BlockedEmptyPath(t *testing.T) {
 	assert.False(t, p.editMode)
 }
 
+func TestEnterEditMode_CRLFNormalized(t *testing.T) {
+	// CRLF line endings must be stripped so \r doesn't corrupt rendering.
+	content := "line one\r\nline two\r\nline three\r\n"
+	p, _ := testPreviewWithFile(t, content)
+
+	enterEditMode(p)
+
+	require.NotNil(t, p.editBuf)
+	assert.Equal(t, "line one", p.editBuf.Line(0), "\\r should be stripped")
+	assert.Equal(t, "line two", p.editBuf.Line(1))
+	assert.Equal(t, "line three", p.editBuf.Line(2))
+}
+
+func TestEnterEditMode_StandaloneCR(t *testing.T) {
+	content := "line one\rline two\rline three"
+	p, _ := testPreviewWithFile(t, content)
+
+	enterEditMode(p)
+
+	require.NotNil(t, p.editBuf)
+	// Standalone \r should be converted to \n, resulting in separate lines.
+	assert.Equal(t, "line one", p.editBuf.Line(0))
+	assert.Equal(t, "line two", p.editBuf.Line(1))
+	assert.Equal(t, "line three", p.editBuf.Line(2))
+}
+
 func TestEnterEditMode_FileReadError(t *testing.T) {
 	p := testPreview()
 	p.filePath = filepath.Join(t.TempDir(), "nonexistent.txt")

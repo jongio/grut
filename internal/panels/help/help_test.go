@@ -279,7 +279,7 @@ func TestContent_AllKeyBindings(t *testing.T) {
 
 	expectedKeys := []string{
 		"1-5", "Tab", "R", "P", "F", "?",
-		"j/k", "g/G", "d/u", "Enter",
+		"j/k", "g/G", "PgDn/PgUp", "Enter",
 		"h/l", "f", "n", "N", "x",
 		"ctrl+c",
 	}

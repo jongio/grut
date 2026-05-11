@@ -2098,7 +2098,7 @@ func TestToggleGitFilter_NoClient(t *testing.T) {
 	assert.Nil(t, ft.gitClient)
 	beforeFilter := ft.gitFilter
 
-	ft.Update(keyMsg('g'))
+	ft.Update(keyMsg('f'))
 	assert.Equal(t, beforeFilter, ft.gitFilter, "toggle without git client should be no-op")
 }
 
@@ -2111,12 +2111,12 @@ func TestToggleGitFilter_EnableDisable(t *testing.T) {
 	assert.False(t, ft.gitFilter)
 
 	// Enable git filter.
-	_, cmd := ft.Update(keyMsg('g'))
+	_, cmd := ft.Update(keyMsg('f'))
 	assert.True(t, ft.gitFilter)
 	assert.NotNil(t, cmd, "enabling git filter should return commands")
 
 	// Disable git filter.
-	ft.Update(keyMsg('g'))
+	ft.Update(keyMsg('f'))
 	assert.False(t, ft.gitFilter)
 	assert.Nil(t, ft.gitChangedPaths, "disabling should clear git paths")
 	assert.Nil(t, ft.gitChangedDirs, "disabling should clear git dirs")
@@ -2130,11 +2130,11 @@ func TestToggleGitFilter_PreservesCursorPath(t *testing.T) {
 
 	// Move cursor to a known file.
 	ft.cursor = 2 // main.go in default sort
-	originalPath := ft.cursorPath()
+	originalPath := ft.CursorPath()
 	assert.NotEmpty(t, originalPath)
 
 	// Toggle on.
-	ft.Update(keyMsg('g'))
+	ft.Update(keyMsg('f'))
 	assert.True(t, ft.gitFilter)
 	assert.Equal(t, originalPath, ft.savedCursorPath, "should save cursor path for async restore")
 }
@@ -2653,14 +2653,14 @@ func TestCursorPath_Empty(t *testing.T) {
 	dir := t.TempDir() // empty directory
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	assert.Equal(t, "", ft.cursorPath(), "empty tree should return empty cursor path")
+	assert.Equal(t, "", ft.CursorPath(), "empty tree should return empty cursor path")
 }
 
 func TestCursorPath_Valid(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	path := ft.cursorPath()
+	path := ft.CursorPath()
 	assert.NotEmpty(t, path)
 	assert.Contains(t, path, dir)
 }
@@ -3086,8 +3086,8 @@ func TestPageDown(t *testing.T) {
 
 	assert.Equal(t, 0, ft.cursor)
 
-	// Press 'd' to page down.
-	ft.Update(keyMsg('d'))
+	// Press PgDn to page down.
+	ft.Update(specialKeyMsg(tea.KeyPgDown))
 	assert.Equal(t, 3, ft.cursor, "cursor should move down by viewport height")
 }
 
@@ -3100,8 +3100,8 @@ func TestPageUp(t *testing.T) {
 	// Move cursor to the bottom first.
 	ft.cursor = ft.visibleCount() - 1
 
-	// Press 'u' to page up.
-	ft.Update(keyMsg('u'))
+	// Press PgUp to page up.
+	ft.Update(specialKeyMsg(tea.KeyPgUp))
 	expected := ft.visibleCount() - 1 - 3
 	if expected < 0 {
 		expected = 0
@@ -3115,7 +3115,7 @@ func TestPageDown_ClampsAtEnd(t *testing.T) {
 	ft.focused = true
 	ft.height = 100 // larger than total items
 
-	ft.Update(keyMsg('d'))
+	ft.Update(specialKeyMsg(tea.KeyPgDown))
 	assert.Equal(t, ft.visibleCount()-1, ft.cursor,
 		"page down beyond end should clamp to last item")
 }
@@ -3127,7 +3127,7 @@ func TestPageUp_ClampsAtZero(t *testing.T) {
 	ft.height = 3
 
 	ft.cursor = 1 // near the top
-	ft.Update(keyMsg('u'))
+	ft.Update(specialKeyMsg(tea.KeyPgUp))
 	assert.Equal(t, 0, ft.cursor, "page up past beginning should clamp to 0")
 }
 

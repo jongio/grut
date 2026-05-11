@@ -262,9 +262,9 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		d.scrollDown(1)
 	case "k", "up":
 		d.scrollUp(1)
-	case "d", "pgdown":
+	case "pgdown":
 		d.scrollDown(d.pageSize())
-	case "u", "pgup":
+	case "pgup":
 		d.scrollUp(d.pageSize())
 	case "g":
 		d.scrollY = 0

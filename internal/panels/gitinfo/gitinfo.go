@@ -1094,8 +1094,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "l", Description: "Reflog / Releases tab", Action: "tab_reflog"},
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "d", Description: "Page down", Action: "page_down"},
-		{Key: "u", Description: "Page up", Action: "page_up"},
+		{Key: "PgDn", Description: "Page down", Action: "page_down"},
+		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "enter", Description: "Context action", Action: "action"},
 		{Key: "n", Description: "Create new item", Action: "item_create"},
 		{Key: "x", Description: "Delete / Cancel action", Action: "item_delete"},
@@ -1367,10 +1367,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.activeTab == tabPRs && p.ghClient != nil {
 			return p.doMergePR()
 		}
-	case "d":
+	case "pgdown":
 		p.pageDown()
 		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
-	case "u":
+	case "pgup":
 		p.pageUp()
 		return p, p.activeTabSelectionCmd()
 	case "n":

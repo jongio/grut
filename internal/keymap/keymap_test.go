@@ -637,9 +637,9 @@ func TestGitFilterBindingChangedToG(t *testing.T) {
 	bindings, err := LoadScheme("default")
 	require.NoError(t, err)
 
-	// Verify "g" → "cycle_file_filter" in filetree context.
-	found := findBinding(bindings, "g", ModePanel, "filetree")
-	require.NotNil(t, found, "default scheme should have 'g' binding in filetree context")
+	// Verify "f" → "cycle_file_filter" in filetree context.
+	found := findBinding(bindings, "f", ModePanel, "filetree")
+	require.NotNil(t, found, "default scheme should have 'f' binding in filetree context")
 	assert.Equal(t, "cycle_file_filter", found.Action)
 }
 

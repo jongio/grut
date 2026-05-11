@@ -4327,9 +4327,9 @@ func TestDKey_PageDown(t *testing.T) {
 	p := newTestPanel(mock)
 	p.Focused = true
 
-	// Pressing 'd' should not panic; page down on the active tab.
-	_, cmd := p.Update(tea.KeyPressMsg{Code: 'd'})
-	assert.NotNil(t, cmd, "'d' should produce a tab-selection command")
+	// Pressing PgDn should not panic; page down on the active tab.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	assert.NotNil(t, cmd, "PgDn should produce a tab-selection command")
 }
 
 func TestUKey_PageUp(t *testing.T) {
@@ -4337,9 +4337,9 @@ func TestUKey_PageUp(t *testing.T) {
 	p := newTestPanel(mock)
 	p.Focused = true
 
-	// Pressing 'u' should not panic; page up on the active tab.
-	_, cmd := p.Update(tea.KeyPressMsg{Code: 'u'})
-	assert.NotNil(t, cmd, "'u' should produce a tab-selection command")
+	// Pressing PgUp should not panic; page up on the active tab.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	assert.NotNil(t, cmd, "PgUp should produce a tab-selection command")
 }
 
 func TestDKey_DispatchWorkflow(t *testing.T) {

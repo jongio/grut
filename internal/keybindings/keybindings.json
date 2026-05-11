@@ -1,0 +1,154 @@
+{
+  "version": "1.0",
+  "description": "Single source of truth for all grut keyboard shortcuts. Embedded by the help overlay and used to generate docs/keybindings.md.",
+  "sections": [
+    {
+      "id": "global",
+      "title": "Global",
+      "description": "Always active regardless of focused panel.",
+      "bindings": [
+        { "key": "1-5", "action": "Focus panel by number" },
+        { "key": "R", "action": "Refresh all data + preview" },
+        { "key": "P", "action": "Push to remote" },
+        { "key": "F", "action": "Fetch all remotes" },
+        { "key": "?", "action": "Help overlay" },
+        { "key": ",", "action": "Settings" },
+        { "key": "/", "action": "Fuzzy finder" },
+        { "key": ":", "action": "Command palette" },
+        { "key": "~", "action": "Change directory" },
+        { "key": "ctrl+space", "action": "Toggle AI chat" },
+        { "key": "ctrl+z", "action": "Undo last git action" },
+        { "key": "ctrl+y", "action": "Redo" },
+        { "key": "ctrl+c", "action": "Quit" }
+      ]
+    },
+    {
+      "id": "navigation",
+      "title": "Navigation",
+      "description": "Consistent in every focused panel.",
+      "bindings": [
+        { "key": "j/k", "action": "Cursor down/up" },
+        { "key": "g/G", "action": "Jump to top/bottom" },
+        { "key": "PgDn/PgUp", "action": "Page down/up" },
+        { "key": "Enter", "action": "Select / open / expand" },
+        { "key": "Esc", "action": "Back / close submode" },
+        { "key": "d", "action": "Discard changes to selected file" },
+        { "key": "u", "action": "Unstage selected file" }
+      ]
+    },
+    {
+      "id": "filetree",
+      "title": "File Tree",
+      "description": "File Tree panel (panel 1).",
+      "bindings": [
+        { "key": "h/l", "action": "Collapse/expand directory" },
+        { "key": "o", "action": "Open in external editor" },
+        { "key": ".", "action": "Toggle hidden files" },
+        { "key": "f", "action": "Toggle git filter" },
+        { "key": "v", "action": "Toggle tree/list view" },
+        { "key": "n", "action": "New file" },
+        { "key": "N", "action": "New directory" },
+        { "key": "x", "action": "Delete file/directory" },
+        { "key": "e / F2", "action": "Rename" },
+        { "key": "y", "action": "Copy path to clipboard" },
+        { "key": "c", "action": "Copy file" },
+        { "key": "p", "action": "Paste file" },
+        { "key": "space", "action": "Toggle stage/unstage" },
+        { "key": "J/K", "action": "Scroll preview down/up" }
+      ]
+    },
+    {
+      "id": "gitstatus",
+      "title": "Git Status",
+      "description": "Active when the file tree is in git filter mode (press f to cycle).",
+      "bindings": [
+        { "key": "s", "action": "Stage file/hunk/line" },
+        { "key": "u", "action": "Unstage file/hunk/line" },
+        { "key": "d", "action": "Discard unstaged changes" },
+        { "key": "c", "action": "Commit staged changes" },
+        { "key": "p", "action": "Pull from remote" },
+        { "key": "a", "action": "Stage all" },
+        { "key": "U", "action": "Unstage all" },
+        { "key": "space", "action": "Toggle select for bulk" },
+        { "key": "enter/l", "action": "Expand file diff" },
+        { "key": "h", "action": "Enter hunk mode" },
+        { "key": "Esc", "action": "Exit hunk/line mode" }
+      ]
+    },
+    {
+      "id": "gitinfo",
+      "title": "Git Info",
+      "description": "Git Info panel (panel 2).",
+      "bindings": [
+        { "key": "Tab", "action": "Next tab" },
+        { "key": "Shift+Tab", "action": "Previous tab" },
+        { "key": "b", "action": "Branches tab" },
+        { "key": "w", "action": "Worktrees tab" },
+        { "key": "r", "action": "Remotes tab" },
+        { "key": "s", "action": "Stash tab" },
+        { "key": "t", "action": "Tags tab" },
+        { "key": "l", "action": "Reflog tab" },
+        { "key": "n", "action": "Create new item" },
+        { "key": "x", "action": "Delete selected" },
+        { "key": "e / F2", "action": "Rename" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy to clipboard" },
+        { "key": "f", "action": "Fetch / filter" },
+        { "key": "P", "action": "Push tag" }
+      ]
+    },
+    {
+      "id": "github",
+      "title": "GitHub",
+      "description": "GitHub panel (panel 3).",
+      "bindings": [
+        { "key": "Tab", "action": "Next tab" },
+        { "key": "Shift+Tab", "action": "Previous tab" },
+        { "key": "b", "action": "Branches tab" },
+        { "key": "t", "action": "Tags tab" },
+        { "key": "i", "action": "Issues tab" },
+        { "key": "p", "action": "Pull Requests tab" },
+        { "key": "a", "action": "Actions tab" },
+        { "key": "w", "action": "Workflows tab" },
+        { "key": "l", "action": "Releases tab" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy to clipboard" },
+        { "key": "m", "action": "Merge PR (PRs tab)" },
+        { "key": "r", "action": "Rerun (Actions tab)" },
+        { "key": "x", "action": "Cancel (Actions tab)" },
+        { "key": "D", "action": "Dispatch workflow" }
+      ]
+    },
+    {
+      "id": "commits",
+      "title": "Commits",
+      "description": "Commits panel (panel 4).",
+      "bindings": [
+        { "key": "Enter", "action": "View commit detail" },
+        { "key": "Esc", "action": "Back to list" },
+        { "key": "o", "action": "Open in browser" },
+        { "key": "y", "action": "Copy SHA" },
+        { "key": "A", "action": "Amend last commit" },
+        { "key": "r", "action": "Reword last commit" },
+        { "key": "/", "action": "Search commits" }
+      ]
+    },
+    {
+      "id": "preview",
+      "title": "Preview",
+      "description": "Preview panel (panel 5).",
+      "bindings": [
+        { "key": "j/k", "action": "Scroll content" },
+        { "key": "g/G", "action": "Jump to top/bottom" },
+        { "key": "PgDn/PgUp", "action": "Page down/up" },
+        { "key": "W", "action": "Toggle word wrap" },
+        { "key": "n", "action": "Toggle line numbers" },
+        { "key": "m", "action": "Toggle markdown render" },
+        { "key": "B", "action": "Toggle blame" },
+        { "key": "y/Ctrl+C", "action": "Copy selection" },
+        { "key": "Esc", "action": "Clear selection" }
+      ],
+      "note": "Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word."
+    }
+  ]
+}
