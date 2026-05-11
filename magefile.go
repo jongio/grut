@@ -768,6 +768,96 @@ func Clean() error {
 	return os.RemoveAll(filepath.Join(projectDir(), "bin"))
 }
 
+// Uninstall removes the dev binary, cleans bin/, kills stale processes,
+// and removes the bin/ directory from PATH. After uninstalling, the
+// release build (if installed) becomes the active `grut` binary.
+func Uninstall() error {
+	fmt.Println("=== Uninstalling dev build ===")
+
+	killStale()
+
+	binDir := filepath.Join(projectDir(), "bin")
+
+	// Remove the bin/ directory.
+	if err := os.RemoveAll(binDir); err != nil {
+		return fmt.Errorf("removing bin/: %w", err)
+	}
+	fmt.Println("   Removed bin/")
+
+	// Also remove any copy in GOBIN / GOPATH/bin.
+	gobin := os.Getenv("GOBIN")
+	if gobin == "" {
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			home, _ := os.UserHomeDir()
+			gopath = filepath.Join(home, "go")
+		}
+		gobin = filepath.Join(gopath, "bin")
+	}
+	devInGobin := filepath.Join(gobin, binaryName())
+	if _, err := os.Stat(devInGobin); err == nil {
+		if err := os.Remove(devInGobin); err != nil {
+			fmt.Printf("   Warning: could not remove %s: %v\n", devInGobin, err)
+		} else {
+			fmt.Printf("   Removed %s\n", devInGobin)
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		removeBinFromPATH(binDir)
+	}
+
+	// Show what grut resolves to now.
+	if resolved, err := exec.LookPath("grut"); err == nil {
+		fmt.Printf("\n✓ Dev build uninstalled. Active grut: %s\n", resolved)
+	} else {
+		fmt.Println("\n✓ Dev build uninstalled. No grut binary found in PATH.")
+		fmt.Println("  Install a release build: go install github.com/jongio/grut@latest")
+		fmt.Println("  Or download from: https://github.com/jongio/grut/releases")
+	}
+	return nil
+}
+
+// removeBinFromPATH removes binDir from both Machine and User PATH on Windows.
+func removeBinFromPATH(binDir string) {
+	for _, scope := range []string{"Machine", "User"} {
+		pathVal, _ := cmdOutput("powershell", "-NoProfile", "-Command",
+			fmt.Sprintf(`[Environment]::GetEnvironmentVariable('Path','%s')`, scope))
+		pathVal = strings.TrimSpace(pathVal)
+		if pathVal == "" || !containsPath(pathVal, binDir) {
+			continue
+		}
+		cleaned := removePathEntry(pathVal, binDir)
+		err := exec.Command("powershell", "-NoProfile", "-Command",
+			fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','%s')`,
+				psSingleQuoteEscape(cleaned), scope)).Run()
+		if err != nil {
+			fmt.Printf("   Warning: could not update %s PATH: %v\n", scope, err)
+		} else {
+			fmt.Printf("   Removed %s from %s PATH\n", binDir, scope)
+		}
+	}
+}
+
+// removePathEntry removes all occurrences of dir from a semicolon-separated
+// PATH string (case-insensitive match on Windows).
+func removePathEntry(pathStr, dir string) string {
+	target := strings.ToLower(filepath.Clean(dir))
+	entries := strings.Split(pathStr, ";")
+	var kept []string
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if strings.EqualFold(filepath.Clean(e), target) {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	return strings.Join(kept, ";")
+}
+
 // --- helpers ---
 
 // runDeadcode runs the deadcode tool with an allowlist filter for known
