@@ -25,15 +25,21 @@ import (
 type mockGitOps struct {
 	git.GitClient // embedded nil — panics on any unused method
 
-	commitHash  string
-	commitErr   error
-	pushErr     error
-	pullErr     error
-	fetchErr    error
-	commitCalls int
-	pushCalls   int
-	pullCalls   int
-	fetchCalls  int
+	commitHash   string
+	commitErr    error
+	pushErr      error
+	pullErr      error
+	fetchErr     error
+	discardErr   error
+	unstageErr   error
+	commitCalls  int
+	pushCalls    int
+	pullCalls    int
+	fetchCalls   int
+	discardCalls int
+	unstageCalls int
+	discardPath  string
+	unstagePaths []string
 }
 
 func (m *mockGitOps) Commit(_ context.Context, _ string, _ git.CommitOpts) (string, error) {
@@ -54,6 +60,18 @@ func (m *mockGitOps) Pull(_ context.Context, _ git.PullOpts) error {
 func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error {
 	m.fetchCalls++
 	return m.fetchErr
+}
+
+func (m *mockGitOps) DiscardFile(_ context.Context, path string) error {
+	m.discardCalls++
+	m.discardPath = path
+	return m.discardErr
+}
+
+func (m *mockGitOps) Unstage(_ context.Context, paths []string) error {
+	m.unstageCalls++
+	m.unstagePaths = paths
+	return m.unstageErr
 }
 
 // newTestModelWithGit creates a test model with a mock git client and config.
@@ -755,4 +773,178 @@ func TestFormatCommitSuggestion(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Discard / Unstage tests
+// ---------------------------------------------------------------------------
+
+func TestDiscardFileWithoutGitShowsToast(t *testing.T) {
+	m := newTestModel(t) // no git client
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated, cmd := m.handleDiscardFile()
+	m = updated.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Git not available")
+}
+
+func TestUnstageFileWithoutGitShowsToast(t *testing.T) {
+	m := newTestModel(t) // no git client
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated, cmd := m.handleUnstageFile()
+	m = updated.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Git not available")
+}
+
+func TestDiscardFileDuringAsyncOpBlocked(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = "pushing..."
+
+	_, cmd := m.handleDiscardFile()
+	assert.Nil(t, cmd, "should be blocked during async op")
+}
+
+func TestUnstageFileDuringAsyncOpBlocked(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = "pushing..."
+
+	_, cmd := m.handleUnstageFile()
+	assert.Nil(t, cmd, "should be blocked during async op")
+}
+
+func TestDiscardFileNoSelectionShowsToast(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	// No filetree/preview panels registered → no file selected.
+	updated2, cmd := m.handleDiscardFile()
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "No file selected")
+}
+
+func TestUnstageFileNoSelectionShowsToast(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated2, cmd := m.handleUnstageFile()
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "No file selected")
+}
+
+func TestExecuteDiscardFileClearsState(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.pendingDiscardPath = "some/file.go"
+
+	updated2, cmd := m.executeDiscardFile()
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingDiscardPath, "pendingDiscardPath should be cleared")
+	require.NotNil(t, cmd, "should return async command")
+	msg := cmd()
+	done, ok := msg.(discardFileDoneMsg)
+	require.True(t, ok)
+	assert.NoError(t, done.err)
+	assert.Equal(t, 1, mock.discardCalls)
+	assert.Equal(t, "some/file.go", mock.discardPath)
+}
+
+func TestExecuteDiscardFileEmptyPathNoop(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.pendingDiscardPath = ""
+
+	_, cmd := m.executeDiscardFile()
+	assert.Nil(t, cmd, "empty path should noop")
+	assert.Equal(t, 0, mock.discardCalls)
+}
+
+func TestHandleFileOpDoneSuccess(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	_, cmd := m.handleFileOpDone(nil, "discard", "Changes discarded")
+	require.NotNil(t, cmd, "should return batch command")
+}
+
+func TestHandleFileOpDoneError(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	_, cmd := m.handleFileOpDone(fmt.Errorf("checkout failed"), "discard", "Changes discarded")
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "discard failed")
+	assert.Contains(t, toast.Message, "checkout failed")
+}
+
+func TestHandleFileOpDoneCancelledSilent(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	_, cmd := m.handleFileOpDone(context.Canceled, "discard", "Changes discarded")
+	assert.Nil(t, cmd, "context.Canceled should produce no toast")
+}
+
+func TestTruncateForToastMultibyte(t *testing.T) {
+	// Ensure multi-byte characters are not split mid-rune.
+	got := truncateForToast("日本語テスト", 5)
+	assert.Equal(t, "日本...", got)
+
+	// ASCII still works.
+	got = truncateForToast("hello world", 8)
+	assert.Equal(t, "hello...", got)
 }

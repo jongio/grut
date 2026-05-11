@@ -661,6 +661,14 @@ func (ft *FileTree) CursorPath() string {
 	return ""
 }
 
+// CursorIsDir reports whether the node under the cursor is a directory.
+func (ft *FileTree) CursorIsDir() bool {
+	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
+		return ft.visible[ft.cursor].isDir
+	}
+	return false
+}
+
 // restoreCursorToPath moves the cursor to the node matching the given path.
 // If the path is not found in the current visible list, the cursor is
 // clamped to valid bounds.

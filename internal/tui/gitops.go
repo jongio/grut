@@ -288,11 +288,14 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 
 // currentFilePath returns the repo-relative path of the file currently under
 // the cursor in the filetree panel, falling back to the preview panel's file.
-// Returns "" if no file is selected or the path cannot be made relative.
-func (m Model) currentFilePath() string {
+// Returns ("", nil) if no file is selected, or ("", err) if path resolution fails.
+func (m Model) currentFilePath() (string, error) {
 	var absPath string
 	allPanels := m.engine.Panels()
 	if ft, ok := allPanels["filetree"].(*filetree.FileTree); ok {
+		if ft.CursorIsDir() {
+			return "", nil // directories are not valid targets for file ops
+		}
 		absPath = ft.CursorPath()
 	}
 	if absPath == "" {
@@ -301,18 +304,18 @@ func (m Model) currentFilePath() string {
 		}
 	}
 	if absPath == "" {
-		return ""
+		return "", nil
 	}
 	// Convert to repo-relative path for git operations.
 	cwd, err := os.Getwd()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("resolve working directory: %w", err)
 	}
 	rel, err := filepath.Rel(cwd, absPath)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("make path relative: %w", err)
 	}
-	return filepath.ToSlash(rel)
+	return filepath.ToSlash(rel), nil
 }
 
 // handleDiscardFile shows a confirmation dialog for discarding unstaged
@@ -321,7 +324,13 @@ func (m Model) handleDiscardFile() (tea.Model, tea.Cmd) {
 	if m.gitClient == nil {
 		return m, showWarnToast("Git not available")
 	}
-	path := m.currentFilePath()
+	if m.asyncOp != "" || m.notify.HasModal() {
+		return m, nil
+	}
+	path, err := m.currentFilePath()
+	if err != nil {
+		return m, showWarnToast("Path error: " + err.Error())
+	}
 	if path == "" {
 		return m, showWarnToast("No file selected")
 	}
@@ -336,7 +345,13 @@ func (m Model) handleUnstageFile() (tea.Model, tea.Cmd) {
 	if m.gitClient == nil {
 		return m, showWarnToast("Git not available")
 	}
-	path := m.currentFilePath()
+	if m.asyncOp != "" || m.notify.HasModal() {
+		return m, nil
+	}
+	path, err := m.currentFilePath()
+	if err != nil {
+		return m, showWarnToast("Path error: " + err.Error())
+	}
 	if path == "" {
 		return m, showWarnToast("No file selected")
 	}
@@ -365,30 +380,24 @@ func (m Model) executeDiscardFile() (tea.Model, tea.Cmd) {
 
 // handleDiscardFileDone refreshes git status and preview after a discard.
 func (m Model) handleDiscardFileDone(msg discardFileDoneMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		errMsg := msg.err.Error()
-		return m, func() tea.Msg {
-			return notify.ShowToastMsg{
-				Message: "discard failed: " + errMsg,
-				Level:   notify.Error,
-			}
-		}
-	}
-	return m, tea.Batch(
-		m.engine.Update(panels.RefreshGitStatusMsg{}),
-		m.engine.Update(panels.RefreshPreviewMsg{}),
-		m.engine.Update(panels.RefreshGitChangedFilesMsg{}),
-		showSuccessToast("Changes discarded"),
-	)
+	return m.handleFileOpDone(msg.err, "discard", "Changes discarded")
 }
 
 // handleUnstageFileDone refreshes git status and preview after an unstage.
 func (m Model) handleUnstageFileDone(msg unstageFileDoneMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		errMsg := msg.err.Error()
+	return m.handleFileOpDone(msg.err, "unstage", "File unstaged")
+}
+
+// handleFileOpDone is a common handler for discard/unstage completion that
+// refreshes all relevant panels and shows a result toast.
+func (m Model) handleFileOpDone(err error, opName, successMsg string) (tea.Model, tea.Cmd) {
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return m, nil
+		}
 		return m, func() tea.Msg {
 			return notify.ShowToastMsg{
-				Message: "unstage failed: " + errMsg,
+				Message: opName + " failed: " + err.Error(),
 				Level:   notify.Error,
 			}
 		}
@@ -397,7 +406,7 @@ func (m Model) handleUnstageFileDone(msg unstageFileDoneMsg) (tea.Model, tea.Cmd
 		m.engine.Update(panels.RefreshGitStatusMsg{}),
 		m.engine.Update(panels.RefreshPreviewMsg{}),
 		m.engine.Update(panels.RefreshGitChangedFilesMsg{}),
-		showSuccessToast("File unstaged"),
+		showSuccessToast(successMsg),
 	)
 }
 
@@ -551,14 +560,16 @@ func showSuccessToast(msg string) tea.Cmd {
 }
 
 // truncateForToast shortens a string for display in a toast notification.
+// It operates on runes to avoid splitting multi-byte UTF-8 characters.
 func truncateForToast(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
 	if maxLen <= 3 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // formatCommitSuggestion formats an AI commit suggestion as a conventional

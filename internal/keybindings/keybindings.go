@@ -52,7 +52,8 @@ type Binding struct {
 // ---------------------------------------------------------------------------
 
 // Sections returns the ordered list of keybinding sections parsed from the
-// embedded JSON. The returned slice is a copy; callers may mutate it freely.
+// embedded JSON. The returned slice is a shallow copy; callers may replace
+// elements but must not mutate individual Binding slice contents in place.
 func Sections() []Section {
 	out := make([]Section, len(data.Sections))
 	copy(out, data.Sections)
