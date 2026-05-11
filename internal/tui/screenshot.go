@@ -414,6 +414,7 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 			"default",
 			theme.ListThemes(),
 			config.ActionsConfig{},
+			th,
 		)
 		m.settingsPanel.Focus()
 		sw, sh := m.settingsOverlayDims()
@@ -430,7 +431,7 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 		}
 		injectGitHubDemoData(m)
 		m.helpShown = true
-		m.helpPanel = helppanel.New()
+		m.helpPanel = helppanel.New(th)
 		m.helpPanel.Focus()
 		hw, hh := m.helpOverlayDims()
 		m.helpPanel.SetSize(hw, hh)
