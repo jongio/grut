@@ -4062,6 +4062,48 @@ func TestDoAction_BlockedWhilePending(t *testing.T) {
 	assert.Equal(t, "123:ci", p.pendingName)
 }
 
+func TestDoAction_FirstUseWorktreeCursorReset(t *testing.T) {
+	// Regression test: when a user double-clicks a worktree (first use),
+	// the worktree path must be captured at double-click time. If a data
+	// reload resets the cursor to 0 before the modal result arrives, the
+	// panel should still use the originally-clicked worktree path.
+	p := newTestPanel(defaultMock())
+	p.actionsCfg = config.ActionsConfig{} // unconfirmed
+	p.activeTab = tabWorktrees
+
+	// Ensure there are multiple worktrees and cursor is on the second one.
+	p.tabItems[tabWorktrees] = []listItem{
+		{kind: kindWorktree, worktree: git.Worktree{Path: "/repo", Branch: "main"}},
+		{kind: kindWorktree, worktree: git.Worktree{Path: "/worktrees/feature", Branch: "feature"}},
+	}
+	p.tabCursor[tabWorktrees] = 1 // user clicked "feature" worktree
+
+	// Step 1: doAction shows the first-use modal.
+	_, cmd := p.doAction()
+	require.NotNil(t, cmd)
+	assert.Equal(t, opFirstUseConfirm, p.pending)
+	assert.Equal(t, "/worktrees/feature", p.pendingPath)
+
+	// Simulate a data reload that resets cursor to 0 (e.g. from fsnotify).
+	p.tabCursor[tabWorktrees] = 0
+
+	// Step 2: User selects "change_directory" from the modal.
+	_, cmd = p.handleModalResult(notify.ModalResultMsg{
+		Accept: true,
+		Value:  string(actions.ActionChangeDirectory),
+	})
+	require.NotNil(t, cmd, "accepting worktree change_directory should produce a command")
+
+	// The command should produce an opResultMsg with the ORIGINAL path,
+	// not the path at cursor 0.
+	msg := cmd()
+	result, ok := msg.(opResultMsg)
+	require.True(t, ok, "expected opResultMsg, got %T", msg)
+	assert.Equal(t, "worktree_switch", result.op)
+	assert.Equal(t, "/worktrees/feature", result.name,
+		"should use path captured at double-click time, not stale cursor")
+}
+
 // ---------------------------------------------------------------------------
 // CI watch animation tests
 // ---------------------------------------------------------------------------
