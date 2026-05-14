@@ -1105,8 +1105,14 @@ func ensurePath() error {
 		broadcastPathChange()
 	}
 	ensureSessionPath(binDir)
-	fmt.Println("   To use in this terminal, run:")
-	fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
+	if err != nil {
+		fmt.Println("   ⚠ Could not update persistent PATH (tried Machine and User).")
+		fmt.Println("   To use in this terminal only, run:")
+		fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
+	} else {
+		fmt.Println("   To use in this terminal, run:")
+		fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
+	}
 	return nil
 }
 

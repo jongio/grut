@@ -1894,6 +1894,8 @@ func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 		// that may happen during the async modal delay (e.g. data reload).
 		if item.kind == kindWorktree {
 			p.pendingPath = item.worktree.Path
+		} else {
+			p.pendingPath = ""
 		}
 		return p, rightclick.FirstUseCmd(itemType)
 	}
