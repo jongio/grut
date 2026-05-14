@@ -7,11 +7,11 @@ auto-generated from git history during each release.
 
 | Name | Contributions |
 |------|---------------|
-| **Copilot** | 99 |
-| **Test** | 86 |
-| **Jon Gallant** | 34 |
+| **Copilot** | 107 |
+| **Test** | 89 |
+| **Jon Gallant** | 35 |
 | **jongio** | 4 |
 
 ---
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-14*
