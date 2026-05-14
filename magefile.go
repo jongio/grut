@@ -1094,12 +1094,16 @@ func ensurePath() error {
 			`[Environment]::GetEnvironmentVariable('Path','User')`)
 		userPath = strings.TrimSpace(userPath)
 		if !containsPath(userPath, binDir) {
-			exec.Command("powershell", "-NoProfile", "-Command",
+			err = exec.Command("powershell", "-NoProfile", "-Command",
 				fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`,
 					psSingleQuoteEscape(binDir+";"+userPath))).Run()
+		} else {
+			err = nil // already present in User PATH
 		}
 	}
-	broadcastPathChange()
+	if err == nil {
+		broadcastPathChange()
+	}
 	ensureSessionPath(binDir)
 	fmt.Println("   To use in this terminal, run:")
 	fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
@@ -1202,7 +1206,9 @@ $HWND_BROADCAST = [IntPtr]0xFFFF
 $WM_SETTINGCHANGE = 0x001A
 $result = [UIntPtr]::Zero
 [Win32.NativeMethods]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", 0x0002, 5000, [ref]$result) | Out-Null`
-	exec.Command("powershell", "-NoProfile", "-Command", script).Run()
+	if err := exec.Command("powershell", "-NoProfile", "-Command", script).Run(); err != nil {
+		fmt.Printf("   Warning: PATH broadcast failed: %v\n", err)
+	}
 }
 
 func verify() error {

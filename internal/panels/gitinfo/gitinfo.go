@@ -1542,6 +1542,8 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 		p.pending = opRightClickPick
 		if item.kind == kindWorktree {
 			p.pendingPath = item.worktree.Path
+		} else {
+			p.pendingPath = ""
 		}
 		return p, cmd
 	}
