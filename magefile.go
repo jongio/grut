@@ -1075,6 +1075,15 @@ func ensurePath() error {
 		return nil
 	}
 
+	// Also check User PATH before trying to modify anything.
+	userPath, _ := cmdOutput("powershell", "-NoProfile", "-Command",
+		`[Environment]::GetEnvironmentVariable('Path','User')`)
+	userPath = strings.TrimSpace(userPath)
+	if containsPath(userPath, binDir) {
+		ensureSessionPath(binDir)
+		return nil
+	}
+
 	fmt.Printf("\n=== Adding %s to system PATH ===\n", binDir)
 	newPath := binDir + ";" + machinePath
 	err := exec.Command("powershell", "-NoProfile", "-Command",
@@ -1085,12 +1094,25 @@ func ensurePath() error {
 			`[Environment]::GetEnvironmentVariable('Path','User')`)
 		userPath = strings.TrimSpace(userPath)
 		if !containsPath(userPath, binDir) {
-			exec.Command("powershell", "-NoProfile", "-Command",
+			err = exec.Command("powershell", "-NoProfile", "-Command",
 				fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`,
 					psSingleQuoteEscape(binDir+";"+userPath))).Run()
+		} else {
+			err = nil // already present in User PATH
 		}
 	}
+	if err == nil {
+		broadcastPathChange()
+	}
 	ensureSessionPath(binDir)
+	if err != nil {
+		fmt.Println("   ⚠ Could not update persistent PATH (tried Machine and User).")
+		fmt.Println("   To use in this terminal only, run:")
+		fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
+	} else {
+		fmt.Println("   To use in this terminal, run:")
+		fmt.Printf("   $env:Path = \"%s;\" + $env:Path\n", binDir)
+	}
 	return nil
 }
 
@@ -1169,6 +1191,30 @@ func ensureSessionPath(binDir string) {
 		current = binDir + ";" + current
 	}
 	os.Setenv("Path", current)
+}
+
+// broadcastPathChange sends WM_SETTINGCHANGE so new Explorer/shell windows
+// pick up the modified persistent PATH immediately without requiring a reboot.
+func broadcastPathChange() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	// SendMessageTimeout with HWND_BROADCAST notifies all top-level windows
+	// that the environment has changed. New terminals will read the updated
+	// persistent PATH; existing terminals remain unaffected (OS limitation).
+	script := `Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @"
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(
+    IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
+    uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@
+$HWND_BROADCAST = [IntPtr]0xFFFF
+$WM_SETTINGCHANGE = 0x001A
+$result = [UIntPtr]::Zero
+[Win32.NativeMethods]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", 0x0002, 5000, [ref]$result) | Out-Null`
+	if err := exec.Command("powershell", "-NoProfile", "-Command", script).Run(); err != nil {
+		fmt.Printf("   Warning: PATH broadcast failed: %v\n", err)
+	}
 }
 
 func verify() error {

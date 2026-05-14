@@ -570,6 +570,7 @@ type Panel struct {
 	iconMode    string          // "nerd" or "ascii"
 	repoRoot    string
 	pendingName string // name for pending operation
+	pendingPath string // path captured at double-click time (survives async modal delay)
 	ghOwner     string
 	ghRepo      string
 	ghUser      string               // authenticated user login
@@ -1539,6 +1540,11 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, itemType, label)
 	if cmd != nil {
 		p.pending = opRightClickPick
+		if item.kind == kindWorktree {
+			p.pendingPath = item.worktree.Path
+		} else {
+			p.pendingPath = ""
+		}
 		return p, cmd
 	}
 	if directAction != "" {
@@ -1884,6 +1890,13 @@ func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
+		// Capture path at double-click time so it survives cursor resets
+		// that may happen during the async modal delay (e.g. data reload).
+		if item.kind == kindWorktree {
+			p.pendingPath = item.worktree.Path
+		} else {
+			p.pendingPath = ""
+		}
 		return p, rightclick.FirstUseCmd(itemType)
 	}
 	// Already confirmed -- execute the configured action.
@@ -2037,19 +2050,25 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p.copyAndToast(item.branch.Name)
 		}
 	case kindWorktree:
+		wtPath := p.pendingPath
+		if wtPath == "" {
+			wtPath = item.worktree.Path
+		}
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionChangeDirectory:
+			// pendingPath is consumed inside requestWorktreeSwitch
 			return p.requestWorktreeSwitch()
 		case actions.ActionOpenTerminal:
-			path := item.worktree.Path
+			p.pendingPath = ""
 			return p, func() tea.Msg {
-				if err := panels.OpenInTerminal(path); err != nil {
+				if err := panels.OpenInTerminal(wtPath); err != nil {
 					return notify.ShowToastMsg{Message: "Terminal error: " + err.Error(), Level: notify.Error}
 				}
-				return notify.ShowToastMsg{Message: "Opened terminal at " + path, Level: notify.Success}
+				return notify.ShowToastMsg{Message: "Opened terminal at " + wtPath, Level: notify.Success}
 			}
 		case actions.ActionCopyPath:
-			return p.copyAndToast(item.worktree.Path)
+			p.pendingPath = ""
+			return p.copyAndToast(wtPath)
 		}
 	case kindRemote:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -2303,11 +2322,19 @@ func (p *Panel) doReflogCheckout() (panels.Panel, tea.Cmd) {
 }
 
 func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
-	wt := p.selectedWorktree()
-	if wt == nil {
-		return p, nil
+	// Use pendingPath captured at double-click time if available (survives
+	// cursor resets from async data reloads during modal display).
+	var path string
+	if p.pendingPath != "" {
+		path = p.pendingPath
+		p.pendingPath = ""
+	} else {
+		wt := p.selectedWorktree()
+		if wt == nil {
+			return p, nil
+		}
+		path = wt.Path
 	}
-	path := wt.Path
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
 			if err := panels.OpenInTerminal(path); err != nil {
@@ -2509,8 +2536,10 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	name := p.pendingName
+	pendingPath := p.pendingPath
 	p.pending = opNone
 	p.pendingName = ""
+	p.pendingPath = ""
 	if !msg.Accept {
 		return p, nil
 	}
@@ -2643,8 +2672,10 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		if msg.Remember {
 			config.SaveDoubleClickChoice(&p.actionsCfg, name, msg.Value)
 		}
+		p.pendingPath = pendingPath // restore for executeRightClickAction
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	case opRightClickPick:
+		p.pendingPath = pendingPath // restore for executeRightClickAction
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	case opTagCreate:
 		tagName := strings.TrimSpace(msg.Value)
