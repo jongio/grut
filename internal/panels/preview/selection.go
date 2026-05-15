@@ -56,18 +56,8 @@ func (p *Preview) displayLines() []string {
 		return nil // selection not supported in blame mode
 	}
 	dl := p.lines
-	if len(p.diffLines) > 0 {
-		if p.gitDiffOnly {
-			dl = p.diffLines
-		} else {
-			combined := make([]string, 0, len(p.diffLines)+len(p.lines)+3)
-			combined = append(combined, "── Git Diff ──")
-			combined = append(combined, p.diffLines...)
-			combined = append(combined, "")
-			combined = append(combined, "── File Content ──")
-			combined = append(combined, p.lines...)
-			dl = combined
-		}
+	if p.diffMode && len(p.diffLines) > 0 {
+		dl = p.diffLines
 	}
 	return dl
 }

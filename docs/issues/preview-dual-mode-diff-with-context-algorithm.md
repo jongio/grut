@@ -9,7 +9,7 @@ Add a toggle in the preview panel between "file on disk" and "contextual diff" m
 Currently the preview panel shows file content with an appended diff section when changes exist. This is neither clean file viewing nor clean diff viewing - it's a hybrid that doesn't serve either purpose well.
 
 The feature adds:
-1. A `v` keybinding (when preview is focused) to toggle between file-on-disk mode and contextual diff mode
+1. An `f` keybinding (when preview is focused) to toggle between file-on-disk mode and contextual diff mode
 2. A DiffContext algorithm attached to FileSelectedMsg that determines the correct diff to show based on the filetree's current navigation state
 
 The filetree mode is the single source of truth for diff context, with this precedence:
@@ -39,12 +39,12 @@ When in commitFilesMode, only FileSelectedMsg{Path} is sent (no commit hash cont
 
 ### Keybinding rationale
 - `d` is taken globally as `discard_file` (default.toml line 215-218)
-- `v` is completely unbound everywhere - mnemonic for "view toggle"
+- `v` is completely unbound everywhere - mnemonic for "view toggle" (NOTE: changed to `f` during implementation to match filetree pattern where `f` means "change view filter")
 - Uses keymap `context = "preview"` for isolation - no global conflicts
 
 ## Acceptance Criteria
 
-- [ ] `v` toggles preview between file-on-disk and contextual diff mode when preview is focused
+- [ ] `f` toggles preview between file-on-disk and contextual diff mode when preview is focused
 - [ ] `d` (lowercase) continues to fire `discard_file` globally - no regression
 - [ ] Commit-files mode: selecting a file shows commit's diff (not working tree)
 - [ ] Branch-files mode: selecting a file shows branch comparison diff

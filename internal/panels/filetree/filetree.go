@@ -1068,8 +1068,33 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 		return func() tea.Msg { return panels.FolderSelectedMsg{Path: path} }
 	}
 	path := n.path
-	// In branch-files mode, emit ShowDiffMsg with ref comparison context
-	// so the diff panel shows the branch diff, not the working tree diff.
+	// Build the DiffContext based on the filetree's current mode.
+	var dc *panels.DiffContext
+	switch {
+	case ft.commitFilesMode && ft.commitHash != "":
+		dc = &panels.DiffContext{
+			Type:    panels.DiffContextCommit,
+			CommitA: ft.commitHash + "~1",
+			CommitB: ft.commitHash,
+		}
+	case ft.prFilesMode:
+		dc = &panels.DiffContext{
+			Type: panels.DiffContextPR,
+		}
+	case ft.branchFilesMode && ft.branchBaseRef != "":
+		dc = &panels.DiffContext{
+			Type:     panels.DiffContextBranch,
+			CommitA:  ft.branchBaseRef,
+			CommitB:  "HEAD",
+			ThreeDot: true,
+		}
+	case ft.gitFilter:
+		dc = &panels.DiffContext{
+			Type: panels.DiffContextWorking,
+		}
+	}
+
+	// In branch-files mode, also emit ShowDiffMsg for the gitdiff panel.
 	if ft.branchFilesMode && ft.branchBaseRef != "" {
 		relPath, err := filepath.Rel(ft.rootPath, path)
 		if err != nil {
@@ -1078,7 +1103,7 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 		relPath = filepath.ToSlash(relPath)
 		baseRef := ft.branchBaseRef
 		return tea.Batch(
-			func() tea.Msg { return panels.FileSelectedMsg{Path: path} },
+			func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc} },
 			func() tea.Msg {
 				return panels.ShowDiffMsg{
 					Path:     relPath,
@@ -1089,7 +1114,7 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 			},
 		)
 	}
-	return func() tea.Msg { return panels.FileSelectedMsg{Path: path} }
+	return func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc} }
 }
 
 func (ft *FileTree) goToTop() {

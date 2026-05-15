@@ -62,7 +62,9 @@ type Preview struct {
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
 	ghPlainText bool // true when ghContent is pre-formatted (not markdown)
-	gitDiffOnly bool // when true, show only diff (not file content)
+	// Dual-mode preview: file content vs contextual diff.
+	diffMode    bool                // when true, show diff instead of file content
+	diffContext *panels.DiffContext // context for diff resolution (nil = working tree)
 	// Theme support
 	theme *theme.Theme
 	// Text selection state
@@ -148,7 +150,8 @@ func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	p.ghContent = ""
 	p.ghPlainText = false
 	p.diffLines = nil
-	p.gitDiffOnly = false
+	p.diffMode = false
+	p.diffContext = nil
 	return p, nil
 }
 
@@ -182,13 +185,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 				},
 			}
 			if p.gitClient != nil {
-				cmds = append(cmds, p.loadDiffCmd(p.filePath))
+				cmds = append(cmds, p.loadContextDiffCmd(p.filePath, p.diffContext))
 			}
 			return p, tea.Batch(cmds...)
 		}
 
 	case panels.FileSelectedMsg:
-		// If in edit mode with unsaved changes, prompt before switching.
 		if p.editMode && p.editBuf != nil && p.editBuf.Dirty() {
 			return p, dirtyGuardCmd(p, "switch")
 		}
@@ -203,6 +205,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghContent = ""
 		p.ghPlainText = false
 		p.clearSelection()
+		// Store the diff context from the filetree's current mode.
+		p.diffContext = msg.DiffContext
 		// Start async file load (F01: no blocking I/O in Update).
 		p.filePath = msg.Path
 		p.scrollY = 0
@@ -216,7 +220,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.diffLines = nil
 		cmds := []tea.Cmd{p.loadFileCmd(msg.Path)}
 		if p.gitClient != nil {
-			cmds = append(cmds, p.loadDiffCmd(msg.Path))
+			cmds = append(cmds, p.loadContextDiffCmd(msg.Path, p.diffContext))
 		}
 		return p, tea.Batch(cmds...)
 	case fileLoadedMsg:
@@ -334,7 +338,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.GitFilterActiveMsg:
-		p.gitDiffOnly = msg.Active
+		p.diffMode = msg.Active
+		if msg.Active {
+			p.diffContext = &panels.DiffContext{Type: panels.DiffContextWorking}
+		}
 		return p, nil
 	case panels.RefreshPreviewMsg:
 		// Re-render whatever is currently showing without changing content type.
@@ -353,7 +360,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.lines = nil
 			cmds := []tea.Cmd{p.loadFileCmd(p.filePath)}
 			if p.gitClient != nil {
-				cmds = append(cmds, p.loadDiffCmd(p.filePath))
+				cmds = append(cmds, p.loadContextDiffCmd(p.filePath, p.diffContext))
 			}
 			return p, tea.Batch(cmds...)
 		}
@@ -402,7 +409,15 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "e":
+			// Edit is only allowed in file mode (not diff) and for local files.
+			if p.diffMode {
+				return p, nil
+			}
 			return p, enterEditMode(p)
+		case "f":
+			p.diffMode = !p.diffMode
+			p.scrollY = 0
+			return p, nil
 		case "j", keyDown:
 			p.scrollDown(1)
 		case "k", "up":
@@ -521,6 +536,9 @@ func (p *Preview) Title() string {
 	if p.editMode {
 		return name + " [edit]"
 	}
+	if p.diffMode {
+		return name + " [diff]"
+	}
 	return name
 }
 
@@ -539,6 +557,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 	}
 	return []panels.KeyBinding{
 		{Key: "e", Description: "Edit file", Action: "edit"},
+		{Key: "f", Description: "Toggle diff view", Action: "toggle_diff_mode"},
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
@@ -676,6 +695,77 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		}
 		return diffLoadedMsg{path: path, lines: lines}
 	}
+}
+
+// loadContextDiffCmd loads the diff for a file using the provided DiffContext.
+// If dc is nil or Working type, it falls back to loadDiffCmd (unstaged/staged).
+// For Commit/Branch/PR contexts, it loads the ref-based diff.
+func (p *Preview) loadContextDiffCmd(path string, dc *panels.DiffContext) tea.Cmd {
+	if dc == nil || dc.Type == panels.DiffContextWorking {
+		return p.loadDiffCmd(path)
+	}
+	if dc.Type == panels.DiffContextStaged {
+		gc := p.gitClient
+		tc := p.themeColors()
+		return func() tea.Msg {
+			ctx := context.Background()
+			diffs, err := gc.Diff(ctx, git.DiffOpts{Path: path, Staged: true})
+			if err != nil || len(diffs) == 0 {
+				return diffLoadedMsg{path: path}
+			}
+			return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
+		}
+	}
+	// Commit, Branch, or PR with refs: use ref-based diff.
+	gc := p.gitClient
+	tc := p.themeColors()
+	commitA := dc.CommitA
+	commitB := dc.CommitB
+	threeDot := dc.ThreeDot
+	return func() tea.Msg {
+		ctx := context.Background()
+		// Convert absolute path to repo-relative for git diff.
+		relPath := path
+		if root, err := gc.RepoRoot(ctx); err == nil {
+			if rel, err := filepath.Rel(root, path); err == nil {
+				relPath = filepath.ToSlash(rel)
+			}
+		}
+		diffs, err := gc.Diff(ctx, git.DiffOpts{
+			Path:     relPath,
+			CommitA:  commitA,
+			CommitB:  commitB,
+			ThreeDot: threeDot,
+		})
+		if err != nil || len(diffs) == 0 {
+			return diffLoadedMsg{path: path}
+		}
+		return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
+	}
+}
+
+// renderDiffLines converts parsed diff hunks to styled display lines.
+func renderDiffLines(diffs []git.FileDiff, tc theme.Colors) []string {
+	addedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
+	removedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
+	headerStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
+	var lines []string
+	for _, d := range diffs {
+		for _, h := range d.Hunks {
+			lines = append(lines, headerStyle.Render(h.Header))
+			for _, l := range h.Lines {
+				switch l.Type {
+				case git.DiffLineAdded:
+					lines = append(lines, addedStyle.Render(l.Content))
+				case git.DiffLineRemoved:
+					lines = append(lines, removedStyle.Render(l.Content))
+				default:
+					lines = append(lines, l.Content)
+				}
+			}
+		}
+	}
+	return lines
 }
 
 // renderHighlightedStatic applies chroma syntax highlighting to source code.
@@ -857,15 +947,10 @@ func (p *Preview) contentLineCount() int {
 	if p.blameMode && len(p.blameLines) > 0 {
 		return len(p.blameLines)
 	}
-	if p.gitDiffOnly && len(p.diffLines) > 0 {
+	if p.diffMode {
 		return len(p.diffLines)
 	}
-	n := len(p.lines)
-	if len(p.diffLines) > 0 {
-		// Account for: "── Git Diff ──" + diff lines + blank + "── File Content ──"
-		n += len(p.diffLines) + 3
-	}
-	return n
+	return len(p.lines)
 }
 
 func (p *Preview) scrollToBottom() {
@@ -918,6 +1003,15 @@ func (p *Preview) renderEmptyState(width, height int) string {
 	return style.Render(msg)
 }
 
+func (p *Preview) renderCenteredMessage(width, height int, msg string) string {
+	style := lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Align(lipgloss.Center, lipgloss.Center).
+		Foreground(panels.ColorOf(p.themeColors().BrightBlack, "#666666"))
+	return style.Render(msg)
+}
+
 func (p *Preview) renderError(width, height int) string {
 	msg := fmt.Sprintf("Error: %s", p.err)
 	style := lipgloss.NewStyle().
@@ -947,22 +1041,16 @@ func (p *Preview) renderMetadata(width, height int) string {
 
 func (p *Preview) renderContent(width, height int) string {
 	// Build display lines based on mode.
-	displayLines := p.lines
-	if len(p.diffLines) > 0 {
-		if p.gitDiffOnly {
-			// Git filter active: show only the diff.
-			displayLines = p.diffLines
-		} else {
-			// Normal mode with diff: show both.
-			diffHeader := lipgloss.NewStyle().Bold(true).Foreground(panels.ColorOf(p.themeColors().DiffHeader, "#7A9EBF"))
-			combined := make([]string, 0, len(p.diffLines)+len(p.lines)+3)
-			combined = append(combined, diffHeader.Render("── Git Diff ──"))
-			combined = append(combined, p.diffLines...)
-			combined = append(combined, "")
-			combined = append(combined, diffHeader.Render("── File Content ──"))
-			combined = append(combined, p.lines...)
-			displayLines = combined
+	var displayLines []string
+	if p.diffMode {
+		// Diff mode: show only the contextual diff.
+		if len(p.diffLines) == 0 {
+			return p.renderCenteredMessage(width, height, "No changes")
 		}
+		displayLines = p.diffLines
+	} else {
+		// File mode: show only file content.
+		displayLines = p.lines
 	}
 	if len(displayLines) == 0 {
 		return p.renderEmptyState(width, height)

@@ -10,6 +10,7 @@ A reactive terminal UI for Git and GitHub where every panel talks to every other
 - **Context-Aware Panels** — Select a branch and commits update. Select a file and commits filter to that file's history. Select a PR and three panels sync simultaneously: file tree shows changed files, commits show PR history, preview shows the summary.
 - **Commit-Files Mode** — Press Enter on a commit and the file tree switches to show only that commit's changed files. Escape restores the full tree.
 - **Git Filter** — Press `g` to toggle the file tree between all files and git-changed files only. Preview switches to diff-only mode automatically.
+- **Diff Toggle** — Press `f` in the preview panel to switch between file content and contextual diff. The diff adapts to your context: commit, branch, PR, or working tree.
 
 ### File Explorer
 - Browse, preview, create, rename, delete files with syntax highlighting

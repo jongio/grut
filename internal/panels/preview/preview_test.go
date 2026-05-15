@@ -778,7 +778,7 @@ func TestKeyBindings(t *testing.T) {
 	bindings := p.KeyBindings()
 
 	assert.NotEmpty(t, bindings)
-	assert.Len(t, bindings, 12)
+	assert.Len(t, bindings, 13)
 
 	// Verify all expected bindings are present
 	actions := make([]string, len(bindings))
@@ -798,6 +798,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "toggle_line_numbers")
 	assert.Contains(t, actions, "toggle_markdown_render")
 	assert.Contains(t, actions, "toggle_blame")
+	assert.Contains(t, actions, "toggle_diff_mode")
 	assert.Contains(t, actions, "copy_selection")
 }
 
@@ -1300,14 +1301,14 @@ func TestRenderError(t *testing.T) {
 
 func TestGitFilterActiveMsg(t *testing.T) {
 	p := New(defaultCfg(), defaultEditorCfg(), nil)
-	assert.False(t, p.gitDiffOnly)
+	assert.False(t, p.diffMode)
 
 	_, cmd := p.Update(panels.GitFilterActiveMsg{Active: true})
-	assert.True(t, p.gitDiffOnly)
+	assert.True(t, p.diffMode)
 	assert.Nil(t, cmd)
 
 	_, cmd = p.Update(panels.GitFilterActiveMsg{Active: false})
-	assert.False(t, p.gitDiffOnly)
+	assert.False(t, p.diffMode)
 	assert.Nil(t, cmd)
 }
 
@@ -1381,9 +1382,9 @@ func TestGitDiffOnlyMode(t *testing.T) {
 	p.SetSize(80, 30)
 	loadFile(t, p, path)
 
-	// Set diff lines and enable diff-only mode.
+	// Set diff lines and enable diff mode.
 	p.diffLines = []string{"+new line"}
-	p.gitDiffOnly = true
+	p.diffMode = true
 
 	view := p.View(80, 30)
 	assert.NotEmpty(t, view)

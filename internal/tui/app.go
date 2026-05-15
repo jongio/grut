@@ -449,7 +449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If the selected path is a directory (from directory fuzzy finder),
 		// convert to ChangeDirectoryMsg instead of opening the file.
 		if info, statErr := os.Stat(msg.Path); statErr == nil && info.IsDir() {
-			return m.Update(panels.ChangeDirectoryMsg(msg))
+			return m.Update(panels.ChangeDirectoryMsg{Path: msg.Path})
 		}
 		// Normal file — broadcast to panels via engine.
 		cmd := m.engine.Update(msg)
@@ -463,7 +463,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.checkGitDirty())
 	case panels.ChatNavigateMsg:
 		// Navigate to the file path requested by chat.
-		cmd := m.engine.Update(panels.FileSelectedMsg(msg))
+		cmd := m.engine.Update(panels.FileSelectedMsg{Path: msg.Path})
 		return m, cmd
 	// Route chat-internal messages to the chat model.
 	case chat.StreamChunkMsg, chat.ToolCallMsg, chat.ToolResultMsg,

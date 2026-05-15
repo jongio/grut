@@ -18,6 +18,8 @@ Thanks to the following people for their contributions to this release:
 New contributors: **Copilot**, **Test** — welcome!
 
 ### Added
+- Preview dual-mode diff toggle - press `f` in the preview panel to switch between file-on-disk and contextual diff view. The diff shown adapts to your context: commit diff when browsing commit files, branch comparison diff in branch mode, PR diff for pull requests, and working tree diff with git filter active. Title shows `[diff]` suffix when in diff mode.
+- Edit blocked in diff mode - press `f` to return to file view before editing with `e`
 - Inline editor mode — press `e` in the preview panel to edit files directly, `Ctrl+S` to save, `Escape` to discard
 - Branch diff filter — `g` now cycles through three modes: all files → git changed → branch diff (files changed compared to default branch)
 - Lazy-loading pagination for GitHub tabs — issues, PRs, Actions, and releases load on demand as you scroll

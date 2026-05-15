@@ -37,7 +37,7 @@ Files, Git, GitHub, and preview — all in one terminal, all aware of each other
 - **File Explorer** — Navigate your project with git status markers, Nerd Font icons, create/rename/delete
 - **Fuzzy Finder** — `/` for instant file search
 - **Syntax Highlighting** — 100+ languages via Chroma
-- **Preview** — Adapts to show file content, issue/PR bodies, workflow details, or diffs depending on selection. Click and drag to select text, `y` to copy.
+- **Preview** — Adapts to show file content, issue/PR bodies, workflow details, or diffs depending on selection. Press `f` to toggle between file-on-disk and contextual diff view. Click and drag to select text, `y` to copy.
 - **Inline Editor** — Press `e` in the preview panel to edit files directly. `Ctrl+S` saves, `Escape` discards.
 
 ### Git

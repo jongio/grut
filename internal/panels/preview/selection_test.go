@@ -861,25 +861,25 @@ func TestSecurity_Highlight_OnlyANSI(t *testing.T) {
 func TestSecurity_SelectedText_DiffMode(t *testing.T) {
 	p := newTestPreview([]string{"file content"})
 	p.diffLines = []string{"+added line", "-removed line"}
-	p.gitDiffOnly = true
-	// In gitDiffOnly mode, displayLines returns diffLines only.
+	p.diffMode = true
+	// In diff mode, displayLines returns diffLines only.
 	p.selAnchor = &selPoint{Line: 0, Col: 0}
 	p.selEnd = &selPoint{Line: 0, Col: 11}
 	got := p.selectedText()
 	assert.Equal(t, "+added line", got)
 }
 
-func TestSecurity_SelectedText_CombinedMode(t *testing.T) {
+func TestSecurity_SelectedText_FileMode(t *testing.T) {
 	p := newTestPreview([]string{"file content"})
 	p.diffLines = []string{"+added"}
-	p.gitDiffOnly = false
-	// Combined mode: header + diffLines + separator + header + lines.
+	p.diffMode = false
+	// File mode: displayLines returns file lines only.
 	dl := p.displayLines()
-	assert.True(t, len(dl) > 2, "combined mode should have headers + content")
+	assert.Equal(t, []string{"file content"}, dl)
 	p.selAnchor = &selPoint{Line: 0, Col: 0}
-	p.selEnd = &selPoint{Line: 0, Col: 14}
+	p.selEnd = &selPoint{Line: 0, Col: 12}
 	got := p.selectedText()
-	assert.Contains(t, got, "Git Diff")
+	assert.Equal(t, "file content", got)
 }
 
 // ---------------------------------------------------------------------------
@@ -988,21 +988,19 @@ func TestApplySelectionHighlight_BothGuardConditions(t *testing.T) {
 	assert.Equal(t, line, got, "should return original line when start > end and > runeCount")
 }
 
-func TestSelectedText_CombinedMode_SpanningHeaders(t *testing.T) {
+func TestSelectedText_DiffMode_MultipleLines(t *testing.T) {
 	p := newTestPreview([]string{"file line"})
-	p.diffLines = []string{"+diff line"}
-	p.gitDiffOnly = false
+	p.diffLines = []string{"+diff line 1", "+diff line 2", "-removed"}
+	p.diffMode = true
 
 	dl := p.displayLines()
-	require.Len(t, dl, 5) // header, diff, blank, header, file
+	require.Len(t, dl, 3)
 
 	p.selAnchor = &selPoint{Line: 0, Col: 0}
-	p.selEnd = &selPoint{Line: 4, Col: 4}
+	p.selEnd = &selPoint{Line: 2, Col: 4}
 	got := p.selectedText()
-	assert.Contains(t, got, "Git Diff")
-	assert.Contains(t, got, "+diff line")
-	assert.Contains(t, got, "File Content")
-	assert.Contains(t, got, "file")
+	assert.Contains(t, got, "+diff line 1")
+	assert.Contains(t, got, "-rem")
 }
 
 // ---------------------------------------------------------------------------

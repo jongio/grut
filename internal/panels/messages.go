@@ -17,11 +17,38 @@ type TargetedPanelMsg struct {
 	Target string  // panel name (e.g. "gitinfo")
 }
 
+// DiffContextType enumerates the kinds of diff context the preview can show.
+type DiffContextType int
+
+const (
+	// DiffContextWorking shows the working tree diff (unstaged, fallback staged).
+	DiffContextWorking DiffContextType = iota
+	// DiffContextStaged shows the staged diff (index vs HEAD).
+	DiffContextStaged
+	// DiffContextCommit shows a single commit's diff (parent..commit).
+	DiffContextCommit
+	// DiffContextBranch shows a branch comparison diff (base...HEAD).
+	DiffContextBranch
+	// DiffContextPR shows a pull request diff (base..head).
+	DiffContextPR
+)
+
+// DiffContext describes the diff to show for a file selection. The preview
+// panel uses this to load the correct diff based on the filetree's current
+// navigation mode.
+type DiffContext struct {
+	Type     DiffContextType
+	CommitA  string // base ref (e.g., "abc123~1", "main")
+	CommitB  string // head ref (e.g., "abc123", "HEAD")
+	ThreeDot bool   // use merge-base comparison (A...B)
+}
+
 // FileSelectedMsg is sent when the user selects (opens) a file.
 // Both filetree and preview panels use this shared type so that
 // cross-panel message routing works correctly.
 type FileSelectedMsg struct {
-	Path string
+	Path        string
+	DiffContext *DiffContext // nil = working tree diff (backward compatible)
 }
 
 // RevealFileMsg requests the filetree to expand parent directories and

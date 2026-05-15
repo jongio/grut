@@ -162,6 +162,8 @@ Preview panel (panel 5).
 
 | Key | Action |
 |-----|--------|
+| `e` | Edit file inline |
+| `f` | Toggle diff view |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `PgDn/PgUp` | Page down/up |
