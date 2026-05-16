@@ -467,3 +467,73 @@ func TestLuaRuntime_SandboxRequireIoBlocked(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "require io blocked")
 }
+
+// ---------------------------------------------------------------------------
+// Issue #73 — require() and package.path must be neutralised
+// ---------------------------------------------------------------------------
+
+// TestLuaRuntime_SandboxRequireGlobalBlocked verifies that the `require`
+// global itself is nil in the sandbox, not just that individual module names
+// are blocked.  This is the primary fix for issue #73.
+func TestLuaRuntime_SandboxRequireGlobalBlocked(t *testing.T) {
+	sandboxBlocked(t, "require", `require("string")`)
+}
+
+// TestLuaRuntime_SandboxPackagePathEmpty verifies that package.path and
+// package.cpath are empty strings so the filesystem searcher finds nothing.
+func TestLuaRuntime_SandboxPackagePathEmpty(t *testing.T) {
+	api := newMockHostAPI()
+	rt, err := NewLuaRuntime(testManifest(), api)
+	require.NoError(t, err)
+	defer rt.Close()
+
+	script := writeLua(t, t.TempDir(), "main.lua", `
+		assert(package.path == "", "package.path must be empty, got: " .. tostring(package.path))
+		assert(package.cpath == "", "package.cpath must be empty, got: " .. tostring(package.cpath))
+	`)
+	require.NoError(t, rt.Load(script))
+}
+
+// TestLuaRuntime_SandboxPackageLoadedEmpty verifies that package.loaded has
+// been wiped completely — no module (including safe ones) is pre-cached.
+func TestLuaRuntime_SandboxPackageLoadedEmpty(t *testing.T) {
+	api := newMockHostAPI()
+	rt, err := NewLuaRuntime(testManifest(), api)
+	require.NoError(t, err)
+	defer rt.Close()
+
+	script := writeLua(t, t.TempDir(), "main.lua", `
+		local count = 0
+		for _ in pairs(package.loaded) do count = count + 1 end
+		assert(count == 0, "package.loaded must be empty, had " .. count .. " entries")
+	`)
+	require.NoError(t, rt.Load(script))
+}
+
+// TestLuaRuntime_SandboxRequireCannotLoadFromDisk creates a .lua file on disk
+// and verifies that even if package.path were somehow restored, require()
+// itself is nil and cannot be called.  This is the end-to-end exploit test
+// for issue #73.
+func TestLuaRuntime_SandboxRequireCannotLoadFromDisk(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a "malicious" module to disk.
+	writeLua(t, dir, "evil.lua", `return "pwned"`)
+
+	api := newMockHostAPI()
+	rt, err := NewLuaRuntime(testManifest(), api)
+	require.NoError(t, err)
+	defer rt.Close()
+
+	// The script tries to restore package.path and call require.
+	script := writeLua(t, dir, "main.lua", `
+		local ok, err = pcall(function()
+			package.path = "`+filepath.ToSlash(dir)+`/?.lua"
+			require("evil")
+		end)
+		if not ok then error("require disk blocked: " .. tostring(err)) end
+	`)
+	err = rt.Load(script)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "require disk blocked")
+}
