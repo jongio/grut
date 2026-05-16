@@ -14,6 +14,10 @@ type inlineNotification struct {
 	notification Notification
 }
 
+// inlineBaseStyle holds the invariant parts of an inline notification.
+// Per-render code only sets Foreground (level-dependent) and Width.
+var inlineBaseStyle = lipgloss.NewStyle().Bold(true)
+
 // view renders an inline notification as a full-width colored bar.
 func (n *inlineNotification) view(width int) string {
 	if width <= 0 {
@@ -24,9 +28,8 @@ func (n *inlineNotification) view(width int) string {
 	icon := levelIcon(n.notification.Level)
 	label := fmt.Sprintf(" %s %s ", icon, n.notification.Message)
 
-	style := lipgloss.NewStyle().
+	style := inlineBaseStyle.
 		Foreground(color).
-		Bold(true).
 		Width(width)
 
 	return style.Render(label)
