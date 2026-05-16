@@ -171,7 +171,13 @@ func saveFile(p *Preview) tea.Cmd {
 				Level:   notify.Error,
 			}
 		}
-		tmp.Close()
+		if err := tmp.Close(); err != nil {
+			os.Remove(tmp.Name())
+			return notify.ShowToastMsg{
+				Message: "Save failed: " + err.Error(),
+				Level:   notify.Error,
+			}
+		}
 		if err := os.Rename(tmp.Name(), filePath); err != nil {
 			os.Remove(tmp.Name())
 			return notify.ShowToastMsg{
