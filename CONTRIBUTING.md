@@ -90,6 +90,64 @@ Some checks (golangci-lint, govulncheck, gofumpt, deadcode, WSL) are skipped if 
 - Keep functions focused and well-named
 - Add tests for new functionality
 
+### Comment Style
+
+Follow these conventions to keep documentation consistent across the codebase.
+
+#### Package doc comments
+
+Every package must have a doc comment on (or immediately before) the `package` line. The comment starts with `// Package <name>` and describes what the package does:
+
+```go
+// Package git wraps the git CLI to provide typed, safe access to git
+// operations.
+package git
+```
+
+#### GoDoc on exported identifiers
+
+Every exported type, function, method, and constant must have a comment that starts with the identifier name. Keep the first sentence short and specific:
+
+```go
+// PathJail restricts file operations to within the git repository root.
+type PathJail struct { ... }
+
+// NewPathJail creates a PathJail anchored at root.
+func NewPathJail(root string, followSymlinks bool) (*PathJail, error) { ... }
+```
+
+Unexported helpers don't require a doc comment, but add one when the intent isn't obvious from the name and signature.
+
+#### Section separators
+
+Use box-drawing line separators (`─`) to group related functions or test cases within a file. Two styles are used in the codebase:
+
+```go
+// ────────────── Section Name ──────────────
+```
+
+```go
+// ──────────────────────────────────────────────────────────────────────────
+// Section Name
+// ──────────────────────────────────────────────────────────────────────────
+```
+
+The short form works well in test files to mark individual test groups. The block form works well for larger logical sections in production or security-sensitive code. Pick whichever is already used in the file you're editing, or the short form for new files.
+
+#### No redundant comments
+
+Don't restate what the code already says. Comments should explain **why**, not **what**:
+
+```go
+// Bad - restates the code:
+// Increment counter by one.
+counter++
+
+// Good - explains intent:
+// Rate-limit retries to avoid hammering a failing remote.
+time.Sleep(backoff)
+```
+
 ## Submitting Changes
 
 ### Pull Request Process
