@@ -19,6 +19,9 @@ import (
 	"github.com/jongio/grut/internal/extension"
 )
 
+// runtimeNameMCP is the canonical identifier for the MCP runtime.
+const runtimeNameMCP = "mcp"
+
 // MCPRuntime manages an MCP extension server as a subprocess,
 // communicating via JSON-RPC 2.0 over stdin/stdout pipes.
 type MCPRuntime struct {
@@ -107,7 +110,7 @@ func NewMCPRuntime(manifest *extension.Manifest) (*MCPRuntime, error) {
 }
 
 // Name returns the runtime type identifier.
-func (m *MCPRuntime) Name() string { return "mcp" }
+func (m *MCPRuntime) Name() string { return runtimeNameMCP }
 
 // Load starts the MCP server subprocess using the given entry point.
 // The interpreter is determined from the entry point file extension:
@@ -121,7 +124,7 @@ func (m *MCPRuntime) Load(entryPoint string) error {
 	// gate an extension that omits "process" could still spawn arbitrary
 	// processes (CWE-862).
 	if !extension.ManifestHasPermission(m.manifest, extension.PermProcess) {
-		return &extension.ErrPermissionDenied{
+		return &extension.PermissionDeniedError{
 			Extension:  m.manifest.Name,
 			Permission: extension.PermProcess,
 			Operation:  "spawn subprocess",

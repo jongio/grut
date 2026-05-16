@@ -93,7 +93,10 @@ func killProcGroup(cmd *exec.Cmd) {
 	if !ok {
 		return
 	}
-	job := v.(windows.Handle)
+	job, ok := v.(windows.Handle)
+	if !ok {
+		return
+	}
 	if err := windows.CloseHandle(job); err != nil {
 		slog.Warn("mcp runtime: CloseHandle(job) failed",
 			"pid", cmd.Process.Pid, "error", err)

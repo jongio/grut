@@ -25,7 +25,10 @@ import (
 // DefaultAllowedHosts lists the hostnames accepted for remote extension
 // installs. Only well-known forges that enforce authenticated pushes and
 // immutable commit SHAs are included by default.
-var DefaultAllowedHosts = []string{"github.com"}
+// hostGitHub is the hostname for GitHub, the primary forge allowed by default.
+const hostGitHub = "github.com"
+
+var DefaultAllowedHosts = []string{hostGitHub}
 
 // ExtensionInfo holds runtime state for an installed extension.
 type ExtensionInfo struct {
@@ -460,7 +463,7 @@ func gitHeadHash(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("unexpected git hash length %d: %q", len(hash), hash)
 	}
 	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return "", fmt.Errorf("invalid character in git hash: %q", hash)
 		}
 	}

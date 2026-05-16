@@ -12,6 +12,9 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// runtimeNameLua is the canonical identifier for the Lua runtime.
+const runtimeNameLua = "lua"
+
 // DefaultTimeout is the maximum time a Lua script may execute before being
 // cancelled. The value mirrors the default from config (lua_timeout_ms = 100).
 const DefaultTimeout = 100 * time.Millisecond
@@ -138,7 +141,7 @@ func (r *LuaRuntime) Close() {
 
 // Name returns the runtime identifier.
 func (r *LuaRuntime) Name() string {
-	return "lua"
+	return runtimeNameLua
 }
 
 // sandbox removes dangerous modules and globals from the Lua state so that

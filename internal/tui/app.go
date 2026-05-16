@@ -214,9 +214,9 @@ func (m Model) loadBranchInfo() tea.Cmd {
 // Update implements tea.Model. Routes messages to the layout engine
 // and handles global key bindings.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		return m.handleWindowSizeMsg(msg.(tea.WindowSizeMsg))
+		return m.handleWindowSizeMsg(msg)
 
 	// Branch / git status.
 	case branchLoadedMsg, gitDirtyMsg, panels.BranchChangedMsg:
@@ -282,7 +282,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Keyboard input.
 	case tea.KeyPressMsg:
-		return m.handleKeyPressMsg(msg.(tea.KeyPressMsg))
+		return m.handleKeyPressMsg(msg)
 	}
 
 	// Default: broadcast to all panels and chat.

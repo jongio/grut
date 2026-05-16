@@ -2636,7 +2636,7 @@ func (p *Panel) actionsStatusIcon() string {
 	case conclusionFailure, conclusionTimedOut:
 		return crossMark
 	}
-	if latest.Status == "in_progress" || latest.Status == "queued" { //nolint:goconst // inline string is more readable here
+	if latest.Status == statusInProgress || latest.Status == statusQueued {
 		if p.actionsWatching {
 			return watchFrames[p.actionsWatchFrame%len(watchFrames)]
 		}
@@ -2652,4 +2652,3 @@ func (p *Panel) actionsStatusIcon() string {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-

@@ -10,6 +10,9 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// runtimeNameWasm is the canonical identifier for the WASM runtime.
+const runtimeNameWasm = "wasm"
+
 // defaultMemoryLimitPages is the maximum WASM linear-memory size measured in
 // 64 KiB pages. 1024 pages = 64 MiB.
 const defaultMemoryLimitPages = 1024
@@ -49,7 +52,7 @@ func NewWASMRuntime(manifest *extension.Manifest, hostAPI HostAPI) (*WASMRuntime
 }
 
 // Name returns the runtime identifier.
-func (w *WASMRuntime) Name() string { return "wasm" }
+func (w *WASMRuntime) Name() string { return runtimeNameWasm }
 
 // Load reads a WASM binary from entryPoint, compiles it, registers host
 // imports, and instantiates the module.

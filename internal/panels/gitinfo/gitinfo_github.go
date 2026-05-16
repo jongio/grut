@@ -173,6 +173,12 @@ const (
 	conclusionTimedOut = "timed_out"
 )
 
+// GitHub Actions status strings used in run-state checks.
+const (
+	statusInProgress = "in_progress"
+	statusQueued     = "queued"
+)
+
 // actionsWatchTickInterval is the polling interval for the GitHub Actions
 // watch animation frame rate.
 const actionsWatchTickInterval = 1000 * time.Millisecond
@@ -570,7 +576,7 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 	wasWatching := p.actionsWatching
 	p.actionsWatching = false
 	for _, a := range msg.actions {
-		if a.Status == "in_progress" || a.Status == "queued" {
+		if a.Status == statusInProgress || a.Status == statusQueued {
 			p.actionsWatching = true
 			break
 		}
@@ -968,7 +974,7 @@ func (p *Panel) handleActionsPage(msg ghActionsPageMsg) (panels.Panel, tea.Cmd) 
 	wasWatching := p.actionsWatching
 	p.actionsWatching = false
 	for _, item := range p.tabItems[tabActions] {
-		if item.actionRun.Status == "in_progress" || item.actionRun.Status == "queued" {
+		if item.actionRun.Status == statusInProgress || item.actionRun.Status == statusQueued {
 			p.actionsWatching = true
 			break
 		}
@@ -1617,7 +1623,6 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 // PR merge
 // ---------------------------------------------------------------------------
 
-
 func mergeStrategyLabel(strategy string) string {
 	switch strategy {
 	case strategySquash:
@@ -1875,7 +1880,7 @@ func prActionIconFrom(c panelColors, pr ghPRItem) (icon string, color string) {
 		return crossMark, c.ActionFail
 	}
 	switch pr.ActionStatus {
-	case "in_progress", "queued":
+	case statusInProgress, statusQueued:
 		return "●", c.ActionRun
 	}
 	return "", ""
@@ -1966,7 +1971,7 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		icon = crossMark
 		fg = p.colors.ActionFail
 	default:
-		if run.Status == "in_progress" || run.Status == "queued" {
+		if run.Status == statusInProgress || run.Status == statusQueued {
 			icon = "●"
 			fg = p.colors.ActionRun
 		} else {
@@ -2118,4 +2123,3 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	}
 	return style.Render(line)
 }
-

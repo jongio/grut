@@ -50,15 +50,15 @@ func ManifestHasPermission(m *Manifest, perm Permission) bool {
 	return false
 }
 
-// ErrPermissionDenied is returned when an extension attempts an operation
+// PermissionDeniedError is returned when an extension attempts an operation
 // that requires a permission it has not declared.
-type ErrPermissionDenied struct {
+type PermissionDeniedError struct {
 	Extension  string
 	Permission Permission
 	Operation  string
 }
 
-func (e *ErrPermissionDenied) Error() string {
+func (e *PermissionDeniedError) Error() string {
 	return "extension " + e.Extension + ": permission " + string(e.Permission) +
 		" is required for " + e.Operation
 }

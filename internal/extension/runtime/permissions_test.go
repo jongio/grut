@@ -33,7 +33,7 @@ func TestMCPRuntime_LoadDeniedWithoutProcessPermission(t *testing.T) {
 	assert.Contains(t, err.Error(), "process")
 
 	// Verify the error is the correct type.
-	var permErr *extension.ErrPermissionDenied
+	var permErr *extension.PermissionDeniedError
 	assert.ErrorAs(t, err, &permErr)
 	assert.Equal(t, extension.PermProcess, permErr.Permission)
 	assert.Equal(t, "no-perms", permErr.Extension)
@@ -180,7 +180,7 @@ func TestManifestHasPermission(t *testing.T) {
 }
 
 func TestErrPermissionDenied_Error(t *testing.T) {
-	err := &extension.ErrPermissionDenied{
+	err := &extension.PermissionDeniedError{
 		Extension:  "my-ext",
 		Permission: extension.PermProcess,
 		Operation:  "spawn subprocess",
