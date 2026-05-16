@@ -115,7 +115,8 @@ func (s *Server) wrapHandler(name string, category string, handler mcpserver.Too
 				s.audit.Log(name, args, "confirmation_required", time.Since(start))
 				return mcplib.NewToolResultErrorf(
 					"tool %q is a write operation and requires confirmation: "+
-						"re-invoke with \"_confirmed\": true to proceed", name), nil
+						"re-invoke with \"_confirmed\": true to proceed", name,
+				), nil
 			}
 		}
 

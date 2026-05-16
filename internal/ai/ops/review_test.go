@@ -163,9 +163,9 @@ func TestReviewReturnsFindings(t *testing.T) {
 		{"file":"main.go","line":12,"severity":"info","category":"style","message":"naming convention","suggestion":""}
 	]`
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: jsonResp},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: jsonResp},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -192,9 +192,9 @@ func TestReviewEmptyDiff(t *testing.T) {
 
 func TestReviewProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		err: errors.New("model overloaded"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("model overloaded"),
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -218,9 +218,9 @@ func TestReviewNoProviderAvailable(t *testing.T) {
 
 func TestReviewMalformedResponse(t *testing.T) {
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: "not json at all"},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: "not json at all"},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -231,9 +231,9 @@ func TestReviewMalformedResponse(t *testing.T) {
 
 func TestReviewNoFindingsEmptyArray(t *testing.T) {
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: "[]"},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: "[]"},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -245,9 +245,9 @@ func TestReviewNoFindingsEmptyArray(t *testing.T) {
 func TestReviewResponseWithCodeFences(t *testing.T) {
 	wrapped := "```json\n" + `[{"file":"x.go","line":1,"severity":"warning","category":"bug","message":"off-by-one","suggestion":"use <"}]` + "\n```"
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: wrapped},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: wrapped},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 

@@ -85,19 +85,28 @@ func init() {
 	}
 }
 
+// cosignRequiredSince is the minimum version from which cosign signature
+// artifacts are mandatory. Releases before this version may lack signatures
+// and are allowed to proceed without verification. Releases at or after this
+// version MUST have valid cosign artifacts — a missing signature is treated
+// as a verification failure to prevent downgrade attacks.
+const cosignRequiredSince = "1.0.0"
+
 // verifyCosignChecksums downloads cosign signature artifacts for the given
 // release version and verifies the cryptographic signature over checksumData.
 //
-// If signature artifacts are not found (HTTP 404), it logs a warning to
-// stderr and returns nil — allowing the update to proceed for older releases
-// that predate cosign signing. If verification fails, it returns a non-nil
-// error and the caller must abort the update.
+// For releases >= cosignRequiredSince, missing signature artifacts are treated
+// as errors (preventing downgrade attacks). For older releases, missing
+// artifacts log a warning and allow the update to proceed.
 func verifyCosignChecksums(ctx context.Context, checksumData []byte, version string) error {
 	sigURL := fmt.Sprintf("%s/v%s/%s%s", downloadBaseURL, version, checksumFileName, cosignSigSuffix)
 	certURL := fmt.Sprintf("%s/v%s/%s%s", downloadBaseURL, version, checksumFileName, cosignCertSuffix)
 
 	sig, sigErr := downloadCosignArtifact(ctx, sigURL)
 	if errors.Is(sigErr, ErrCosignArtifactNotFound) {
+		if !versionPredatesCosign(version) {
+			return fmt.Errorf("cosign signature required for v%s but not found (possible downgrade attack)", version)
+		}
 		fmt.Fprintf(os.Stderr, "Warning: cosign signature not found for v%s, skipping signature verification\n", version)
 		return nil
 	}
@@ -107,6 +116,9 @@ func verifyCosignChecksums(ctx context.Context, checksumData []byte, version str
 
 	cert, certErr := downloadCosignArtifact(ctx, certURL)
 	if errors.Is(certErr, ErrCosignArtifactNotFound) {
+		if !versionPredatesCosign(version) {
+			return fmt.Errorf("cosign certificate required for v%s but not found (possible downgrade attack)", version)
+		}
 		fmt.Fprintf(os.Stderr, "Warning: cosign certificate not found for v%s, skipping signature verification\n", version)
 		return nil
 	}
@@ -115,6 +127,12 @@ func verifyCosignChecksums(ctx context.Context, checksumData []byte, version str
 	}
 
 	return cosignVerifyFunc(checksumData, sig, cert)
+}
+
+// versionPredatesCosign returns true if version is strictly older than
+// cosignRequiredSince, meaning it predates mandatory cosign signing.
+func versionPredatesCosign(version string) bool {
+	return CompareVersions(version, cosignRequiredSince) < 0
 }
 
 // downloadCosignArtifact downloads a small cosign artifact (signature or

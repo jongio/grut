@@ -22,8 +22,8 @@ import (
 // this package directly. The aliases preserve backwards compatibility
 // for any external callers and internal tests.
 type (
-	SetPreviewPositionMsg = panels.SetPreviewPositionMsg
-	SetThemeMsg           = panels.SetThemeMsg
+	SetPreviewPositionMsg   = panels.SetPreviewPositionMsg
+	SetThemeMsg             = panels.SetThemeMsg
 	SetDoubleClickActionMsg = panels.SetDoubleClickActionMsg
 	SetRightClickActionMsg  = panels.SetRightClickActionMsg
 	ResetActionPromptsMsg   = panels.ResetActionPromptsMsg

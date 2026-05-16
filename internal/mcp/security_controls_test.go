@@ -16,8 +16,8 @@ func TestAllowedCommands_EmptyListAllowsAll(t *testing.T) {
 	cfg := &config.Config{
 		MCP: config.MCPConfig{
 			Security: config.MCPSecurityConfig{
-				RateLimitRead:  10000,
-				RateLimitWrite: 10000,
+				RateLimitRead:   10000,
+				RateLimitWrite:  10000,
 				AllowedCommands: nil, // empty = allow all
 			},
 		},

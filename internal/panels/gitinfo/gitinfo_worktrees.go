@@ -119,4 +119,3 @@ func (p *Panel) renderWorktree(item listItem, width int, isCursor bool) string {
 func worktreePath(repoRoot, branch string) string {
 	return git.WorktreePath(repoRoot, branch)
 }
-

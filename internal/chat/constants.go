@@ -135,8 +135,8 @@ const (
 
 // GitHub CLI flag constants.
 const (
-	GHFlagLimit = "--limit"
-	GHFlagJSON  = "--json"
+	GHFlagLimit  = "--limit"
+	GHFlagJSON   = "--json"
 	GHSubcmdList = "list"
 )
 

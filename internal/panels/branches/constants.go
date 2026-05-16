@@ -1,6 +1,6 @@
 package branches
 
 const (
-	actionCheckout     = "checkout"
-	defaultBranchName  = "main"
+	actionCheckout    = "checkout"
+	defaultBranchName = "main"
 )

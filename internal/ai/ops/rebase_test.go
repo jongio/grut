@@ -60,9 +60,9 @@ func TestRebaseSuggestion_NewSubjectOmitted(t *testing.T) {
 func TestRebaseAssistant_Suggest(t *testing.T) {
 	respJSON := `{"commits":[{"hash":"abc","subject":"feat: add auth","action":"pick","reason":"core feature commit"}]}`
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: respJSON},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -82,9 +82,9 @@ func TestRebaseAssistant_Suggest(t *testing.T) {
 
 func TestRebaseAssistant_Suggest_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		response: ai.CompletionResponse{Content: "not json at all"},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: "not json at all"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -101,9 +101,9 @@ func TestRebaseAssistant_Suggest_InvalidJSON(t *testing.T) {
 
 func TestRebaseAssistant_Suggest_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		err: errors.New("provider down"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("provider down"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

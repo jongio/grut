@@ -1,6 +1,6 @@
 package commits
 
 const (
-	keyEnter    = "enter"
+	keyEnter     = "enter"
 	labelJustNow = "just now"
 )

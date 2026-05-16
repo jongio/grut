@@ -109,9 +109,9 @@ func TestGenerate_Success(t *testing.T) {
 
 func TestGenerate_ProviderError(t *testing.T) {
 	provider := &mockAIProvider{
-		name:        "stub",
-		available:   true,
-		err: fmt.Errorf("provider unavailable"),
+		name:      "stub",
+		available: true,
+		err:       fmt.Errorf("provider unavailable"),
 	}
 	registry := ai.NewRegistry(config.AIConfig{Provider: "stub"})
 	registry.Register("stub", provider)

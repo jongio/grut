@@ -3,10 +3,10 @@ package gitinfo
 
 import (
 	"fmt"
-	
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	
+
 	"github.com/jongio/grut/internal/panels"
 )
 
@@ -52,4 +52,3 @@ func (p *Panel) renderStashEntry(item listItem, width int, isCursor bool) string
 	}
 	return style.Render(label)
 }
-

@@ -41,11 +41,11 @@ type SensitivePathChecker func(path string) error
 
 // ToolExecutor maps AI tool calls to actual git and file operations.
 type ToolExecutor struct {
-	client         git.GitClient
-	jail           PathValidator
-	limiter        RateLimiter
-	isSensitive    SensitivePathChecker
-	registry       *ToolRegistry
+	client      git.GitClient
+	jail        PathValidator
+	limiter     RateLimiter
+	isSensitive SensitivePathChecker
+	registry    *ToolRegistry
 }
 
 // maxListEntries caps the number of entries returned by file listing and

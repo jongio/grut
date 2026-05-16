@@ -352,9 +352,9 @@ func main() { greet() }
 	require.NoError(t, err)
 
 	mock := &mockAIProvider{
-		name:         "test",
-		available:    true,
-		response: ai.CompletionResponse{Content: string(respJSON)},
+		name:      "test",
+		available: true,
+		response:  ai.CompletionResponse{Content: string(respJSON)},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "test"})

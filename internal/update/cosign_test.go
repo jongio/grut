@@ -238,7 +238,7 @@ func TestVerifyCosignChecksums_VerificationFails(t *testing.T) {
 	}
 }
 
-func TestVerifyCosignChecksums_SigNotFound(t *testing.T) {
+func TestVerifyCosignChecksums_SigNotFound_OldVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".sig") {
 			w.WriteHeader(http.StatusNotFound)
@@ -259,13 +259,38 @@ func TestVerifyCosignChecksums_SigNotFound(t *testing.T) {
 	}
 	defer func() { cosignVerifyFunc = origVerify }()
 
-	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
+	// Pre-cosign version: graceful degradation (allow unsigned)
+	err := verifyCosignChecksums(context.Background(), []byte("data"), "0.9.0")
 	if err != nil {
-		t.Fatalf("expected nil (graceful degradation), got: %v", err)
+		t.Fatalf("expected nil (graceful degradation for old version), got: %v", err)
 	}
 }
 
-func TestVerifyCosignChecksums_CertNotFound(t *testing.T) {
+func TestVerifyCosignChecksums_SigNotFound_EnforcedVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sig") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("cert-data"))
+	}))
+	defer srv.Close()
+
+	origBase := downloadBaseURL
+	downloadBaseURL = srv.URL
+	defer func() { downloadBaseURL = origBase }()
+
+	// Version >= cosignRequiredSince: must fail (prevent downgrade attack)
+	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
+	if err == nil {
+		t.Fatal("expected error for missing sig on enforced version, got nil")
+	}
+	if !strings.Contains(err.Error(), "cosign signature required") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestVerifyCosignChecksums_CertNotFound_OldVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".pem") {
 			w.WriteHeader(http.StatusNotFound)
@@ -286,9 +311,34 @@ func TestVerifyCosignChecksums_CertNotFound(t *testing.T) {
 	}
 	defer func() { cosignVerifyFunc = origVerify }()
 
-	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
+	// Pre-cosign version: graceful degradation
+	err := verifyCosignChecksums(context.Background(), []byte("data"), "0.9.0")
 	if err != nil {
-		t.Fatalf("expected nil (graceful degradation), got: %v", err)
+		t.Fatalf("expected nil (graceful degradation for old version), got: %v", err)
+	}
+}
+
+func TestVerifyCosignChecksums_CertNotFound_EnforcedVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".pem") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("sig-data"))
+	}))
+	defer srv.Close()
+
+	origBase := downloadBaseURL
+	downloadBaseURL = srv.URL
+	defer func() { downloadBaseURL = origBase }()
+
+	// Version >= cosignRequiredSince: must fail
+	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
+	if err == nil {
+		t.Fatal("expected error for missing cert on enforced version, got nil")
+	}
+	if !strings.Contains(err.Error(), "cosign certificate required") {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }
 

@@ -4,10 +4,10 @@ package gitinfo
 import (
 	"fmt"
 	"time"
-	
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	
+
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
@@ -87,4 +87,3 @@ func reflogRelativeDate(t time.Time) string {
 		return fmt.Sprintf("%d months ago", months)
 	}
 }
-

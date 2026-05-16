@@ -4,10 +4,10 @@ package gitinfo
 import (
 	"fmt"
 	"strings"
-	
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	
+
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 )
@@ -123,4 +123,3 @@ func (p *Panel) renderTag(item listItem, width int, isCursor bool) string {
 	}
 	return style.Render(line)
 }
-

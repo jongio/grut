@@ -239,9 +239,9 @@ func TestCommitGenerator_Generate_InvalidJSON(t *testing.T) {
 
 func TestCommitGenerator_Generate_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		err: errors.New("rate limited"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("rate limited"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

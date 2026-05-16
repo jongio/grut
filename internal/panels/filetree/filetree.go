@@ -123,23 +123,23 @@ type FileTree struct {
 	actionsCfg config.ActionsConfig
 	gitClient  git.StatusReader // git client for fetching status (nil = no git)
 	// Git-ignored paths (from .gitignore) keyed by absolute path.
-	ignoreChecker   git.IgnoreChecker
-	ctx             context.Context // stored from Init for watcher lifecycle
-	root            *node           // root directory node (not rendered; depth = -1)
-	selected        map[string]bool // multi-select state keyed by path
-	gitChanged *changedFiles // git-status changed files + dirs
+	ignoreChecker git.IgnoreChecker
+	ctx           context.Context // stored from Init for watcher lifecycle
+	root          *node           // root directory node (not rendered; depth = -1)
+	selected      map[string]bool // multi-select state keyed by path
+	gitChanged    *changedFiles   // git-status changed files + dirs
 	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
 	gitFileStatus   map[string]string
 	gitIgnoredPaths map[string]bool
 	// Per-mode expand/collapse state preservation (Change 3).
-	explorerExpanded   map[string]bool   // saved expand state for explorer mode
-	gitModeExpanded    map[string]bool   // saved expand state for git mode
-	pending            *pendingOperation // operation awaiting modal confirmation
-	watcher            *watcher          // filesystem watcher
-	commitChanged *changedFiles // commit-changed files + dirs
-	prChanged     *changedFiles // PR-changed files + dirs
-	branchChanged *changedFiles // branch-changed files + dirs
-	rootPath           string
+	explorerExpanded map[string]bool   // saved expand state for explorer mode
+	gitModeExpanded  map[string]bool   // saved expand state for git mode
+	pending          *pendingOperation // operation awaiting modal confirmation
+	watcher          *watcher          // filesystem watcher
+	commitChanged    *changedFiles     // commit-changed files + dirs
+	prChanged        *changedFiles     // PR-changed files + dirs
+	branchChanged    *changedFiles     // branch-changed files + dirs
+	rootPath         string
 	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
 	savedCursorPath string
 	commitHash      string // short hash for display
@@ -631,11 +631,11 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 	}
 	// Build filter sets from commit file paths (analogous to gitFilter approach).
 	paths := make(map[string]bool, len(msg.files))
-for _, f := range msg.files {
-abs := filepath.Clean(filepath.Join(ft.rootPath, f))
-paths[abs] = true
-}
-ft.commitChanged = newChangedFiles(paths, ft.rootPath)
+	for _, f := range msg.files {
+		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
+		paths[abs] = true
+	}
+	ft.commitChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing commit-changed files so the tree
 	// shows the full hierarchy immediately.
 	ft.expandDirsInSet(ft.root, ft.commitChanged.dirs)
@@ -688,11 +688,11 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 	}
 	// Build filter sets from PR file paths (analogous to gitFilter approach).
 	paths := make(map[string]bool, len(msg.Files))
-for _, f := range msg.Files {
-abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
-paths[abs] = true
-}
-ft.prChanged = newChangedFiles(paths, ft.rootPath)
+	for _, f := range msg.Files {
+		abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
+		paths[abs] = true
+	}
+	ft.prChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing PR-changed files so the tree
 	// shows the full hierarchy immediately.
 	ft.expandDirsInSet(ft.root, ft.prChanged.dirs)
@@ -772,11 +772,11 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 	}
 	// Build filter sets from branch file paths.
 	paths := make(map[string]bool, len(msg.files))
-for _, f := range msg.files {
-abs := filepath.Clean(filepath.Join(ft.rootPath, f))
-paths[abs] = true
-}
-ft.branchChanged = newChangedFiles(paths, ft.rootPath)
+	for _, f := range msg.files {
+		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
+		paths[abs] = true
+	}
+	ft.branchChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing branch-changed files so the tree
 	// shows the full hierarchy immediately.
 	ft.expandDirsInSet(ft.root, ft.branchChanged.dirs)
@@ -1337,8 +1337,6 @@ func normalizeVolume(p, ref string) string {
 	return p
 }
 
-
-
 // handleTabActivated reacts to tab switches by auto-enabling/disabling
 // git filter and preserving per-mode expand/collapse state.
 func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel, tea.Cmd) {
@@ -1404,8 +1402,6 @@ func (ft *FileTree) expandGitChangedDirsWalk(n *node) {
 		}
 	}
 }
-
-
 
 // expandDirsInSet walks the tree and expands every directory whose path is
 // in the given set, loading children as needed. Used by commit/PR/branch modes to auto-expand directories containing changed files.

@@ -60,7 +60,7 @@ func loadBuiltinTemplates() []Template {
 			Runtime:     extTypeLua,
 			Files: map[string]string{
 				configFile: mustReadTemplate("templates/lua/extension.toml"),
-				"init.lua":       mustReadTemplate("templates/lua/init.lua"),
+				"init.lua": mustReadTemplate("templates/lua/init.lua"),
 			},
 		},
 		{
@@ -68,10 +68,10 @@ func loadBuiltinTemplates() []Template {
 			Description: "WebAssembly extension built with TinyGo",
 			Runtime:     extTypeWasm,
 			Files: map[string]string{
-				configFile: mustReadTemplate("templates/wasm-go/extension.toml"),
-				"main.go":        mustReadTemplate("templates/wasm-go/main.go.tmpl"),
-				"Makefile":       mustReadTemplate("templates/wasm-go/Makefile"),
-				"README.md":      mustReadTemplate("templates/wasm-go/README.md"),
+				configFile:  mustReadTemplate("templates/wasm-go/extension.toml"),
+				"main.go":   mustReadTemplate("templates/wasm-go/main.go.tmpl"),
+				"Makefile":  mustReadTemplate("templates/wasm-go/Makefile"),
+				"README.md": mustReadTemplate("templates/wasm-go/README.md"),
 			},
 		},
 		{
@@ -89,9 +89,9 @@ func loadBuiltinTemplates() []Template {
 			Description: "Node.js MCP server extension",
 			Runtime:     extTypeMCP,
 			Files: map[string]string{
-				configFile: mustReadTemplate("templates/mcp-node/extension.toml"),
-				"server.js":      mustReadTemplate("templates/mcp-node/server.js"),
-				"package.json":   mustReadTemplate("templates/mcp-node/package.json"),
+				configFile:     mustReadTemplate("templates/mcp-node/extension.toml"),
+				"server.js":    mustReadTemplate("templates/mcp-node/server.js"),
+				"package.json": mustReadTemplate("templates/mcp-node/package.json"),
 			},
 		},
 	}

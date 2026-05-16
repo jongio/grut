@@ -90,4 +90,3 @@ func (p *Panel) renderRemoteSub(item listItem, width int, isCursor bool) string 
 
 // remoteToHTTPS is a package-local alias for git.RemoteToHTTPS.
 func remoteToHTTPS(raw string) string { return git.RemoteToHTTPS(raw) }
-

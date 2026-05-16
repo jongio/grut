@@ -83,8 +83,8 @@ func (r *ToolRegistry) register(name, description string, safety ToolSafety, par
 // required field list.
 func objectSchema(props map[string]any, required []string) map[string]any {
 	s := map[string]any{
-		SchemaType:             SchemaObject,
-		SchemaProperties:   props,
+		SchemaType:       SchemaObject,
+		SchemaProperties: props,
 	}
 	if len(required) > 0 {
 		s["required"] = required
@@ -95,8 +95,8 @@ func objectSchema(props map[string]any, required []string) map[string]any {
 // emptySchema returns a JSON Schema object with no properties.
 func emptySchema() map[string]any {
 	return map[string]any{
-		SchemaType:             SchemaObject,
-		SchemaProperties:   map[string]any{},
+		SchemaType:       SchemaObject,
+		SchemaProperties: map[string]any{},
 	}
 }
 
@@ -118,9 +118,9 @@ func intProp(desc string) map[string]any {
 // stringArrayProp returns a JSON Schema array-of-strings property.
 func stringArrayProp(desc string) map[string]any {
 	return map[string]any{
-		SchemaType:              "array",
-		SchemaDescription:   desc,
-		SchemaItems:         map[string]any{SchemaType: SchemaString},
+		SchemaType:        "array",
+		SchemaDescription: desc,
+		SchemaItems:       map[string]any{SchemaType: SchemaString},
 	}
 }
 
@@ -488,10 +488,10 @@ func (r *ToolRegistry) registerBulkTools() {
 		Destructive,
 		objectSchema(map[string]any{
 			PropRenames: map[string]any{
-				SchemaType:            "array",
+				SchemaType:        "array",
 				SchemaDescription: "List of rename operations to perform",
 				SchemaItems: map[string]any{
-					SchemaType:            SchemaObject,
+					SchemaType: SchemaObject,
 					SchemaProperties: map[string]any{
 						PropOld: stringProp("Current file path"),
 						PropNew: stringProp("New file path"),

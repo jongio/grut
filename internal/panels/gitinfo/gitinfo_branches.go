@@ -192,4 +192,3 @@ func (p *Panel) currentBranch() string {
 	}
 	return branchMain
 }
-

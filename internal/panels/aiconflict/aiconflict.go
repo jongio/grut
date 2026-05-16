@@ -80,7 +80,7 @@ const (
 type sectionKind int
 
 const (
-	sectionOurs   sectionKind = iota
+	sectionOurs sectionKind = iota
 	sectionTheirs
 	sectionAI
 )
