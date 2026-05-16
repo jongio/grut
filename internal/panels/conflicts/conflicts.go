@@ -81,7 +81,7 @@ type resolveResultMsg struct {
 // continueResultMsg carries the result of a continue/abort operation.
 type continueResultMsg struct {
 	err    error
-	action string // "continued" or "aborted"
+	action string // actionContinued or actionAborted
 }
 
 // mergeResultMsg carries the result of a merge operation.
@@ -579,14 +579,14 @@ func (p *Panel) continueOp() (panels.Panel, tea.Cmd) {
 		case opMerge:
 			// For merge, continuing is not a git command — the user commits.
 			// But we emit the message so the app can handle it.
-			return continueResultMsg{action: "continued"}
+			return continueResultMsg{action: actionContinued}
 		case opRebase:
 			err = gc.RebaseContinue(ctx)
 		}
 		if err != nil {
-			return continueResultMsg{action: "continued", err: err}
+			return continueResultMsg{action: actionContinued, err: err}
 		}
-		return continueResultMsg{action: "continued"}
+		return continueResultMsg{action: actionContinued}
 	}
 }
 
@@ -606,9 +606,9 @@ func (p *Panel) abortOp() (panels.Panel, tea.Cmd) {
 			err = gc.RebaseAbort(ctx)
 		}
 		if err != nil {
-			return continueResultMsg{action: "aborted", err: err}
+			return continueResultMsg{action: actionAborted, err: err}
 		}
-		return continueResultMsg{action: "aborted"}
+		return continueResultMsg{action: actionAborted}
 	}
 }
 

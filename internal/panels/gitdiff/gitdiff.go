@@ -840,13 +840,13 @@ func (d *GitDiff) renderAnnotation(f panels.AIReviewFinding) string {
 // severityIcon returns a unicode icon for the given severity level.
 func severityIcon(severity string) string {
 	switch severity {
-	case "error":
+	case severityError:
 		return "✗"
-	case "warning":
+	case severityWarning:
 		return "⚠"
-	case "info":
+	case severityInfo:
 		return "ℹ"
-	case "hint":
+	case severityHint:
 		return "›"
 	default:
 		return "⚠"
@@ -870,13 +870,13 @@ func (d *GitDiff) severityStyle(severity string) lipgloss.Style {
 	tc := d.themeColors()
 	var c color.Color
 	switch severity {
-	case "error":
+	case severityError:
 		c = panels.ColorOf(tc.NormalRed, "#C44B4B")
-	case "warning":
+	case severityWarning:
 		c = panels.ColorOf(tc.NormalYellow, "#C9A227")
-	case "info":
+	case severityInfo:
 		c = panels.ColorOf(tc.NormalBlue, "#7A9EBF")
-	case "hint":
+	case severityHint:
 		c = panels.ColorOf(tc.BrightBlack, "#555555")
 	default:
 		c = panels.ColorOf(tc.NormalYellow, "#C9A227")

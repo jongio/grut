@@ -110,7 +110,7 @@ func blameRecencyColor(commitDate, now time.Time) string {
 	switch {
 	case age < 7*24*time.Hour:
 		// Less than 1 week: bright white
-		return "#FFFFFF"
+		return colorWhite
 	case age < 30*24*time.Hour:
 		// Less than 1 month: light gray
 		return "#CCCCCC"

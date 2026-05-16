@@ -703,11 +703,11 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toggleChatFocus()
 	case pendingActionCommit:
 		return m.handleCommit()
-	case "push":
+	case actionPush:
 		return m.handlePush()
 	case "pull":
 		return m.handlePull()
-	case "fetch":
+	case actionFetch:
 		return m.handleFetch()
 	// Direct panel focus (1-5 number keys).
 	case "focus_panel_1":
@@ -2091,25 +2091,25 @@ func (m Model) renderHintsBar() string {
 	var hints []string
 	switch focusedName {
 	case "filetree":
-		hints = []string{"h/l:collapse/expand", "/:find", "?:help"}
+		hints = []string{"h/l:collapse/expand", hintFind, hintHelp}
 	case "gitstatus":
-		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", "?:help"}
+		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", hintHelp}
 	case "preview":
-		hints = []string{"j/k:scroll", "Tab:focus", "/:find", "?:help"}
+		hints = []string{hintScroll, hintTabFocus, hintFind, hintHelp}
 	case "branches":
-		hints = []string{"enter:checkout", "n:new branch", "d:delete", "?:help"}
+		hints = []string{"enter:checkout", "n:new branch", "d:delete", hintHelp}
 	case "gitlog":
-		hints = []string{"enter:details", "j/k:scroll", "/:search", "?:help"}
+		hints = []string{"enter:details", hintScroll, "/:search", hintHelp}
 	case "gitdiff":
-		hints = []string{"j/k:scroll", "Tab:focus", "?:help"}
+		hints = []string{hintScroll, hintTabFocus, hintHelp}
 	case "terminal":
-		hints = []string{"i:insert mode", "ctrl+b:normal mode", "?:help"}
+		hints = []string{"i:insert mode", "ctrl+b:normal mode", hintHelp}
 	case "agents":
-		hints = []string{"j/k:scroll", "enter:select", "?:help"}
+		hints = []string{hintScroll, "enter:select", hintHelp}
 	case "extensions":
-		hints = []string{"enter:toggle", "i:install", "?:help"}
+		hints = []string{"enter:toggle", "i:install", hintHelp}
 	default:
-		hints = []string{"Tab:focus", "?:help", "/:find", "1-5:tabs"}
+		hints = []string{hintTabFocus, hintHelp, hintFind, "1-5:tabs"}
 	}
 	// Append chat hint when chat is available but not focused.
 	if m.chat != nil {

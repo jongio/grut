@@ -184,7 +184,7 @@ func TestSecurityFileExclusionCoversAllSensitiveTypes(t *testing.T) {
 		path string
 	}{
 		// Environment files
-		{"dotenv", ".env"},
+		{"dotenv", patternDotEnv},
 		{"dotenv local", ".env.local"},
 		{"dotenv production", ".env.production"},
 
@@ -195,9 +195,9 @@ func TestSecurityFileExclusionCoversAllSensitiveTypes(t *testing.T) {
 		{"PFX file", "cert.pfx"},
 
 		// SSH keys
-		{"SSH RSA", "id_rsa"},
-		{"SSH Ed25519", "id_ed25519"},
-		{"SSH ECDSA", "id_ecdsa"},
+		{"SSH RSA", patternIDRSA},
+		{"SSH Ed25519", patternIDEd25519},
+		{"SSH ECDSA", patternIDECDSA},
 
 		// Secret files
 		{".secret extension", "database.secret"},

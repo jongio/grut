@@ -131,13 +131,13 @@ func (m Model) renderMessageHistory(height, width int) string {
 	for _, msg := range m.messages {
 		var prefix, color string
 		switch msg.Role {
-		case "user":
+		case RoleUser:
 			prefix = "You: "
 			color = greenColor
-		case "assistant":
+		case RoleAssistant:
 			prefix = "AI: "
 			color = cyanColor
-		case "tool": //nolint:goconst // inline string is more readable here
+		case RoleTool:
 			prefix = "Tool: "
 			color = dimColor
 		default:
@@ -154,7 +154,7 @@ func (m Model) renderMessageHistory(height, width int) string {
 		}
 
 		// Render assistant markdown when enabled.
-		if m.renderMD && msg.Role == "assistant" {
+		if m.renderMD && msg.Role == RoleAssistant {
 			rendered := markdown.RenderStatic(content, contentWidth-2)
 			for i, line := range rendered {
 				if i == 0 {

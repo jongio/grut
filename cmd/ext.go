@@ -75,7 +75,7 @@ func newExtRemoveCmd() *cobra.Command {
 
 func newExtListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
+		Use:   cmdList,
 		Short: "List installed extensions",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mgr := extManager()
@@ -169,7 +169,7 @@ func newExtCreateCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&templateName, "template", "t", "lua",
 		"Template to use (lua, wasm-go, mcp-python, mcp-node)")
-	cmd.Flags().BoolVar(&listTemplates, "list", false,
+	cmd.Flags().BoolVar(&listTemplates, cmdList, false,
 		"List available templates")
 
 	return cmd

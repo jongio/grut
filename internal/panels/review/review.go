@@ -225,7 +225,7 @@ func (p *Panel) View(width, height int) string {
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/k", Description: "Move between files/hunks", Action: "navigate"},
-		{Key: "enter", Description: "Expand file diff", Action: "expand"},
+		{Key: keyEnter, Description: "Expand file diff", Action: "expand"},
 		{Key: "a", Description: "Approve hunk", Action: "approve"},
 		{Key: "x", Description: "Reject hunk", Action: "reject"},
 		{Key: "A", Description: "Approve all hunks", Action: "approve_all"},
@@ -260,7 +260,7 @@ func (p *Panel) SetFiles(files []ReviewFile) {
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if p.showSummary {
 		switch msg.String() {
-		case "q", "escape", "esc", "enter", "s": //nolint:goconst // inline string is more readable here
+		case "q", "escape", "esc", keyEnter, "s": //nolint:goconst // inline string is more readable here
 			p.showSummary = false
 			p.rebuildLines()
 		}
@@ -289,7 +289,7 @@ func (p *Panel) handleFileListKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.rebuildLines()
 			p.ensureFileVisible()
 		}
-	case "enter":
+	case keyEnter:
 		if len(p.files) > 0 {
 			p.mode = modeDiff
 			p.hunkCursor = 0

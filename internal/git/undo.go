@@ -107,7 +107,7 @@ func (u *UndoManager) RedoNeedsConfirmation() bool {
 // Currently only force-push-related undos are considered destructive.
 func isDestructive(action UndoAction) bool {
 	// Undoing a commit that was pushed would require a force push.
-	if action.Type == "commit" && action.Metadata["pushed"] == "true" { //nolint:goconst // inline string is more readable here
+	if action.Type == objCommit && action.Metadata["pushed"] == "true" {
 		return true
 	}
 	return false
@@ -168,23 +168,23 @@ func (u *UndoManager) Redo(ctx context.Context) (string, error) {
 // executeUndo performs the inverse operation for the given action.
 func (u *UndoManager) executeUndo(ctx context.Context, action UndoAction) (string, error) {
 	switch action.Type {
-	case "commit":
+	case objCommit:
 		return u.undoCommit(ctx)
-	case "stage":
+	case actionStage:
 		return u.undoStage(ctx, action)
-	case "unstage":
+	case actionUnstage:
 		return u.undoUnstage(ctx, action)
 	case "branch_delete":
 		return u.undoBranchDelete(ctx, action)
-	case "checkout":
+	case cmdCheckout:
 		return u.undoCheckout(ctx, action)
 	case "discard": //nolint:goconst // inline string is more readable here
 		return u.undoDiscard(ctx, action)
-	case "revert":
+	case cmdRevert:
 		return u.undoRevert(ctx, action)
-	case "reset":
+	case cmdReset:
 		return u.undoReset(ctx, action)
-	case "amend":
+	case actionAmend:
 		return u.undoAmend(ctx)
 	default:
 		return "", fmt.Errorf("unknown undo action type: %s", action.Type)
@@ -194,23 +194,23 @@ func (u *UndoManager) executeUndo(ctx context.Context, action UndoAction) (strin
 // executeRedo re-applies the given action.
 func (u *UndoManager) executeRedo(ctx context.Context, action UndoAction) (string, error) {
 	switch action.Type {
-	case "commit":
+	case objCommit:
 		return u.redoCommit(ctx, action)
-	case "stage":
+	case actionStage:
 		return u.redoStage(ctx, action)
-	case "unstage":
+	case actionUnstage:
 		return u.redoUnstage(ctx, action)
 	case "branch_delete":
 		return u.redoBranchDelete(ctx, action)
-	case "checkout":
+	case cmdCheckout:
 		return u.redoCheckout(ctx, action)
 	case "discard":
 		return u.redoDiscard(ctx, action)
-	case "revert":
+	case cmdRevert:
 		return u.redoRevert(ctx, action)
-	case "reset":
+	case cmdReset:
 		return u.redoReset(ctx, action)
-	case "amend":
+	case actionAmend:
 		return u.redoAmend(ctx, action)
 	default:
 		return "", fmt.Errorf("unknown redo action type: %s", action.Type)
@@ -220,7 +220,7 @@ func (u *UndoManager) executeRedo(ctx context.Context, action UndoAction) (strin
 // undoCommit reverses a commit via git reset --soft HEAD~1.
 // Changes remain staged so the user can re-commit if desired.
 func (u *UndoManager) undoCommit(ctx context.Context) (string, error) {
-	_, err := u.client.run(ctx, "reset", "--soft", "HEAD~1")
+	_, err := u.client.run(ctx, cmdReset, "--soft", "HEAD~1")
 	if err != nil {
 		return "", fmt.Errorf("undo commit: %w", err)
 	}
@@ -380,7 +380,7 @@ func (u *UndoManager) undoRevert(ctx context.Context, action UndoAction) (string
 	if refBefore == "" {
 		return "", fmt.Errorf("undo revert: missing RefBefore")
 	}
-	_, err := u.client.run(ctx, "reset", "--hard", refBefore)
+	_, err := u.client.run(ctx, cmdReset, "--hard", refBefore)
 	if err != nil {
 		return "", fmt.Errorf("undo revert: %w", err)
 	}
@@ -407,7 +407,7 @@ func (u *UndoManager) undoReset(ctx context.Context, action UndoAction) (string,
 	if refBefore == "" {
 		return "", fmt.Errorf("undo reset: missing RefBefore")
 	}
-	_, err := u.client.run(ctx, "reset", "--hard", refBefore)
+	_, err := u.client.run(ctx, cmdReset, "--hard", refBefore)
 	if err != nil {
 		return "", fmt.Errorf("undo reset: %w", err)
 	}
@@ -431,7 +431,7 @@ func (u *UndoManager) redoReset(ctx context.Context, action UndoAction) (string,
 // undoAmend reverses an amend by resetting to the pre-amend HEAD.
 // The amended changes remain staged so the user can re-commit.
 func (u *UndoManager) undoAmend(ctx context.Context) (string, error) {
-	_, err := u.client.run(ctx, "reset", "--soft", "HEAD@{1}")
+	_, err := u.client.run(ctx, cmdReset, "--soft", "HEAD@{1}")
 	if err != nil {
 		return "", fmt.Errorf("undo amend: %w", err)
 	}

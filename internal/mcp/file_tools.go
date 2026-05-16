@@ -99,14 +99,14 @@ func registerFileTools(s *Server) {
 			"file_write",
 			mcplib.WithDescription("Write content to a file within the repository"),
 			mcplib.WithString("path", mcplib.Required(), mcplib.Description("File path relative to the repository root")),
-			mcplib.WithString("content", mcplib.Required(), mcplib.Description("Content to write to the file")),
+			mcplib.WithString(fieldContent, mcplib.Required(), mcplib.Description("Content to write to the file")),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			path, err := req.RequireString("path")
 			if err != nil {
 				return mcplib.NewToolResultError("path is required"), nil //nolint:nilerr // error returned as MCP tool result
 			}
-			content, err := req.RequireString("content")
+			content, err := req.RequireString(fieldContent)
 			if err != nil {
 				return mcplib.NewToolResultError("content is required"), nil //nolint:nilerr // error returned as MCP tool result
 			}

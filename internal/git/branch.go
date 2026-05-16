@@ -97,7 +97,7 @@ func (c *Client) BranchCreate(ctx context.Context, name, base string) error {
 		return fmt.Errorf("branch create name: %w", err)
 	}
 
-	args := []string{"branch", name}
+	args := []string{objBranch, name}
 	if base != "" {
 		if err := ValidateRef(base); err != nil {
 			return fmt.Errorf("branch create base: %w", err)
@@ -124,7 +124,7 @@ func (c *Client) BranchDelete(ctx context.Context, name string, force bool) erro
 		flag = "-D"
 	}
 
-	_, err := c.run(ctx, "branch", flag, name)
+	_, err := c.run(ctx, objBranch, flag, name)
 	if err != nil {
 		return fmt.Errorf("branch delete: %w", err)
 	}
@@ -141,12 +141,12 @@ func (c *Client) BranchRename(ctx context.Context, oldName, newName string) erro
 
 	var args []string
 	if oldName == "" {
-		args = []string{"branch", "-m", newName}
+		args = []string{objBranch, "-m", newName}
 	} else {
 		if err := ValidateRef(oldName); err != nil {
 			return fmt.Errorf("branch rename old: %w", err)
 		}
-		args = []string{"branch", "-m", oldName, newName}
+		args = []string{objBranch, "-m", oldName, newName}
 	}
 
 	_, err := c.run(ctx, args...)
@@ -163,7 +163,7 @@ func (c *Client) Checkout(ctx context.Context, ref string) error {
 		return fmt.Errorf("checkout: %w", err)
 	}
 
-	_, err := c.run(ctx, "checkout", ref)
+	_, err := c.run(ctx, cmdCheckout, ref)
 	if err != nil {
 		return fmt.Errorf("checkout: %w", err)
 	}
@@ -205,7 +205,7 @@ func (c *Client) Unstage(ctx context.Context, paths []string) error {
 	}
 
 	return c.queue.Exec(ctx, func() error {
-		args := append([]string{"reset", "HEAD", "--"}, paths...)
+		args := append([]string{cmdReset, refHEAD, "--"}, paths...)
 		_, err := c.run(ctx, args...)
 		if err != nil {
 			return fmt.Errorf("unstage: %w", err)
@@ -245,9 +245,9 @@ func (c *Client) Commit(ctx context.Context, msg string, opts CommitOpts) (strin
 	err := c.queue.Exec(ctx, func() error {
 		var args []string
 		if opts.Fixup != "" {
-			args = []string{"commit", "--fixup=" + opts.Fixup}
+			args = []string{objCommit, "--fixup=" + opts.Fixup}
 		} else {
-			args = []string{"commit", "-m", msg}
+			args = []string{objCommit, "-m", msg}
 		}
 		if opts.AllowEmpty {
 			args = append(args, "--allow-empty")
@@ -271,7 +271,7 @@ func (c *Client) Commit(ctx context.Context, msg string, opts CommitOpts) (strin
 		}
 
 		// Get the hash of the commit just created.
-		out, err := c.run(ctx, "rev-parse", "HEAD")
+		out, err := c.run(ctx, "rev-parse", refHEAD)
 		if err != nil {
 			return fmt.Errorf("commit rev-parse: %w", err)
 		}

@@ -27,11 +27,11 @@ const (
 func (m KeyMode) String() string {
 	switch m {
 	case ModeGlobal:
-		return "global"
+		return scopeGlobal
 	case ModePanel:
-		return "panel"
+		return scopePanel
 	case ModeInput:
-		return "input"
+		return scopeInput
 	default:
 		return fmt.Sprintf("KeyMode(%d)", int(m))
 	}
@@ -40,11 +40,11 @@ func (m KeyMode) String() string {
 // parseKeyMode converts a TOML mode string to a KeyMode value.
 func parseKeyMode(s string) (KeyMode, error) {
 	switch strings.ToLower(s) {
-	case "global":
+	case scopeGlobal:
 		return ModeGlobal, nil
-	case "panel":
+	case scopePanel:
 		return ModePanel, nil
-	case "input":
+	case scopeInput:
 		return ModeInput, nil
 	default:
 		return 0, fmt.Errorf("unknown key mode %q", s)

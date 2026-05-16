@@ -1336,7 +1336,7 @@ func (ft *FileTree) buildGitChangedDirs() {
 func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel, tea.Cmd) {
 	// Save cursor path before any mode switch so it can be restored.
 	cursorPath := ft.CursorPath()
-	if msg.PresetName == "git" {
+	if msg.PresetName == presetGit {
 		if !ft.gitFilter {
 			// Save explorer expand state.
 			ft.explorerExpanded = ft.collectExpanded(ft.root)

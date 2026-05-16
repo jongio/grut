@@ -134,7 +134,7 @@ func New(d Deps) Model {
 		theme:      d.Theme,
 		ctx:        ctx,
 		cancel:     cancel,
-		status:     "Ready",
+		status:     StatusReady,
 		renderMD:   d.ChatCfg.RenderMarkdown,
 	}
 }
@@ -239,7 +239,7 @@ func (m *Model) ClearHistory() {
 	m.streamBuf.Reset()
 	m.scrollOffset = 0
 	m.err = nil
-	m.status = "Ready" //nolint:goconst // inline status string
+	m.status = StatusReady
 }
 
 // Close cancels any in-flight operations and releases resources.
@@ -355,7 +355,7 @@ func (m Model) sendMessage(content string) (Model, tea.Cmd) {
 	// Redact user content before storing.
 	redacted, _ := m.redactor.RedactContent(content)
 	m.messages = append(m.messages, ai.ChatMessage{
-		Role:    "user",
+		Role:    RoleUser,
 		Content: redacted,
 	})
 	m.messages = trimMessages(m.messages)
@@ -453,10 +453,10 @@ func (m Model) handleStreamDone(msg streamDoneMsg) (Model, tea.Cmd) {
 	}
 	m.lastResponse = msg.response
 	m.streamBuf.Reset()
-	m.status = "Ready"
+	m.status = StatusReady
 	// Add the assistant response to conversation history.
 	m.messages = append(m.messages, ai.ChatMessage{
-		Role:      "assistant",
+		Role:      RoleAssistant,
 		Content:   msg.response,
 		ToolCalls: msg.tools,
 	})
@@ -533,7 +533,7 @@ func (m Model) handleToolResults(msg ToolResultMsg) (Model, tea.Cmd) {
 		}
 		content = ai.SanitizeExternalContent(content)
 		m.messages = append(m.messages, ai.ChatMessage{
-			Role:    "tool",
+			Role:    RoleTool,
 			Content: content,
 			ToolID:  result.ToolID,
 		})
@@ -570,7 +570,7 @@ func (m Model) rejectConfirmation() (Model, tea.Cmd) {
 	}
 	// Add a tool result indicating rejection.
 	m.messages = append(m.messages, ai.ChatMessage{
-		Role:    "tool",
+		Role:    RoleTool,
 		Content: "User rejected: " + desc,
 	})
 	m.messages = trimMessages(m.messages)

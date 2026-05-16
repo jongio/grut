@@ -639,7 +639,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		ext := strings.ToLower(filepath.Ext(path))
 		// Render based on file type
 		switch ext {
-		case ".md", ".markdown", ".mdown", ".mkd":
+		case extMD, extMarkdown, extMdown, extMkd:
 			if renderMD {
 				result.lines = markdown.RenderStatic(source, width)
 			} else if cfg.SyntaxHighlighting {
@@ -811,9 +811,9 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 // statusIcon returns a clean Unicode icon for a job or step status/conclusion.
 func statusIcon(status, conclusion string) string {
 	switch conclusion {
-	case "success":
+	case statusSuccess:
 		return "✓"
-	case "failure":
+	case statusFailure:
 		return "✗"
 	case "cancelled":
 		return "⊘"
@@ -821,11 +821,11 @@ func statusIcon(status, conclusion string) string {
 		return "⊘"
 	}
 	switch status {
-	case "in_progress":
+	case statusInProgress:
 		return "●"
 	case "queued", "waiting", "pending":
 		return "○"
-	case "completed":
+	case statusCompleted:
 		return "✓"
 	}
 	return "○"
@@ -1156,7 +1156,7 @@ func (p *Preview) scrollIndicator(totalLines, viewHeight int) string {
 // isMarkdownExt returns true if the file extension indicates a markdown file.
 func isMarkdownExt(ext string) bool {
 	switch strings.ToLower(ext) {
-	case ".md", ".markdown", ".mdown", ".mkd":
+	case extMD, extMarkdown, extMdown, extMkd:
 		return true
 	}
 	return false

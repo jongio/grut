@@ -68,7 +68,7 @@ type branchesLoadedMsg struct {
 // branchOpResultMsg carries the result of a branch operation.
 type branchOpResultMsg struct {
 	err  error
-	op   string // "checkout", "worktree", "created", "deleted", "renamed", "fetched"
+	op   string // actionCheckout, "worktree", "created", "deleted", "renamed", "fetched"
 	name string // branch name involved
 }
 
@@ -280,7 +280,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Checkout branch", Action: "checkout"},
+		{Key: "enter", Description: "Checkout branch", Action: actionCheckout},
 		{Key: "n", Description: "Create new branch", Action: "item_create"},
 		{Key: "d/x", Description: "Delete branch", Action: "item_delete"},
 		{Key: "e/F2", Description: "Rename branch", Action: "item_edit"},
@@ -319,7 +319,7 @@ func (p *Panel) handleOpResult(msg branchOpResultMsg) (panels.Panel, tea.Cmd) {
 	p.preserveCursor = true
 	cmds := []tea.Cmd{p.loadBranches()}
 	switch op {
-	case "checkout":
+	case actionCheckout:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
@@ -566,7 +566,7 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 	name := ref
 	return p, func() tea.Msg {
 		err := g.Checkout(ctx, name)
-		return branchOpResultMsg{op: "checkout", name: name, err: err}
+		return branchOpResultMsg{op: actionCheckout, name: name, err: err}
 	}
 }
 
@@ -820,7 +820,7 @@ func (p *Panel) computeAnnotations(branches []git.Branch) {
 	p.annotations = make(map[string]string)
 	defaultBranch := p.cfg.DefaultBranch
 	if defaultBranch == "" {
-		defaultBranch = "main"
+		defaultBranch = defaultBranchName
 	}
 	for _, b := range branches {
 		if b.IsRemote || b.IsCurrent {

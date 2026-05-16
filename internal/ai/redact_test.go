@@ -21,10 +21,10 @@ func TestShouldExcludeFile(t *testing.T) {
 		excluded bool
 	}{
 		// Built-in exact matches.
-		{".env exact", ".env", true},
-		{"SSH RSA key", "id_rsa", true},
-		{"SSH Ed25519 key", "id_ed25519", true},
-		{"SSH ECDSA key", "id_ecdsa", true},
+		{".env exact", patternDotEnv, true},
+		{"SSH RSA key", patternIDRSA, true},
+		{"SSH Ed25519 key", patternIDEd25519, true},
+		{"SSH ECDSA key", patternIDECDSA, true},
 
 		// Built-in glob matches.
 		{".env.local", ".env.local", true},
@@ -276,23 +276,23 @@ func TestRedactContentCountAccuracy(t *testing.T) {
 
 func TestUserPatternsMerge(t *testing.T) {
 	// Add a custom pattern; duplicate ".env" to verify dedup.
-	r := NewRedactor([]string{"*.custom", ".env"})
+	r := NewRedactor([]string{"*.custom", patternDotEnv})
 
 	// Custom pattern works.
 	assert.True(t, r.ShouldExcludeFile("data.custom"))
 
 	// Built-in patterns still active.
-	assert.True(t, r.ShouldExcludeFile(".env"))
+	assert.True(t, r.ShouldExcludeFile(patternDotEnv))
 	assert.True(t, r.ShouldExcludeFile(".env.local"))
 	assert.True(t, r.ShouldExcludeFile("server.key"))
-	assert.True(t, r.ShouldExcludeFile("id_rsa"))
+	assert.True(t, r.ShouldExcludeFile(patternIDRSA))
 
 	// Non-matching file passes through.
 	assert.False(t, r.ShouldExcludeFile("main.go"))
 }
 
 func TestUserPatternsDeduplicate(t *testing.T) {
-	r := NewRedactor([]string{".env", ".env", "*.key"})
+	r := NewRedactor([]string{patternDotEnv, patternDotEnv, patternKeyFile})
 
 	// Count occurrences of ".env" in file patterns — must be exactly 1.
 	envCount := 0
@@ -412,5 +412,5 @@ func TestShouldExcludeFile_CustomPattern(t *testing.T) {
 	assert.True(t, r.ShouldExcludeFile("config.secret.json"))
 	assert.False(t, r.ShouldExcludeFile("config.json"))
 	// Built-in patterns still work.
-	assert.True(t, r.ShouldExcludeFile(".env"))
+	assert.True(t, r.ShouldExcludeFile(patternDotEnv))
 }

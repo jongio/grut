@@ -23,104 +23,104 @@ func (r *ToolRegistry) registerGitHubTools() {
 	// ── Read-only (Safe) ────────────────────────────────────────────
 
 	r.register(
-		"gh_issues",
+		ToolGHIssues,
 		"List or search GitHub issues in this repository",
 		Safe,
 		objectSchema(map[string]any{
-			"query": stringProp("Search query to filter issues"),
-			"state": stringProp("Issue state: open, closed, or all (default open)"),
-			"limit": intProp("Maximum number of issues to return (default 20)"),
+			PropQuery: stringProp("Search query to filter issues"),
+			PropState: stringProp("Issue state: open, closed, or all (default open)"),
+			PropLimit: intProp("Maximum number of issues to return (default 20)"),
 		}, nil),
 	)
 
 	r.register(
-		"gh_issue_view",
+		ToolGHIssueView,
 		"View a GitHub issue with its body and comments",
 		Safe,
 		objectSchema(map[string]any{
-			"number": intProp("Issue number"),
-		}, []string{"number"}),
+			PropNumber: intProp("Issue number"),
+		}, []string{PropNumber}),
 	)
 
 	r.register(
-		"gh_prs",
+		ToolGHPRs,
 		"List or search GitHub pull requests in this repository",
 		Safe,
 		objectSchema(map[string]any{
-			"query": stringProp("Search query to filter pull requests"),
-			"state": stringProp("PR state: open, closed, merged, or all (default open)"),
-			"limit": intProp("Maximum number of PRs to return (default 20)"),
+			PropQuery: stringProp("Search query to filter pull requests"),
+			PropState: stringProp("PR state: open, closed, merged, or all (default open)"),
+			PropLimit: intProp("Maximum number of PRs to return (default 20)"),
 		}, nil),
 	)
 
 	r.register(
-		"gh_pr_view",
+		ToolGHPRView,
 		"View a GitHub pull request with reviews, comments, and files",
 		Safe,
 		objectSchema(map[string]any{
-			"number": intProp("Pull request number"),
-		}, []string{"number"}),
+			PropNumber: intProp("Pull request number"),
+		}, []string{PropNumber}),
 	)
 
 	r.register(
-		"gh_pr_diff",
+		ToolGHPRDiff,
 		"Get the diff of a GitHub pull request",
 		Safe,
 		objectSchema(map[string]any{
-			"number": intProp("Pull request number"),
-		}, []string{"number"}),
+			PropNumber: intProp("Pull request number"),
+		}, []string{PropNumber}),
 	)
 
 	r.register(
-		"gh_actions",
+		ToolGHActions,
 		"List recent GitHub Actions workflow runs",
 		Safe,
 		objectSchema(map[string]any{
-			"branch": stringProp("Filter runs by branch name"),
-			"status": stringProp("Filter by status: completed, in_progress, or queued"),
-			"limit":  intProp("Maximum number of runs to return (default 10)"),
+			PropBranch: stringProp("Filter runs by branch name"),
+			PropStatus: stringProp("Filter by status: completed, in_progress, or queued"),
+			PropLimit:  intProp("Maximum number of runs to return (default 10)"),
 		}, nil),
 	)
 
 	r.register(
-		"gh_actions_logs",
+		ToolGHActionsLogs,
 		"Get failed job logs for a GitHub Actions workflow run",
 		Safe,
 		objectSchema(map[string]any{
-			"run_id": intProp("Workflow run ID"),
-		}, []string{"run_id"}),
+			PropRunID: intProp("Workflow run ID"),
+		}, []string{PropRunID}),
 	)
 
 	// ── Write (Destructive) ─────────────────────────────────────────
 
 	r.register(
-		"gh_comment",
+		ToolGHComment,
 		"Post a comment on a GitHub issue or pull request",
 		Destructive,
 		objectSchema(map[string]any{
-			"number": intProp("Issue or PR number"),
-			"body":   stringProp("Comment body text"),
-		}, []string{"number", "body"}),
+			PropNumber: intProp("Issue or PR number"),
+			PropBody:   stringProp("Comment body text"),
+		}, []string{PropNumber, PropBody}),
 	)
 
 	r.register(
-		"gh_pr_review",
+		ToolGHPRReview,
 		"Submit a review on a GitHub pull request",
 		Destructive,
 		objectSchema(map[string]any{
-			"number": intProp("Pull request number"),
-			"body":   stringProp("Review body text"),
-			"action": stringProp("Review action: approve, request-changes, or comment"),
-		}, []string{"number", "body", "action"}),
+			PropNumber: intProp("Pull request number"),
+			PropBody:   stringProp("Review body text"),
+			PropAction: stringProp("Review action: approve, request-changes, or comment"),
+		}, []string{PropNumber, PropBody, PropAction}),
 	)
 
 	r.register(
-		"gh_actions_rerun",
+		ToolGHActionsRerun,
 		"Rerun failed jobs in a GitHub Actions workflow run",
 		Destructive,
 		objectSchema(map[string]any{
-			"run_id": intProp("Workflow run ID"),
-		}, []string{"run_id"}),
+			PropRunID: intProp("Workflow run ID"),
+		}, []string{PropRunID}),
 	)
 }
 
@@ -147,21 +147,21 @@ func (e *ToolExecutor) ghExec(ctx context.Context, args ...string) (string, erro
 // ---------------------------------------------------------------------------
 
 func (e *ToolExecutor) ghIssues(ctx context.Context, args map[string]any) (string, error) {
-	state := getString(args, "state")
+	state := getString(args, PropState)
 	if state == "" {
 		state = "open"
 	}
-	limit := getInt(args, "limit")
+	limit := getInt(args, PropLimit)
 	if limit <= 0 {
 		limit = 20
 	}
-	query := getString(args, "query")
+	query := getString(args, PropQuery)
 
 	ghArgs := []string{
-		"issue", "list",
+		"issue", GHSubcmdList,
 		"--state", state,
-		"--limit", strconv.Itoa(limit),
-		"--json", "number,title,state,labels,assignees,author,createdAt,updatedAt",
+		GHFlagLimit, strconv.Itoa(limit),
+		GHFlagJSON, "number,title,state,labels,assignees,author,createdAt,updatedAt",
 	}
 	if query != "" {
 		ghArgs = append(ghArgs, "--search", query)
@@ -170,14 +170,14 @@ func (e *ToolExecutor) ghIssues(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) ghIssueView(ctx context.Context, args map[string]any) (string, error) {
-	number := getInt(args, "number")
+	number := getInt(args, PropNumber)
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
 	out, err := e.ghExec(
 		ctx,
 		"issue", "view", strconv.Itoa(number),
-		"--json", "number,title,body,state,labels,assignees,author,comments,createdAt,updatedAt",
+		GHFlagJSON, "number,title,body,state,labels,assignees,author,comments,createdAt,updatedAt",
 	)
 	if err != nil {
 		return "", err
@@ -186,21 +186,21 @@ func (e *ToolExecutor) ghIssueView(ctx context.Context, args map[string]any) (st
 }
 
 func (e *ToolExecutor) ghPRs(ctx context.Context, args map[string]any) (string, error) {
-	state := getString(args, "state")
+	state := getString(args, PropState)
 	if state == "" {
 		state = "open"
 	}
-	limit := getInt(args, "limit")
+	limit := getInt(args, PropLimit)
 	if limit <= 0 {
 		limit = 20
 	}
-	query := getString(args, "query")
+	query := getString(args, PropQuery)
 
 	ghArgs := []string{
-		"pr", "list",
+		"pr", GHSubcmdList,
 		"--state", state,
-		"--limit", strconv.Itoa(limit),
-		"--json", "number,title,state,author,labels,reviewDecision,isDraft,headRefName,createdAt,updatedAt",
+		GHFlagLimit, strconv.Itoa(limit),
+		GHFlagJSON, "number,title,state,author,labels,reviewDecision,isDraft,headRefName,createdAt,updatedAt",
 	}
 	if query != "" {
 		ghArgs = append(ghArgs, "--search", query)
@@ -209,14 +209,14 @@ func (e *ToolExecutor) ghPRs(ctx context.Context, args map[string]any) (string, 
 }
 
 func (e *ToolExecutor) ghPRView(ctx context.Context, args map[string]any) (string, error) {
-	number := getInt(args, "number")
+	number := getInt(args, PropNumber)
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
 	out, err := e.ghExec(
 		ctx,
 		"pr", "view", strconv.Itoa(number),
-		"--json", "number,title,body,state,author,labels,reviewDecision,isDraft,headRefName,reviews,comments,files,commits,createdAt,updatedAt",
+		GHFlagJSON, "number,title,body,state,author,labels,reviewDecision,isDraft,headRefName,reviews,comments,files,commits,createdAt,updatedAt",
 	)
 	if err != nil {
 		return "", err
@@ -225,7 +225,7 @@ func (e *ToolExecutor) ghPRView(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) ghPRDiff(ctx context.Context, args map[string]any) (string, error) {
-	number := getInt(args, "number")
+	number := getInt(args, PropNumber)
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
@@ -237,17 +237,17 @@ func (e *ToolExecutor) ghPRDiff(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) ghActions(ctx context.Context, args map[string]any) (string, error) {
-	limit := getInt(args, "limit")
+	limit := getInt(args, PropLimit)
 	if limit <= 0 {
 		limit = 10
 	}
-	branch := getString(args, "branch")
-	status := getString(args, "status")
+	branch := getString(args, PropBranch)
+	status := getString(args, PropStatus)
 
 	ghArgs := []string{
-		"run", "list",
-		"--limit", strconv.Itoa(limit),
-		"--json", "databaseId,displayTitle,status,conclusion,workflowName,headBranch,createdAt,updatedAt",
+		"run", GHSubcmdList,
+		GHFlagLimit, strconv.Itoa(limit),
+		GHFlagJSON, "databaseId,displayTitle,status,conclusion,workflowName,headBranch,createdAt,updatedAt",
 	}
 	if branch != "" {
 		ghArgs = append(ghArgs, "--branch", branch)
@@ -259,7 +259,7 @@ func (e *ToolExecutor) ghActions(ctx context.Context, args map[string]any) (stri
 }
 
 func (e *ToolExecutor) ghActionsLogs(ctx context.Context, args map[string]any) (string, error) {
-	runID := getInt(args, "run_id")
+	runID := getInt(args, PropRunID)
 	if runID == 0 {
 		return "", fmt.Errorf("run_id is required")
 	}
@@ -275,11 +275,11 @@ func (e *ToolExecutor) ghActionsLogs(ctx context.Context, args map[string]any) (
 // ---------------------------------------------------------------------------
 
 func (e *ToolExecutor) ghComment(ctx context.Context, args map[string]any) (string, error) {
-	number := getInt(args, "number")
+	number := getInt(args, PropNumber)
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
-	body := getString(args, "body")
+	body := getString(args, PropBody)
 	if body == "" {
 		return "", fmt.Errorf("body is required")
 	}
@@ -291,20 +291,20 @@ func (e *ToolExecutor) ghComment(ctx context.Context, args map[string]any) (stri
 }
 
 func (e *ToolExecutor) ghPRReview(ctx context.Context, args map[string]any) (string, error) {
-	number := getInt(args, "number")
+	number := getInt(args, PropNumber)
 	if number == 0 {
 		return "", fmt.Errorf("number is required")
 	}
-	body := getString(args, "body")
+	body := getString(args, PropBody)
 	if body == "" {
 		return "", fmt.Errorf("body is required")
 	}
-	action := getString(args, "action")
+	action := getString(args, PropAction)
 	if action == "" {
 		return "", fmt.Errorf("action is required")
 	}
 	switch action {
-	case "approve", "request-changes", "comment":
+	case ReviewApprove, ReviewRequestChanges, ReviewComment:
 		// valid
 	default:
 		return "", fmt.Errorf("action must be approve, request-changes, or comment")
@@ -317,7 +317,7 @@ func (e *ToolExecutor) ghPRReview(ctx context.Context, args map[string]any) (str
 }
 
 func (e *ToolExecutor) ghActionsRerun(ctx context.Context, args map[string]any) (string, error) {
-	runID := getInt(args, "run_id")
+	runID := getInt(args, PropRunID)
 	if runID == 0 {
 		return "", fmt.Errorf("run_id is required")
 	}
@@ -334,7 +334,7 @@ func (e *ToolExecutor) ghActionsRerun(ctx context.Context, args map[string]any) 
 var blockedEnvPrefixes = []string{
 	"ANTHROPIC_",
 	"AWS_SECRET_",
-	"AWS_SESSION_TOKEN",
+	EnvAWSSessionToken,
 	"AZURE_",
 }
 
@@ -350,7 +350,7 @@ var blockedEnvSuffixes = []string{
 var blockedEnvExact = map[string]bool{
 	"ANTHROPIC_API_KEY":     true,
 	"AWS_SECRET_ACCESS_KEY": true,
-	"AWS_SESSION_TOKEN":     true,
+	EnvAWSSessionToken:      true,
 	"OPENAI_API_KEY":        true,
 }
 

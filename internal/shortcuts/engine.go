@@ -139,20 +139,20 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 	var err error
 	switch step.Op {
 	case OpStage:
-		paths := parsePaths(step.Params["paths"])
+		paths := parsePaths(step.Params[paramPaths])
 		err = e.git.Stage(ctx, paths)
 
 	case OpUnstage:
-		paths := parsePaths(step.Params["paths"])
+		paths := parsePaths(step.Params[paramPaths])
 		err = e.git.Unstage(ctx, paths)
 
 	case OpCommit:
-		msg := step.Params["message"]
+		msg := step.Params[paramMessage]
 		opts := git.CommitOpts{
-			Amend: step.Params["amend"] == "true", //nolint:goconst // inline string is more readable here
-			Fixup: step.Params["fixup"],
+			Amend: step.Params[paramAmend] == valTrue,
+			Fixup: step.Params[paramFixup],
 		}
-		if msg == "" && step.Params["ai_message"] != "true" && opts.Fixup == "" {
+		if msg == "" && step.Params[paramAIMessage] != valTrue && opts.Fixup == "" {
 			msg = "auto-commit"
 		}
 		var hash string
@@ -163,82 +163,82 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 
 	case OpPush:
 		opts := git.PushOpts{
-			Remote:      step.Params["remote"],
-			Branch:      step.Params["branch"],
-			Force:       step.Params["force"] == "true",
-			SetUpstream: step.Params["set_upstream"] == "true",
+			Remote:      step.Params[paramRemote],
+			Branch:      step.Params[paramBranch],
+			Force:       step.Params[paramForce] == valTrue,
+			SetUpstream: step.Params[paramSetUpstream] == valTrue,
 		}
 		err = e.git.Push(ctx, opts)
 
 	case OpPull:
 		opts := git.PullOpts{
-			Remote: step.Params["remote"],
-			Branch: step.Params["branch"],
-			Rebase: step.Params["rebase"] == "true",
+			Remote: step.Params[paramRemote],
+			Branch: step.Params[paramBranch],
+			Rebase: step.Params[paramRebase] == valTrue,
 		}
 		err = e.git.Pull(ctx, opts)
 
 	case OpFetch:
 		opts := git.FetchOpts{
-			Remote: step.Params["remote"],
-			All:    step.Params["all"] == "true",
-			Prune:  step.Params["prune"] == "true",
+			Remote: step.Params[paramRemote],
+			All:    step.Params[paramAll] == valTrue,
+			Prune:  step.Params[paramPrune] == valTrue,
 		}
 		err = e.git.Fetch(ctx, opts)
 
 	case OpRebase:
-		onto := step.Params["onto"]
+		onto := step.Params[paramOnto]
 		err = e.git.Rebase(ctx, onto, git.RebaseOpts{})
 
 	case OpMerge:
-		branch := step.Params["branch"]
+		branch := step.Params[paramBranch]
 		opts := git.MergeOpts{
-			Squash:  step.Params["squash"] == "true",
-			NoFF:    step.Params["no_ff"] == "true",
-			Message: step.Params["message"],
+			Squash:  step.Params[paramSquash] == valTrue,
+			NoFF:    step.Params[paramNoFF] == valTrue,
+			Message: step.Params[paramMessage],
 		}
 		err = e.git.Merge(ctx, branch, opts)
 
 	case OpCheckout:
-		ref := step.Params["ref"]
+		ref := step.Params[paramRef]
 		err = e.git.Checkout(ctx, ref)
 
 	case OpBranch:
-		name := step.Params["name"]
-		base := step.Params["base"]
+		name := step.Params[paramName]
+		base := step.Params[paramBase]
 		err = e.git.BranchCreate(ctx, name, base)
 
 	case OpReset:
 		// Reset is implemented via Unstage for mixed, or requires
 		// checkout for soft. We map to available git client ops.
-		mode := step.Params["mode"]
-		ref := step.Params["ref"]
+		mode := step.Params[paramMode]
+		ref := step.Params[paramRef]
 		switch mode {
-		case "soft":
+		case resetModeSoft:
 			err = e.git.Checkout(ctx, ref)
-		case "hard":
+		case resetModeHard:
 			// Hard reset: checkout the ref and unstage everything.
 			err = e.git.Checkout(ctx, ref)
 			if err == nil {
 				err = e.git.Unstage(ctx, []string{"."})
 			}
-		case "mixed", "":
+		case resetModeMixed, "":
 			err = e.git.Unstage(ctx, []string{"."})
 		default:
 			err = fmt.Errorf("%w: %q", ErrUnsupportedResetMode, mode)
 		}
 
 	case OpDelete:
-		if step.Params["merged"] == "true" {
+		if step.Params[paramMerged] == valTrue {
 			err = e.deletemergedBranches(ctx)
 		} else {
-			branch := step.Params["branch"]
+			branch := step.Params[paramBranch]
 			err = e.git.BranchDelete(ctx, branch, false)
 		}
 
 	case OpStash:
 		opts := git.StashOpts{
-			Message: step.Params["message"],
+			Message: step.Params[paramMessage],
 		}
 		err = e.git.StashPush(ctx, opts)
 
@@ -246,7 +246,7 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 		err = e.git.StashPop(ctx, 0)
 
 	case OpBranchRename:
-		newName := step.Params["new_name"]
+		newName := step.Params[paramNewName]
 		err = e.git.BranchRename(ctx, "", newName)
 
 	default:
@@ -271,7 +271,7 @@ func (e *Engine) deletemergedBranches(ctx context.Context) error {
 		if b.IsCurrent || b.IsRemote {
 			continue
 		}
-		if b.Name == "main" || b.Name == "master" || b.Name == "develop" {
+		if b.Name == branchMain || b.Name == protectedMaster || b.Name == protectedDevelop {
 			continue
 		}
 		if err := e.git.BranchDelete(ctx, b.Name, false); err != nil {

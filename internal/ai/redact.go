@@ -12,17 +12,17 @@ const RedactedPlaceholder = "[REDACTED]"
 // an AI provider. They use filepath.Match syntax and are matched against the
 // base name of each path.
 var builtinFilePatterns = []string{
-	".env",
+	patternDotEnv,
 	".env.*",
-	"*.key",
+	patternKeyFile,
 	"*.pem",
 	"*.p12",
 	"*.pfx",
 	"*.secret",
 	"*.secrets",
-	"id_rsa",
-	"id_ed25519",
-	"id_ecdsa",
+	patternIDRSA,
+	patternIDEd25519,
+	patternIDECDSA,
 }
 
 // builtinSecretPatterns are regular expressions that detect common secret

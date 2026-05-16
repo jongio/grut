@@ -167,6 +167,9 @@ func (b *Builder) resolve(path string) (abs string, rel string, err error) {
 	return absPath, filepath.ToSlash(relPath), nil
 }
 
+// formatYAML is the code-fence language tag for YAML files.
+const formatYAML = "yaml"
+
 // langFromExt maps a file extension to a code-fence language tag.
 func langFromExt(ext string) string {
 	switch strings.ToLower(ext) {
@@ -203,7 +206,7 @@ func langFromExt(ext string) string {
 	case ".json":
 		return "json"
 	case ".yaml", ".yml":
-		return "yaml"
+		return formatYAML
 	case ".toml":
 		return "toml"
 	case ".xml":
