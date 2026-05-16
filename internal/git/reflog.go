@@ -11,7 +11,7 @@ import (
 // to HEAD. Limit controls the maximum number of entries (0 = unlimited).
 func (c *Client) Reflog(ctx context.Context, ref string, limit int) ([]ReflogEntry, error) {
 	if ref == "" {
-		ref = "HEAD"
+		ref = refHEAD
 	}
 	if err := ValidateRef(ref); err != nil {
 		return nil, fmt.Errorf("reflog ref: %w", err)
@@ -25,7 +25,7 @@ func (c *Client) Reflog(ctx context.Context, ref string, limit int) ([]ReflogEnt
 		"%aI", // author date ISO 8601
 	}, FieldSep)
 
-	args := []string{"reflog", "show", ref, "--format=" + format}
+	args := []string{"reflog", cmdShow, ref, "--format=" + format}
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("-n%d", limit))
 	}
