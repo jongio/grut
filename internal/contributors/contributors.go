@@ -37,6 +37,12 @@ var botPatterns = []string{
 	"snyk-bot",
 }
 
+// excludedNames lists git user.name values that are artifacts of testing
+// or pipeline configuration rather than real contributors.
+var excludedNames = []string{
+	"Test",
+}
+
 // coAuthorRegex matches Co-authored-by trailers in commit messages.
 // Format: Co-authored-by: Name <email>
 var coAuthorRegex = regexp.MustCompile(`(?i)^co-authored-by:\s*(.+?)\s*<([^>]+)>`)
@@ -145,7 +151,7 @@ func Extract(ctx context.Context, opts Options) ([]Contributor, error) {
 		email := strings.TrimSpace(fields[1])
 		dateStr := strings.TrimSpace(fields[2])
 
-		if isBot(name, email) {
+		if isExcluded(name, email) {
 			continue
 		}
 
@@ -178,7 +184,7 @@ func Extract(ctx context.Context, opts Options) ([]Contributor, error) {
 			}
 			name := strings.TrimSpace(m[1])
 			email := strings.TrimSpace(m[2])
-			if isBot(name, email) {
+			if isExcluded(name, email) {
 				continue
 			}
 			addContributor(byEmail, name, email, date)
@@ -223,11 +229,17 @@ func addContributor(m map[string]*Contributor, name, email string, date time.Tim
 	}
 }
 
-// isBot returns true if the name or email matches a known bot pattern.
-func isBot(name, email string) bool {
+// isExcluded returns true if the name or email matches a known bot pattern
+// or is a bogus contributor name from test/pipeline artifacts.
+func isExcluded(name, email string) bool {
 	lower := strings.ToLower(name + " " + email)
 	for _, pat := range botPatterns {
 		if strings.Contains(lower, strings.ToLower(pat)) {
+			return true
+		}
+	}
+	for _, excluded := range excludedNames {
+		if strings.EqualFold(name, excluded) {
 			return true
 		}
 	}

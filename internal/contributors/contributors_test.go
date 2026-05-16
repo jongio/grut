@@ -109,7 +109,7 @@ func TestExtract_Deduplication(t *testing.T) {
 	assert.Equal(t, 2, contributors[0].CommitCount)
 }
 
-func TestIsBot(t *testing.T) {
+func TestIsExcluded(t *testing.T) {
 	tests := []struct {
 		name  string
 		email string
@@ -119,13 +119,16 @@ func TestIsBot(t *testing.T) {
 		{"github-actions[bot]", "actions@github.com", true},
 		{"copilot-swe-agent[bot]", "copilot@github.com", true},
 		{"renovate[bot]", "renovate@whitesource.com", true},
+		{"Test", "test@example.com", true},
+		{"test", "test@example.com", true},
+		{"TEST", "test@example.com", true},
 		{"Alice", "alice@example.com", false},
 		{"Bob", "bob@company.com", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isBot(tt.name, tt.email))
+			assert.Equal(t, tt.want, isExcluded(tt.name, tt.email))
 		})
 	}
 }
