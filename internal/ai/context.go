@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -278,8 +279,16 @@ func (b *Builder) ForConflict(ctx context.Context, files []string) (GitContext, 
 
 	// Metadata — always included.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
-	gc.Status, _ = b.client.Status(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
+	if status, err := b.client.Status(ctx); err != nil {
+		slog.Warn("ai: failed to get working tree status", "error", err)
+	} else {
+		gc.Status = status
+	}
 
 	// Priority 1: Conflict regions and file contents.
 	for _, path := range files {
@@ -321,8 +330,16 @@ func (b *Builder) ForCommit(ctx context.Context) (GitContext, error) {
 
 	// Metadata — always included.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
-	gc.Status, _ = b.client.Status(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
+	if status, err := b.client.Status(ctx); err != nil {
+		slog.Warn("ai: failed to get working tree status", "error", err)
+	} else {
+		gc.Status = status
+	}
 
 	// Priority 1: Staged diff.
 	if diffs, err := b.client.Diff(ctx, git.DiffOpts{Staged: true}); err == nil {
@@ -349,8 +366,16 @@ func (b *Builder) ForReview(ctx context.Context, opts git.DiffOpts) (GitContext,
 
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
-	gc.Status, _ = b.client.Status(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
+	if status, err := b.client.Status(ctx); err != nil {
+		slog.Warn("ai: failed to get working tree status", "error", err)
+	} else {
+		gc.Status = status
+	}
 
 	// Priority 1: Diff.
 	var diffs []git.FileDiff
@@ -393,7 +418,11 @@ func (b *Builder) ForPR(ctx context.Context, targetBranch string) (GitContext, e
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
 	gc.TargetBranch = targetBranch
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
 
 	// Priority 1: Diff vs target branch.
 	if diffs, err := b.client.Diff(ctx, git.DiffOpts{
@@ -426,7 +455,11 @@ func (b *Builder) ForRebase(ctx context.Context, onto string) (GitContext, error
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
 	gc.TargetBranch = onto
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
 
 	// Priority 1: Commits to rebase.
 	if log, err := b.client.Log(ctx, git.LogOpts{
@@ -458,7 +491,11 @@ func (b *Builder) ForBisect(ctx context.Context, good, bad string) (GitContext, 
 
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
 
 	// Priority 1: Diff between good and bad.
 	if diffs, err := b.client.Diff(ctx, git.DiffOpts{
@@ -490,7 +527,11 @@ func (b *Builder) ForChangelog(ctx context.Context, fromRef, toRef string) (GitC
 
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
 
 	// Priority 1: All commits in range.
 	if log, err := b.client.Log(ctx, git.LogOpts{
@@ -522,7 +563,11 @@ func (b *Builder) ForSplit(ctx context.Context, commitHash string) (GitContext, 
 
 	// Metadata.
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
 
 	// Priority 1: The commit's diff.
 	if diffs, err := b.client.Diff(ctx, git.DiffOpts{
@@ -553,7 +598,15 @@ func (b *Builder) ForSplit(ctx context.Context, commitHash string) (GitContext, 
 func (b *Builder) ForChat(ctx context.Context) (GitContext, error) {
 	gc := GitContext{}
 	gc.CurrentBranch = b.currentBranch(ctx)
-	gc.RepoRoot, _ = b.client.RepoRoot(ctx)
-	gc.Status, _ = b.client.Status(ctx)
+	if root, err := b.client.RepoRoot(ctx); err != nil {
+		slog.Warn("ai: failed to resolve repo root", "error", err)
+	} else {
+		gc.RepoRoot = root
+	}
+	if status, err := b.client.Status(ctx); err != nil {
+		slog.Warn("ai: failed to get working tree status", "error", err)
+	} else {
+		gc.Status = status
+	}
 	return gc, nil
 }
