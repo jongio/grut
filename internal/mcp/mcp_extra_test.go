@@ -213,7 +213,12 @@ func TestResolveNewPath_ExistingFile(t *testing.T) {
 
 	resolved, err := resolveNewPath(file)
 	require.NoError(t, err)
-	assert.Equal(t, file, resolved)
+	// On Windows CI, t.TempDir() may return a short-name path (e.g. RUNNER~1)
+	// while resolveNewPath normalizes via EvalSymlinks. Compare against the
+	// EvalSymlinks-resolved expectation.
+	expected, err := filepath.EvalSymlinks(file)
+	require.NoError(t, err)
+	assert.Equal(t, expected, resolved)
 }
 
 func TestResolveNewPath_NonExistentFile(t *testing.T) {

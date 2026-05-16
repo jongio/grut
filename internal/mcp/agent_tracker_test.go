@@ -169,6 +169,9 @@ func TestOutputCapture(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	// Allow output goroutines to finish flushing (Windows PowerShell can be slow).
+	time.Sleep(200 * time.Millisecond)
+
 	stdout, _ := tracker.Output(pid)
 	require.NotEmpty(t, stdout, "should have captured stdout output")
 	assert.Contains(t, stdout[0], "hello agent world")
