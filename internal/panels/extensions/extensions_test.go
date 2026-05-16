@@ -423,7 +423,7 @@ func TestToggleEnable_Error(t *testing.T) {
 	toastMsg := cmd()
 	toast, ok := toastMsg.(notify.ShowToastMsg)
 	require.True(t, ok)
-	assert.Contains(t, toast.Message, "Toggle failed")
+	assert.Contains(t, toast.Message, "Could not toggle extension")
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ func TestRemove_Error(t *testing.T) {
 	toastMsg := cmd()
 	toast, ok := toastMsg.(notify.ShowToastMsg)
 	require.True(t, ok)
-	assert.Contains(t, toast.Message, "Remove failed")
+	assert.Contains(t, toast.Message, "Could not remove extension")
 }
 
 // ---------------------------------------------------------------------------
@@ -612,7 +612,7 @@ func TestInstall_Error(t *testing.T) {
 	toastMsg := cmd()
 	toast, ok := toastMsg.(notify.ShowToastMsg)
 	require.True(t, ok)
-	assert.Contains(t, toast.Message, "Install failed")
+	assert.Contains(t, toast.Message, "Could not install extension")
 }
 
 // ---------------------------------------------------------------------------

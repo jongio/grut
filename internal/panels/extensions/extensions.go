@@ -6,6 +6,7 @@ package extensions
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -133,8 +134,9 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case extensionToggleResultMsg:
 		if msg.err != nil {
+			slog.Warn("extension toggle failed", "name", msg.name, "err", msg.err)
 			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: fmt.Sprintf("Toggle failed: %v", msg.err), Level: notify.Error}
+				return notify.ShowToastMsg{Message: fmt.Sprintf("Could not toggle extension %q", msg.name), Level: notify.Error}
 			}
 		}
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
@@ -142,8 +144,9 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		})
 	case extensionRemoveResultMsg:
 		if msg.err != nil {
+			slog.Warn("extension remove failed", "name", msg.name, "err", msg.err)
 			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: fmt.Sprintf("Remove failed: %v", msg.err), Level: notify.Error}
+				return notify.ShowToastMsg{Message: fmt.Sprintf("Could not remove extension %q", msg.name), Level: notify.Error}
 			}
 		}
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
@@ -151,8 +154,9 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		})
 	case extensionInstallResultMsg:
 		if msg.err != nil {
+			slog.Warn("extension install failed", "source", msg.source, "err", msg.err)
 			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: fmt.Sprintf("Install failed: %v", msg.err), Level: notify.Error}
+				return notify.ShowToastMsg{Message: fmt.Sprintf("Could not install extension from %q", msg.source), Level: notify.Error}
 			}
 		}
 		return p, tea.Batch(p.loadExtensionsCmd(), func() tea.Msg {
