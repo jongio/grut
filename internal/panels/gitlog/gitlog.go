@@ -55,6 +55,31 @@ type panelColors struct {
 	SearchFg string
 }
 
+// commitLineStyles caches lipgloss.Style objects derived from panelColors so
+// that renderCommitLine does not allocate new styles on every call (~7,200
+// allocations/sec at 20 visible commits * 60 fps).
+type commitLineStyles struct {
+	hash    lipgloss.Style
+	date    lipgloss.Style
+	author  lipgloss.Style
+	subject lipgloss.Style
+	ref     lipgloss.Style
+	graph   lipgloss.Style
+	cursor  lipgloss.Style
+}
+
+func newCommitLineStyles(c panelColors) commitLineStyles {
+	return commitLineStyles{
+		hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		date:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Date)),
+		author:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.Author)),
+		subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		ref:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.Refs)).Bold(true),
+		graph:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.Graph)),
+		cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+	}
+}
+
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
 		Hash:     "#D4B84A",
@@ -110,6 +135,7 @@ type Panel struct {
 	detailLines  []string
 	cfg          config.GitConfig
 	colors       panelColors
+	clStyles     commitLineStyles
 	theme        *theme.Theme
 	cursor       int // index into commits
 	offset       int // viewport offset into display
@@ -136,11 +162,13 @@ func New(client git.StatusReader, cfg config.GitConfig, th *theme.Theme) *Panel 
 	if cfg.MaxLogEntries > 0 {
 		ps = cfg.MaxLogEntries
 	}
+	colors := initColors(th)
 	return &Panel{
 		gitClient: client,
 		cfg:       cfg,
 		pageSize:  ps,
-		colors:    initColors(th),
+		colors:    colors,
+		clStyles:  newCommitLineStyles(colors),
 		theme:     th,
 	}
 }
@@ -454,12 +482,12 @@ func (p *Panel) renderLog(width, height int) string {
 }
 
 func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Date))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Author))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Refs)).Bold(true)
-	graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Graph))
+	hashStyle := p.clStyles.hash
+	dateStyle := p.clStyles.date
+	authorStyle := p.clStyles.author
+	subjectStyle := p.clStyles.subject
+	refStyle := p.clStyles.ref
+	graphStyle := p.clStyles.graph
 	// Build right-side fixed columns first to determine how much space subject gets.
 	// SHA is always pinned to the right. Author and date appear as width allows.
 	hashCol := panels.StripANSI(c.ShortHash)
@@ -545,8 +573,7 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	}
 	line += gap + rightSide
 	if isCursor {
-		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(p.colors.CursorBg))
-		line = cursorStyle.Width(width).Render(line)
+		line = p.clStyles.cursor.Width(width).Render(line)
 	}
 	return truncateOrPad(line, width)
 }
