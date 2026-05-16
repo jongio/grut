@@ -236,7 +236,7 @@ func (p *CopilotProvider) ensureStarted(ctx context.Context) error {
 func (p *CopilotProvider) buildSessionConfig(req CompletionRequest) *copilot.SessionConfig {
 	cfg := &copilot.SessionConfig{
 		Model:               p.model,
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		OnPermissionRequest: policyPermissionHandler,
 	}
 	if req.SystemPrompt != "" {
 		cfg.SystemMessage = &copilot.SystemMessageConfig{
