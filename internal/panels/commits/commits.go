@@ -21,6 +21,7 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 	"github.com/jongio/grut/internal/rightclick"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -90,6 +91,14 @@ func initColors(th *theme.Theme) panelColors {
 	return c
 }
 
+func newCommitLineStyles(c panelColors) commitrender.Styles {
+	return commitrender.Styles{
+		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+	}
+}
+
 // Panel is the commits panel. It implements [panels.Panel].
 type Panel struct {
 	actionsCfg  config.ActionsConfig
@@ -129,6 +138,7 @@ type Panel struct {
 	prCommitsMode bool
 	focused       bool
 	colors        panelColors
+	clStyles      commitrender.Styles
 	theme         *theme.Theme
 }
 
@@ -137,10 +147,12 @@ var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new commits panel.
 func New(client gitOps, th *theme.Theme) *Panel {
+	c := initColors(th)
 	return &Panel{
 		gitClient: client,
 		pageSize:  defaultPageSize,
-		colors:    initColors(th),
+		colors:    c,
+		clStyles:  newCommitLineStyles(c),
 		theme:     th,
 	}
 }
@@ -573,12 +585,24 @@ func (p *Panel) renderList(width, height int) string {
 	}
 	for i := p.offset; i < end; i++ {
 		c := p.commitAt(i)
-		lines = append(lines, p.renderCommitLine(c, width, i == p.cursor))
+		isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
+		styles := p.clStyles
+		if isSelected {
+			styles.Subject = styles.Subject.Bold(true)
+		}
+		lines = append(lines, commitrender.RenderLine(commitrender.Params{
+			Commit:     c,
+			Width:      width,
+			IsCursor:   i == p.cursor,
+			Styles:     styles,
+			IsSelected: isSelected,
+			SelectedBg: "#3B3F52", // subtler highlight for selected-but-not-cursor
+		}))
 	}
 	// Loading indicator.
 	if p.loading && len(lines) < height {
 		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
-		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
+		lines = append(lines, commitrender.TruncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
 	// Search bar at bottom if in search mode.
 	if p.searchMode {
@@ -597,44 +621,6 @@ func (p *Panel) renderList(width, height int) string {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
-	// Highlight the selected commit (the one whose files are shown).
-	isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
-	if isSelected {
-		subjectStyle = subjectStyle.Bold(true)
-	}
-	hash := hashStyle.Render(c.ShortHash)
-	hashLen := len(c.ShortHash)
-	// Subject fills available width, SHA pinned right.
-	gap := 2 // spaces between subject and hash
-	subjectWidth := width - hashLen - gap
-	if subjectWidth < 10 {
-		subjectWidth = 10
-	}
-	subject := panels.StripANSI(c.Subject)
-	if len(subject) > subjectWidth {
-		subject = subject[:subjectWidth-1] + "…"
-	}
-	subjectRendered := subjectStyle.Render(subject)
-	// Pad between subject and hash so hash is right-aligned.
-	pad := width - lipgloss.Width(subjectRendered) - hashLen
-	if pad < 1 {
-		pad = 1
-	}
-	line := subjectRendered + strings.Repeat(" ", pad) + hash
-	if isCursor || isSelected {
-		bg := p.colors.CursorBg
-		if isSelected && !isCursor {
-			bg = "#3B3F52" // subtler highlight for selected-but-not-cursor
-		}
-		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(bg))
-		line = cursorStyle.Render(line)
-	}
-	return truncateOrPad(line, width)
 }
 
 func (p *Panel) renderSearchBar(width int) string {
@@ -659,7 +645,7 @@ func (p *Panel) renderDetail(width, height int) string {
 		end = len(p.detailLines)
 	}
 	for i := p.detailOffset; i < end; i++ {
-		lines = append(lines, truncateOrPad(p.detailLines[i], width))
+		lines = append(lines, commitrender.TruncateOrPad(p.detailLines[i], width))
 	}
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
@@ -1138,16 +1124,4 @@ func relativeDate(t time.Time) string {
 		}
 		return fmt.Sprintf("%d years ago", years)
 	}
-}
-
-// truncateOrPad ensures a rendered string fits exactly the given width.
-func truncateOrPad(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w > width {
-		return lipgloss.NewStyle().MaxWidth(width).Render(s)
-	}
-	if w < width {
-		return s + strings.Repeat(" ", width-w)
-	}
-	return s
 }
