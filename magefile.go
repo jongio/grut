@@ -1058,9 +1058,11 @@ func ensurePath() error {
 				for _, r := range removed {
 					fmt.Printf("   - %s\n", r)
 				}
-				exec.Command("powershell", "-NoProfile", "-Command",
+				if err := exec.Command("powershell", "-NoProfile", "-Command",
 					fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`,
-						psSingleQuoteEscape(cleaned))).Run()
+						psSingleQuoteEscape(cleaned))).Run(); err != nil {
+					fmt.Printf("   ⚠ Failed to remove stale PATH entries: %v\n", err)
+				}
 			}
 		}
 	}
