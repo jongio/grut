@@ -271,6 +271,37 @@ To manually regenerate the contributors list:
 mage contributors
 ```
 
+## Library Choices
+
+grut uses specific canonical libraries for each domain. Don't introduce alternatives
+without discussing in an issue first - consistency matters more than marginal gains.
+
+| Domain | Library | Notes |
+|--------|---------|-------|
+| **TUI framework** | [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) | Elm-architecture TUI. All panels are `tea.Model` implementations. |
+| **TUI styling** | [Lip Gloss v2](https://github.com/charmbracelet/lipgloss) | Layout and styling for all TUI components. |
+| **TUI components** | [Bubbles v2](https://github.com/charmbracelet/bubbles) | Reusable TUI widgets (viewport, textinput, list, etc.). |
+| **Markdown rendering** | [Glamour v2](https://github.com/charmbracelet/glamour) | Terminal markdown rendering for preview and chat panels. |
+| **CLI framework** | [Cobra](https://github.com/spf13/cobra) | Command and flag parsing. All commands live in `cmd/`. |
+| **Config (TOML)** | [go-toml/v2](https://github.com/pelletier/go-toml/v2) | User configuration in `grut.toml`. |
+| **Config (YAML)** | [yaml.v3](https://github.com/go-yaml/yaml) | YAML parsing where needed. |
+| **Logging** | `log/slog` (stdlib) | Structured logging throughout. No third-party loggers. |
+| **Testing** | stdlib `testing` + [testify](https://github.com/stretchr/testify) | `require`/`assert` for assertions. No other test frameworks. |
+| **Git operations** | `os/exec` calling `git` CLI | Shell out to git - no go-git. See `internal/git/`. |
+| **GitHub API** | [go-github/v68](https://github.com/google/go-github) | GitHub REST API client. See `internal/github/`. |
+| **AI providers** | [anthropic-sdk-go](https://github.com/anthropics/anthropic-sdk-go), [copilot-sdk/go](https://github.com/github/copilot-sdk/go) | Claude and Copilot integrations. See `internal/ai/`. |
+| **MCP** | [mcp-go](https://github.com/mark3labs/mcp-go) | Model Context Protocol server. See `internal/mcp/`. |
+| **Extension runtimes** | [wazero](https://github.com/tetratelabs/wazero) (Wasm), [gopher-lua](https://github.com/yuin/gopher-lua) (Lua) | Plugin execution sandboxes. See `internal/extension/runtime/`. |
+| **Syntax highlighting** | [chroma/v2](https://github.com/alecthomas/chroma) | Code highlighting in preview and diff panels. |
+| **Fuzzy matching** | [fuzzy](https://github.com/sahilm/fuzzy) | Fuzzy finder panel filtering. |
+| **File watching** | [fsnotify](https://github.com/fsnotify/fsnotify) | File system change notifications. |
+
+**Rules:**
+
+- Prefer stdlib when it covers the need (e.g., `log/slog`, `os/exec`, `testing`).
+- If you need something a listed library already handles, use that library.
+- Proposing a new dependency? Open an issue explaining why existing libraries don't suffice.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.
