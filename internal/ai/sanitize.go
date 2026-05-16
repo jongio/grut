@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -87,14 +88,27 @@ func SanitizeFilePath(path string) string {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// delimiterPattern matches any variant of the boundary markers regardless of
+// separator character (underscore, space, hyphen, or absent) and case.
+// This prevents bypass attacks where an attacker embeds a pre-neutralised
+// form like "[EXTERNAL DATA END]" or a hyphenated/mixed-case variant that
+// the previous literal replacement would miss.
+var delimiterPattern = regexp.MustCompile(
+	`(?i)\[EXTERNAL[_\s\-]*DATA[_\s\-]*(START|END)\]`,
+)
+
 // stripDelimiters neutralises any occurrence of the boundary marker strings
-// within content by removing the underscores, turning e.g.
-// "[EXTERNAL_DATA_START]" into "[EXTERNAL DATA START]".
+// (and all visual variants) within content. The defused form uses parentheses
+// instead of square brackets so it cannot be confused with a real marker by
+// the LLM under any interpretation.
 func stripDelimiters(s string) string {
-	// Replace exact marker strings with defused versions.
-	s = strings.ReplaceAll(s, ExternalDataStart, "[EXTERNAL DATA START]")
-	s = strings.ReplaceAll(s, ExternalDataEnd, "[EXTERNAL DATA END]")
-	return s
+	return delimiterPattern.ReplaceAllStringFunc(s, func(match string) string {
+		upper := strings.ToUpper(match)
+		if strings.Contains(upper, "START") {
+			return "(EXTERNAL DATA START)"
+		}
+		return "(EXTERNAL DATA END)"
+	})
 }
 
 // stripControlChars removes all Unicode control characters (category Cc)
