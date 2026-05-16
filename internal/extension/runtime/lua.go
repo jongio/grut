@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jongio/grut/internal/extension"
@@ -74,9 +76,39 @@ func (r *LuaRuntime) SetTimeout(d time.Duration) {
 	r.timeout = d
 }
 
+// ValidateEntryPoint checks that a Lua entry-point path does not escape
+// its intended directory via path traversal or contain characters that could
+// be used for injection (null bytes, shell metacharacters in the filename).
+func ValidateEntryPoint(entryPoint string) error {
+	if entryPoint == "" {
+		return fmt.Errorf("lua: entry point must not be empty")
+	}
+	if strings.ContainsRune(entryPoint, 0) {
+		return fmt.Errorf("lua: entry point contains null byte")
+	}
+	// Reject path traversal: normalise to forward slashes and check each
+	// segment for a literal ".." component.
+	normalized := strings.ReplaceAll(entryPoint, "\\", "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == ".." {
+			return fmt.Errorf("lua: entry point must not contain path traversal (..)")
+		}
+	}
+	// Reject entries whose base name starts with "-" to prevent option
+	// injection if the path is ever passed to a subprocess.
+	if strings.HasPrefix(filepath.Base(entryPoint), "-") {
+		return fmt.Errorf("lua: entry point filename must not start with '-'")
+	}
+	return nil
+}
+
 // Load reads the Lua file at entryPoint and executes it inside the sandbox.
 // Execution is subject to the configured timeout.
 func (r *LuaRuntime) Load(entryPoint string) error {
+	if err := ValidateEntryPoint(entryPoint); err != nil {
+		return err
+	}
+
 	src, err := os.ReadFile(entryPoint)
 	if err != nil {
 		return fmt.Errorf("lua: read entry point: %w", err)

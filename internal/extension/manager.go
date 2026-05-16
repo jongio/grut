@@ -110,7 +110,7 @@ func (m *Manager) Install(ctx context.Context, source string) error {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }() // clean up on any error path
 	if isURL {
-		cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", "--no-recurse-submodules", source, tmpDir)
+		cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", "--no-recurse-submodules", "--", source, tmpDir)
 		cmd.Env = safeGitCloneEnv()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("install: git clone: %s: %w", strings.TrimSpace(string(out)), err)
@@ -407,6 +407,12 @@ func safeGitCloneEnv() []string {
 // hostname appears in allowedHosts. It rejects embedded credentials, path
 // traversal, and fragment/query strings that could confuse git clone.
 func validateSourceURL(source string, allowedHosts []string) error {
+	// Reject URLs that start with "-" to prevent git option injection
+	// (CWE-88). Even though the scheme check below would also catch this,
+	// an explicit check here makes the defense-in-depth intent clear.
+	if strings.HasPrefix(source, "-") {
+		return fmt.Errorf("URL must not start with '-' (option injection)")
+	}
 	u, err := url.Parse(source)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)

@@ -12,7 +12,7 @@ import (
 
 // shellMetachars contains characters that could be interpreted by cmd.exe or
 // POSIX shells when a path is passed through platform launchers.
-const shellMetachars = ";|&$`<>\"'\n\r"
+const shellMetachars = ";|&$`<>\"'\n\r%^!"
 
 // ValidateEditorPath validates a file path before passing it to an external
 // editor. It rejects null bytes, shell metacharacters, and empty paths.
