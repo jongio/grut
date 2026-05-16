@@ -474,7 +474,7 @@ func (ft *FileTree) stageFile() (panels.Panel, tea.Cmd) {
 				Level:   notify.Error,
 			}
 		}
-		cmd := exec.CommandContext(context.Background(), "git", "-C", root, "add", "--", path)
+		cmd := exec.CommandContext(ft.safeCtx(), "git", "-C", root, "add", "--", path)
 		if err := cmd.Run(); err != nil {
 			return notify.ShowToastMsg{
 				Message: "Stage failed: " + err.Error(),
