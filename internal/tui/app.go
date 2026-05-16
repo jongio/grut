@@ -43,7 +43,7 @@ type Model struct {
 	lastStatusBarClick time.Time     // for double-click detection on the status bar
 	gitClient          git.GitClient // git client for app-level operations (nil = no git)
 	ctx                context.Context
-	engine             *layout.Engine
+	engine             layout.PanelManager
 	theme              *theme.Theme
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
@@ -81,9 +81,10 @@ type Model struct {
 	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
 }
 
-// New creates a new TUI model with the given layout engine, theme, keymap,
-// and bookmark manager.
-func New(engine *layout.Engine, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
+// New creates a new TUI model with the given panel manager, theme, keymap,
+// and bookmark manager. The panel manager is typically a *layout.Engine but
+// can be any implementation of layout.PanelManager.
+func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
 		engine:      engine,
