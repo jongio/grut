@@ -161,11 +161,6 @@ func (p *Agents) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	return p, nil
 }
 
-// Focus overrides BasePanel.Focus to start auto-refresh.
-func (p *Agents) Focus() {
-	p.BasePanel.Focus()
-}
-
 // View implements panels.Panel.
 func (p *Agents) View(width, height int) string {
 	if width <= 0 || height <= 0 {
