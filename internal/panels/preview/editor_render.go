@@ -76,7 +76,7 @@ func renderEditContent(p *Preview, width, height int) string {
 		displayLine := strings.ReplaceAll(rawLine, "\t", strings.Repeat(" ", tabSize))
 
 		// Apply syntax highlighting to this single line.
-		highlighted := highlightLine(displayLine, p.filePath, p.cfg.Theme)
+		highlighted := highlightLine(displayLine, p.filePath, p.cfg.GetTheme())
 
 		isCursorLine := i == p.cursorLine
 
