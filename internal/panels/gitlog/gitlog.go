@@ -512,15 +512,17 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 	showAuthor := baseUsed+len(gap)+len(authorCol) <= width
 	showDate := showAuthor && baseUsed+len(gap)+len(authorCol)+len(gap)+len(dateCol) <= width
 	// Compute right-side string (everything after subject).
-	var rightParts []string
+	var rb strings.Builder
 	if showDate {
-		rightParts = append(rightParts, dateStyle.Render(dateCol))
+		rb.WriteString(dateStyle.Render(dateCol))
+		rb.WriteString(gap)
 	}
 	if showAuthor {
-		rightParts = append(rightParts, authorStyle.Render(authorCol))
+		rb.WriteString(authorStyle.Render(authorCol))
+		rb.WriteString(gap)
 	}
-	rightParts = append(rightParts, hashStyle.Render(hashCol))
-	rightSide := strings.Join(rightParts, gap)
+	rb.WriteString(hashStyle.Render(hashCol))
+	rightSide := rb.String()
 	rightW := lipgloss.Width(rightSide)
 	// Subject + refs fill the remaining space.
 	subjectSpace := width - graphW - len(gap) - rightW
@@ -565,13 +567,15 @@ func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, is
 		}
 	}
 	// Assemble the line: graph + subject + gap + right-side columns.
-	var line string
+	var lb strings.Builder
 	if graphW > 0 {
-		line = graphStyle.Render(graphPrefix) + gap + styledSubject
-	} else {
-		line = styledSubject
+		lb.WriteString(graphStyle.Render(graphPrefix))
+		lb.WriteString(gap)
 	}
-	line += gap + rightSide
+	lb.WriteString(styledSubject)
+	lb.WriteString(gap)
+	lb.WriteString(rightSide)
+	line := lb.String()
 	if isCursor {
 		line = p.clStyles.cursor.Width(width).Render(line)
 	}
