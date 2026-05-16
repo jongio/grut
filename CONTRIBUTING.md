@@ -302,6 +302,34 @@ without discussing in an issue first - consistency matters more than marginal ga
 - If you need something a listed library already handles, use that library.
 - Proposing a new dependency? Open an issue explaining why existing libraries don't suffice.
 
+## Interface Naming
+
+Interfaces use a small set of suffixes that signal their purpose at a glance.
+Avoid generic names like `Service` or `Handler` - pick the suffix that describes
+what the interface actually does.
+
+| Suffix | Meaning | Examples |
+|---|---|---|
+| **Reader** | Read-only queries, no side effects | `StatusReader`, `IgnoreChecker` |
+| **Manager** | Stateful management of a resource | `BranchManager`, `UndoManager` |
+| **Ops** | A collection of related operations | `RemoteOps`, `WorktreeOps`, `StashOps`, `TagOps`, `MergeRebaseOps`, `BisectOps`, `ReflogOps`, `DiscardOps`, `RevertOps`, `ResetOps` |
+| **Provider** | A pluggable backend implementation | `AIProvider` |
+| **Logger** | Logging or auditing | `AuditLogger` |
+| **Checker** | A boolean query | `IgnoreChecker` |
+
+**Rules:**
+
+- **Compose, don't monolith.** Prefer many small, focused interfaces over a
+  single large one. A `StatusReader` with three methods is better than a
+  `GitService` with thirty.
+- **Composite interfaces** (e.g., `GitClient`) embed multiple micro-interfaces
+  and are defined in a dedicated `interfaces.go` file.
+- **Compile-time compliance** is verified with a blank identifier assignment:
+
+  ```go
+  var _ GitClient = (*Client)(nil)
+  ```
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.
