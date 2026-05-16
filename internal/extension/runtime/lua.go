@@ -120,24 +120,28 @@ func (r *LuaRuntime) sandbox() {
 		r.state.SetGlobal(fn, lua.LNil)
 	}
 
-	// Clear already-loaded modules from package.loaded so that
-	// require("os") cannot return a cached copy.
-	loaded := r.state.GetField(r.state.GetField(r.state.Get(lua.EnvironIndex), "package"), "loaded")
-	if tbl, ok := loaded.(*lua.LTable); ok {
-		for _, mod := range dangerousModules {
-			tbl.RawSetString(mod, lua.LNil)
+	// Neutralise the package system entirely so that require() cannot load
+	// arbitrary .lua/.so files from disk via package.path / package.cpath
+	// (see issue #73).  We clear every sub-table and path string, then
+	// remove require itself from the global scope.
+	pkg := r.state.GetField(r.state.Get(lua.EnvironIndex), "package")
+	if pkgTbl, ok := pkg.(*lua.LTable); ok {
+		// Wipe package.loaded — prevents returning cached copies of any module.
+		if loaded, ok := pkgTbl.RawGetString("loaded").(*lua.LTable); ok {
+			loaded.ForEach(func(k, _ lua.LValue) { loaded.RawSet(k, lua.LNil) })
 		}
+		// Wipe package.preload — prevents deferred loaders.
+		if preload, ok := pkgTbl.RawGetString("preload").(*lua.LTable); ok {
+			preload.ForEach(func(k, _ lua.LValue) { preload.RawSet(k, lua.LNil) })
+		}
+		// Clear search paths so the file-system searcher finds nothing.
+		pkgTbl.RawSetString("path", lua.LString(""))
+		pkgTbl.RawSetString("cpath", lua.LString(""))
 	}
 
-	// Replace preloaders with functions that return an error, blocking any
-	// future require() calls for these modules.
-	for _, mod := range dangerousModules {
-		name := mod // capture loop variable
-		r.state.PreloadModule(name, func(L *lua.LState) int {
-			L.ArgError(1, "module '"+name+"' is restricted")
-			return 0
-		})
-	}
+	// Remove require itself — extensions must use the grut host API, not
+	// the Lua module system.
+	r.state.SetGlobal("require", lua.LNil)
 
 	// Remove string.dump which can serialize function bytecode, potentially
 	// enabling sandbox escape via bytecode manipulation.
