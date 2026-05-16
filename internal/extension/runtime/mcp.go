@@ -163,6 +163,9 @@ func (m *MCPRuntime) Load(entryPoint string) error {
 		_ = stdin.Close()
 		return fmt.Errorf("mcp runtime: start %q: %w", name, err)
 	}
+	// Assign the process to a containment group (Job Object on Windows)
+	// so the entire subprocess tree is terminated on Close (CWE-269).
+	postStartProcGroup(cmd)
 	m.cmd = cmd
 	m.stdin = stdin
 	m.stdout = stdout
