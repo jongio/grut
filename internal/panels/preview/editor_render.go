@@ -15,6 +15,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// Pre-allocated styles for editor rendering. These are created once to
+// avoid per-frame lipgloss.NewStyle allocations in the render loop.
+var (
+	editorDimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	editorCursorStyle     = lipgloss.NewStyle().Reverse(true)
+	editorCurLineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
+	editorCurLineBg       = lipgloss.Color("#1A1A1A")
+	editorCurLineStyle    = lipgloss.NewStyle().Background(editorCurLineBg)
+	editorStatusStyle     = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				Background(lipgloss.Color("#1A1A1A"))
+)
+
 // renderEditContent renders the buffer contents with syntax highlighting,
 // a cursor block, current-line highlight, line-number gutter, and a
 // status bar at the bottom.
@@ -50,12 +63,6 @@ func renderEditContent(p *Preview, width, height int) string {
 		contentWidth = 1
 	}
 
-	// Styles used for rendering.
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	cursorStyle := lipgloss.NewStyle().Reverse(true)
-	currentLineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
-	currentLineBg := lipgloss.Color("#1A1A1A")
-
 	rendered := make([]string, 0, contentHeight)
 	for i := start; i < end; i++ {
 		lineNum := i + 1
@@ -75,7 +82,7 @@ func renderEditContent(p *Preview, width, height int) string {
 
 		// Render cursor on the cursor line.
 		if isCursorLine {
-			highlighted = renderCursorOnLine(highlighted, displayLine, p.cursorCol, cursorStyle)
+			highlighted = renderCursorOnLine(highlighted, displayLine, p.cursorCol, editorCursorStyle)
 		}
 
 		// Truncate content to fit the available width.
@@ -86,10 +93,10 @@ func renderEditContent(p *Preview, width, height int) string {
 		digits := strconv.Itoa(lineNum)
 		numStr := strings.Repeat(" ", numWidth-len(digits)) + digits + " │ "
 		if isCursorLine {
-			highlighted = lipgloss.NewStyle().Background(currentLineBg).Width(contentWidth).Render(highlighted)
-			highlighted = currentLineNumStyle.Render(numStr) + highlighted
+			highlighted = editorCurLineStyle.Width(contentWidth).Render(highlighted)
+			highlighted = editorCurLineNumStyle.Render(numStr) + highlighted
 		} else {
-			highlighted = dimStyle.Render(numStr) + highlighted
+			highlighted = editorDimStyle.Render(numStr) + highlighted
 		}
 
 		// Hard truncate to panel width.
@@ -100,7 +107,7 @@ func renderEditContent(p *Preview, width, height int) string {
 	// Pad remaining lines with empty gutter space.
 	for len(rendered) < contentHeight {
 		numStr := strings.Repeat(" ", gutterWidth)
-		rendered = append(rendered, dimStyle.Render(numStr))
+		rendered = append(rendered, editorDimStyle.Render(numStr))
 	}
 
 	content := strings.Join(rendered, "\n")
@@ -213,10 +220,6 @@ func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle 
 // renderEditStatusBar renders the bottom status bar showing cursor
 // position, tab settings, dirty indicator, and total line count.
 func renderEditStatusBar(p *Preview, width, totalLines int) string {
-	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		Background(lipgloss.Color("#1A1A1A"))
-
 	left := fmt.Sprintf(" Ln %d, Col %d", p.cursorLine+1, p.cursorCol+1)
 
 	tabSize := p.editCfg.TabSize
@@ -235,7 +238,7 @@ func renderEditStatusBar(p *Preview, width, totalLines int) string {
 	}
 	bar := left + strings.Repeat(" ", padding) + right
 
-	return statusStyle.Width(width).Render(bar)
+	return editorStatusStyle.Width(width).Render(bar)
 }
 
 // clampEditScroll ensures the scroll offset keeps the cursor visible and
