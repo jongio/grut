@@ -534,7 +534,7 @@ func initChat(cfg *config.Config, gc git.GitClient, repoRoot string, th *theme.T
 	}
 	limiter := mcp.NewRateLimiter(60, 30)
 	toolReg := chat.NewToolRegistry()
-	executor := chat.NewToolExecutor(gc, jail, limiter, toolReg)
+	executor := chat.NewToolExecutor(gc, jail, limiter, mcp.IsSensitivePath, toolReg)
 	confirming := chat.NewConfirmationManager(toolReg)
 	sysPrompt := chat.NewSystemPromptBuilder(gc, cfg.AI.Chat.SystemPrompt)
 	chatModel := chat.New(chat.Deps{

@@ -208,7 +208,7 @@ func newTestExecutor(t *testing.T, client git.GitClient) (*ToolExecutor, string)
 	limiter := mcp.NewRateLimiter(1000, 1000)
 	registry := NewToolRegistry()
 
-	return NewToolExecutor(client, jail, limiter, registry), tmpDir
+	return NewToolExecutor(client, jail, limiter, mcp.IsSensitivePath, registry), tmpDir
 }
 
 // ---------------------------------------------------------------------------
@@ -654,7 +654,7 @@ func TestRateLimiting(t *testing.T) {
 	// Only allow 2 read operations per minute.
 	limiter := mcp.NewRateLimiter(2, 2)
 	registry := NewToolRegistry()
-	exec := NewToolExecutor(mock, jail, limiter, registry)
+	exec := NewToolExecutor(mock, jail, limiter, mcp.IsSensitivePath, registry)
 
 	// Create a file to read.
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("ok"), 0o644))
@@ -1247,7 +1247,7 @@ func TestExecute_RateLimited(t *testing.T) {
 	// Create a very restrictive rate limiter: 1 read, 1 write.
 	limiter := mcp.NewRateLimiter(1, 1)
 	registry := NewToolRegistry()
-	exec := NewToolExecutor(mock, jail, limiter, registry)
+	exec := NewToolExecutor(mock, jail, limiter, mcp.IsSensitivePath, registry)
 
 	// First read should succeed.
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("ok"), 0o644))
