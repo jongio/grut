@@ -165,7 +165,7 @@ func TestReviewReturnsFindings(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: jsonResp},
+		response: ai.CompletionResponse{Content: jsonResp},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -194,7 +194,7 @@ func TestReviewProviderError(t *testing.T) {
 	mock := &mockAIProvider{
 		name:        "mock",
 		available:   true,
-		completeErr: errors.New("model overloaded"),
+		err: errors.New("model overloaded"),
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -220,7 +220,7 @@ func TestReviewMalformedResponse(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: "not json at all"},
+		response: ai.CompletionResponse{Content: "not json at all"},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -233,7 +233,7 @@ func TestReviewNoFindingsEmptyArray(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: "[]"},
+		response: ai.CompletionResponse{Content: "[]"},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 
@@ -247,7 +247,7 @@ func TestReviewResponseWithCodeFences(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: wrapped},
+		response: ai.CompletionResponse{Content: wrapped},
 	}
 	rev := newTestReviewer(mock, sampleDiffs())
 

@@ -62,7 +62,7 @@ func TestRebaseAssistant_Suggest(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: respJSON},
+		response: ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -84,7 +84,7 @@ func TestRebaseAssistant_Suggest_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: "not json at all"},
+		response: ai.CompletionResponse{Content: "not json at all"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -103,7 +103,7 @@ func TestRebaseAssistant_Suggest_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
 		name:        "mock",
 		available:   true,
-		completeErr: errors.New("provider down"),
+		err: errors.New("provider down"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

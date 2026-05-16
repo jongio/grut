@@ -170,7 +170,7 @@ func TestCommitGenerator_Generate(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: respJSON,
 		},
 	}
@@ -217,7 +217,7 @@ func TestCommitGenerator_Generate_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: "{broken",
 		},
 	}
@@ -241,7 +241,7 @@ func TestCommitGenerator_Generate_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
 		name:        "mock",
 		available:   true,
-		completeErr: errors.New("rate limited"),
+		err: errors.New("rate limited"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

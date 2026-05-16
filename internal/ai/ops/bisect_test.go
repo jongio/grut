@@ -66,7 +66,7 @@ func TestBisectAnalyzer_Analyze(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: respJSON},
+		response: ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -89,7 +89,7 @@ func TestBisectAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: "{broken"},
+		response: ai.CompletionResponse{Content: "{broken"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -108,7 +108,7 @@ func TestBisectAnalyzer_Analyze_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
 		name:        "mock",
 		available:   true,
-		completeErr: errors.New("timeout"),
+		err: errors.New("timeout"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

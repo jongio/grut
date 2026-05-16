@@ -13,41 +13,17 @@ import (
 var errMockProvider = errors.New("mock provider error")
 
 // ---------------------------------------------------------------------------
-// Mock AI providers
+// Mock AI provider
 // ---------------------------------------------------------------------------
 
-// mockAIProvider is a minimal AIProvider for testing ops behaviour.
+// mockAIProvider is a configurable test double for ai.AIProvider.
+// It returns preconfigured responses and is used across all ops tests.
 type mockAIProvider struct {
-	name         string
-	available    bool
-	completeResp ai.CompletionResponse
-	completeErr  error
-}
-
-// mockProvider is an alternative mock AIProvider used by changelog, split,
-// and conflict tests with a simpler field naming convention.
-type mockProvider struct {
 	name      string
 	available bool
 	response  ai.CompletionResponse
 	err       error
 }
-
-var _ ai.AIProvider = (*mockProvider)(nil)
-
-func (m *mockProvider) Name() string { return m.name }
-func (m *mockProvider) Available(_ context.Context) (bool, error) {
-	return m.available, nil
-}
-
-func (m *mockProvider) Complete(_ context.Context, _ ai.CompletionRequest) (ai.CompletionResponse, error) {
-	return m.response, m.err
-}
-
-func (m *mockProvider) CompleteStream(_ context.Context, _ ai.CompletionRequest) (<-chan ai.StreamChunk, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (m *mockProvider) Close() error { return nil }
 
 var _ ai.AIProvider = (*mockAIProvider)(nil)
 
@@ -57,42 +33,13 @@ func (m *mockAIProvider) Available(_ context.Context) (bool, error) {
 }
 
 func (m *mockAIProvider) Complete(_ context.Context, _ ai.CompletionRequest) (ai.CompletionResponse, error) {
-	return m.completeResp, m.completeErr
+	return m.response, m.err
 }
 
 func (m *mockAIProvider) CompleteStream(_ context.Context, _ ai.CompletionRequest) (<-chan ai.StreamChunk, error) {
-	return nil, nil
-}
-func (m *mockAIProvider) Close() error { return nil }
-
-// ---------------------------------------------------------------------------
-// testProvider — simple AI provider mock with different field names.
-// ---------------------------------------------------------------------------
-
-// testProvider is a test double for ai.AIProvider that returns preconfigured
-// responses. Used by bisect, branch, changelog, conflict, and other tests.
-type testProvider struct {
-	name      string
-	available bool
-	response  ai.CompletionResponse
-	err       error
-}
-
-var _ ai.AIProvider = (*testProvider)(nil)
-
-func (p *testProvider) Name() string { return p.name }
-func (p *testProvider) Available(_ context.Context) (bool, error) {
-	return p.available, nil
-}
-
-func (p *testProvider) Complete(_ context.Context, _ ai.CompletionRequest) (ai.CompletionResponse, error) {
-	return p.response, p.err
-}
-
-func (p *testProvider) CompleteStream(_ context.Context, _ ai.CompletionRequest) (<-chan ai.StreamChunk, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (p *testProvider) Close() error { return nil }
+func (m *mockAIProvider) Close() error { return nil }
 
 // ---------------------------------------------------------------------------
 // Mock git client
