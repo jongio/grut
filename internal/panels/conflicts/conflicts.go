@@ -81,7 +81,7 @@ type resolveResultMsg struct {
 // continueResultMsg carries the result of a continue/abort operation.
 type continueResultMsg struct {
 	err    error
-	action string // "continued" or "aborted"
+	action string // actionContinued or actionAborted
 }
 
 // mergeResultMsg carries the result of a merge operation.
@@ -304,6 +304,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.adjustOffset()
 	itemType := actions.ItemConflictFile
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pendingOp = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -349,6 +350,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := p.files[idx]
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemConflictFile, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -358,12 +360,18 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+}
+
 // handleModalResult dispatches the result of an action-picker modal.
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
-	p.pendingOp = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -579,14 +587,14 @@ func (p *Panel) continueOp() (panels.Panel, tea.Cmd) {
 		case opMerge:
 			// For merge, continuing is not a git command — the user commits.
 			// But we emit the message so the app can handle it.
-			return continueResultMsg{action: "continued"}
+			return continueResultMsg{action: actionContinued}
 		case opRebase:
 			err = gc.RebaseContinue(ctx)
 		}
 		if err != nil {
-			return continueResultMsg{action: "continued", err: err}
+			return continueResultMsg{action: actionContinued, err: err}
 		}
-		return continueResultMsg{action: "continued"}
+		return continueResultMsg{action: actionContinued}
 	}
 }
 
@@ -606,9 +614,9 @@ func (p *Panel) abortOp() (panels.Panel, tea.Cmd) {
 			err = gc.RebaseAbort(ctx)
 		}
 		if err != nil {
-			return continueResultMsg{action: "aborted", err: err}
+			return continueResultMsg{action: actionAborted, err: err}
 		}
-		return continueResultMsg{action: "aborted"}
+		return continueResultMsg{action: actionAborted}
 	}
 }
 

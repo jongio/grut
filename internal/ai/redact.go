@@ -8,21 +8,26 @@ import (
 // RedactedPlaceholder is the replacement text for detected secrets.
 const RedactedPlaceholder = "[REDACTED]"
 
+// RedactionFailedPlaceholder is returned instead of the original content when
+// redaction fails. This ensures fail-closed behavior: secrets are never leaked
+// to AI providers even when the redactor encounters an error (CWE-200).
+const RedactionFailedPlaceholder = "[redaction failed]"
+
 // builtinFilePatterns lists file-name globs that must never be forwarded to
 // an AI provider. They use filepath.Match syntax and are matched against the
 // base name of each path.
 var builtinFilePatterns = []string{
-	".env",
+	patternDotEnv,
 	".env.*",
-	"*.key",
+	patternKeyFile,
 	"*.pem",
 	"*.p12",
 	"*.pfx",
 	"*.secret",
 	"*.secrets",
-	"id_rsa",
-	"id_ed25519",
-	"id_ecdsa",
+	patternIDRSA,
+	patternIDEd25519,
+	patternIDECDSA,
 }
 
 // builtinSecretPatterns are regular expressions that detect common secret
@@ -93,6 +98,7 @@ var builtinSecretPatterns = []string{
 type Redactor struct {
 	filePatterns  []string         // filepath.Match patterns for file exclusion
 	secretRegexps []*regexp.Regexp // compiled content-level secret patterns
+	forceErr      error            // test-only: when non-nil, RedactContent returns this error
 }
 
 // NewRedactor creates a Redactor from the given user-supplied file-exclusion
@@ -142,9 +148,13 @@ func (r *Redactor) ShouldExcludeFile(path string) bool {
 }
 
 // RedactContent scans content for secret patterns and replaces each match
-// with [REDACTED]. It returns the sanitised content and the total number of
-// redactions performed.
-func (r *Redactor) RedactContent(content string) (string, int) {
+// with [REDACTED]. It returns the sanitised content, the total number of
+// redactions performed, and any error encountered during redaction.
+func (r *Redactor) RedactContent(content string) (string, int, error) {
+	if r.forceErr != nil {
+		return "", 0, r.forceErr
+	}
+
 	count := 0
 	result := content
 
@@ -156,5 +166,5 @@ func (r *Redactor) RedactContent(content string) (string, int) {
 		}
 	}
 
-	return result, count
+	return result, count, nil
 }

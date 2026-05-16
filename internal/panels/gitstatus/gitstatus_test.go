@@ -209,7 +209,7 @@ func TestStatusLoaded_Error(t *testing.T) {
 	p := newTestPanel(t, mock)
 
 	view := p.View(80, 24)
-	assert.Contains(t, view, "Error")
+	assert.Contains(t, view, "Could not load git status")
 }
 
 func TestView_Loading(t *testing.T) {

@@ -1,6 +1,7 @@
 package panels
 
 import (
+	"context"
 	"os"
 	"runtime"
 	"testing"
@@ -15,7 +16,7 @@ func TestOpenInEditorUsesVISUAL(t *testing.T) {
 	t.Setenv("VISUAL", "this_editor_does_not_exist_67890")
 	t.Setenv("EDITOR", "")
 
-	err := OpenInEditor("somefile.txt")
+	err := OpenInEditor(context.Background(), "somefile.txt")
 	if err == nil {
 		t.Fatal("expected error when VISUAL is set to non-existent binary")
 	}
@@ -26,7 +27,7 @@ func TestOpenInEditorUsesEDITOR(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "this_editor_does_not_exist_67890")
 
-	err := OpenInEditor("somefile.txt")
+	err := OpenInEditor(context.Background(), "somefile.txt")
 	if err == nil {
 		t.Fatal("expected error when EDITOR is set to non-existent binary")
 	}
@@ -51,7 +52,7 @@ func TestOpenInEditorFallsThroughToDefault(t *testing.T) {
 	}
 	_ = f.Close()
 
-	err = OpenInEditor(f.Name())
+	err = OpenInEditor(context.Background(), f.Name())
 	if err != nil {
 		t.Logf("OpenInEditor returned error with platform default (may be expected in headless CI): %v", err)
 	}
@@ -59,7 +60,7 @@ func TestOpenInEditorFallsThroughToDefault(t *testing.T) {
 
 func TestOpenInBrowserDoesNotPanic(t *testing.T) {
 	// OpenInBrowser should reject an empty URL via validation.
-	err := OpenInBrowser("")
+	err := OpenInBrowser(context.Background(), "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must not be empty")
 }
@@ -114,6 +115,9 @@ func TestValidateEditorPath_RejectsShellMetachars(t *testing.T) {
 		{"carriage-return", "file\rmalicious"},
 		{"double-quote", `file"inject`},
 		{"single-quote", "file'inject"},
+		{"percent-env-expand", "%USERPROFILE%"},
+		{"caret-cmd-escape", "^inject"},
+		{"exclamation-delayed-expand", "!var!"},
 	}
 	for _, tt := range dangerous {
 		t.Run(tt.name, func(t *testing.T) {
@@ -130,7 +134,7 @@ func TestOpenInEditor_RejectsMetacharPath(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "")
 
-	err := OpenInEditor("file & del *")
+	err := OpenInEditor(context.Background(), "file & del *")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "forbidden character")
 }
@@ -139,7 +143,7 @@ func TestOpenInEditor_RejectsEmptyPath(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "")
 
-	err := OpenInEditor("")
+	err := OpenInEditor(context.Background(), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must not be empty")
 }
@@ -240,13 +244,13 @@ func TestValidateBrowserURL_CaseInsensitiveScheme(t *testing.T) {
 func TestOpenInBrowser_RejectsDangerousURL(t *testing.T) {
 	// Ensure the full OpenInBrowser function rejects dangerous URLs
 	// before any command is launched.
-	err := OpenInBrowser("javascript:alert(document.cookie)")
+	err := OpenInBrowser(context.Background(), "javascript:alert(document.cookie)")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not allowed")
 }
 
 func TestOpenInBrowser_RejectsFileURL(t *testing.T) {
-	err := OpenInBrowser("file:///etc/shadow")
+	err := OpenInBrowser(context.Background(), "file:///etc/shadow")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not allowed")
 }
@@ -256,13 +260,13 @@ func TestOpenInBrowser_RejectsFileURL(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenInTerminal_RejectsEmpty(t *testing.T) {
-	err := OpenInTerminal("")
+	err := OpenInTerminal(context.Background(), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must not be empty")
 }
 
 func TestOpenInTerminal_RejectsNullByte(t *testing.T) {
-	err := OpenInTerminal("/tmp/dir\x00malicious")
+	err := OpenInTerminal(context.Background(), "/tmp/dir\x00malicious")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "null byte")
 }
@@ -280,7 +284,7 @@ func TestOpenInTerminal_RejectsShellMetachars(t *testing.T) {
 	}
 	for _, tt := range dangerous {
 		t.Run(tt.name, func(t *testing.T) {
-			err := OpenInTerminal(tt.dir)
+			err := OpenInTerminal(context.Background(), tt.dir)
 			require.Error(t, err, "dir %q should be rejected", tt.dir)
 			assert.Contains(t, err.Error(), "forbidden character")
 		})
@@ -295,7 +299,7 @@ func TestOpenInTerminal_AcceptsValidDirectory(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	err := OpenInTerminal(dir)
+	err := OpenInTerminal(context.Background(), dir)
 	if err != nil {
 		assert.NotContains(t, err.Error(), "forbidden character")
 		assert.NotContains(t, err.Error(), "must not be empty")

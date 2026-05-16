@@ -12,10 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Thanks to the following people for their contributions to this release:
 
 - **Copilot**
-- **Test**
 - **Jon Gallant**
 
-New contributors: **Copilot**, **Test** — welcome!
+New contributors: **Copilot** — welcome!
 
 ### Added
 - Preview dual-mode diff toggle - press `f` in the preview panel to switch between file-on-disk and contextual diff view. The diff shown adapts to your context: commit diff when browsing commit files, branch comparison diff in branch mode, PR diff for pull requests, and working tree diff with git filter active. Title shows `[diff]` suffix when in diff mode.

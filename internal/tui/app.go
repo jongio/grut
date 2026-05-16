@@ -14,7 +14,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/jongio/grut/internal/actions"
 	bm "github.com/jongio/grut/internal/bookmarks"
 	"github.com/jongio/grut/internal/chat"
 	"github.com/jongio/grut/internal/config"
@@ -23,11 +22,6 @@ import (
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	bmpanel "github.com/jongio/grut/internal/panels/bookmarks"
-	"github.com/jongio/grut/internal/panels/fuzzyfinder"
-	helppanel "github.com/jongio/grut/internal/panels/help"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
-	welcomepanel "github.com/jongio/grut/internal/panels/welcome"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -49,18 +43,19 @@ type Model struct {
 	lastStatusBarClick time.Time     // for double-click detection on the status bar
 	gitClient          git.GitClient // git client for app-level operations (nil = no git)
 	ctx                context.Context
-	engine             *layout.Engine
+	engine             layout.PanelManager
 	theme              *theme.Theme
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	bookmarkPanel      *bmpanel.Panel                // overlay panel (nil = hidden)
-	fuzzyFinder        *fuzzyfinder.FuzzyFinder      // overlay fuzzy finder (nil = hidden)
-	helpPanel          *helppanel.Panel              // overlay help panel (nil = hidden)
+	overlays           *OverlayFactory               // factory for overlay panels
+	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
+	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
 	helpShown          bool                          // whether help overlay is visible
-	welcomePanel       *welcomepanel.Panel           // overlay welcome panel (nil = hidden)
+	welcomePanel       panels.Panel                  // overlay welcome panel (nil = hidden)
 	welcomeShown       bool                          // whether welcome overlay is visible
-	settingsPanel      *settingspanel.Panel          // overlay settings panel (nil = hidden)
+	settingsPanel      panels.Panel                  // overlay settings panel (nil = hidden)
 	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
 	cfg                *config.Config                // app config (nil = defaults)
 	sessionMgr         *session.Manager              // session persistence (nil = disabled)
@@ -86,9 +81,10 @@ type Model struct {
 	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
 }
 
-// New creates a new TUI model with the given layout engine, theme, keymap,
-// and bookmark manager.
-func New(engine *layout.Engine, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
+// New creates a new TUI model with the given panel manager, theme, keymap,
+// and bookmark manager. The panel manager is typically a *layout.Engine but
+// can be any implementation of layout.PanelManager.
+func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
 		engine:      engine,
@@ -96,6 +92,7 @@ func New(engine *layout.Engine, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Ma
 		keys:        km,
 		notify:      notify.NewManager(),
 		bookmarkMgr: bmMgr,
+		overlays:    NewOverlayFactory(th, bmMgr),
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -219,424 +216,77 @@ func (m Model) loadBranchInfo() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Inform chat of full terminal dimensions so overlay mode can
-		// compute its height correctly.
-		if m.chat != nil {
-			m.chat.SetSize(msg.Width, msg.Height)
-		}
-		// Inform the notification manager so mouse clicks can be mapped to
-		// modal-relative coordinates.
-		m.notify.SetSize(msg.Width, msg.Height)
-		// Subtract chat footer height so the engine reserves the right panel space.
-		chatHeight := 0
-		if m.chat != nil {
-			chatHeight = m.chat.Height()
-		}
-		// The engine internally reserves space for status bar, hints bar, and tab bar.
-		m.engine.SetSize(msg.Width, msg.Height-chatHeight)
-		m.ready = true
-		return m, nil
-	// Branch info for status bar.
-	case branchLoadedMsg:
-		// Ignore stale responses from a previous generation. A branch
-		// checkout bumps branchInfoGen; any in-flight loadBranchInfo
-		// from before the checkout carries the old gen and must be
-		// discarded so it doesn't overwrite the freshly set branch name.
-		if msg.generation != m.branchInfoGen {
-			return m, nil
-		}
-		m.currentBranch = msg.Name
-		m.branchAhead = msg.Ahead
-		m.branchBehind = msg.Behind
-		return m, m.checkGitDirty()
-	case gitDirtyMsg:
-		m.gitDirty = msg.dirty
-		return m, nil
-	case panels.BranchChangedMsg:
-		m.currentBranch = msg.Name
-		m.branchAhead = 0
-		m.branchBehind = 0
-		m.branchInfoGen++
-		cmd := m.engine.Update(msg)
-		return m, tea.Batch(
-			cmd,
-			m.checkGitDirty(),
-			m.loadBranchInfo(),
-			func() tea.Msg { return panels.RefreshGitStatusMsg{} },
-			func() tea.Msg { return panels.RefreshBranchesMsg{} },
-		)
-	// F27: Route notification messages to the notify manager.
-	case notify.ShowToastMsg:
-		cmd := m.notify.Update(msg)
-		return m, cmd
-	case notify.ShowModalMsg:
-		cmd := m.notify.Update(msg)
-		return m, cmd
-	case notify.ToastExpiredMsg:
-		cmd := m.notify.Update(msg)
-		return m, cmd
-	case notify.ModalResultMsg:
-		// If an app-level action is pending (e.g. commit message input),
-		// handle it here instead of forwarding to the focused panel.
-		if m.pendingAction != "" {
-			return m.handlePendingAction(msg)
-		}
-		// Route modal results to the focused panel so it can act on confirm/cancel.
-		cmd := m.engine.Update(msg)
-		return m, cmd
-	// Git operation messages.
-	case panels.CommitRequestMsg:
-		return m.handleCommit()
-	case panels.AmendRequestMsg:
-		return m.handleAmend()
-	case panels.RewordRequestMsg:
-		return m.handleReword(msg.OldMessage)
-	case panels.AICommitSuggestionMsg:
-		m.aiCommitSuggestion = &msg
-		return m, nil
-	case panels.PushRequestMsg:
-		return m.handlePush()
-	case panels.PullRequestMsg:
-		return m.handlePull()
-	case panels.FetchRequestMsg:
-		return m.handleFetch()
-	case panels.AsyncOpDoneMsg:
-		return m.handleAsyncOpDone(msg)
-	case discardFileDoneMsg:
-		return m.handleDiscardFileDone(msg)
-	case unstageFileDoneMsg:
-		return m.handleUnstageFileDone(msg)
-	case panels.AutoFetchTickMsg:
-		return m.handleAutoFetchTick()
-	// Undo/redo messages.
-	case panels.UndoMsg:
-		return m.handleUndo()
-	case panels.RedoMsg:
-		return m.handleRedo()
-	case panels.UndoResultMsg:
-		if msg.Err != nil {
-			errMsg := msg.Err.Error()
-			return m, func() tea.Msg {
-				return notify.ShowToastMsg{Message: "Undo failed: " + errMsg, Level: notify.Warn}
-			}
-		}
-		desc := msg.Description
-		return m, func() tea.Msg {
-			return notify.ShowToastMsg{Message: "Undone: " + desc, Level: notify.Success}
-		}
-	// Bookmark messages.
-	case panels.ToggleBookmarksMsg:
-		return m.toggleBookmarks()
-	case panels.NavigateToPathMsg:
-		// Close bookmarks overlay, then route to filetree.
-		m.bookmarksShown = false
-		m.bookmarkPanel = nil
-		cmd := m.engine.Update(msg)
-		return m, cmd
-	case panels.ChangeDirectoryMsg:
-		targetPath, err := filepath.Abs(msg.Path)
-		if err != nil {
-			return m, func() tea.Msg {
-				return notify.ShowToastMsg{
-					Message: "Failed to resolve directory: " + err.Error(),
-					Level:   notify.Error,
-				}
-			}
-		}
-		if err := os.Chdir(targetPath); err != nil {
-			return m, func() tea.Msg {
-				return notify.ShowToastMsg{
-					Message: "Failed to change directory: " + err.Error(),
-					Level:   notify.Error,
-				}
-			}
-		}
-		// Reinitialize git client for the new directory.
-		newClient, gitErr := git.NewClient(targetPath)
-		if gitErr != nil {
-			m.gitClient = nil
-			m.currentBranch = ""
-			m.gitDirty = false
-			m.branchAhead = 0
-			m.branchBehind = 0
-		} else {
-			m.gitClient = newClient
-		}
-		// Update filetree root.
-		navCmd := m.engine.Update(panels.NavigateToPathMsg{Path: targetPath})
-		// Broadcast repo change to ALL panels so they replace their git
-		// client references and reload data (commits, log, status, diff,
-		// gitinfo tabs, preview, etc.).
-		repoCmd := m.engine.Update(panels.RepoChangedMsg{Path: targetPath})
-		toastCmd := func() tea.Msg {
-			return notify.ShowToastMsg{
-				Message: "Changed directory to " + filepath.Base(targetPath),
-				Level:   notify.Info,
-			}
-		}
-		m.branchInfoGen++
-		return m, tea.Batch(navCmd, repoCmd, toastCmd, m.checkGitDirty(), m.loadBranchInfo())
-	case panels.BookmarkAddMsg:
-		return m.addBookmark(msg.Path)
-	// Help overlay messages.
-	case panels.ToggleHelpMsg:
-		return m.toggleHelp()
-	case panels.FirstRunMsg:
-		return m.toggleWelcome()
+		return m.handleWindowSizeMsg(msg)
 
-	// Welcome overlay messages.
-	case welcomepanel.AnimTickMsg:
-		if m.welcomeShown && m.welcomePanel != nil {
-			_, cmd := m.welcomePanel.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-	case welcomepanel.DismissMsg:
-		return m.dismissWelcome(msg)
+	// Branch / git status.
+	case branchLoadedMsg, gitDirtyMsg, panels.BranchChangedMsg:
+		return m.handleBranchMsg(msg)
 
-	// Settings overlay messages.
-	case settingspanel.ToggleSettingsMsg:
-		return m.toggleSettings()
-	case settingspanel.SetPreviewPositionMsg:
-		m.engine.SetPreviewPosition(msg.Position)
-		if err := config.SaveUserSetting("preview.position", msg.Position.String()); err != nil {
-			slog.Warn("failed to persist preview position", "err", err)
-		}
-		return m, nil
-	case settingspanel.SetThemeMsg:
-		// Theme change is persisted and takes effect on next launch,
-		// matching dispatch's behaviour.
-		if err := config.SaveUserSetting("theme.name", msg.Name); err != nil {
-			slog.Warn("failed to persist theme", "err", err)
-		}
-		return m, nil
-	case settingspanel.SetDoubleClickActionMsg:
-		// Persist action + confirmed flag to disk and update in-memory config.
-		config.SaveDoubleClickChoice(&m.cfg.Actions, msg.ItemType, msg.Action)
-		// Push updated config to all panels so double-click works immediately.
-		m.broadcastActionsCfg()
-		return m, nil
-	case settingspanel.SetRightClickActionMsg:
-		if err := config.SetRightClickAction(actions.ItemType(msg.ItemType), actions.ActionID(msg.Action)); err != nil {
-			slog.Warn("failed to persist right-click action", "err", err)
-		}
-		// Update in-memory config and push to all panels.
-		if m.cfg.Actions.RightClick == nil {
-			m.cfg.Actions.RightClick = make(map[string]string)
-		}
-		m.cfg.Actions.RightClick[msg.ItemType] = msg.Action
-		m.broadcastActionsCfg()
-		return m, nil
-	case settingspanel.ResetActionPromptsMsg:
-		if err := config.ResetAllActionConfirmations(); err != nil {
-			slog.Warn("failed to reset action confirmations", "err", err)
-		}
-		// Clear in-memory confirmed flags and push to all panels.
-		m.cfg.Actions.Confirmed = make(map[string]bool)
-		m.broadcastActionsCfg()
-		return m, nil
-	// Fuzzy finder messages.
-	case panels.ToggleFuzzyFinderMsg:
-		m.fuzzyFinder = nil // close fuzzy finder
-		return m, nil
-	case panels.CommandSelectedMsg:
-		m.fuzzyFinder = nil // close fuzzy finder
-		return m.handleAction(msg.Action, msg)
-	case panels.FileSelectedMsg:
-		m.fuzzyFinder = nil // close fuzzy finder
-		// If the selected path is a directory (from directory fuzzy finder),
-		// convert to ChangeDirectoryMsg instead of opening the file.
-		if info, statErr := os.Stat(msg.Path); statErr == nil && info.IsDir() {
-			return m.Update(panels.ChangeDirectoryMsg{Path: msg.Path})
-		}
-		// Normal file — broadcast to panels via engine.
-		cmd := m.engine.Update(msg)
-		return m, cmd
-	// Chat footer messages.
-	case panels.ChatFocusMsg:
-		return m.toggleChatFocus()
-	case panels.ChatRefreshMsg:
-		// A chat tool changed repo state — refresh git status and panels.
-		cmd := m.engine.Update(panels.RefreshGitStatusMsg{})
-		return m, tea.Batch(cmd, m.checkGitDirty())
-	case panels.ChatNavigateMsg:
-		// Navigate to the file path requested by chat.
-		cmd := m.engine.Update(panels.FileSelectedMsg{Path: msg.Path})
-		return m, cmd
-	// Route chat-internal messages to the chat model.
+	// Notifications.
+	case notify.ShowToastMsg, notify.ShowModalMsg,
+		notify.ToastExpiredMsg, notify.ModalResultMsg:
+		return m.handleNotifyMsg(msg)
+
+	// Git operations.
+	case panels.CommitRequestMsg, panels.AmendRequestMsg, panels.RewordRequestMsg,
+		panels.AICommitSuggestionMsg, panels.PushRequestMsg, panels.PullRequestMsg,
+		panels.FetchRequestMsg, panels.AsyncOpDoneMsg, discardFileDoneMsg,
+		unstageFileDoneMsg, panels.AutoFetchTickMsg:
+		return m.handleGitOpMsg(msg)
+
+	// Undo / redo.
+	case panels.UndoMsg, panels.RedoMsg, panels.UndoResultMsg:
+		return m.handleUndoRedoMsg(msg)
+
+	// Bookmarks & navigation.
+	case panels.ToggleBookmarksMsg, panels.NavigateToPathMsg,
+		panels.ChangeDirectoryMsg, panels.BookmarkAddMsg:
+		return m.handleBookmarkNavMsg(msg)
+
+	// Overlays & settings.
+	case panels.ToggleHelpMsg, panels.FirstRunMsg,
+		panels.WelcomeAnimTickMsg, panels.WelcomeDismissMsg,
+		panels.ToggleSettingsMsg, panels.SetPreviewPositionMsg,
+		panels.SetThemeMsg, panels.SetDoubleClickActionMsg,
+		panels.SetRightClickActionMsg, panels.ResetActionPromptsMsg:
+		return m.handleOverlayMsg(msg)
+
+	// Fuzzy finder.
+	case panels.ToggleFuzzyFinderMsg, panels.CommandSelectedMsg, panels.FileSelectedMsg:
+		return m.handleFuzzyFinderMsg(msg)
+
+	// Chat.
+	case panels.ChatFocusMsg, panels.ChatRefreshMsg, panels.ChatNavigateMsg:
+		return m.handleChatMsg(msg)
 	case chat.StreamChunkMsg, chat.ToolCallMsg, chat.ToolResultMsg,
 		chat.SendMessageCmd:
 		if m.chat != nil {
-			updated, cmd := m.chat.Update(msg)
-			m.chat = &updated
-			return m, cmd
+			return m.handleChatStreamMsg(msg)
 		}
-	// Tab management messages — disabled for v1 single-tab mode.
-	case panels.NewTabMsg:
-		return m, nil // v1: no-op
-	case panels.CloseTabMsg:
-		return m, nil // v1: no-op
-	case panels.NextTabMsg:
-		return m, nil // v1: no-op
-	case panels.PrevTabMsg:
-		return m, nil // v1: no-op
-	case panels.SwitchTabMsg:
-		return m, nil // v1: no-op
-	// Split / panel messages.
-	case panels.SplitVerticalMsg:
-		return m.handleSplitVertical(msg.PanelType)
-	case panels.SplitHorizontalMsg:
-		return m.handleSplitHorizontal(msg.PanelType)
-	case panels.ClosePanelMsg:
-		return m.handleClosePanel()
-	// GitStatusChangedMsg needs app-level side effect (dirty check).
-	// All other cross-panel messages fall through to the default
-	// engine.Update() which broadcasts to all panels automatically.
-	case panels.GitStatusChangedMsg:
-		cmd := m.engine.Update(msg)
-		return m, tea.Batch(cmd, m.checkGitDirty())
-	case tea.MouseClickMsg:
-		// If a modal is active, route mouse clicks to the modal first.
-		if m.notify.HasModal() {
-			cmd := m.notify.Update(msg)
-			return m, cmd
+
+	// Tab management (v1: disabled).
+	case panels.NewTabMsg, panels.CloseTabMsg, panels.NextTabMsg,
+		panels.PrevTabMsg, panels.SwitchTabMsg:
+		return m, nil
+
+	// Panel layout.
+	case panels.SplitVerticalMsg, panels.SplitHorizontalMsg,
+		panels.ClosePanelMsg, panels.GitStatusChangedMsg:
+		return m.handlePanelLayoutMsg(msg)
+
+	// Mouse events — may fall through to default broadcast.
+	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
+		if mdl, cmd, handled := m.handleMouseMsg(msg); handled {
+			return mdl, cmd
 		}
-		// Double-click on the status bar CWD area enters inline-edit mode.
-		if msg.Button == tea.MouseLeft && msg.Y == m.height-1 {
-			// Only trigger on the CWD area (left portion of status bar).
-			cwd, _ := os.Getwd()
-			cwdWidth := len([]rune(cwd)) + 4 // path + padding/icon
-			if cwdWidth > m.width/2 {
-				cwdWidth = m.width / 2
-			}
-			if msg.X <= cwdWidth {
-				now := time.Now()
-				if now.Sub(m.lastStatusBarClick) <= 500*time.Millisecond {
-					m.cwdEditing = true
-					m.cwdEditValue = cwd
-					m.cwdEditCursor = len([]rune(cwd))
-					m.lastStatusBarClick = time.Time{}
-					return m, nil
-				}
-				m.lastStatusBarClick = now
-			}
-		}
-		// Otherwise fall through to the layout engine (default case).
-	case tea.MouseReleaseMsg:
-		// Swallow mouse releases while a modal is active so they don't
-		// leak to the layout engine and trigger panel focus changes.
-		if m.notify.HasModal() {
-			return m, nil
-		}
-		// Otherwise fall through to the layout engine (default case).
-	case tea.MouseWheelMsg:
-		// Route mouse wheel to overlay panels so they can scroll.
-		if m.settingsShown && m.settingsPanel != nil {
-			_, cmd := m.settingsPanel.Update(msg)
-			return m, cmd
-		}
-		if m.helpShown && m.helpPanel != nil {
-			_, cmd := m.helpPanel.Update(msg)
-			return m, cmd
-		}
-		if m.welcomeShown && m.welcomePanel != nil {
-			_, cmd := m.welcomePanel.Update(msg)
-			return m, cmd
-		}
-		// Otherwise fall through to the layout engine (default case).
+
+	// Keyboard input.
 	case tea.KeyPressMsg:
-		// If a modal is active, route keys to the modal first.
-		if m.notify.HasModal() {
-			cmd := m.notify.Update(msg)
-			return m, cmd
-		}
-		// If CWD inline-edit is active, route all keys to it.
-		if m.cwdEditing {
-			return m.handleCWDEditKey(msg)
-		}
-		// If an async operation is running, Esc cancels it.
-		if msg.String() == "esc" && m.asyncCancel != nil {
-			return m.cancelAsyncOp()
-		}
-		// If help overlay is shown, route keys to it.
-		if m.helpShown && m.helpPanel != nil {
-			_, cmd := m.helpPanel.Update(msg)
-			return m, cmd
-		}
-
-		// If welcome overlay is shown, route keys to it.
-		if m.welcomeShown && m.welcomePanel != nil {
-			_, cmd := m.welcomePanel.Update(msg)
-			return m, cmd
-		}
-
-		// If settings overlay is shown, route keys to it.
-		if m.settingsShown && m.settingsPanel != nil {
-			_, cmd := m.settingsPanel.Update(msg)
-			return m, cmd
-		}
-		// If bookmarks overlay is shown, route keys to it.
-		if m.bookmarksShown && m.bookmarkPanel != nil {
-			_, cmd := m.bookmarkPanel.Update(msg)
-			return m, cmd
-		}
-		// If fuzzy finder overlay is shown, route keys to it.
-		if m.fuzzyFinder != nil {
-			_, cmd := m.fuzzyFinder.Update(msg)
-			return m, cmd
-		}
-		// If chat footer is focused, route ALL keys to it so that
-		// typing characters (?, !, letters, Enter, etc.) are consumed
-		// by the chat's text input and do NOT leak to the parent
-		// keymap. Only ctrl+space passes through to toggle focus off.
-		if m.chat != nil && m.chat.Focused() {
-			if msg.String() == "ctrl+space" {
-				return m.toggleChatFocus()
-			}
-			updated, cmd := m.chat.Update(msg)
-			m.chat = &updated
-			return m, cmd
-		}
-		if m.keys != nil {
-			action, handled := m.keys.Dispatch(msg.String(), m.engine.FocusedName())
-			if handled {
-				return m.handleAction(action, msg)
-			}
-			// If a multi-key prefix is pending, swallow the key.
-			if m.keys.HasPending() {
-				return m, nil
-			}
-		}
-		// Global refresh: R refreshes all panels + forces preview re-render.
-		if msg.String() == "R" {
-			return m.handleGlobalRefresh()
-		}
-		// Undo/redo (global key bindings).
-		if msg.String() == "ctrl+z" {
-			return m.handleUndo()
-		}
-		if msg.String() == "ctrl+y" {
-			return m.handleRedo()
-		}
-		// Route unhandled keys to focused panel.
-		cmd := m.engine.Update(msg)
-		return m, cmd
+		return m.handleKeyPressMsg(msg)
 	}
-	// Route all other messages to all panels via engine broadcast,
-	// and forward to the chat model so internal chat messages
-	// (e.g. stream-done, tool-exec-done) are handled.
-	var cmds []tea.Cmd
-	cmds = append(cmds, m.engine.Update(msg))
-	if m.chat != nil {
-		updated, chatCmd := m.chat.Update(msg)
-		m.chat = &updated
-		if chatCmd != nil {
-			cmds = append(cmds, chatCmd)
-		}
-	}
-	return m, tea.Batch(cmds...)
+
+	// Default: broadcast to all panels and chat.
+	return m.handleDefaultMsg(msg)
 }
 
 // handleAction maps a dispatched action string to concrete model operations.
@@ -703,11 +353,11 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toggleChatFocus()
 	case pendingActionCommit:
 		return m.handleCommit()
-	case "push":
+	case actionPush:
 		return m.handlePush()
 	case "pull":
 		return m.handlePull()
-	case "fetch":
+	case actionFetch:
 		return m.handleFetch()
 	// Direct panel focus (1-5 number keys).
 	case "focus_panel_1":
@@ -877,7 +527,7 @@ func (m Model) toggleBookmarks() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.bookmarksShown = true
-	m.bookmarkPanel = bmpanel.New(m.bookmarkMgr, m.theme)
+	m.bookmarkPanel = m.overlays.NewBookmarkPanel()
 	m.bookmarkPanel.Focus()
 	m.bookmarkPanel.SetSize(m.bookmarkOverlayDims())
 	m.bookmarkPanel.Init(m.ctx)
@@ -892,7 +542,7 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.helpShown = true
-	m.helpPanel = helppanel.New(m.theme)
+	m.helpPanel = m.overlays.NewHelpPanel()
 	m.helpPanel.Focus()
 	w, h := m.helpOverlayDims()
 	m.helpPanel.SetSize(w, h)
@@ -939,7 +589,7 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 	}
 
 	m.welcomeShown = true
-	m.welcomePanel = welcomepanel.New(m.theme)
+	m.welcomePanel = m.overlays.NewWelcomePanel()
 	m.welcomePanel.Focus()
 	w, h := m.welcomeOverlayDims()
 	m.welcomePanel.SetSize(w, h)
@@ -953,7 +603,7 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 }
 
 // dismissWelcome handles the welcome panel dismiss message.
-func (m Model) dismissWelcome(_ welcomepanel.DismissMsg) (tea.Model, tea.Cmd) {
+func (m Model) dismissWelcome(_ panels.WelcomeDismissMsg) (tea.Model, tea.Cmd) {
 	m.welcomeShown = false
 	m.welcomePanel = nil
 
@@ -1008,12 +658,11 @@ func (m Model) toggleSettings() (tea.Model, tea.Cmd) {
 	if m.cfg != nil {
 		actionsCfg = m.cfg.Actions
 	}
-	m.settingsPanel = settingspanel.New(
+	m.settingsPanel = m.overlays.NewSettingsPanel(
 		m.engine.CurrentPreviewPosition(),
 		currentTheme,
 		theme.ListThemes(),
 		actionsCfg,
-		m.theme,
 	)
 	m.settingsPanel.Focus()
 	w, h := m.settingsOverlayDims()
@@ -1299,26 +948,11 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 // openFuzzyFinder creates and shows the fuzzy finder overlay with the
 // appropriate source based on mode ("files" or "commands").
 func (m Model) openFuzzyFinder(mode string) Model {
-	var sources []fuzzyfinder.Source
-	switch mode {
-	case "files":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewFileSource(cwd))
-	case "commands":
-		if m.keys != nil {
-			sources = append(sources, fuzzyfinder.NewCommandSource(m.keys.Bindings()))
-		}
-	case "directories":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth))
+	var bindings []keymap.Binding
+	if m.keys != nil {
+		bindings = m.keys.Bindings()
 	}
-	ff := fuzzyfinder.New(m.theme, sources...)
+	ff := m.overlays.NewFuzzyFinder(mode, bindings)
 	ff.Focus()
 	w, h := m.fuzzyFinderDims()
 	ff.SetSize(w, h)
@@ -2091,25 +1725,25 @@ func (m Model) renderHintsBar() string {
 	var hints []string
 	switch focusedName {
 	case "filetree":
-		hints = []string{"h/l:collapse/expand", "/:find", "?:help"}
+		hints = []string{"h/l:collapse/expand", hintFind, hintHelp}
 	case "gitstatus":
-		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", "?:help"}
+		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", hintHelp}
 	case "preview":
-		hints = []string{"j/k:scroll", "Tab:focus", "/:find", "?:help"}
+		hints = []string{hintScroll, hintTabFocus, hintFind, hintHelp}
 	case "branches":
-		hints = []string{"enter:checkout", "n:new branch", "d:delete", "?:help"}
+		hints = []string{"enter:checkout", "n:new branch", "d:delete", hintHelp}
 	case "gitlog":
-		hints = []string{"enter:details", "j/k:scroll", "/:search", "?:help"}
+		hints = []string{"enter:details", hintScroll, "/:search", hintHelp}
 	case "gitdiff":
-		hints = []string{"j/k:scroll", "Tab:focus", "?:help"}
+		hints = []string{hintScroll, hintTabFocus, hintHelp}
 	case "terminal":
-		hints = []string{"i:insert mode", "ctrl+b:normal mode", "?:help"}
+		hints = []string{"i:insert mode", "ctrl+b:normal mode", hintHelp}
 	case "agents":
-		hints = []string{"j/k:scroll", "enter:select", "?:help"}
+		hints = []string{hintScroll, "enter:select", hintHelp}
 	case "extensions":
-		hints = []string{"enter:toggle", "i:install", "?:help"}
+		hints = []string{"enter:toggle", "i:install", hintHelp}
 	default:
-		hints = []string{"Tab:focus", "?:help", "/:find", "1-5:tabs"}
+		hints = []string{hintTabFocus, hintHelp, hintFind, "1-5:tabs"}
 	}
 	// Append chat hint when chat is available but not focused.
 	if m.chat != nil {

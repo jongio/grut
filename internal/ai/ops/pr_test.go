@@ -169,7 +169,7 @@ func TestPRDescriptionGenerator_Generate(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: respJSON,
 		},
 	}
@@ -202,7 +202,7 @@ func TestPRDescriptionGenerator_Generate_WithBreakingChanges(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: respJSON,
 		},
 	}
@@ -225,7 +225,7 @@ func TestPRDescriptionGenerator_Generate_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: "not json at all",
 		},
 	}
@@ -244,9 +244,9 @@ func TestPRDescriptionGenerator_Generate_InvalidJSON(t *testing.T) {
 
 func TestPRDescriptionGenerator_Generate_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		completeErr: errors.New("provider down"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("provider down"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

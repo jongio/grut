@@ -83,8 +83,8 @@ func (r *ToolRegistry) register(name, description string, safety ToolSafety, par
 // required field list.
 func objectSchema(props map[string]any, required []string) map[string]any {
 	s := map[string]any{
-		"type":       "object",
-		"properties": props,
+		SchemaType:       SchemaObject,
+		SchemaProperties: props,
 	}
 	if len(required) > 0 {
 		s["required"] = required
@@ -95,32 +95,32 @@ func objectSchema(props map[string]any, required []string) map[string]any {
 // emptySchema returns a JSON Schema object with no properties.
 func emptySchema() map[string]any {
 	return map[string]any{
-		"type":       "object",
-		"properties": map[string]any{},
+		SchemaType:       SchemaObject,
+		SchemaProperties: map[string]any{},
 	}
 }
 
 // stringProp returns a JSON Schema string property.
 func stringProp(desc string) map[string]any {
-	return map[string]any{"type": "string", "description": desc}
+	return map[string]any{SchemaType: SchemaString, SchemaDescription: desc}
 }
 
 // boolProp returns a JSON Schema boolean property.
 func boolProp(desc string) map[string]any {
-	return map[string]any{"type": "boolean", "description": desc}
+	return map[string]any{SchemaType: "boolean", SchemaDescription: desc}
 }
 
 // intProp returns a JSON Schema integer property.
 func intProp(desc string) map[string]any {
-	return map[string]any{"type": "integer", "description": desc}
+	return map[string]any{SchemaType: "integer", SchemaDescription: desc}
 }
 
 // stringArrayProp returns a JSON Schema array-of-strings property.
 func stringArrayProp(desc string) map[string]any {
 	return map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items":       map[string]any{"type": "string"},
+		SchemaType:        "array",
+		SchemaDescription: desc,
+		SchemaItems:       map[string]any{SchemaType: SchemaString},
 	}
 }
 
@@ -130,60 +130,60 @@ func stringArrayProp(desc string) map[string]any {
 
 func (r *ToolRegistry) registerFileTools() {
 	r.register(
-		"file_read",
+		ToolFileRead,
 		"Read the contents of a file",
 		Safe,
 		objectSchema(map[string]any{
-			"path": stringProp("File path relative to repo root"),
-		}, []string{"path"}),
+			PropPath: stringProp("File path relative to repo root"),
+		}, []string{PropPath}),
 	)
 
 	r.register(
-		"file_write",
+		ToolFileWrite,
 		"Write content to a file, creating it if it does not exist",
 		Destructive,
 		objectSchema(map[string]any{
-			"path":    stringProp("File path relative to repo root"),
-			"content": stringProp("Content to write to the file"),
-		}, []string{"path", "content"}),
+			PropPath:    stringProp("File path relative to repo root"),
+			PropContent: stringProp("Content to write to the file"),
+		}, []string{PropPath, PropContent}),
 	)
 
 	r.register(
-		"file_delete",
+		ToolFileDelete,
 		"Delete a file from the repository",
 		Destructive,
 		objectSchema(map[string]any{
-			"path": stringProp("File path relative to repo root"),
-		}, []string{"path"}),
+			PropPath: stringProp("File path relative to repo root"),
+		}, []string{PropPath}),
 	)
 
 	r.register(
-		"file_rename",
+		ToolFileRename,
 		"Rename or move a file within the repository",
 		Destructive,
 		objectSchema(map[string]any{
-			"old_path": stringProp("Current file path relative to repo root"),
-			"new_path": stringProp("New file path relative to repo root"),
-		}, []string{"old_path", "new_path"}),
+			PropOldPath: stringProp("Current file path relative to repo root"),
+			PropNewPath: stringProp("New file path relative to repo root"),
+		}, []string{PropOldPath, PropNewPath}),
 	)
 
 	r.register(
-		"file_list",
+		ToolFileList,
 		"List files and directories at the given path",
 		Safe,
 		objectSchema(map[string]any{
-			"path":      stringProp("Directory path relative to repo root"),
-			"recursive": boolProp("List files recursively"),
-		}, []string{"path"}),
+			PropPath:      stringProp("Directory path relative to repo root"),
+			PropRecursive: boolProp("List files recursively"),
+		}, []string{PropPath}),
 	)
 
 	r.register(
-		"file_mkdir",
+		ToolFileMkdir,
 		"Create a directory and any necessary parents",
 		Safe,
 		objectSchema(map[string]any{
-			"path": stringProp("Directory path relative to repo root"),
-		}, []string{"path"}),
+			PropPath: stringProp("Directory path relative to repo root"),
+		}, []string{PropPath}),
 	)
 }
 
@@ -193,57 +193,57 @@ func (r *ToolRegistry) registerFileTools() {
 
 func (r *ToolRegistry) registerGitReadTools() {
 	r.register(
-		"git_status",
+		ToolGitStatus,
 		"Returns the list of changed files with their git status codes",
 		Safe,
 		emptySchema(),
 	)
 
 	r.register(
-		"git_diff",
+		ToolGitDiff,
 		"Returns diff output for changed files",
 		Safe,
 		objectSchema(map[string]any{
-			"path":   stringProp("Limit diff to a specific file path"),
-			"staged": boolProp("Compare staged changes against HEAD"),
+			PropPath:    stringProp("Limit diff to a specific file path"),
+			PropStagged: boolProp("Compare staged changes against HEAD"),
 		}, nil),
 	)
 
 	r.register(
-		"git_log",
+		ToolGitLog,
 		"Returns the commit log",
 		Safe,
 		objectSchema(map[string]any{
-			"count": intProp("Maximum number of commits to return (default 10)"),
-			"path":  stringProp("Filter commits by file path"),
+			PropCount: intProp("Maximum number of commits to return (default 10)"),
+			PropPath:  stringProp("Filter commits by file path"),
 		}, nil),
 	)
 
 	r.register(
-		"git_blame",
+		ToolGitBlame,
 		"Returns per-line blame annotation for a file",
 		Safe,
 		objectSchema(map[string]any{
-			"path": stringProp("File path to blame"),
-		}, []string{"path"}),
+			PropPath: stringProp("File path to blame"),
+		}, []string{PropPath}),
 	)
 
 	r.register(
-		"git_branch_list",
+		ToolGitBranchList,
 		"Returns the list of local and remote branches",
 		Safe,
 		emptySchema(),
 	)
 
 	r.register(
-		"git_stash_list",
+		ToolGitStashList,
 		"Returns the list of stash entries",
 		Safe,
 		emptySchema(),
 	)
 
 	r.register(
-		"git_worktree_list",
+		ToolGitWorktreeList,
 		"Returns the list of git worktrees",
 		Safe,
 		emptySchema(),
@@ -256,162 +256,162 @@ func (r *ToolRegistry) registerGitReadTools() {
 
 func (r *ToolRegistry) registerGitWriteTools() {
 	r.register(
-		"git_stage",
+		ToolGitStage,
 		"Stage files for commit",
 		Safe,
 		objectSchema(map[string]any{
-			"paths": stringArrayProp("File paths to stage"),
-		}, []string{"paths"}),
+			PropPaths: stringArrayProp("File paths to stage"),
+		}, []string{PropPaths}),
 	)
 
 	r.register(
-		"git_unstage",
+		ToolGitUnstage,
 		"Unstage files from the index",
 		Safe,
 		objectSchema(map[string]any{
-			"paths": stringArrayProp("File paths to unstage"),
-		}, []string{"paths"}),
+			PropPaths: stringArrayProp("File paths to unstage"),
+		}, []string{PropPaths}),
 	)
 
 	r.register(
-		"git_commit",
+		ToolGitCommit,
 		"Create a commit with staged changes",
 		Safe,
 		objectSchema(map[string]any{
-			"message": stringProp("Commit message"),
-		}, []string{"message"}),
+			PropMessage: stringProp("Commit message"),
+		}, []string{PropMessage}),
 	)
 
 	r.register(
-		"git_push",
+		ToolGitPush,
 		"Push commits to a remote",
 		Destructive,
 		objectSchema(map[string]any{
-			"remote": stringProp("Remote name (default origin)"),
-			"force":  boolProp("Force push (overwrites remote history)"),
+			PropRemote: stringProp("Remote name (default origin)"),
+			PropForce:  boolProp("Force push (overwrites remote history)"),
 		}, nil),
 	)
 
 	r.register(
-		"git_pull",
+		ToolGitPull,
 		"Pull changes from a remote",
 		Safe,
 		objectSchema(map[string]any{
-			"remote": stringProp("Remote name (default origin)"),
+			PropRemote: stringProp("Remote name (default origin)"),
 		}, nil),
 	)
 
 	r.register(
-		"git_fetch",
+		ToolGitFetch,
 		"Fetch refs and objects from a remote",
 		Safe,
 		objectSchema(map[string]any{
-			"remote": stringProp("Remote name"),
+			PropRemote: stringProp("Remote name"),
 		}, nil),
 	)
 
 	r.register(
-		"git_checkout",
+		ToolGitCheckout,
 		"Checkout a branch, tag, or commit",
 		Safe,
 		objectSchema(map[string]any{
-			"ref": stringProp("Git ref to checkout"),
-		}, []string{"ref"}),
+			PropRef: stringProp("Git ref to checkout"),
+		}, []string{PropRef}),
 	)
 
 	r.register(
-		"git_branch_create",
+		ToolGitBranchCreate,
 		"Create a new branch",
 		Safe,
 		objectSchema(map[string]any{
-			"name":        stringProp("Branch name"),
-			"start_point": stringProp("Base ref for the new branch (default HEAD)"),
-		}, []string{"name"}),
+			PropName:       stringProp("Branch name"),
+			PropStartPoint: stringProp("Base ref for the new branch (default HEAD)"),
+		}, []string{PropName}),
 	)
 
 	r.register(
-		"git_branch_delete",
+		ToolGitBranchDelete,
 		"Delete a branch",
 		Destructive,
 		objectSchema(map[string]any{
-			"name":  stringProp("Branch name to delete"),
-			"force": boolProp("Force delete even if not fully merged"),
-		}, []string{"name"}),
+			PropName:  stringProp("Branch name to delete"),
+			PropForce: boolProp("Force delete even if not fully merged"),
+		}, []string{PropName}),
 	)
 
 	r.register(
-		"git_merge",
+		ToolGitMerge,
 		"Merge a branch into the current branch",
 		Safe,
 		objectSchema(map[string]any{
-			"branch": stringProp("Branch to merge"),
-		}, []string{"branch"}),
+			PropBranch: stringProp("Branch to merge"),
+		}, []string{PropBranch}),
 	)
 
 	r.register(
-		"git_rebase",
+		ToolGitRebase,
 		"Rebase the current branch onto another ref",
 		Destructive,
 		objectSchema(map[string]any{
-			"onto": stringProp("Ref to rebase onto"),
-		}, []string{"onto"}),
+			PropOnto: stringProp("Ref to rebase onto"),
+		}, []string{PropOnto}),
 	)
 
 	r.register(
-		"git_stash_push",
+		ToolGitStashPush,
 		"Stash the current working directory changes",
 		Safe,
 		objectSchema(map[string]any{
-			"message": stringProp("Stash message"),
+			PropMessage: stringProp("Stash message"),
 		}, nil),
 	)
 
 	r.register(
-		"git_stash_pop",
+		ToolGitStashPop,
 		"Apply and remove the top stash entry",
 		Safe,
 		objectSchema(map[string]any{
-			"index": intProp("Stash index to pop (default 0)"),
+			PropIndex: intProp("Stash index to pop (default 0)"),
 		}, nil),
 	)
 
 	r.register(
-		"git_reset",
+		ToolGitReset,
 		"Reset the current HEAD to a specified state",
 		Destructive,
 		objectSchema(map[string]any{
-			"ref":  stringProp("Git ref to reset to"),
-			"hard": boolProp("Discard all working tree changes (--hard)"),
-		}, []string{"ref"}),
+			PropRef:  stringProp("Git ref to reset to"),
+			PropHard: boolProp("Discard all working tree changes (--hard)"),
+		}, []string{PropRef}),
 	)
 
 	r.register(
-		"git_tag_create",
+		ToolGitTagCreate,
 		"Create a new tag",
 		Safe,
 		objectSchema(map[string]any{
-			"name":    stringProp("Tag name"),
-			"ref":     stringProp("Ref to tag (default HEAD)"),
-			"message": stringProp("Annotation message (creates annotated tag if provided)"),
-		}, []string{"name"}),
+			PropName:    stringProp("Tag name"),
+			PropRef:     stringProp("Ref to tag (default HEAD)"),
+			PropMessage: stringProp("Annotation message (creates annotated tag if provided)"),
+		}, []string{PropName}),
 	)
 
 	r.register(
-		"git_tag_delete",
+		ToolGitTagDelete,
 		"Delete a tag",
 		Destructive,
 		objectSchema(map[string]any{
-			"name": stringProp("Tag name to delete"),
-		}, []string{"name"}),
+			PropName: stringProp("Tag name to delete"),
+		}, []string{PropName}),
 	)
 
 	r.register(
-		"git_discard",
+		ToolGitDiscard,
 		"Discard working tree changes for specified files",
 		Destructive,
 		objectSchema(map[string]any{
-			"paths": stringArrayProp("File paths to discard changes for"),
-		}, []string{"paths"}),
+			PropPaths: stringArrayProp("File paths to discard changes for"),
+		}, []string{PropPaths}),
 	)
 }
 
@@ -421,41 +421,41 @@ func (r *ToolRegistry) registerGitWriteTools() {
 
 func (r *ToolRegistry) registerNavSearchTools() {
 	r.register(
-		"navigate_to",
+		ToolNavigateTo,
 		"Navigate to a file or directory in the repository",
 		Safe,
 		objectSchema(map[string]any{
-			"path": stringProp("File or directory path relative to repo root"),
-		}, []string{"path"}),
+			PropPath: stringProp("File or directory path relative to repo root"),
+		}, []string{PropPath}),
 	)
 
 	r.register(
-		"search_files",
+		ToolSearchFiles,
 		"Search for files matching a glob pattern",
 		Safe,
 		objectSchema(map[string]any{
-			"pattern": stringProp("Glob pattern to match file names"),
-			"path":    stringProp("Directory to search within (default repo root)"),
-		}, []string{"pattern"}),
+			PropPattern: stringProp("Glob pattern to match file names"),
+			PropPath:    stringProp("Directory to search within (default repo root)"),
+		}, []string{PropPattern}),
 	)
 
 	r.register(
-		"search_content",
+		ToolSearchContent,
 		"Search file contents for a regex pattern",
 		Safe,
 		objectSchema(map[string]any{
-			"pattern": stringProp("Regex pattern to search for in file contents"),
-			"path":    stringProp("Directory to search within (default repo root)"),
-		}, []string{"pattern"}),
+			PropPattern: stringProp("Regex pattern to search for in file contents"),
+			PropPath:    stringProp("Directory to search within (default repo root)"),
+		}, []string{PropPattern}),
 	)
 
 	r.register(
-		"explain",
+		ToolExplain,
 		"Explain a git concept, command, or workflow",
 		Safe,
 		objectSchema(map[string]any{
-			"topic": stringProp("The topic to explain"),
-		}, []string{"topic"}),
+			PropTopic: stringProp("The topic to explain"),
+		}, []string{PropTopic}),
 	)
 }
 
@@ -465,40 +465,40 @@ func (r *ToolRegistry) registerNavSearchTools() {
 
 func (r *ToolRegistry) registerBulkTools() {
 	r.register(
-		"bulk_stage",
+		ToolBulkStage,
 		"Stage files matching one or more glob patterns",
 		Safe,
 		objectSchema(map[string]any{
-			"patterns": stringArrayProp("Glob patterns of files to stage"),
-		}, []string{"patterns"}),
+			PropPatterns: stringArrayProp("Glob patterns of files to stage"),
+		}, []string{PropPatterns}),
 	)
 
 	r.register(
-		"bulk_delete",
+		ToolBulkDelete,
 		"Delete multiple files from the repository",
 		Destructive,
 		objectSchema(map[string]any{
-			"paths": stringArrayProp("File paths to delete"),
-		}, []string{"paths"}),
+			PropPaths: stringArrayProp("File paths to delete"),
+		}, []string{PropPaths}),
 	)
 
 	r.register(
-		"bulk_rename",
+		ToolBulkRename,
 		"Rename multiple files in a single operation",
 		Destructive,
 		objectSchema(map[string]any{
-			"renames": map[string]any{
-				"type":        "array",
-				"description": "List of rename operations to perform",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"old": stringProp("Current file path"),
-						"new": stringProp("New file path"),
+			PropRenames: map[string]any{
+				SchemaType:        "array",
+				SchemaDescription: "List of rename operations to perform",
+				SchemaItems: map[string]any{
+					SchemaType: SchemaObject,
+					SchemaProperties: map[string]any{
+						PropOld: stringProp("Current file path"),
+						PropNew: stringProp("New file path"),
 					},
-					"required": []string{"old", "new"},
+					"required": []string{PropOld, PropNew},
 				},
 			},
-		}, []string{"renames"}),
+		}, []string{PropRenames}),
 	)
 }

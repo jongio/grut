@@ -31,7 +31,7 @@ func TestNewClaudeProvider_Custom(t *testing.T) {
 
 func TestClaudeName(t *testing.T) {
 	p := NewClaudeProvider("", 0)
-	assert.Equal(t, "claude", p.Name())
+	assert.Equal(t, providerClaude, p.Name())
 }
 
 // ---------------------------------------------------------------------------
@@ -121,8 +121,8 @@ func TestBuildParams_MessagesBeforeUserPrompt(t *testing.T) {
 	p := NewClaudeProvider("", 0)
 	params := p.buildParams(CompletionRequest{
 		Messages: []ChatMessage{
-			{Role: "user", Content: "First question"},
-			{Role: "assistant", Content: "First answer"},
+			{Role: roleUser, Content: "First question"},
+			{Role: roleAssistant, Content: "First answer"},
 		},
 		UserPrompt: "Follow-up question",
 	})
@@ -144,8 +144,8 @@ func TestBuildParams_MessagesBeforeUserPrompt(t *testing.T) {
 func TestConvertMessages_UserAndAssistant(t *testing.T) {
 	p := NewClaudeProvider("", 0)
 	msgs := p.convertMessages([]ChatMessage{
-		{Role: "user", Content: "Hello"},
-		{Role: "assistant", Content: "Hi there!"},
+		{Role: roleUser, Content: "Hello"},
+		{Role: roleAssistant, Content: "Hi there!"},
 	})
 
 	require.Len(t, msgs, 2)
@@ -163,7 +163,7 @@ func TestConvertMessages_AssistantWithToolCalls(t *testing.T) {
 	p := NewClaudeProvider("", 0)
 	msgs := p.convertMessages([]ChatMessage{
 		{
-			Role:    "assistant",
+			Role:    roleAssistant,
 			Content: "Let me check the weather.",
 			ToolCalls: []ToolCall{
 				{
@@ -209,7 +209,7 @@ func TestConvertMessages_SkipsSystem(t *testing.T) {
 	p := NewClaudeProvider("", 0)
 	msgs := p.convertMessages([]ChatMessage{
 		{Role: "system", Content: "You are helpful."},
-		{Role: "user", Content: "Hi"},
+		{Role: roleUser, Content: "Hi"},
 	})
 
 	// System message is skipped.
@@ -268,7 +268,7 @@ func TestParseResponse_TextContent(t *testing.T) {
 		ID:    "msg_123",
 		Model: "claude-sonnet-4-20250514",
 		Content: []anthropic.ContentBlockUnion{
-			{Type: "text", Text: "Hello, world!"},
+			{Type: blockTypeText, Text: "Hello, world!"},
 		},
 		StopReason: anthropic.StopReasonEndTurn,
 		Usage: anthropic.Usage{
@@ -280,7 +280,7 @@ func TestParseResponse_TextContent(t *testing.T) {
 	resp := p.parseResponse(msg)
 
 	assert.Equal(t, "Hello, world!", resp.Content)
-	assert.Equal(t, "stop", resp.FinishReason)
+	assert.Equal(t, finishReasonStop, resp.FinishReason)
 	assert.Equal(t, 15, resp.TokensUsed.InputTokens)
 	assert.Equal(t, 4, resp.TokensUsed.OutputTokens)
 	assert.Equal(t, "msg_123", resp.Metadata["message_id"])
@@ -298,7 +298,7 @@ func TestParseResponse_ToolUseContent(t *testing.T) {
 		Model: "claude-sonnet-4-20250514",
 		Content: []anthropic.ContentBlockUnion{
 			{
-				Type:  "tool_use",
+				Type:  blockTypeToolUse,
 				ID:    "toolu_01",
 				Name:  "get_weather",
 				Input: json.RawMessage(toolInput),
@@ -330,9 +330,9 @@ func TestParseResponse_MixedContent(t *testing.T) {
 		ID:    "msg_789",
 		Model: "claude-sonnet-4-20250514",
 		Content: []anthropic.ContentBlockUnion{
-			{Type: "text", Text: "Let me search for that."},
+			{Type: blockTypeText, Text: "Let me search for that."},
 			{
-				Type:  "tool_use",
+				Type:  blockTypeToolUse,
 				ID:    "toolu_02",
 				Name:  "search",
 				Input: json.RawMessage(toolInput),
@@ -356,7 +356,7 @@ func TestParseResponse_StopReasons(t *testing.T) {
 		stopReason anthropic.StopReason
 		expected   string
 	}{
-		{anthropic.StopReasonEndTurn, "stop"},
+		{anthropic.StopReasonEndTurn, finishReasonStop},
 		{anthropic.StopReasonMaxTokens, "length"},
 		{anthropic.StopReasonToolUse, "tool_calls"},
 		{anthropic.StopReasonStopSequence, "stop_sequence"},
@@ -389,7 +389,7 @@ func TestParseResponse_EmptyInput(t *testing.T) {
 
 	assert.Empty(t, resp.Content)
 	assert.Empty(t, resp.ToolCalls)
-	assert.Equal(t, "stop", resp.FinishReason)
+	assert.Equal(t, finishReasonStop, resp.FinishReason)
 }
 
 // ---------------------------------------------------------------------------

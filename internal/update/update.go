@@ -33,9 +33,6 @@ const (
 	// asset download.
 	maxRedirects = 10
 
-	// downloadBaseURL is the base URL for GitHub release asset downloads.
-	downloadBaseURL = "https://github.com/jongio/grut/releases/download"
-
 	// checksumFileName is the name of the SHA-256 checksum file in each
 	// release.
 	checksumFileName = "grut_checksums.txt"
@@ -57,6 +54,10 @@ const (
 var (
 	updateHTTPTransport http.RoundTripper = http.DefaultTransport
 	versionPattern                        = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+	// downloadBaseURL is the base URL for GitHub release asset downloads.
+	// Declared as var (not const) to allow test overrides.
+	downloadBaseURL = "https://github.com/jongio/grut/releases/download"
 
 	// Sentinel errors for testable error checking via errors.Is().
 	ErrDevBuild           = errors.New("cannot update a development build")
@@ -184,9 +185,23 @@ func RunUpdate(ctx context.Context, currentVersion string) error {
 		return fmt.Errorf("downloading %s: %w", asset, err)
 	}
 
-	// Download and verify checksum.
+	// Download the checksum file.
 	checksumURL := fmt.Sprintf("%s/v%s/%s", downloadBaseURL, latest, checksumFileName)
-	if err := verifyChecksum(ctx, archivePath, checksumURL, asset); err != nil {
+	checksumData, err := downloadChecksumData(ctx, checksumURL)
+	if err != nil {
+		return fmt.Errorf("downloading checksums: %w", err)
+	}
+
+	// Verify the cosign signature on the checksum file before trusting it.
+	// This prevents a compromised release from silently replacing both the
+	// archive and checksum file (CWE-347).
+	fmt.Fprintf(os.Stderr, "Verifying cosign signature...\n")
+	if err := verifyCosignChecksums(ctx, checksumData, latest); err != nil {
+		return fmt.Errorf("cosign signature verification: %w", err)
+	}
+
+	// Verify the archive hash against the authenticated checksum data.
+	if err := verifyArchiveChecksum(archivePath, checksumData, asset); err != nil {
 		return fmt.Errorf("checksum verification: %w", err)
 	}
 
@@ -266,33 +281,48 @@ func downloadAsset(ctx context.Context, dst, url string) error {
 // verifyChecksum downloads the checksum file and verifies the SHA-256
 // hash of the downloaded archive.
 func verifyChecksum(ctx context.Context, archivePath, checksumURL, archiveName string) error {
+	checksumData, err := downloadChecksumData(ctx, checksumURL)
+	if err != nil {
+		return err
+	}
+	return verifyArchiveChecksum(archivePath, checksumData, archiveName)
+}
+
+// downloadChecksumData downloads and returns the raw checksum file content.
+func downloadChecksumData(ctx context.Context, checksumURL string) ([]byte, error) {
 	client := newSecureClient(apiTimeout)
 
 	csReq, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil) //nolint:gosec // URL built from constants
 	if err != nil {
-		return fmt.Errorf("creating checksum request: %w", err)
+		return nil, fmt.Errorf("creating checksum request: %w", err)
 	}
 	resp, err := client.Do(csReq)
 	if err != nil {
-		return fmt.Errorf("downloading checksums: %w", err)
+		return nil, fmt.Errorf("downloading checksums: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // best-effort cleanup
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d fetching checksums", resp.StatusCode)
+		return nil, fmt.Errorf("HTTP %d fetching checksums", resp.StatusCode)
 	}
 	if resp.ContentLength > maxChecksumSize {
-		return fmt.Errorf("checksums file exceeds %d bytes", maxChecksumSize)
+		return nil, fmt.Errorf("checksums file exceeds %d bytes", maxChecksumSize)
 	}
 
 	checksumData, err := io.ReadAll(io.LimitReader(resp.Body, maxChecksumSize+1))
 	if err != nil {
-		return fmt.Errorf("reading checksums: %w", err)
+		return nil, fmt.Errorf("reading checksums: %w", err)
 	}
 	if int64(len(checksumData)) > maxChecksumSize {
-		return fmt.Errorf("checksums file exceeds %d bytes", maxChecksumSize)
+		return nil, fmt.Errorf("checksums file exceeds %d bytes", maxChecksumSize)
 	}
 
+	return checksumData, nil
+}
+
+// verifyArchiveChecksum verifies the SHA-256 hash of a downloaded archive
+// against pre-downloaded checksum data.
+func verifyArchiveChecksum(archivePath string, checksumData []byte, archiveName string) error {
 	// Find the expected hash for our archive.
 	expectedHash, err := ParseChecksum(string(checksumData), archiveName)
 	if err != nil {

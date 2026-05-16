@@ -225,7 +225,7 @@ func (p *Panel) View(width, height int) string {
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/k", Description: "Move between files/hunks", Action: "navigate"},
-		{Key: "enter", Description: "Expand file diff", Action: "expand"},
+		{Key: keyEnter, Description: "Expand file diff", Action: "expand"},
 		{Key: "a", Description: "Approve hunk", Action: "approve"},
 		{Key: "x", Description: "Reject hunk", Action: "reject"},
 		{Key: "A", Description: "Approve all hunks", Action: "approve_all"},
@@ -260,7 +260,7 @@ func (p *Panel) SetFiles(files []ReviewFile) {
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if p.showSummary {
 		switch msg.String() {
-		case "q", "escape", "esc", "enter", "s": //nolint:goconst // inline string is more readable here
+		case "q", "escape", "esc", keyEnter, "s": //nolint:goconst // inline string is more readable here
 			p.showSummary = false
 			p.rebuildLines()
 		}
@@ -289,7 +289,7 @@ func (p *Panel) handleFileListKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.rebuildLines()
 			p.ensureFileVisible()
 		}
-	case "enter":
+	case keyEnter:
 		if len(p.files) > 0 {
 			p.mode = modeDiff
 			p.hunkCursor = 0
@@ -436,6 +436,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 		p.fileCursor = fileIdx
 		itemType := actions.ItemReviewFile
 		if !p.actionsCfg.IsConfirmed(string(itemType)) {
+			p.clearPending()
 			p.pendingOp = opFirstUseConfirm
 			p.pendingName = string(itemType)
 			return p, rightclick.FirstUseCmd(itemType)
@@ -487,6 +488,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 		label := p.files[fileIdx].Path
 		cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemReviewFile, label)
 		if cmd != nil {
+			p.clearPending()
 			p.pendingOp = opRightClickPick
 			return p, cmd
 		}
@@ -497,12 +499,18 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+}
+
 // handleModalResult dispatches the result of an action-picker modal.
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
-	p.pendingOp = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}

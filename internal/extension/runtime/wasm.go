@@ -10,6 +10,9 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// runtimeNameWasm is the canonical identifier for the WASM runtime.
+const runtimeNameWasm = "wasm"
+
 // defaultMemoryLimitPages is the maximum WASM linear-memory size measured in
 // 64 KiB pages. 1024 pages = 64 MiB.
 const defaultMemoryLimitPages = 1024
@@ -49,7 +52,7 @@ func NewWASMRuntime(manifest *extension.Manifest, hostAPI HostAPI) (*WASMRuntime
 }
 
 // Name returns the runtime identifier.
-func (w *WASMRuntime) Name() string { return "wasm" }
+func (w *WASMRuntime) Name() string { return runtimeNameWasm }
 
 // Load reads a WASM binary from entryPoint, compiles it, registers host
 // imports, and instantiates the module.
@@ -113,6 +116,10 @@ func (w *WASMRuntime) registerHostFunctions(ctx context.Context) error {
 		WithFunc(func(ctx context.Context, mod api.Module,
 			titlePtr, titleLen, msgPtr, msgLen, level uint32,
 		) {
+			// Enforce "notify" permission before showing toasts (CWE-862).
+			if !extension.ManifestHasPermission(w.manifest, extension.PermNotify) {
+				return // silently deny — WASM host calls have no error return
+			}
 			title, okT := readString(mod, titlePtr, titleLen)
 			msg, okM := readString(mod, msgPtr, msgLen)
 			if !okT || !okM {
@@ -177,6 +184,6 @@ func levelToString(level uint32) string {
 	case toastLevelError:
 		return "error"
 	default:
-		return "info"
+		return logInfo
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 	"github.com/jongio/grut/internal/rightclick"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -90,6 +91,14 @@ func initColors(th *theme.Theme) panelColors {
 	return c
 }
 
+func newCommitLineStyles(c panelColors) commitrender.Styles {
+	return commitrender.Styles{
+		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+	}
+}
+
 // Panel is the commits panel. It implements [panels.Panel].
 type Panel struct {
 	actionsCfg  config.ActionsConfig
@@ -129,6 +138,7 @@ type Panel struct {
 	prCommitsMode bool
 	focused       bool
 	colors        panelColors
+	clStyles      commitrender.Styles
 	theme         *theme.Theme
 }
 
@@ -137,10 +147,12 @@ var _ panels.Panel = (*Panel)(nil)
 
 // New creates a new commits panel.
 func New(client gitOps, th *theme.Theme) *Panel {
+	c := initColors(th)
 	return &Panel{
 		gitClient: client,
 		pageSize:  defaultPageSize,
-		colors:    initColors(th),
+		colors:    c,
+		clStyles:  newCommitLineStyles(c),
 		theme:     th,
 	}
 }
@@ -310,7 +322,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Show commit details", Action: "detail"},
+		{Key: keyEnter, Description: "Show commit details", Action: "detail"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
@@ -573,12 +585,24 @@ func (p *Panel) renderList(width, height int) string {
 	}
 	for i := p.offset; i < end; i++ {
 		c := p.commitAt(i)
-		lines = append(lines, p.renderCommitLine(c, width, i == p.cursor))
+		isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
+		styles := p.clStyles
+		if isSelected {
+			styles.Subject = styles.Subject.Bold(true)
+		}
+		lines = append(lines, commitrender.RenderLine(commitrender.Params{
+			Commit:     c,
+			Width:      width,
+			IsCursor:   i == p.cursor,
+			Styles:     styles,
+			IsSelected: isSelected,
+			SelectedBg: "#3B3F52", // subtler highlight for selected-but-not-cursor
+		}))
 	}
 	// Loading indicator.
 	if p.loading && len(lines) < height {
 		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
-		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
+		lines = append(lines, commitrender.TruncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
 	// Search bar at bottom if in search mode.
 	if p.searchMode {
@@ -597,44 +621,6 @@ func (p *Panel) renderList(width, height int) string {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (p *Panel) renderCommitLine(c git.Commit, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
-	// Highlight the selected commit (the one whose files are shown).
-	isSelected := p.selectedHash != "" && c.Hash == p.selectedHash
-	if isSelected {
-		subjectStyle = subjectStyle.Bold(true)
-	}
-	hash := hashStyle.Render(c.ShortHash)
-	hashLen := len(c.ShortHash)
-	// Subject fills available width, SHA pinned right.
-	gap := 2 // spaces between subject and hash
-	subjectWidth := width - hashLen - gap
-	if subjectWidth < 10 {
-		subjectWidth = 10
-	}
-	subject := panels.StripANSI(c.Subject)
-	if len(subject) > subjectWidth {
-		subject = subject[:subjectWidth-1] + "…"
-	}
-	subjectRendered := subjectStyle.Render(subject)
-	// Pad between subject and hash so hash is right-aligned.
-	pad := width - lipgloss.Width(subjectRendered) - hashLen
-	if pad < 1 {
-		pad = 1
-	}
-	line := subjectRendered + strings.Repeat(" ", pad) + hash
-	if isCursor || isSelected {
-		bg := p.colors.CursorBg
-		if isSelected && !isCursor {
-			bg = "#3B3F52" // subtler highlight for selected-but-not-cursor
-		}
-		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(bg))
-		line = cursorStyle.Render(line)
-	}
-	return truncateOrPad(line, width)
 }
 
 func (p *Panel) renderSearchBar(width int) string {
@@ -659,7 +645,7 @@ func (p *Panel) renderDetail(width, height int) string {
 		end = len(p.detailLines)
 	}
 	for i := p.detailOffset; i < end; i++ {
-		lines = append(lines, truncateOrPad(p.detailLines[i], width))
+		lines = append(lines, commitrender.TruncateOrPad(p.detailLines[i], width))
 	}
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
@@ -689,6 +675,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.cursor = idx
 	itemType := actions.ItemCommit
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pendingOp = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -717,6 +704,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := c.ShortHash + " " + panels.StripANSI(c.Subject)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemCommit, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -726,12 +714,18 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+}
+
 // handleModalResult processes the result from the action picker modal.
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
-	p.pendingOp = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -776,7 +770,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.moveCursorDown()
 	case "k", "up":
 		p.moveCursorUp()
-	case "enter": //nolint:goconst // inline string is more readable here
+	case keyEnter:
 		return p.selectCommit()
 	case "pgdown":
 		p.pageDown()
@@ -821,7 +815,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		p.searchMode = false
 	case "esc":
 		p.searchMode = false
@@ -846,7 +840,7 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "enter", "q":
+	case "esc", keyEnter, "q":
 		p.detailMode = false
 		p.detailLines = nil
 		p.detailOffset = 0
@@ -1106,7 +1100,7 @@ func relativeDate(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return labelJustNow
 	case d < time.Hour:
 		m := int(d.Minutes())
 		if m == 1 {
@@ -1138,16 +1132,4 @@ func relativeDate(t time.Time) string {
 		}
 		return fmt.Sprintf("%d years ago", years)
 	}
-}
-
-// truncateOrPad ensures a rendered string fits exactly the given width.
-func truncateOrPad(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w > width {
-		return lipgloss.NewStyle().MaxWidth(width).Render(s)
-	}
-	if w < width {
-		return s + strings.Repeat(" ", width-w)
-	}
-	return s
 }

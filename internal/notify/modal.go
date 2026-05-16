@@ -7,6 +7,68 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// Package-level modal styles. Width-dependent properties (.Width) are
+// applied per-render via lipgloss's copy-on-write, so these bases are
+// never mutated.
+var (
+	modalTitleBase = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Align(lipgloss.Center)
+
+	modalMsgBase = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#CCCCCC"))
+
+	modalHintBase = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#666666")).
+			Italic(true).
+			Align(lipgloss.Center)
+
+	modalBoxBase = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#7D56F4")).
+			Background(lipgloss.Color("#1E1E2E")).
+			Padding(1, 2)
+
+	modalSelectedBtn = lipgloss.NewStyle().
+				Background(lipgloss.Color("#7D56F4")).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true).
+				Padding(0, 3)
+
+	modalNormalBtn = lipgloss.NewStyle().
+			Background(lipgloss.Color("#444444")).
+			Foreground(lipgloss.Color("#CCCCCC")).
+			Padding(0, 3)
+
+	modalCenterBase = lipgloss.NewStyle().Align(lipgloss.Center)
+
+	modalInputBorder = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#7D56F4")).
+				Padding(0, 1)
+
+	modalCheckIcon = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#BD93F9"))
+
+	modalCheckLabelNormal = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#CCCCCC"))
+
+	modalCheckLabelFocused = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF"))
+
+	modalActionSelected = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true)
+
+	modalActionNormal = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#CCCCCC"))
+
+	modalActionCursor = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#7D56F4")).
+				Bold(true)
+)
+
 // modalState holds the state of an active modal dialog. Only one modal
 // can be active at a time (enforced by the Manager).
 type modalState struct {
@@ -308,14 +370,8 @@ func (ms *modalState) handleMouseClick(mgr *Manager, mouseX, mouseY, screenWidth
 	cw := boxWidth - 6 // text/content width: boxWidth minus border (1+1) minus padding (2+2)
 	// Measure the title and message heights using the same styles as
 	// view() so the line offsets match exactly.
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Width(cw).
-		Align(lipgloss.Center)
-	msgStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Width(cw)
+	titleStyle := modalTitleBase.Width(cw)
+	msgStyle := modalMsgBase.Width(cw)
 	titleH := lipgloss.Height(titleStyle.Render(ms.title))
 	msgH := lipgloss.Height(msgStyle.Render(ms.message))
 	// The header section: title + blank + message + blank.
@@ -341,44 +397,27 @@ func (ms *modalState) handleMouseClick(mgr *Manager, mouseX, mouseY, screenWidth
 	case ModalConfirmWithCheckbox:
 		content.WriteString(ms.renderCheckbox(cw))
 		content.WriteString("\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("tab cycle • space toggle • settings (,)"))
 		content.WriteString("\n\n")
 		content.WriteString(ms.renderConfirmButtons(cw))
 	case ModalActionPicker:
 		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("↑↓ navigate • enter select • esc cancel"))
 	case ModalActionPickerWithCheckbox:
 		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n")
 		content.WriteString(ms.renderActionPickerCheckbox(cw))
 		content.WriteString("\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("↑↓ navigate • tab checkbox • space toggle • esc cancel"))
 		content.WriteString("\n")
 		content.WriteString(hintStyle.Render("You can change this later in settings (,)"))
 	}
 	// Render through the same box style as view().
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7D56F4")).
-		Background(lipgloss.Color("#1E1E2E")).
-		Padding(1, 2).
-		Width(boxWidth)
+	boxStyle := modalBoxBase.Width(boxWidth)
 	box := boxStyle.Render(content.String())
 	bw := lipgloss.Width(box)
 	bh := lipgloss.Height(box)
@@ -509,17 +548,11 @@ func (ms *modalState) view(width, height int) string {
 	cw := boxWidth - 6
 	var content strings.Builder
 	// Title
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Width(cw).
-		Align(lipgloss.Center)
+	titleStyle := modalTitleBase.Width(cw)
 	content.WriteString(titleStyle.Render(ms.title))
 	content.WriteString("\n\n")
 	// Message
-	msgStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Width(cw)
+	msgStyle := modalMsgBase.Width(cw)
 	content.WriteString(msgStyle.Render(ms.message))
 	content.WriteString("\n\n")
 	// Kind-specific content
@@ -531,44 +564,27 @@ func (ms *modalState) view(width, height int) string {
 	case ModalConfirmWithCheckbox:
 		content.WriteString(ms.renderCheckbox(cw))
 		content.WriteString("\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("tab cycle • space toggle • settings (,)"))
 		content.WriteString("\n\n")
 		content.WriteString(ms.renderConfirmButtons(cw))
 	case ModalActionPicker:
 		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("↑↓ navigate • enter select • esc cancel"))
 	case ModalActionPickerWithCheckbox:
 		content.WriteString(ms.renderActionPicker(cw))
 		content.WriteString("\n")
 		content.WriteString(ms.renderActionPickerCheckbox(cw))
 		content.WriteString("\n")
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true).
-			Width(cw).
-			Align(lipgloss.Center)
+		hintStyle := modalHintBase.Width(cw)
 		content.WriteString(hintStyle.Render("↑↓ navigate • tab checkbox • space toggle • esc cancel"))
 		content.WriteString("\n")
 		content.WriteString(hintStyle.Render("You can change this later in settings (,)"))
 	}
 	// Box style
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7D56F4")).
-		Background(lipgloss.Color("#1E1E2E")).
-		Padding(1, 2).
-		Width(boxWidth)
+	boxStyle := modalBoxBase.Width(boxWidth)
 	box := boxStyle.Render(content.String())
 	// Return the rendered box without manual centering. The caller
 	// (app.View) uses lipgloss.Place to center the overlay, which must
@@ -578,27 +594,17 @@ func (ms *modalState) view(width, height int) string {
 
 // renderConfirmButtons renders the Yes/No buttons for a confirm modal.
 func (ms *modalState) renderConfirmButtons(width int) string {
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#7D56F4")).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 3)
-	normalStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#444444")).
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Padding(0, 3)
 	var yesBtn, noBtn string
 	if ms.selected {
-		yesBtn = selectedStyle.Render("Yes")
-		noBtn = normalStyle.Render("No")
+		yesBtn = modalSelectedBtn.Render("Yes")
+		noBtn = modalNormalBtn.Render("No")
 	} else {
-		yesBtn = normalStyle.Render("Yes")
-		noBtn = selectedStyle.Render("No")
+		yesBtn = modalNormalBtn.Render("Yes")
+		noBtn = modalSelectedBtn.Render("No")
 	}
 	buttons := yesBtn + "  " + noBtn
-	return lipgloss.NewStyle().
+	return modalCenterBase.
 		Width(width).
-		Align(lipgloss.Center).
 		Render(buttons)
 }
 
@@ -608,11 +614,7 @@ func (ms *modalState) renderInputField(width int) string {
 	if display == "" && ms.placeholder != "" {
 		display = ms.placeholder
 	}
-	inputStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7D56F4")).
-		Width(width-4).
-		Padding(0, 1)
+	inputStyle := modalInputBorder.Width(width - 4)
 	return inputStyle.Render(display)
 }
 
@@ -707,36 +709,25 @@ func (ms *modalState) renderCheckbox(width int) string {
 	if ms.focusIdx == 2 {
 		prefix = "▸ " // focused cursor
 	}
-	checkStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#BD93F9"))
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC"))
+	labelStyle := modalCheckLabelNormal
 	// Use brighter label color when focused
 	if ms.focusIdx == 2 {
-		labelStyle = labelStyle.Foreground(lipgloss.Color("#FFFFFF"))
+		labelStyle = modalCheckLabelFocused
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Render(prefix + checkStyle.Render(icon) + " " + labelStyle.Render(label))
+		Render(prefix + modalCheckIcon.Render(icon) + " " + labelStyle.Render(label))
 }
 
 // renderActionPicker renders the selectable action list for an action picker modal.
 func (ms *modalState) renderActionPicker(width int) string {
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
-	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC"))
-	cursorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7D56F4")).
-		Bold(true)
 	var lines []string
 	for i, action := range ms.actions {
 		if i == ms.actionCursor {
-			line := cursorStyle.Render("▸ ") + selectedStyle.Render(action.Label)
+			line := modalActionCursor.Render("▸ ") + modalActionSelected.Render(action.Label)
 			lines = append(lines, line)
 		} else {
-			line := "  " + normalStyle.Render(action.Label)
+			line := "  " + modalActionNormal.Render(action.Label)
 			lines = append(lines, line)
 		}
 	}
@@ -760,16 +751,13 @@ func (ms *modalState) renderActionPickerCheckbox(width int) string {
 	if ms.focusIdx == 1 {
 		prefix = "▸ "
 	}
-	checkStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#BD93F9"))
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC"))
+	labelStyle := modalCheckLabelNormal
 	if ms.focusIdx == 1 {
-		labelStyle = labelStyle.Foreground(lipgloss.Color("#FFFFFF"))
+		labelStyle = modalCheckLabelFocused
 	}
 	return lipgloss.NewStyle().
 		Width(width).
-		Render(prefix + checkStyle.Render(icon) + " " + labelStyle.Render(label))
+		Render(prefix + modalCheckIcon.Render(icon) + " " + labelStyle.Render(label))
 }
 
 // ShowActionPickerWithCheckbox returns a tea.Cmd that produces a

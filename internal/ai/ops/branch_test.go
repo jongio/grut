@@ -88,9 +88,9 @@ func TestFormatBranchList_NoTracking(t *testing.T) {
 func TestBranchAnalyzer_Analyze(t *testing.T) {
 	respJSON := `{"branches":[{"name":"main","action":"keep","reason":"primary branch"},{"name":"stale","action":"delete","reason":"merged and inactive"}]}`
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		completeResp: ai.CompletionResponse{Content: respJSON},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -157,9 +157,9 @@ func TestBranchAnalyzer_Analyze_BranchListError(t *testing.T) {
 
 func TestBranchAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		completeResp: ai.CompletionResponse{Content: "not valid json"},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: "not valid json"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -179,9 +179,9 @@ func TestBranchAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 
 func TestBranchAnalyzer_Analyze_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		completeErr: errors.New("service unavailable"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("service unavailable"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

@@ -4,11 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jongio/grut/internal/extension"
 	lua "github.com/yuin/gopher-lua"
 )
+
+// runtimeNameLua is the canonical identifier for the Lua runtime.
+const runtimeNameLua = "lua"
 
 // DefaultTimeout is the maximum time a Lua script may execute before being
 // cancelled. The value mirrors the default from config (lua_timeout_ms = 100).
@@ -74,9 +79,39 @@ func (r *LuaRuntime) SetTimeout(d time.Duration) {
 	r.timeout = d
 }
 
+// ValidateEntryPoint checks that a Lua entry-point path does not escape
+// its intended directory via path traversal or contain characters that could
+// be used for injection (null bytes, shell metacharacters in the filename).
+func ValidateEntryPoint(entryPoint string) error {
+	if entryPoint == "" {
+		return fmt.Errorf("lua: entry point must not be empty")
+	}
+	if strings.ContainsRune(entryPoint, 0) {
+		return fmt.Errorf("lua: entry point contains null byte")
+	}
+	// Reject path traversal: normalise to forward slashes and check each
+	// segment for a literal ".." component.
+	normalized := strings.ReplaceAll(entryPoint, "\\", "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == ".." {
+			return fmt.Errorf("lua: entry point must not contain path traversal (..)")
+		}
+	}
+	// Reject entries whose base name starts with "-" to prevent option
+	// injection if the path is ever passed to a subprocess.
+	if strings.HasPrefix(filepath.Base(entryPoint), "-") {
+		return fmt.Errorf("lua: entry point filename must not start with '-'")
+	}
+	return nil
+}
+
 // Load reads the Lua file at entryPoint and executes it inside the sandbox.
 // Execution is subject to the configured timeout.
 func (r *LuaRuntime) Load(entryPoint string) error {
+	if err := ValidateEntryPoint(entryPoint); err != nil {
+		return err
+	}
+
 	src, err := os.ReadFile(entryPoint)
 	if err != nil {
 		return fmt.Errorf("lua: read entry point: %w", err)
@@ -106,7 +141,7 @@ func (r *LuaRuntime) Close() {
 
 // Name returns the runtime identifier.
 func (r *LuaRuntime) Name() string {
-	return "lua"
+	return runtimeNameLua
 }
 
 // sandbox removes dangerous modules and globals from the Lua state so that
@@ -120,24 +155,28 @@ func (r *LuaRuntime) sandbox() {
 		r.state.SetGlobal(fn, lua.LNil)
 	}
 
-	// Clear already-loaded modules from package.loaded so that
-	// require("os") cannot return a cached copy.
-	loaded := r.state.GetField(r.state.GetField(r.state.Get(lua.EnvironIndex), "package"), "loaded")
-	if tbl, ok := loaded.(*lua.LTable); ok {
-		for _, mod := range dangerousModules {
-			tbl.RawSetString(mod, lua.LNil)
+	// Neutralise the package system entirely so that require() cannot load
+	// arbitrary .lua/.so files from disk via package.path / package.cpath
+	// (see issue #73).  We clear every sub-table and path string, then
+	// remove require itself from the global scope.
+	pkg := r.state.GetField(r.state.Get(lua.EnvironIndex), "package")
+	if pkgTbl, ok := pkg.(*lua.LTable); ok {
+		// Wipe package.loaded — prevents returning cached copies of any module.
+		if loaded, ok := pkgTbl.RawGetString("loaded").(*lua.LTable); ok {
+			loaded.ForEach(func(k, _ lua.LValue) { loaded.RawSet(k, lua.LNil) })
 		}
+		// Wipe package.preload — prevents deferred loaders.
+		if preload, ok := pkgTbl.RawGetString("preload").(*lua.LTable); ok {
+			preload.ForEach(func(k, _ lua.LValue) { preload.RawSet(k, lua.LNil) })
+		}
+		// Clear search paths so the file-system searcher finds nothing.
+		pkgTbl.RawSetString("path", lua.LString(""))
+		pkgTbl.RawSetString("cpath", lua.LString(""))
 	}
 
-	// Replace preloaders with functions that return an error, blocking any
-	// future require() calls for these modules.
-	for _, mod := range dangerousModules {
-		name := mod // capture loop variable
-		r.state.PreloadModule(name, func(L *lua.LState) int {
-			L.ArgError(1, "module '"+name+"' is restricted")
-			return 0
-		})
-	}
+	// Remove require itself — extensions must use the grut host API, not
+	// the Lua module system.
+	r.state.SetGlobal("require", lua.LNil)
 
 	// Remove string.dump which can serialize function bytecode, potentially
 	// enabling sandbox escape via bytecode manipulation.
@@ -182,10 +221,16 @@ func (r *LuaRuntime) registerHostAPI() {
 }
 
 // luaToast implements grut.toast(title, message, level).
+// Requires the "notify" permission.
 func (r *LuaRuntime) luaToast(l *lua.LState) int {
+	if !extension.ManifestHasPermission(r.manifest, extension.PermNotify) {
+		l.RaiseError("permission denied: %q requires %q permission",
+			"grut.toast", string(extension.PermNotify))
+		return 0
+	}
 	title := l.CheckString(1)
 	message := l.CheckString(2)
-	level := l.OptString(3, "info")
+	level := l.OptString(3, logInfo)
 	r.hostAPI.ShowToast(title, message, level)
 	return 0
 }

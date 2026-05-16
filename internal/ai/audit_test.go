@@ -28,7 +28,7 @@ func TestAuditLoggerBasicLogging(t *testing.T) {
 
 	entry := AuditEntry{
 		Operation:  "commit_message",
-		Provider:   "copilot",
+		Provider:   providerCopilot,
 		FilesSent:  []string{"main.go", "go.mod"},
 		Redactions: 1,
 		TokensIn:   100,
@@ -47,7 +47,7 @@ func TestAuditLoggerBasicLogging(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &got))
 
 	assert.Equal(t, "commit_message", got.Operation)
-	assert.Equal(t, "copilot", got.Provider)
+	assert.Equal(t, providerCopilot, got.Provider)
 	assert.Equal(t, []string{"main.go", "go.mod"}, got.FilesSent)
 	assert.Equal(t, 1, got.Redactions)
 	assert.Equal(t, 100, got.TokensIn)
@@ -67,7 +67,7 @@ func TestAuditLoggerJSONLines(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		err = al.Log(AuditEntry{
 			Operation: fmt.Sprintf("op_%d", i),
-			Provider:  "copilot",
+			Provider:  providerCopilot,
 			Result:    "accepted",
 		})
 		require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestAuditLoggerErrorFieldPresent(t *testing.T) {
 
 	err = al.Log(AuditEntry{
 		Operation: "chat",
-		Provider:  "claude",
+		Provider:  providerClaude,
 		Result:    "error",
 		Error:     "connection timeout",
 	})
@@ -128,7 +128,7 @@ func TestAuditLoggerErrorFieldOmittedWhenEmpty(t *testing.T) {
 
 	err = al.Log(AuditEntry{
 		Operation: "chat",
-		Provider:  "claude",
+		Provider:  providerClaude,
 		Result:    "accepted",
 	})
 	require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestAuditLoggerTimestampAutoSet(t *testing.T) {
 	require.NoError(t, err)
 
 	before := time.Now()
-	err = al.Log(AuditEntry{Operation: "chat", Provider: "claude", Result: "accepted"})
+	err = al.Log(AuditEntry{Operation: "chat", Provider: providerClaude, Result: "accepted"})
 	require.NoError(t, err)
 	after := time.Now()
 	require.NoError(t, al.Close())
@@ -178,7 +178,7 @@ func TestAuditLoggerTimestampPreserved(t *testing.T) {
 	err = al.Log(AuditEntry{
 		Timestamp: explicit,
 		Operation: "chat",
-		Provider:  "claude",
+		Provider:  providerClaude,
 		Result:    "accepted",
 	})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestAuditLoggerConcurrentWrites(t *testing.T) {
 			for i := 0; i < entriesPerGoroutine; i++ {
 				logErr := al.Log(AuditEntry{
 					Operation: fmt.Sprintf("op_%d_%d", id, i),
-					Provider:  "copilot",
+					Provider:  providerCopilot,
 					Result:    "accepted",
 				})
 				assert.NoError(t, logErr)
@@ -252,7 +252,7 @@ func TestAuditLoggerFileRotation(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		err = al.Log(AuditEntry{
 			Operation: "test_operation_with_padding",
-			Provider:  "copilot",
+			Provider:  providerCopilot,
 			FilesSent: []string{"file1.go", "file2.go", "file3.go"},
 			Result:    "accepted",
 			TokensIn:  1000,
@@ -291,7 +291,7 @@ func TestAuditLoggerRotationMaxFiles(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		err = al.Log(AuditEntry{
 			Operation: "fill_operation_for_large_entry",
-			Provider:  "copilot",
+			Provider:  providerCopilot,
 			FilesSent: []string{"a.go", "b.go"},
 			Result:    "accepted",
 			TokensIn:  999,
@@ -341,7 +341,7 @@ func TestAuditLoggerCloseFlushes(t *testing.T) {
 
 	err = al.Log(AuditEntry{
 		Operation: "close_test",
-		Provider:  "copilot",
+		Provider:  providerCopilot,
 		Result:    "accepted",
 	})
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestAuditLoggerConcurrentRotation(t *testing.T) {
 			for i := 0; i < entriesPerGoroutine; i++ {
 				logErr := al.Log(AuditEntry{
 					Operation: fmt.Sprintf("concurrent_rot_%d_%d", id, i),
-					Provider:  "copilot",
+					Provider:  providerCopilot,
 					FilesSent: []string{"a.go", "b.go"},
 					Result:    "accepted",
 					TokensIn:  500,

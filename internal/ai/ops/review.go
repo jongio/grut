@@ -35,10 +35,10 @@ Do not include any text outside the JSON array.`
 
 // severityOrder maps severity strings to sort priority (lower = more severe).
 var severityOrder = map[string]int{
-	"error":   0,
-	"warning": 1,
-	"info":    2,
-	"hint":    3,
+	severityError:   0,
+	severityWarning: 1,
+	severityInfo:    2,
+	severityHint:    3,
 }
 
 // Reviewer performs AI-powered code review on diffs.

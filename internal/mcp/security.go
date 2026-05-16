@@ -231,14 +231,14 @@ type AuditLogger struct {
 }
 
 var sensitiveAuditFields = []string{
-	"content",
-	"message",
+	fieldContent,
+	fieldMessage,
 	"body",
-	"token",
+	fieldToken,
 	"secret",
 	"credential",
-	"password",
-	"key",
+	fieldPassword,
+	fieldKey,
 	"auth",
 	"private",
 }

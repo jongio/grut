@@ -30,11 +30,11 @@ func RenderTabBar(tabs []Tab, activeIdx, width int) string {
 		name string
 	}
 	allPresets := []presetInfo{
-		{"1", "explorer"},
-		{"2", "git"},
-		{"3", "review"},
-		{"4", "agent"},
-		{"5", "full"},
+		{"1", layoutExplorer},
+		{"2", layoutGit},
+		{"3", layoutReview},
+		{"4", layoutAgent},
+		{"5", layoutFull},
 	}
 
 	openNames := make(map[string]bool)

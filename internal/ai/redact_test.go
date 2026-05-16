@@ -21,10 +21,10 @@ func TestShouldExcludeFile(t *testing.T) {
 		excluded bool
 	}{
 		// Built-in exact matches.
-		{".env exact", ".env", true},
-		{"SSH RSA key", "id_rsa", true},
-		{"SSH Ed25519 key", "id_ed25519", true},
-		{"SSH ECDSA key", "id_ecdsa", true},
+		{".env exact", patternDotEnv, true},
+		{"SSH RSA key", patternIDRSA, true},
+		{"SSH Ed25519 key", patternIDEd25519, true},
+		{"SSH ECDSA key", patternIDECDSA, true},
 
 		// Built-in glob matches.
 		{".env.local", ".env.local", true},
@@ -67,7 +67,7 @@ func TestRedactAWSAccessKey(t *testing.T) {
 	r := NewRedactor(nil)
 
 	input := "aws_access_key_id = AKIAIOSFODNN7EXAMPLE and some text"
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "AKIAIOSFODNN7EXAMPLE")
 	assert.Contains(t, got, RedactedPlaceholder)
@@ -88,7 +88,7 @@ YMORn7y8k6P/0LqDx3kTt1z7/cMiRuPQ1Q==
 -----END RSA PRIVATE KEY-----`
 	input := "before\n" + pem + "\nafter"
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "BEGIN RSA PRIVATE KEY")
 	assert.NotContains(t, got, "END RSA PRIVATE KEY")
@@ -106,7 +106,7 @@ func TestRedactPEMBlockECDSA(t *testing.T) {
 MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVxuB1kU7FsJEIaEAA
 -----END EC PRIVATE KEY-----`
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "BEGIN EC PRIVATE KEY")
 	assert.Equal(t, RedactedPlaceholder, got)
@@ -135,7 +135,7 @@ func TestRedactConnectionStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.NotContains(t, got, tt.gone)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
@@ -167,7 +167,7 @@ func TestRedactGitHubTokens(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			token := tt.prefix + suffix
 			input := "GITHUB_TOKEN=" + token
-			got, count := r.RedactContent(input)
+			got, count, _ := r.RedactContent(input)
 
 			assert.NotContains(t, got, token)
 			assert.Contains(t, got, RedactedPlaceholder)
@@ -195,7 +195,7 @@ func TestRedactAPIKeyAssignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
 		})
@@ -220,7 +220,7 @@ func TestRedactGenericSecretKeywords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
 		})
@@ -246,7 +246,7 @@ func main() {
 	}
 }
 `
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.Equal(t, input, got)
 	assert.Equal(t, 0, count)
@@ -265,7 +265,7 @@ func TestRedactContentCountAccuracy(t *testing.T) {
 		"db=postgres://user:pass@host:5432/db\n" +
 		"gh=" + ghToken + "\n"
 
-	_, count := r.RedactContent(input)
+	_, count, _ := r.RedactContent(input)
 
 	assert.GreaterOrEqual(t, count, 3, "expected at least 3 redactions")
 }
@@ -276,23 +276,23 @@ func TestRedactContentCountAccuracy(t *testing.T) {
 
 func TestUserPatternsMerge(t *testing.T) {
 	// Add a custom pattern; duplicate ".env" to verify dedup.
-	r := NewRedactor([]string{"*.custom", ".env"})
+	r := NewRedactor([]string{"*.custom", patternDotEnv})
 
 	// Custom pattern works.
 	assert.True(t, r.ShouldExcludeFile("data.custom"))
 
 	// Built-in patterns still active.
-	assert.True(t, r.ShouldExcludeFile(".env"))
+	assert.True(t, r.ShouldExcludeFile(patternDotEnv))
 	assert.True(t, r.ShouldExcludeFile(".env.local"))
 	assert.True(t, r.ShouldExcludeFile("server.key"))
-	assert.True(t, r.ShouldExcludeFile("id_rsa"))
+	assert.True(t, r.ShouldExcludeFile(patternIDRSA))
 
 	// Non-matching file passes through.
 	assert.False(t, r.ShouldExcludeFile("main.go"))
 }
 
 func TestUserPatternsDeduplicate(t *testing.T) {
-	r := NewRedactor([]string{".env", ".env", "*.key"})
+	r := NewRedactor([]string{patternDotEnv, patternDotEnv, patternKeyFile})
 
 	// Count occurrences of ".env" in file patterns — must be exactly 1.
 	envCount := 0
@@ -321,7 +321,7 @@ func TestNewRedactorNilPatterns(t *testing.T) {
 
 func TestRedactEmptyContent(t *testing.T) {
 	r := NewRedactor(nil)
-	got, count := r.RedactContent("")
+	got, count, _ := r.RedactContent("")
 	assert.Equal(t, "", got)
 	assert.Equal(t, 0, count)
 }
@@ -339,7 +339,7 @@ func TestRedactOverlappingPatterns(t *testing.T) {
 	ghToken := "ghp_" + strings.Repeat("A", 36)
 	input := `token = "` + ghToken + `"`
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 	assert.NotContains(t, got, ghToken)
 	assert.Contains(t, got, RedactedPlaceholder)
 	// At least 1 redaction (may be more if both patterns match).
@@ -355,7 +355,7 @@ func TestRedactMultipleSecretsOnOneLine(t *testing.T) {
 
 	input := "AKIAIOSFODNN7EXAMPLE ghp_" + strings.Repeat("B", 36) + " postgres://user:pass@host/db"
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 	assert.NotContains(t, got, "AKIAIOSFODNN7EXAMPLE")
 	assert.NotContains(t, got, "postgres://")
 	assert.GreaterOrEqual(t, count, 3)
@@ -369,7 +369,7 @@ func TestRedactMultipleSecretsOnOneLine(t *testing.T) {
 
 func TestRedactWhitespaceContent(t *testing.T) {
 	r := NewRedactor(nil)
-	got, count := r.RedactContent("   \n\t\n   ")
+	got, count, _ := r.RedactContent("   \n\t\n   ")
 	assert.Equal(t, "   \n\t\n   ", got)
 	assert.Equal(t, 0, count)
 }
@@ -393,7 +393,7 @@ func TestRedactCredentialInURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.NotContains(t, got, tt.gone)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
@@ -412,5 +412,5 @@ func TestShouldExcludeFile_CustomPattern(t *testing.T) {
 	assert.True(t, r.ShouldExcludeFile("config.secret.json"))
 	assert.False(t, r.ShouldExcludeFile("config.json"))
 	// Built-in patterns still work.
-	assert.True(t, r.ShouldExcludeFile(".env"))
+	assert.True(t, r.ShouldExcludeFile(patternDotEnv))
 }

@@ -17,35 +17,18 @@ import (
 	"github.com/jongio/grut/internal/theme"
 )
 
-// SetPreviewPositionMsg is emitted when the user selects a preview position.
-// The root model handles this by calling engine.SetPreviewPosition.
-type SetPreviewPositionMsg struct {
-	Position layout.PreviewPosition
-}
-
-// SetThemeMsg is emitted when the user selects a theme.
-// The root model handles this by loading and applying the new theme.
-type SetThemeMsg struct {
-	Name string
-}
-
-// SetDoubleClickActionMsg is emitted when the user changes a double-click action.
-type SetDoubleClickActionMsg struct {
-	ItemType string
-	Action   string
-}
-
-// SetRightClickActionMsg is emitted when the user changes a right-click action.
-type SetRightClickActionMsg struct {
-	ItemType string
-	Action   string
-}
-
-// ResetActionPromptsMsg is emitted when the user resets all action confirmations.
-type ResetActionPromptsMsg struct{}
-
-// ToggleSettingsMsg requests showing or hiding the settings overlay.
-type ToggleSettingsMsg struct{}
+// Message type aliases — the canonical definitions now live in the panels
+// package so that the root TUI model can type-switch without importing
+// this package directly. The aliases preserve backwards compatibility
+// for any external callers and internal tests.
+type (
+	SetPreviewPositionMsg   = panels.SetPreviewPositionMsg
+	SetThemeMsg             = panels.SetThemeMsg
+	SetDoubleClickActionMsg = panels.SetDoubleClickActionMsg
+	SetRightClickActionMsg  = panels.SetRightClickActionMsg
+	ResetActionPromptsMsg   = panels.ResetActionPromptsMsg
+	ToggleSettingsMsg       = panels.ToggleSettingsMsg
+)
 
 // settingField identifies which setting row the cursor is on.
 type settingField int
@@ -180,7 +163,7 @@ func (p *Panel) View(width, height int) string {
 	previewLabel := positionLabel(p.previewPos)
 	themeLabel := p.themeName
 	if themeLabel == "" {
-		themeLabel = "default"
+		themeLabel = labelDefault
 	}
 	rendered := []string{
 		emptyLine,
@@ -343,7 +326,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		case p.cursor == fieldPreviewPosition:
 			p.previewPos = cyclePreviewPosition(p.previewPos)
 			return p, func() tea.Msg {
-				return SetPreviewPositionMsg{Position: p.previewPos}
+				return SetPreviewPositionMsg{Position: int(p.previewPos)}
 			}
 		case p.cursor == fieldTheme:
 			p.themeName = p.cycleTheme(p.themeName)
@@ -474,7 +457,7 @@ func cyclePreviewPosition(current layout.PreviewPosition) layout.PreviewPosition
 func positionLabel(pos layout.PreviewPosition) string {
 	switch pos {
 	case layout.PreviewRight:
-		return "Right"
+		return labelRight
 	case layout.PreviewBottom:
 		return "Bottom"
 	case layout.PreviewLeft:
@@ -482,7 +465,7 @@ func positionLabel(pos layout.PreviewPosition) string {
 	case layout.PreviewTop:
 		return "Top"
 	default:
-		return "Right"
+		return labelRight
 	}
 }
 
@@ -492,7 +475,7 @@ func (p *Panel) cycleTheme(current string) string {
 		return current
 	}
 	if current == "" {
-		current = "default"
+		current = labelDefault
 	}
 	for i, name := range p.themeNames {
 		if name == current {

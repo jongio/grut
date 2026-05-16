@@ -23,10 +23,7 @@ func sleepCmd() (string, []string) {
 // echoCmd returns a platform-appropriate command that prints output to stdout.
 func echoCmd(text string) (string, []string) {
 	if runtime.GOOS == "windows" {
-		return "powershell", []string{
-			"-NoProfile", "-NonInteractive", "-Command",
-			"Write-Output '" + text + "'",
-		}
+		return "cmd", []string{"/C", "echo", text}
 	}
 	return "echo", []string{text}
 }
@@ -168,6 +165,9 @@ func TestOutputCapture(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+
+	// Allow output goroutines to finish flushing (Windows PowerShell can be slow).
+	time.Sleep(200 * time.Millisecond)
 
 	stdout, _ := tracker.Output(pid)
 	require.NotEmpty(t, stdout, "should have captured stdout output")

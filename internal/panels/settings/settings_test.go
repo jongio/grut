@@ -85,7 +85,7 @@ func TestEnterCyclesPreviewPosition(t *testing.T) {
 	msg := cmd()
 	posMsg, ok := msg.(SetPreviewPositionMsg)
 	require.True(t, ok, "command should return SetPreviewPositionMsg")
-	assert.Equal(t, layout.PreviewBottom, posMsg.Position, "should cycle Right→Bottom")
+	assert.Equal(t, int(layout.PreviewBottom), posMsg.Position, "should cycle Right→Bottom")
 }
 
 func TestEnterCyclesTheme(t *testing.T) {

@@ -76,9 +76,43 @@ const (
 	choiceTheirs = "theirs"
 )
 
+// sectionKind identifies a conflict section for style lookup.
+type sectionKind int
+
+const (
+	sectionOurs sectionKind = iota
+	sectionTheirs
+	sectionAI
+)
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
+// panelStyles holds pre-computed lipgloss styles to avoid per-frame
+// allocations.  Width is applied at render time since it varies per call.
+type panelStyles struct {
+	noConflicts lipgloss.Style // "No conflicts" placeholder (centered, success color)
+	emptyLine   lipgloss.Style // viewport padding line
+	fileHeader  lipgloss.Style // bold file path header
+	regionLabel lipgloss.Style // "Region N of M" label
+	dim         lipgloss.Style // dim foreground (confidence line)
+	dimItalic   lipgloss.Style // dim + italic (explanation, AI unavailable, empty code block)
+	keyHints    lipgloss.Style // bottom key-hint bar (fg + bg)
+
+	// Section header styles keyed by section color.
+	oursHeader         lipgloss.Style
+	oursHeaderChosen   lipgloss.Style
+	theirsHeader       lipgloss.Style
+	theirsHeaderChosen lipgloss.Style
+	aiHeader           lipgloss.Style
+	aiHeaderChosen     lipgloss.Style
+
+	// Code block styles keyed by section color.
+	oursCode   lipgloss.Style
+	theirsCode lipgloss.Style
+	aiCode     lipgloss.Style
+}
+
 // Panel is the AI conflict resolution panel. It shows a three-way diff
 // (base/ours/theirs) with AI-suggested resolutions and lets the user
 // accept or override each region's resolution.
@@ -88,6 +122,7 @@ type Panel struct {
 	// resolved tracks user choices: filePath -> regionIndex -> choiceXxx.
 	resolved map[string]map[int]string
 	files    []ConflictFileData
+	styles   panelStyles
 	panels.BasePanel
 	currentFile   int // index into files
 	currentRegion int // index into current file's regions
@@ -100,10 +135,61 @@ var _ panels.Panel = (*Panel)(nil)
 // New creates a new AI conflict panel. The theme may be nil; the panel
 // falls back to hard-coded colors when it is.
 func New(th *theme.Theme) *Panel {
-	return &Panel{
+	p := &Panel{
 		BasePanel: panels.BasePanel{PanelTitle: "aiconflict"},
 		theme:     th,
 		resolved:  make(map[string]map[int]string),
+	}
+	p.initStyles()
+	return p
+}
+
+// initStyles pre-computes all lipgloss styles from the current theme so
+// View and buildLines only apply width at render time.
+func (p *Panel) initStyles() {
+	mkSectionHeader := func(hex string) (normal, chosen lipgloss.Style) {
+		normal = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color(hex))
+		chosen = normal.Underline(true)
+		return normal, chosen
+	}
+
+	oursN, oursC := mkSectionHeader(p.oursHex())
+	theirsN, theirsC := mkSectionHeader(p.theirsHex())
+	aiN, aiC := mkSectionHeader(p.aiHex())
+
+	dimColor := lipgloss.Color(p.dimHex())
+
+	p.styles = panelStyles{
+		noConflicts: lipgloss.NewStyle().
+			Align(lipgloss.Center, lipgloss.Center).
+			Foreground(lipgloss.Color(p.successHex())),
+		emptyLine: lipgloss.NewStyle(),
+		fileHeader: lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color(p.headerHex())),
+		regionLabel: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.regionHex())),
+		dim: lipgloss.NewStyle().
+			Foreground(dimColor),
+		dimItalic: lipgloss.NewStyle().Italic(true).
+			Foreground(dimColor),
+		keyHints: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.hintHex())).
+			Background(lipgloss.Color(p.hintBgHex())),
+
+		oursHeader:         oursN,
+		oursHeaderChosen:   oursC,
+		theirsHeader:       theirsN,
+		theirsHeaderChosen: theirsC,
+		aiHeader:           aiN,
+		aiHeaderChosen:     aiC,
+
+		oursCode: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.oursHex())),
+		theirsCode: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.theirsHex())),
+		aiCode: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.aiHex())),
 	}
 }
 
@@ -282,10 +368,8 @@ func (p *Panel) View(width, height int) string {
 		return ""
 	}
 	if len(p.files) == 0 {
-		return lipgloss.NewStyle().
+		return p.styles.noConflicts.
 			Width(width).Height(height).
-			Align(lipgloss.Center, lipgloss.Center).
-			Foreground(lipgloss.Color(p.successHex())).
 			Render("No conflicts")
 	}
 	lines := p.buildLines(width)
@@ -303,7 +387,7 @@ func (p *Panel) View(width, height int) string {
 		visible = visible[:contentHeight]
 	}
 	// Pad to fill viewport.
-	emptyLine := lipgloss.NewStyle().Width(width).Render("")
+	emptyLine := p.styles.emptyLine.Width(width).Render("")
 	for len(visible) < contentHeight {
 		visible = append(visible, emptyLine)
 	}
@@ -321,9 +405,7 @@ func (p *Panel) buildLines(width int) []string {
 	// Header: file path and file counter.
 	fileHeader := fmt.Sprintf("  File %d/%d: %s",
 		p.currentFile+1, len(p.files), cf.Path)
-	lines = append(lines, lipgloss.NewStyle().
-		Width(width).Bold(true).
-		Foreground(lipgloss.Color(p.headerHex())).
+	lines = append(lines, p.styles.fileHeader.Width(width).
 		Render(fileHeader))
 	// Region indicator.
 	regionLabel := fmt.Sprintf("  Region %d of %d", p.currentRegion+1, rc)
@@ -331,9 +413,7 @@ func (p *Panel) buildLines(width int) []string {
 	if choice, ok := p.resolved[cf.Path][p.currentRegion]; ok {
 		regionLabel += fmt.Sprintf("  [resolved: %s]", choice)
 	}
-	lines = append(lines, lipgloss.NewStyle().
-		Width(width).
-		Foreground(lipgloss.Color(p.regionHex())).
+	lines = append(lines, p.styles.regionLabel.Width(width).
 		Render(regionLabel))
 	lines = append(lines, "") // blank separator
 	// Guard: no regions available.
@@ -343,37 +423,31 @@ func (p *Panel) buildLines(width int) []string {
 	}
 	region := cf.Regions[p.currentRegion]
 	// --- Ours section ---
-	lines = append(lines, p.renderSectionHeader(width, "OURS", p.oursHex(),
+	lines = append(lines, p.renderSectionHeader(width, "OURS", sectionOurs,
 		p.resolved[cf.Path][p.currentRegion] == choiceOurs))
-	lines = append(lines, p.renderCodeBlock(width, region.Ours, p.oursHex())...)
+	lines = append(lines, p.renderCodeBlock(width, region.Ours, sectionOurs)...)
 	lines = append(lines, "") // separator
 	// --- Theirs section ---
-	lines = append(lines, p.renderSectionHeader(width, "THEIRS", p.theirsHex(),
+	lines = append(lines, p.renderSectionHeader(width, "THEIRS", sectionTheirs,
 		p.resolved[cf.Path][p.currentRegion] == choiceTheirs))
-	lines = append(lines, p.renderCodeBlock(width, region.Theirs, p.theirsHex())...)
+	lines = append(lines, p.renderCodeBlock(width, region.Theirs, sectionTheirs)...)
 	lines = append(lines, "") // separator
 	// --- AI Suggestion section ---
 	if region.AIResolution != "" {
 		isChosen := p.resolved[cf.Path][p.currentRegion] == choiceAI
-		lines = append(lines, p.renderSectionHeader(width, "AI SUGGESTION", p.aiHex(), isChosen))
-		lines = append(lines, p.renderCodeBlock(width, region.AIResolution, p.aiHex())...)
+		lines = append(lines, p.renderSectionHeader(width, "AI SUGGESTION", sectionAI, isChosen))
+		lines = append(lines, p.renderCodeBlock(width, region.AIResolution, sectionAI)...)
 		// Explanation and confidence.
 		if region.Explanation != "" {
 			explLine := fmt.Sprintf("  Explanation: %s", region.Explanation)
-			lines = append(lines, lipgloss.NewStyle().
-				Width(width).Italic(true).
-				Foreground(lipgloss.Color(p.dimHex())).
+			lines = append(lines, p.styles.dimItalic.Width(width).
 				Render(explLine))
 		}
 		confLine := fmt.Sprintf("  Confidence: %.0f%%", region.Confidence*100)
-		lines = append(lines, lipgloss.NewStyle().
-			Width(width).
-			Foreground(lipgloss.Color(p.dimHex())).
+		lines = append(lines, p.styles.dim.Width(width).
 			Render(confLine))
 	} else {
-		lines = append(lines, lipgloss.NewStyle().
-			Width(width).Italic(true).
-			Foreground(lipgloss.Color(p.dimHex())).
+		lines = append(lines, p.styles.dimItalic.Width(width).
 			Render("  AI SUGGESTION — not available"))
 	}
 	return lines
@@ -383,114 +457,128 @@ func (p *Panel) buildLines(width int) []string {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 // renderSectionHeader renders a section header like "▸ OURS" or "● OURS".
-func (p *Panel) renderSectionHeader(width int, title, hex string, chosen bool) string {
+func (p *Panel) renderSectionHeader(width int, title string, kind sectionKind, chosen bool) string {
 	prefix := "  ▸ "
 	if chosen {
 		prefix = "  ● "
 	}
-	style := lipgloss.NewStyle().Width(width).Bold(true).
-		Foreground(lipgloss.Color(hex))
-	if chosen {
-		style = style.Underline(true)
+	style := p.sectionHeaderStyle(kind, chosen)
+	return style.Width(width).Render(prefix + title)
+}
+
+// sectionHeaderStyle returns the cached header style for the given section
+// and chosen state.
+func (p *Panel) sectionHeaderStyle(kind sectionKind, chosen bool) lipgloss.Style {
+	switch kind {
+	case sectionOurs:
+		if chosen {
+			return p.styles.oursHeaderChosen
+		}
+		return p.styles.oursHeader
+	case sectionTheirs:
+		if chosen {
+			return p.styles.theirsHeaderChosen
+		}
+		return p.styles.theirsHeader
+	default: // sectionAI
+		if chosen {
+			return p.styles.aiHeaderChosen
+		}
+		return p.styles.aiHeader
 	}
-	return style.Render(prefix + title)
 }
 
 // renderCodeBlock splits content into lines and renders each with an
-// indent and the given color.
-func (p *Panel) renderCodeBlock(width int, content, hex string) []string {
+// indent and the given section color.
+func (p *Panel) renderCodeBlock(width int, content string, kind sectionKind) []string {
 	if content == "" {
-		return []string{lipgloss.NewStyle().
-			Width(width).Italic(true).
-			Foreground(lipgloss.Color(p.dimHex())).
+		return []string{p.styles.dimItalic.Width(width).
 			Render("    (empty)")}
 	}
-	style := lipgloss.NewStyle().
-		Width(width).
-		Foreground(lipgloss.Color(hex))
+	style := p.codeBlockStyle(kind)
 	raw := strings.TrimRight(content, "\n")
 	split := strings.Split(raw, "\n")
 	out := make([]string, 0, len(split))
+	widthStyle := style.Width(width)
 	for _, l := range split {
-		out = append(out, style.Render("    "+l))
+		out = append(out, widthStyle.Render("    "+l))
 	}
 	return out
+}
+
+// codeBlockStyle returns the cached code style for the given section.
+func (p *Panel) codeBlockStyle(kind sectionKind) lipgloss.Style {
+	switch kind {
+	case sectionOurs:
+		return p.styles.oursCode
+	case sectionTheirs:
+		return p.styles.theirsCode
+	default: // sectionAI
+		return p.styles.aiCode
+	}
 }
 
 // renderKeyHints renders the bottom key-hint bar.
 func (p *Panel) renderKeyHints(width int) string {
 	hints := "  a:AI  o:ours  t:theirs  n:next  p:prev  j/k:scroll"
-	style := lipgloss.NewStyle().
-		Width(width).
-		Foreground(lipgloss.Color(p.hintHex())).
-		Background(lipgloss.Color(p.hintBgHex()))
-	return style.Render(hints)
+	return p.styles.keyHints.Width(width).Render(hints)
 }
 
 // ---------------------------------------------------------------------------
 // Color helpers — prefer theme, fall back to hard-coded Dracula palette
 // ---------------------------------------------------------------------------
-func (p *Panel) headerHex() string {
-	if p.theme != nil && p.theme.Colors.DiffHeader != "" {
-		return p.theme.Colors.DiffHeader
+
+// colorOrDefault returns themeColor when non-empty, otherwise fallback.
+func colorOrDefault(themeColor, fallback string) string {
+	if themeColor != "" {
+		return themeColor
 	}
-	return "#C9A227"
+	return fallback
+}
+
+// themeColor returns the theme value for the given accessor (if a theme is
+// loaded), falling back to fallback.
+func (p *Panel) themeColor(accessor func(*theme.Colors) string, fallback string) string {
+	if p.theme != nil {
+		return colorOrDefault(accessor(&p.theme.Colors), fallback)
+	}
+	return fallback
+}
+
+func (p *Panel) headerHex() string {
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffHeader }, "#C9A227")
 }
 
 func (p *Panel) regionHex() string {
-	if p.theme != nil && p.theme.Colors.DiffHunk != "" {
-		return p.theme.Colors.DiffHunk
-	}
-	return "#555555"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffHunk }, "#555555")
 }
 
 func (p *Panel) oursHex() string {
-	if p.theme != nil && p.theme.Colors.DiffAdded != "" {
-		return p.theme.Colors.DiffAdded
-	}
-	return "#6B9E56"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffAdded }, "#6B9E56")
 }
 
 func (p *Panel) theirsHex() string {
-	if p.theme != nil && p.theme.Colors.DiffRemoved != "" {
-		return p.theme.Colors.DiffRemoved
-	}
-	return "#C44B4B"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffRemoved }, "#C44B4B")
 }
 
 func (p *Panel) aiHex() string {
-	if p.theme != nil && p.theme.Colors.NormalCyan != "" {
-		return p.theme.Colors.NormalCyan
-	}
-	return "#5E8E8B"
+	return p.themeColor(func(c *theme.Colors) string { return c.NormalCyan }, "#5E8E8B")
 }
 
 func (p *Panel) dimHex() string {
-	if p.theme != nil && p.theme.Colors.BrightBlack != "" {
-		return p.theme.Colors.BrightBlack
-	}
-	return "#555555"
+	return p.themeColor(func(c *theme.Colors) string { return c.BrightBlack }, "#555555")
 }
 
 func (p *Panel) successHex() string {
-	if p.theme != nil && p.theme.Colors.NotifySuccess != "" {
-		return p.theme.Colors.NotifySuccess
-	}
-	return "#6B9E56"
+	return p.themeColor(func(c *theme.Colors) string { return c.NotifySuccess }, "#6B9E56")
 }
 
 func (p *Panel) hintHex() string {
-	if p.theme != nil && p.theme.Colors.StatusBarFg != "" {
-		return p.theme.Colors.StatusBarFg
-	}
-	return "#D4D4D4"
+	return p.themeColor(func(c *theme.Colors) string { return c.StatusBarFg }, "#D4D4D4")
 }
 
 func (p *Panel) hintBgHex() string {
-	if p.theme != nil && p.theme.Colors.StatusBarBg != "" {
-		return p.theme.Colors.StatusBarBg
-	}
-	return "#2A2A2A"
+	return p.themeColor(func(c *theme.Colors) string { return c.StatusBarBg }, "#2A2A2A")
 }
 
 // ---------------------------------------------------------------------------

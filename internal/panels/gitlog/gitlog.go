@@ -17,9 +17,9 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 	"github.com/jongio/grut/internal/rightclick"
 	"github.com/jongio/grut/internal/theme"
-	"github.com/mattn/go-runewidth"
 )
 
 // Pending operation identifiers for modal result dispatch.
@@ -38,10 +38,6 @@ const loadMoreThreshold = 50
 // debounceInterval prevents rapid-fire pagination requests.
 const debounceInterval = 200 * time.Millisecond
 
-// authorColMaxWidth is the maximum rune-width used for the author column
-// in the log list view. Wider names are truncated to keep the layout compact.
-const authorColMaxWidth = 14
-
 type panelColors struct {
 	Hash     string
 	Date     string
@@ -55,16 +51,28 @@ type panelColors struct {
 	SearchFg string
 }
 
+func newCommitLineStyles(c panelColors) commitrender.Styles {
+	return commitrender.Styles{
+		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Date:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Date)),
+		Author:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.Author)),
+		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Ref:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.Refs)).Bold(true),
+		Graph:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.Graph)),
+		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+	}
+}
+
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
 		Hash:     "#D4B84A",
-		Date:     "#555555",
+		Date:     colorDim,
 		Author:   "#6B9E56",
 		Refs:     "#7A9EBF",
 		Subject:  "#999999",
-		Dim:      "#555555",
+		Dim:      colorDim,
 		CursorBg: "#2A2A2A",
-		Graph:    "#555555",
+		Graph:    colorDim,
 		SearchBg: "#2A2A2A",
 		SearchFg: "#D4D4D4",
 	}
@@ -110,6 +118,7 @@ type Panel struct {
 	detailLines  []string
 	cfg          config.GitConfig
 	colors       panelColors
+	clStyles     commitrender.Styles
 	theme        *theme.Theme
 	cursor       int // index into commits
 	offset       int // viewport offset into display
@@ -136,11 +145,13 @@ func New(client git.StatusReader, cfg config.GitConfig, th *theme.Theme) *Panel 
 	if cfg.MaxLogEntries > 0 {
 		ps = cfg.MaxLogEntries
 	}
+	colors := initColors(th)
 	return &Panel{
 		gitClient: client,
 		cfg:       cfg,
 		pageSize:  ps,
-		colors:    initColors(th),
+		colors:    colors,
+		clStyles:  newCommitLineStyles(colors),
 		theme:     th,
 	}
 }
@@ -265,7 +276,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Show commit details", Action: "detail"},
+		{Key: keyEnter, Description: "Show commit details", Action: "detail"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
@@ -420,18 +431,27 @@ func (p *Panel) renderLog(width, height int) string {
 	for i := p.offset; i < end; i++ {
 		d := dl[i]
 		if d.commitIdx >= 0 && d.commitIdx < len(p.commits) {
-			lines = append(lines, p.renderCommitLine(p.commits[d.commitIdx], d.text, width, i == cursorDL))
+			lines = append(lines, commitrender.RenderLine(commitrender.Params{
+				Commit:      p.commits[d.commitIdx],
+				Width:       width,
+				IsCursor:    i == cursorDL,
+				GraphPrefix: d.text,
+				Styles:      p.clStyles,
+				ShowRefs:    true,
+				ShowAuthor:  true,
+				ShowDate:    true,
+			}))
 		} else {
 			// Connector line — just show the graph portion.
 			graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Graph))
 			line := graphStyle.Render(d.text)
-			lines = append(lines, truncateOrPad(line, width))
+			lines = append(lines, commitrender.TruncateOrPad(line, width))
 		}
 	}
 	// Loading indicator.
 	if p.loading && len(lines) < height {
 		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
-		lines = append(lines, truncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
+		lines = append(lines, commitrender.TruncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
 	// Search bar at top if in search mode.
 	if p.searchMode {
@@ -451,113 +471,6 @@ func (p *Panel) renderLog(width, height int) string {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (p *Panel) renderCommitLine(c git.Commit, graphPrefix string, width int, isCursor bool) string {
-	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Date))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Author))
-	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Subject))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Refs)).Bold(true)
-	graphStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Graph))
-	// Build right-side fixed columns first to determine how much space subject gets.
-	// SHA is always pinned to the right. Author and date appear as width allows.
-	hashCol := panels.StripANSI(c.ShortHash)
-	hashW := len(hashCol)
-	gap := "  " // column separator
-	// Compute author/date only when they'll fit.
-	authorCol := panels.StripANSI(c.Author)
-	if runewidth.StringWidth(authorCol) > authorColMaxWidth {
-		authorCol = runewidth.Truncate(authorCol, authorColMaxWidth, "")
-	}
-	dateCol := c.Date.Format("2006-01-02")
-	graphW := lipgloss.Width(graphPrefix)
-	if graphW > 0 {
-		graphW += 2 // gap after graph
-	}
-	// Progressive columns: show more as width grows.
-	// Always: graph + subject + gap + hash
-	// Medium: + author
-	// Wide: + date
-	minSubjectW := 10
-	baseUsed := graphW + minSubjectW + len(gap) + hashW
-	showAuthor := baseUsed+len(gap)+len(authorCol) <= width
-	showDate := showAuthor && baseUsed+len(gap)+len(authorCol)+len(gap)+len(dateCol) <= width
-	// Compute right-side string (everything after subject).
-	var rightParts []string
-	if showDate {
-		rightParts = append(rightParts, dateStyle.Render(dateCol))
-	}
-	if showAuthor {
-		rightParts = append(rightParts, authorStyle.Render(authorCol))
-	}
-	rightParts = append(rightParts, hashStyle.Render(hashCol))
-	rightSide := strings.Join(rightParts, gap)
-	rightW := lipgloss.Width(rightSide)
-	// Subject + refs fill the remaining space.
-	subjectSpace := width - graphW - len(gap) - rightW
-	if subjectSpace < minSubjectW {
-		subjectSpace = minSubjectW
-	}
-	// Build subject text with inline refs. Sanitise untrusted git data
-	// to prevent ANSI escape-sequence injection (CWE-150).
-	safeSubject := panels.StripANSI(c.Subject)
-	safeRefs := make([]string, len(c.Refs))
-	for i, r := range c.Refs {
-		safeRefs[i] = panels.StripANSI(r)
-	}
-	subjectText := safeSubject
-	if len(safeRefs) > 0 {
-		subjectText += " (" + strings.Join(safeRefs, ", ") + ")"
-	}
-	// Truncate or pad subject to fill its allotted space.
-	subjectVisW := runewidth.StringWidth(subjectText)
-	var styledSubject string
-	if subjectVisW > subjectSpace {
-		subjectText = runewidth.Truncate(subjectText, subjectSpace, "")
-		// Check if refs portion was included in the truncated text.
-		if len(safeRefs) > 0 && strings.Contains(subjectText, "(") {
-			styledSubject = p.styleSubjectWithRefs(subjectText, safeSubject, subjectStyle, refStyle)
-		} else {
-			styledSubject = subjectStyle.Render(subjectText)
-		}
-	} else {
-		if len(safeRefs) > 0 {
-			styledSubject = subjectStyle.Render(safeSubject) + " " + refStyle.Render("("+strings.Join(safeRefs, ", ")+")")
-			// Pad to fill subject space.
-			styledVisW := lipgloss.Width(styledSubject)
-			if styledVisW < subjectSpace {
-				styledSubject += strings.Repeat(" ", subjectSpace-styledVisW)
-			}
-		} else {
-			styledSubject = subjectStyle.Render(subjectText)
-			if subjectVisW < subjectSpace {
-				styledSubject += strings.Repeat(" ", subjectSpace-subjectVisW)
-			}
-		}
-	}
-	// Assemble the line: graph + subject + gap + right-side columns.
-	var line string
-	if graphW > 0 {
-		line = graphStyle.Render(graphPrefix) + gap + styledSubject
-	} else {
-		line = styledSubject
-	}
-	line += gap + rightSide
-	if isCursor {
-		cursorStyle := lipgloss.NewStyle().Background(lipgloss.Color(p.colors.CursorBg))
-		line = cursorStyle.Width(width).Render(line)
-	}
-	return truncateOrPad(line, width)
-}
-
-// styleSubjectWithRefs handles the case where subject text includes a truncated refs portion.
-func (p *Panel) styleSubjectWithRefs(text string, _ string, subjectStyle, refStyle lipgloss.Style) string {
-	idx := strings.Index(text, "(")
-	if idx < 0 {
-		return subjectStyle.Render(text)
-	}
-	return subjectStyle.Render(text[:idx]) + refStyle.Render(text[idx:])
 }
 
 func (p *Panel) renderSearchBar(width int) string {
@@ -582,7 +495,7 @@ func (p *Panel) renderDetail(width, height int) string {
 		end = len(p.detailLines)
 	}
 	for i := p.detailOffset; i < end; i++ {
-		lines = append(lines, truncateOrPad(p.detailLines[i], width))
+		lines = append(lines, commitrender.TruncateOrPad(p.detailLines[i], width))
 	}
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
@@ -624,6 +537,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.ensureCursorVisible()
 	itemType := actions.ItemLogCommit
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pendingOp = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -657,6 +571,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := panels.StripANSI(c.ShortHash) + " " + panels.StripANSI(c.Subject)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemLogCommit, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -666,12 +581,18 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+}
+
 // handleModalResult dispatches the result of a modal dialog.
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
-	p.pendingOp = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -742,7 +663,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.moveCursorDown()
 	case "k", "up":
 		p.moveCursorUp()
-	case "enter": //nolint:goconst // inline string is more readable here
+	case keyEnter:
 		p.showDetail()
 	case "pgdown":
 		p.pageDown()
@@ -774,7 +695,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		p.searchMode = false
 		// Keep filter active.
 	case "escape", "esc":
@@ -802,7 +723,7 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "escape", "esc", "enter", "q":
+	case "escape", "esc", keyEnter, "q":
 		p.detailMode = false
 		p.detailLines = nil
 		p.detailOffset = 0
@@ -1031,18 +952,6 @@ func (p *Panel) activeCommitY() []int {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-// truncateOrPad ensures a rendered string fits exactly the given width.
-func truncateOrPad(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w > width {
-		// Truncate: take first width chars accounting for ANSI codes.
-		return lipgloss.NewStyle().MaxWidth(width).Render(s)
-	}
-	if w < width {
-		return s + strings.Repeat(" ", width-w)
-	}
-	return s
-}
 
 // containsFold reports whether s contains the already-lowered substr
 // using case-insensitive comparison without allocating new strings.

@@ -228,7 +228,7 @@ func (ff *FuzzyFinder) View(width, height int) string {
 func (ff *FuzzyFinder) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "↑/ctrl+p", Description: "Previous result", Action: "cursor_up"},
-		{Key: "↓/ctrl+n", Description: "Next result", Action: "cursor_down"},
+		{Key: "↓/ctrl+n", Description: "Next result", Action: actionCursorDown},
 		{Key: "enter", Description: "Select result", Action: "select"},
 		{Key: "escape", Description: "Close", Action: "close"},
 	}
@@ -293,7 +293,7 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 		func() tea.Msg { return panels.ToggleFuzzyFinderMsg{} },
 		func() tea.Msg {
 			switch item.Category {
-			case "command":
+			case categoryCommand:
 				action, ok := item.Value.(string)
 				if !ok {
 					return nil
@@ -308,7 +308,7 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 			}
 		},
 		func() tea.Msg {
-			if item.Category != "command" {
+			if item.Category != categoryCommand {
 				path, ok := item.Value.(string)
 				if !ok {
 					return nil

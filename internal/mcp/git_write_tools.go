@@ -68,11 +68,11 @@ func registerGitWriteTools(s *Server) {
 		mcplib.NewTool(
 			"git_commit",
 			mcplib.WithDescription("Create a commit with staged changes"),
-			mcplib.WithString("message", mcplib.Required(), mcplib.Description("Commit message")),
+			mcplib.WithString(fieldMessage, mcplib.Required(), mcplib.Description("Commit message")),
 			mcplib.WithBoolean("amend", mcplib.Description("Amend the previous commit")),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-			msg, err := req.RequireString("message")
+			msg, err := req.RequireString(fieldMessage)
 			if err != nil || strings.TrimSpace(msg) == "" {
 				return mcplib.NewToolResultError("message is required and must not be empty"), nil //nolint:nilerr // error returned as MCP tool result
 			}
@@ -86,7 +86,7 @@ func registerGitWriteTools(s *Server) {
 			if err != nil {
 				return toolError("git commit", err)
 			}
-			return jsonResult(map[string]string{"hash": hash})
+			return jsonResult(map[string]string{paramHash: hash})
 		},
 	)
 

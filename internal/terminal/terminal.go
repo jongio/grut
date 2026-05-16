@@ -64,16 +64,18 @@ func DefaultShell() string {
 }
 
 // New starts a shell process and begins reading its output.
+// The provided context controls the lifetime of the shell process;
+// cancelling it will terminate the subprocess.
 // If shell is empty, DefaultShell() is used. If maxLines is <= 0,
 // it defaults to 10000.
-func New(shell string, maxLines int) (*Terminal, error) {
+func New(ctx context.Context, shell string, maxLines int) (*Terminal, error) {
 	if shell == "" {
 		shell = DefaultShell()
 	}
 	if maxLines <= 0 {
 		maxLines = 10000
 	}
-	cmd := exec.CommandContext(context.Background(), shell)
+	cmd := exec.CommandContext(ctx, shell)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("creating stdin pipe: %w", err)

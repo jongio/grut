@@ -16,8 +16,11 @@ import (
 //go:embed themes/*.toml
 var builtinThemes embed.FS
 
+// themeDefault is the name of the built-in fallback theme.
+const themeDefault = "default"
+
 // builtinNames lists the theme names that ship with the binary.
-var builtinNames = []string{"default", "catppuccin", "tokyonight", "gruvbox"}
+var builtinNames = []string{themeDefault, "catppuccin", "tokyonight", "gruvbox"}
 
 // ---------------------------------------------------------------------------
 // TOML file structure — matches the nested theme file format.
@@ -233,7 +236,7 @@ func Load(name string) (*Theme, error) {
 				"theme path contains traversal, falling back to default",
 				"path", name,
 			)
-			return Load("default")
+			return Load(themeDefault)
 		}
 		data, err := os.ReadFile(cleaned)
 		if err != nil {
@@ -242,7 +245,7 @@ func Load(name string) (*Theme, error) {
 				"path", name,
 				"error", err,
 			)
-			return Load("default")
+			return Load(themeDefault)
 		}
 		return parse(cleaned, data)
 	}
@@ -260,13 +263,13 @@ func Load(name string) (*Theme, error) {
 
 	// Unknown name — fall back to "default" so a stale config value
 	// (e.g. a removed theme) doesn't prevent the app from launching.
-	if name != "default" {
+	if name != themeDefault {
 		slog.Warn(
 			"unknown theme, falling back to default",
 			"theme", name,
 			"available", builtinNames,
 		)
-		return Load("default")
+		return Load(themeDefault)
 	}
 	return nil, fmt.Errorf("unknown theme %q (available: %s)",
 		name, strings.Join(builtinNames, ", "))

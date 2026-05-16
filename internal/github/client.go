@@ -21,6 +21,12 @@ type clientImpl struct {
 // list call to prevent unbounded memory growth on very large repositories.
 const maxPaginationPages = 100 // ~10,000 items at 100 per page
 
+// MaxPaginationItems caps the total number of items accumulated across all
+// pages for list endpoints (issues, PRs). Pagination stops once this many
+// items have been collected. Exported so panels can apply the same cap on
+// their own accumulation slices.
+const MaxPaginationItems = 1000
+
 // Compile-time interface assertion.
 var _ Client = (*clientImpl)(nil)
 
@@ -46,13 +52,17 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 	}
 
 	local.Page = 1
-	var allIssues []*gh.Issue
+	allIssues := make([]*gh.Issue, 0, 30)
 	for page := 0; page < maxPaginationPages; page++ {
 		issues, resp, err := c.gh.Issues.ListByRepo(ctx, owner, repo, &local)
 		if err != nil {
 			return nil, fmt.Errorf("list issues: %w", err)
 		}
 		allIssues = append(allIssues, issues...)
+		if len(allIssues) >= MaxPaginationItems {
+			allIssues = allIssues[:MaxPaginationItems]
+			break
+		}
 		if resp.NextPage == 0 {
 			break
 		}
@@ -148,7 +158,7 @@ func (c *clientImpl) GetIssueComments(ctx context.Context, owner, repo string, n
 		return comments, nil
 	}
 
-	var allComments []*gh.IssueComment
+	allComments := make([]*gh.IssueComment, 0, 100)
 	opts := &gh.IssueListCommentsOptions{
 		ListOptions: gh.ListOptions{Page: 1, PerPage: 100},
 	}
@@ -232,13 +242,17 @@ func (c *clientImpl) ListPRs(ctx context.Context, owner, repo string, opts *gh.P
 	}
 
 	local.Page = 1
-	var allPRs []*gh.PullRequest
+	allPRs := make([]*gh.PullRequest, 0, 30)
 	for page := 0; page < maxPaginationPages; page++ {
 		prs, resp, err := c.gh.PullRequests.List(ctx, owner, repo, &local)
 		if err != nil {
 			return nil, fmt.Errorf("list PRs: %w", err)
 		}
 		allPRs = append(allPRs, prs...)
+		if len(allPRs) >= MaxPaginationItems {
+			allPRs = allPRs[:MaxPaginationItems]
+			break
+		}
 		if resp.NextPage == 0 {
 			break
 		}
@@ -305,7 +319,7 @@ func (c *clientImpl) GetPRFiles(ctx context.Context, owner, repo string, number 
 		return files, nil
 	}
 
-	var allFiles []*gh.CommitFile
+	allFiles := make([]*gh.CommitFile, 0, 100)
 	opts := &gh.ListOptions{Page: 1, PerPage: 100}
 	for page := 0; page < maxPaginationPages; page++ {
 		files, resp, err := c.gh.PullRequests.ListFiles(ctx, owner, repo, number, opts)
@@ -333,7 +347,7 @@ func (c *clientImpl) GetPRComments(ctx context.Context, owner, repo string, numb
 		return comments, nil
 	}
 
-	var allComments []*gh.PullRequestComment
+	allComments := make([]*gh.PullRequestComment, 0, 100)
 	opts := &gh.PullRequestListCommentsOptions{
 		ListOptions: gh.ListOptions{Page: 1, PerPage: 100},
 	}
@@ -363,7 +377,7 @@ func (c *clientImpl) GetPRReviews(ctx context.Context, owner, repo string, numbe
 		return reviews, nil
 	}
 
-	var allReviews []*gh.PullRequestReview
+	allReviews := make([]*gh.PullRequestReview, 0, 100)
 	opts := &gh.ListOptions{Page: 1, PerPage: 100}
 	for page := 0; page < maxPaginationPages; page++ {
 		reviews, resp, err := c.gh.PullRequests.ListReviews(ctx, owner, repo, number, opts)
@@ -410,7 +424,7 @@ func (c *clientImpl) GetPRCommits(ctx context.Context, owner, repo string, numbe
 		return commits, nil
 	}
 
-	var allCommits []*gh.RepositoryCommit
+	allCommits := make([]*gh.RepositoryCommit, 0, 100)
 	opts := &gh.ListOptions{Page: 1, PerPage: 100}
 	for page := 0; page < maxPaginationPages; page++ {
 		commits, resp, err := c.gh.PullRequests.ListCommits(ctx, owner, repo, number, opts)
@@ -712,7 +726,7 @@ func (c *clientImpl) ListWorkflows(ctx context.Context, owner, repo string, opts
 	}
 
 	local.Page = 1
-	var allWorkflows []*gh.Workflow
+	allWorkflows := make([]*gh.Workflow, 0, 30)
 	for {
 		result, resp, err := c.gh.Actions.ListWorkflows(ctx, owner, repo, &local)
 		if err != nil {
@@ -776,7 +790,7 @@ func (c *clientImpl) ListReleases(ctx context.Context, owner, repo string, opts 
 	}
 
 	local.Page = 1
-	var allReleases []*gh.RepositoryRelease
+	allReleases := make([]*gh.RepositoryRelease, 0, 30)
 	for {
 		releases, resp, err := c.gh.Repositories.ListReleases(ctx, owner, repo, &local)
 		if err != nil {
@@ -878,7 +892,7 @@ func (c *clientImpl) ListNotifications(ctx context.Context, opts *gh.Notificatio
 	}
 
 	local.Page = 1
-	var allNotifications []*gh.Notification
+	allNotifications := make([]*gh.Notification, 0, 30)
 	for {
 		notifications, resp, err := c.gh.Activity.ListNotifications(ctx, &local)
 		if err != nil {

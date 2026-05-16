@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
@@ -65,7 +66,7 @@ func TestRegisterDefaults(t *testing.T) {
 	r := NewRegistry()
 	cfg, err := config.Load()
 	require.NoError(t, err)
-	RegisterDefaults(r, cfg, nil, nil)
+	RegisterDefaults(context.Background(), r, cfg, nil, nil)
 
 	expectedPanels := []string{"filetree", "preview", "status", "gitdiff"}
 	expectedTitles := map[string]string{

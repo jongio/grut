@@ -125,7 +125,7 @@ func TestNewCustomConfig(t *testing.T) {
 	assert.False(t, p.lineNumbers)
 	assert.True(t, p.wordWrap)
 	assert.False(t, p.renderMarkdown)
-	assert.Equal(t, 512, p.cfg.MaxFileSize)
+	assert.Equal(t, 512, p.cfg.GetMaxFileSize())
 }
 
 func TestInit(t *testing.T) {

@@ -531,7 +531,7 @@ func TestView_Error(t *testing.T) {
 	p.err = assert.AnError
 
 	view := p.View(80, 24)
-	assert.Contains(t, view, "Error")
+	assert.Contains(t, view, "Could not load agents")
 }
 
 // ---------------------------------------------------------------------------

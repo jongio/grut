@@ -11,13 +11,13 @@ import (
 
 // validCommitTypes enumerates the allowed conventional commit types.
 var validCommitTypes = map[string]bool{
-	"feat":     true,
-	"fix":      true,
-	"docs":     true,
-	"style":    true,
-	"refactor": true,
-	"test":     true,
-	"chore":    true,
+	commitTypeFeat: true,
+	commitTypeFix:  true,
+	commitTypeDocs: true,
+	"style":        true,
+	"refactor":     true,
+	commitTypeTest: true,
+	"chore":        true,
 }
 
 // maxSubjectLength is the maximum length for a commit subject line.

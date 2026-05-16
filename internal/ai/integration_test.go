@@ -243,7 +243,7 @@ func TestIntegration_Registry_Provider_CommitGenerate(t *testing.T) {
 		available: true,
 		completeResp: ai.CompletionResponse{
 			Content:      commitJSON,
-			FinishReason: "stop",
+			FinishReason: ai.FinishReasonStop,
 			TokensUsed:   ai.TokenUsage{InputTokens: 100, OutputTokens: 50},
 		},
 	}
@@ -369,7 +369,7 @@ const Host = "example.com"
 						{Type: git.DiffLineAdded, Content: `const APIKey = "AKIA1234567890ABCDEF"`},
 					},
 				}}},
-				{Path: ".env", Hunks: []git.Hunk{{
+				{Path: ai.PatternDotEnv, Hunks: []git.Hunk{{
 					Header: "@@ -0,0 +1 @@",
 					Lines:  []git.DiffLine{{Type: git.DiffLineAdded, Content: "SECRET=hunter2"}},
 				}}},
@@ -387,7 +387,7 @@ const Host = "example.com"
 	// The provider should NOT have received the .env file in its diffs.
 	require.NotNil(t, provider.capturedReq)
 	for _, d := range provider.capturedReq.GitContext.Diffs {
-		assert.NotEqual(t, ".env", d.Path,
+		assert.NotEqual(t, ai.PatternDotEnv, d.Path,
 			"redactor should exclude .env files from diffs sent to provider")
 	}
 }
@@ -402,10 +402,10 @@ func TestIntegration_Redactor_FileExclusion_And_ContentRedaction(t *testing.T) {
 	redactor := ai.NewRedactor([]string{"*.credentials"})
 
 	// Built-in file exclusions.
-	assert.True(t, redactor.ShouldExcludeFile(".env"))
+	assert.True(t, redactor.ShouldExcludeFile(ai.PatternDotEnv))
 	assert.True(t, redactor.ShouldExcludeFile("config/.env.local"))
 	assert.True(t, redactor.ShouldExcludeFile("server.key"))
-	assert.True(t, redactor.ShouldExcludeFile("id_rsa"))
+	assert.True(t, redactor.ShouldExcludeFile(ai.PatternIDRSA))
 	assert.True(t, redactor.ShouldExcludeFile("cert.pem"))
 
 	// User-supplied pattern.
@@ -416,25 +416,25 @@ func TestIntegration_Redactor_FileExclusion_And_ContentRedaction(t *testing.T) {
 	assert.False(t, redactor.ShouldExcludeFile("README.md"))
 
 	// Content redaction: AWS key.
-	redacted, count := redactor.RedactContent(`token = "AKIA1234567890ABCDEF"`)
+	redacted, count, _ := redactor.RedactContent(`token = "AKIA1234567890ABCDEF"`)
 	assert.Greater(t, count, 0)
 	assert.Contains(t, redacted, ai.RedactedPlaceholder)
 	assert.NotContains(t, redacted, "AKIA1234567890ABCDEF")
 
 	// Content redaction: GitHub token.
-	redacted, count = redactor.RedactContent(`GH_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn`)
+	redacted, count, _ = redactor.RedactContent(`GH_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn`)
 	assert.Greater(t, count, 0)
 	assert.Contains(t, redacted, ai.RedactedPlaceholder)
 
 	// Content redaction: PEM private key block.
 	pemContent := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z...\n-----END RSA PRIVATE KEY-----"
-	redacted, count = redactor.RedactContent(pemContent)
+	redacted, count, _ = redactor.RedactContent(pemContent)
 	assert.Greater(t, count, 0)
 	assert.NotContains(t, redacted, "BEGIN RSA PRIVATE KEY")
 
 	// Clean content passes through unchanged.
 	cleanContent := "func main() { fmt.Println(\"hello\") }"
-	redacted, count = redactor.RedactContent(cleanContent)
+	redacted, count, _ = redactor.RedactContent(cleanContent)
 	assert.Equal(t, 0, count)
 	assert.Equal(t, cleanContent, redacted)
 }
@@ -891,8 +891,8 @@ func TestIntegration_Config_Registry_ProviderSetup(t *testing.T) {
 	// Simulate loading a config with AI settings.
 	cfg := config.AIConfig{
 		Enabled:          true,
-		Provider:         "copilot",
-		FallbackProvider: "claude",
+		Provider:         ai.ProviderCopilot,
+		FallbackProvider: ai.ProviderClaude,
 		RedactPatterns:   []string{"*.secrets.yaml"},
 		AutoCommitMsg:    true,
 		AutoReviewDiff:   true,
@@ -904,15 +904,15 @@ func TestIntegration_Config_Registry_ProviderSetup(t *testing.T) {
 	reg := ai.NewRegistry(cfg)
 
 	// Register mock providers matching the config names.
-	copilot := &mockProvider{name: "copilot", available: true}
-	claude := &mockProvider{name: "claude", available: true}
-	reg.Register("copilot", copilot)
-	reg.Register("claude", claude)
+	copilot := &mockProvider{name: ai.ProviderCopilot, available: true}
+	claude := &mockProvider{name: ai.ProviderClaude, available: true}
+	reg.Register(ai.ProviderCopilot, copilot)
+	reg.Register(ai.ProviderClaude, claude)
 
 	// Primary should be preferred.
 	got, err := reg.Get(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "copilot", got.Name())
+	assert.Equal(t, ai.ProviderCopilot, got.Name())
 
 	// Verify redaction patterns can be used with the config.
 	redactor := ai.NewRedactor(cfg.RedactPatterns)

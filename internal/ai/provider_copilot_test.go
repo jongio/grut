@@ -47,7 +47,7 @@ func TestNewCopilotProvider_WithGitHubToken(t *testing.T) {
 
 func TestCopilotProvider_Name(t *testing.T) {
 	p := &CopilotProvider{}
-	assert.Equal(t, "copilot", p.Name())
+	assert.Equal(t, providerCopilot, p.Name())
 }
 
 func TestCopilotProvider_Close_NotStarted(t *testing.T) {
@@ -135,9 +135,9 @@ func TestBuildPrompt_Messages(t *testing.T) {
 	p := &CopilotProvider{}
 	prompt := p.buildPrompt(CompletionRequest{
 		Messages: []ChatMessage{
-			{Role: "user", Content: "Hello"},
-			{Role: "assistant", Content: "Hi there"},
-			{Role: "user", Content: "How are you?"},
+			{Role: roleUser, Content: "Hello"},
+			{Role: roleAssistant, Content: "Hi there"},
+			{Role: roleUser, Content: "How are you?"},
 		},
 	})
 
@@ -150,9 +150,9 @@ func TestBuildPrompt_MessagesSkipEmpty(t *testing.T) {
 	p := &CopilotProvider{}
 	prompt := p.buildPrompt(CompletionRequest{
 		Messages: []ChatMessage{
-			{Role: "user", Content: "Hello"},
-			{Role: "assistant", Content: ""}, // empty content should be skipped
-			{Role: "user", Content: "Bye"},
+			{Role: roleUser, Content: "Hello"},
+			{Role: roleAssistant, Content: ""}, // empty content should be skipped
+			{Role: roleUser, Content: "Bye"},
 		},
 	})
 
@@ -168,7 +168,7 @@ func TestBuildPrompt_FullRequest(t *testing.T) {
 			CurrentBranch: "main",
 		},
 		Messages: []ChatMessage{
-			{Role: "user", Content: "previous question"},
+			{Role: roleUser, Content: "previous question"},
 		},
 		UserPrompt: "new question",
 	})
@@ -208,7 +208,7 @@ func TestBuildPrompt_GitContextWithDiffs(t *testing.T) {
 func TestEventToResponse_NilEvent(t *testing.T) {
 	resp := eventToResponse(nil)
 
-	assert.Equal(t, "stop", resp.FinishReason)
+	assert.Equal(t, finishReasonStop, resp.FinishReason)
 	assert.Equal(t, "", resp.Content)
 	assert.Equal(t, "copilot-sdk", resp.Metadata["provider"])
 }
@@ -224,7 +224,7 @@ func TestEventToResponse_WithContent(t *testing.T) {
 	resp := eventToResponse(event)
 
 	assert.Equal(t, "Hello, how can I help?", resp.Content)
-	assert.Equal(t, "stop", resp.FinishReason)
+	assert.Equal(t, finishReasonStop, resp.FinishReason)
 }
 
 func TestEventToResponse_WithUsage(t *testing.T) {

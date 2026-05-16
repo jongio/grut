@@ -7,6 +7,7 @@ package gitstatus
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -318,11 +319,12 @@ func (p *GitStatus) View(width, height int) string {
 			Render("Loading git status...")
 	}
 	if p.err != nil && len(p.rows) == 0 {
+		slog.Warn("git status panel error", "err", p.err)
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(lipgloss.Color(p.colors.Removed)).
-			Render(fmt.Sprintf("Error: %v", p.err))
+			Render("Could not load git status")
 	}
 	if len(p.rows) == 0 {
 		return lipgloss.NewStyle().
@@ -616,6 +618,7 @@ func (p *GitStatus) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) 
 	p.ensureCursorVisible()
 	itemType := actions.ItemStatusFile
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pendingOp = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -652,6 +655,7 @@ func (p *GitStatus) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (p
 	label := r.file.Path
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemStatusFile, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -661,14 +665,20 @@ func (p *GitStatus) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (p
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *GitStatus) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+	p.pendingPath = ""
+}
+
 // handleModalResult dispatches the result of an action-picker modal.
 func (p *GitStatus) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
 	path := p.pendingPath
-	p.pendingOp = ""
-	p.pendingName = ""
-	p.pendingPath = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -1112,6 +1122,7 @@ func (p *GitStatus) discardAtCursor() (panels.Panel, tea.Cmd) {
 	if r.section != sectionUnstaged {
 		return p, nil
 	}
+	p.clearPending()
 	p.pendingOp = opDiscard
 	p.pendingPath = r.file.Path
 	return p, notify.ShowConfirm("Discard Changes",

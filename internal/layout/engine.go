@@ -990,11 +990,11 @@ func (p PreviewPosition) String() string {
 	case PreviewRight:
 		return "right" //nolint:goconst // inline string is more readable here
 	case PreviewBottom:
-		return "bottom"
+		return positionBottom
 	case PreviewLeft:
-		return "left"
+		return positionLeft
 	case PreviewTop:
-		return "top"
+		return positionTop
 	default:
 		return "right"
 	}
@@ -1006,11 +1006,11 @@ func PreviewPositionFromString(s string) PreviewPosition {
 	switch s {
 	case "right":
 		return PreviewRight
-	case "bottom":
+	case positionBottom:
 		return PreviewBottom
-	case "left":
+	case positionLeft:
 		return PreviewLeft
-	case "top":
+	case positionTop:
 		return PreviewTop
 	default:
 		return PreviewRight
@@ -1155,7 +1155,7 @@ func applyPreviewPositionToTree(tree Node, pos PreviewPosition) bool {
 // isPreviewLeaf returns true if the node is a LeafNode named "preview".
 func isPreviewLeaf(n Node) bool {
 	leaf, ok := n.(*LeafNode)
-	return ok && leaf.Panel == "preview"
+	return ok && leaf.Panel == slotPreview
 }
 
 // ---------------------------------------------------------------------------

@@ -2,13 +2,15 @@ package gitlog
 
 import (
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,19 +28,34 @@ func TestPanel_SetActionsCfg_Extra(t *testing.T) {
 func TestStyleSubjectWithRefs_Extra(t *testing.T) {
 	tests := []struct {
 		name string
-		text string
+		refs []string
 		want string
 	}{
-		{name: "renders refs suffix separately", text: "feat: add panel (HEAD -> main, origin/main)", want: "feat: add panel (HEAD -> main, origin/main)"},
-		{name: "renders plain subject without refs", text: "feat: add panel", want: "feat: add panel"},
+		{name: "renders refs suffix", refs: []string{"HEAD -> main", "origin/main"}, want: "(HEAD -> main, origin/main)"},
+		{name: "renders plain subject without refs", refs: nil, want: "feat: add panel"},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			p := newTestPanelWithCommits(t, 1)
-			got := p.styleSubjectWithRefs(tt.text, "", lipgloss.NewStyle(), lipgloss.NewStyle())
-			assert.Contains(t, got, tt.want)
+			c := git.Commit{
+				ShortHash: "abc1234",
+				Author:    "Dev",
+				Date:      time.Now(),
+				Subject:   "feat: add panel",
+				Refs:      tt.refs,
+			}
+			line := commitrender.RenderLine(commitrender.Params{
+				Commit:      c,
+				Width:       200,
+				Styles:      p.clStyles,
+				ShowRefs:    true,
+				ShowAuthor:  true,
+				ShowDate:    true,
+				GraphPrefix: "*",
+			})
+			assert.Contains(t, line, tt.want)
 		})
 	}
 }

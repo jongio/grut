@@ -39,7 +39,7 @@ func TestExtract_BasicAuthors(t *testing.T) {
 		gitRun:  fakeGitRunner(authorOut, trailerOut),
 	}
 
-	contributors, err := Extract(opts)
+	contributors, err := Extract(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Len(t, contributors, 2)
 
@@ -59,7 +59,7 @@ func TestExtract_CoAuthoredBy(t *testing.T) {
 		gitRun:  fakeGitRunner(authorOut, trailerOut),
 	}
 
-	contributors, err := Extract(opts)
+	contributors, err := Extract(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Len(t, contributors, 2)
 
@@ -84,7 +84,7 @@ func TestExtract_BotFiltering(t *testing.T) {
 		gitRun:  fakeGitRunner(authorOut, trailerOut),
 	}
 
-	contributors, err := Extract(opts)
+	contributors, err := Extract(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Len(t, contributors, 1)
 	assert.Equal(t, "Alice", contributors[0].Name)
@@ -103,13 +103,13 @@ func TestExtract_Deduplication(t *testing.T) {
 		gitRun:  fakeGitRunner(authorOut, trailerOut),
 	}
 
-	contributors, err := Extract(opts)
+	contributors, err := Extract(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Len(t, contributors, 1)
 	assert.Equal(t, 2, contributors[0].CommitCount)
 }
 
-func TestIsBot(t *testing.T) {
+func TestIsExcluded(t *testing.T) {
 	tests := []struct {
 		name  string
 		email string
@@ -119,13 +119,16 @@ func TestIsBot(t *testing.T) {
 		{"github-actions[bot]", "actions@github.com", true},
 		{"copilot-swe-agent[bot]", "copilot@github.com", true},
 		{"renovate[bot]", "renovate@whitesource.com", true},
+		{"Test", "test@example.com", true},
+		{"test", "test@example.com", true},
+		{"TEST", "test@example.com", true},
 		{"Alice", "alice@example.com", false},
 		{"Bob", "bob@company.com", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isBot(tt.name, tt.email))
+			assert.Equal(t, tt.want, isExcluded(tt.name, tt.email))
 		})
 	}
 }
@@ -151,7 +154,7 @@ func TestMarkFirstTimers(t *testing.T) {
 		{Name: "Bob", Email: "bob@example.com", CommitCount: 1},
 	}
 
-	err := MarkFirstTimers(contributors, Options{
+	err := MarkFirstTimers(context.Background(), contributors, Options{
 		FromRef: "v0.1.0",
 		gitRun:  mockRun,
 	})
@@ -165,7 +168,7 @@ func TestMarkFirstTimers_NoFromRef(t *testing.T) {
 		{Name: "Alice", Email: "alice@example.com"},
 	}
 
-	err := MarkFirstTimers(contributors, Options{})
+	err := MarkFirstTimers(context.Background(), contributors, Options{})
 	require.NoError(t, err)
 	assert.True(t, contributors[0].IsFirstTime)
 }
@@ -218,7 +221,7 @@ func TestExtract_EmptyOutput(t *testing.T) {
 		gitRun:  fakeGitRunner("", ""),
 	}
 
-	contributors, err := Extract(opts)
+	contributors, err := Extract(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Empty(t, contributors)
 }
@@ -231,7 +234,7 @@ func TestExtract_GitError(t *testing.T) {
 		},
 	}
 
-	_, err := Extract(opts)
+	_, err := Extract(context.Background(), opts)
 	assert.Error(t, err)
 }
 

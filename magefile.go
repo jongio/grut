@@ -61,9 +61,11 @@ var deadcodeAllowlist = []string{
 	// actions registry — public API getter
 	"Description",
 
-	// extension permissions — public API
+	// extension permissions — public API + error interface impl
 	"CheckPermission",
 	"AllPermissions",
+	"ManifestHasPermission",
+	"PermissionDeniedError.Error",
 
 	// extension/runtime/lua — loaded via runtime factory; interface impls
 	"NewLuaRuntime",
@@ -77,6 +79,7 @@ var deadcodeAllowlist = []string{
 	"LuaRuntime.luaRegisterCommand",
 	"LuaRuntime.luaSetStatus",
 	"LuaRuntime.execWithTimeout",
+	"ValidateEntryPoint",
 
 	// extension/runtime/mcp — loaded via runtime factory; interface impls
 	"ringBuffer.Write",  // io.Writer
@@ -94,6 +97,8 @@ var deadcodeAllowlist = []string{
 	// MCPRuntime.Load itself is factory-dispatched (also allowlisted above).
 	"setProcGroup",
 	"killProcGroup",
+	// mcp_procattr_unix.go — same pattern, unreachable under Linux analysis
+	"postStartProcGroup",
 
 	// extension/runtime/wasm — loaded via runtime factory; interface impls
 	"NewWASMRuntime",
@@ -150,6 +155,11 @@ var deadcodeAllowlist = []string{
 	"Panel.hintHex",
 	"Panel.hintBgHex",
 	"Panel.KeyBindings",
+	"Panel.initStyles",
+	"Panel.sectionHeaderStyle",
+	"Panel.codeBlockStyle",
+	"Panel.themeColor",
+	"colorOrDefault",
 
 	// panel accessor methods — public API / test accessors across panels
 	"Panel.cursorIndex",
@@ -239,6 +249,12 @@ var deadcodeAllowlist = []string{
 	// fuzzyfinder/source — test-support cache invalidation API
 	"fileCache.invalidate",
 	"InvalidateFileCache",
+
+	// panelreg — test-only reset helper
+	"Reset",
+
+	// update — internal checksum verification
+	"verifyChecksum",
 
 	// preview/editor — test-only save handler
 	"handleFileSaved",
@@ -1058,9 +1074,11 @@ func ensurePath() error {
 				for _, r := range removed {
 					fmt.Printf("   - %s\n", r)
 				}
-				exec.Command("powershell", "-NoProfile", "-Command",
+				if err := exec.Command("powershell", "-NoProfile", "-Command",
 					fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`,
-						psSingleQuoteEscape(cleaned))).Run()
+						psSingleQuoteEscape(cleaned))).Run(); err != nil {
+					fmt.Printf("   ⚠ Failed to remove stale PATH entries: %v\n", err)
+				}
 			}
 		}
 	}

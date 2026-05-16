@@ -19,7 +19,7 @@ import (
 
 func TestCommitSuggestion_ValidJSON(t *testing.T) {
 	suggestion := CommitSuggestion{
-		Type:    "feat",
+		Type:    commitTypeFeat,
 		Scope:   "auth",
 		Subject: "add login endpoint",
 		Body:    "Implements OAuth2 login flow",
@@ -31,7 +31,7 @@ func TestCommitSuggestion_ValidJSON(t *testing.T) {
 	var got CommitSuggestion
 	require.NoError(t, json.Unmarshal(data, &got))
 
-	assert.Equal(t, "feat", got.Type)
+	assert.Equal(t, commitTypeFeat, got.Type)
 	assert.Equal(t, "auth", got.Scope)
 	assert.Equal(t, "add login endpoint", got.Subject)
 	assert.Equal(t, "Implements OAuth2 login flow", got.Body)
@@ -41,7 +41,7 @@ func TestCommitSuggestion_NoScopeNoBody(t *testing.T) {
 	data := `{"type":"fix","subject":"correct nil pointer dereference"}`
 	var got CommitSuggestion
 	require.NoError(t, json.Unmarshal([]byte(data), &got))
-	assert.Equal(t, "fix", got.Type)
+	assert.Equal(t, commitTypeFix, got.Type)
 	assert.Empty(t, got.Scope)
 	assert.Equal(t, "correct nil pointer dereference", got.Subject)
 	assert.Empty(t, got.Body)
@@ -55,7 +55,7 @@ func TestParseCommitResponse_Valid(t *testing.T) {
 	input := `{"type": "feat", "scope": "api", "subject": "add health endpoint", "body": "Returns 200 OK"}`
 	suggestion, err := parseCommitResponse(input)
 	require.NoError(t, err)
-	assert.Equal(t, "feat", suggestion.Type)
+	assert.Equal(t, commitTypeFeat, suggestion.Type)
 	assert.Equal(t, "api", suggestion.Scope)
 	assert.Equal(t, "add health endpoint", suggestion.Subject)
 	assert.Equal(t, "Returns 200 OK", suggestion.Body)
@@ -112,7 +112,7 @@ func TestParseCommitResponse_NormalizesType(t *testing.T) {
 	input := `{"type":" FEAT ","subject":"add something"}`
 	suggestion, err := parseCommitResponse(input)
 	require.NoError(t, err)
-	assert.Equal(t, "feat", suggestion.Type)
+	assert.Equal(t, commitTypeFeat, suggestion.Type)
 }
 
 func TestParseCommitResponse_NormalizesScope(t *testing.T) {
@@ -126,12 +126,12 @@ func TestParseCommitResponse_StripsCodeFences(t *testing.T) {
 	input := "```json\n" + `{"type":"fix","subject":"correct bug"}` + "\n```"
 	suggestion, err := parseCommitResponse(input)
 	require.NoError(t, err)
-	assert.Equal(t, "fix", suggestion.Type)
+	assert.Equal(t, commitTypeFix, suggestion.Type)
 	assert.Equal(t, "correct bug", suggestion.Subject)
 }
 
 func TestParseCommitResponse_AllValidTypes(t *testing.T) {
-	types := []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
+	types := []string{commitTypeFeat, commitTypeFix, commitTypeDocs, "style", "refactor", commitTypeTest, "chore"}
 	for _, typ := range types {
 		t.Run(typ, func(t *testing.T) {
 			input := `{"type":"` + typ + `","subject":"do something"}`
@@ -147,18 +147,18 @@ func TestParseCommitResponse_AllValidTypes(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommitSuggestion_String_WithScope(t *testing.T) {
-	s := CommitSuggestion{Type: "feat", Scope: "auth", Subject: "add login", Body: "OAuth2 support"}
-	assert.Equal(t, "feat(auth): add login\n\nOAuth2 support", s.String())
+	s := CommitSuggestion{Type: commitTypeFeat, Scope: "auth", Subject: "add login", Body: "OAuth2 support"}
+	assert.Equal(t, commitTypeFeat+"(auth): add login\n\nOAuth2 support", s.String())
 }
 
 func TestCommitSuggestion_String_WithoutScope(t *testing.T) {
-	s := CommitSuggestion{Type: "fix", Subject: "correct typo"}
-	assert.Equal(t, "fix: correct typo", s.String())
+	s := CommitSuggestion{Type: commitTypeFix, Subject: "correct typo"}
+	assert.Equal(t, commitTypeFix+": correct typo", s.String())
 }
 
 func TestCommitSuggestion_String_WithoutBody(t *testing.T) {
-	s := CommitSuggestion{Type: "docs", Scope: "readme", Subject: "update installation"}
-	assert.Equal(t, "docs(readme): update installation", s.String())
+	s := CommitSuggestion{Type: commitTypeDocs, Scope: "readme", Subject: "update installation"}
+	assert.Equal(t, commitTypeDocs+"(readme): update installation", s.String())
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ func TestCommitGenerator_Generate(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: respJSON,
 		},
 	}
@@ -188,7 +188,7 @@ func TestCommitGenerator_Generate(t *testing.T) {
 	suggestion, err := gen.Generate(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, suggestion)
-	assert.Equal(t, "feat", suggestion.Type)
+	assert.Equal(t, commitTypeFeat, suggestion.Type)
 	assert.Equal(t, "api", suggestion.Scope)
 	assert.Equal(t, "add health endpoint", suggestion.Subject)
 	assert.Equal(t, "Returns 200 OK", suggestion.Body)
@@ -217,7 +217,7 @@ func TestCommitGenerator_Generate_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:      "mock",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: "{broken",
 		},
 	}
@@ -239,9 +239,9 @@ func TestCommitGenerator_Generate_InvalidJSON(t *testing.T) {
 
 func TestCommitGenerator_Generate_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		completeErr: errors.New("rate limited"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("rate limited"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

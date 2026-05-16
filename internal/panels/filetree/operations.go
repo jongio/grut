@@ -65,7 +65,15 @@ func isWithinRoot(root, target string) bool {
 	}
 	resolvedTarget, err := filepath.EvalSymlinks(absTarget)
 	if err != nil {
-		resolvedTarget = filepath.Clean(absTarget)
+		// Target doesn't exist yet (write operation). Resolve the parent
+		// directory to normalize short paths (e.g. RUNNER~1 → runneradmin on
+		// Windows CI), then re-append the base name.
+		parent := filepath.Dir(absTarget)
+		resolvedParent, perr := filepath.EvalSymlinks(parent)
+		if perr != nil {
+			resolvedParent = filepath.Clean(parent)
+		}
+		resolvedTarget = filepath.Join(resolvedParent, filepath.Base(absTarget))
 	}
 	// Target must be under root or equal to root.
 	rel, err := filepath.Rel(resolvedRoot, resolvedTarget)

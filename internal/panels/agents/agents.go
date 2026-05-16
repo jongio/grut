@@ -6,6 +6,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -161,11 +162,6 @@ func (p *Agents) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	return p, nil
 }
 
-// Focus overrides BasePanel.Focus to start auto-refresh.
-func (p *Agents) Focus() {
-	p.BasePanel.Focus()
-}
-
 // View implements panels.Panel.
 func (p *Agents) View(width, height int) string {
 	if width <= 0 || height <= 0 {
@@ -179,11 +175,12 @@ func (p *Agents) View(width, height int) string {
 			Render("Loading agents...")
 	}
 	if p.err != nil && len(p.agents) == 0 {
+		slog.Warn("agent panel error", "err", p.err)
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(panels.ColorOf(p.themeColors().NormalRed, "#C44B4B")).
-			Render(fmt.Sprintf("Error: %v", p.err))
+			Render("Could not load agents")
 	}
 	if len(p.agents) == 0 {
 		return lipgloss.NewStyle().
@@ -320,6 +317,7 @@ func (p *Agents) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (pane
 	label := fmt.Sprintf("PID:%d %s", p.agents[p.cursor].PID, p.agents[p.cursor].Command)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemAgent, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -329,10 +327,16 @@ func (p *Agents) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (pane
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Agents) clearPending() {
+	p.pendingOp = ""
+}
+
 // handleModalResult processes the result from the action picker modal.
 func (p *Agents) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
-	p.pendingOp = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}

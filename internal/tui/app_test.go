@@ -19,7 +19,6 @@ import (
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +30,7 @@ func newTestModel(t *testing.T) Model {
 	t.Helper()
 	reg := layout.NewRegistry()
 	cfg, _ := config.LoadDefaults()
-	layout.RegisterDefaults(reg, cfg, nil, nil)
+	layout.RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	preset := layout.ExplorerPreset()
 	engine, err := layout.NewEngine(reg, preset)
 	require.NoError(t, err)
@@ -721,7 +720,7 @@ func newTestChatModel(t *testing.T) *chat.Model {
 	cfg := ai.NewRegistry(config.AIConfig{Provider: "mock"})
 	th := &theme.Theme{Name: "test", Variant: "dark"}
 	toolReg := chat.NewToolRegistry()
-	executor := chat.NewToolExecutor(nil, nil, nil, toolReg)
+	executor := chat.NewToolExecutor(nil, nil, nil, nil, toolReg)
 	confirmer := chat.NewConfirmationManager(toolReg)
 	sysBuilder := chat.NewSystemPromptBuilder(nil, "test")
 	redactor := ai.NewRedactor(nil)
@@ -1184,7 +1183,7 @@ func TestToggleSettingsShowsOverlay(t *testing.T) {
 	assert.False(t, m.settingsShown)
 	assert.Nil(t, m.settingsPanel)
 
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.True(t, m.settingsShown, "settings overlay should be shown")
 	assert.NotNil(t, m.settingsPanel, "settingsPanel should be initialised")
@@ -1197,12 +1196,12 @@ func TestToggleSettingsHidesOverlay(t *testing.T) {
 	m.Init()
 
 	// Toggle on.
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.True(t, m.settingsShown)
 
 	// Toggle off.
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.False(t, m.settingsShown, "settings overlay should be hidden")
 	assert.Nil(t, m.settingsPanel, "settingsPanel should be nil")
@@ -1217,7 +1216,7 @@ func TestSettingsOverlayRoutesKeys(t *testing.T) {
 	initialFocus := m.engine.FocusedName()
 
 	// Open settings.
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 
 	// Tab should NOT change panel focus while settings overlay is active.
@@ -1233,7 +1232,7 @@ func TestSettingsOverlayAppearsInView(t *testing.T) {
 	m = updated.(Model)
 	m.Init()
 
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 
 	view := m.View()

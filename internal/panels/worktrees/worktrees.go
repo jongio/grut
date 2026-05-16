@@ -76,7 +76,7 @@ type worktreesLoadedMsg struct {
 // worktreeOpResultMsg carries the result of a worktree operation.
 type worktreeOpResultMsg struct {
 	err  error
-	op   string // "created", "removed", "pruned"
+	op   string // opCreated, opRemoved, "pruned"
 	name string // branch or path involved
 }
 
@@ -290,7 +290,7 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 	name := msg.name
 	cmds := []tea.Cmd{p.loadWorktrees()}
 	switch op {
-	case "created":
+	case opCreated:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -298,7 +298,7 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 				return notify.ShowToastMsg{Message: "Worktree created for " + name, Level: notify.Success}
 			},
 		)
-	case "removed":
+	case opRemoved:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -367,6 +367,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.ensureCursorVisible()
 	itemType := actions.ItemWorktree
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		p.pendingPath = p.items[idx].worktree.Path
@@ -407,7 +408,7 @@ func (p *Panel) openTerminal(pathOverride string) (panels.Panel, tea.Cmd) {
 		wtPath = p.items[p.cursor].worktree.Path
 	}
 	return p, func() tea.Msg {
-		if err := panels.OpenInTerminal(wtPath); err != nil {
+		if err := panels.OpenInTerminal(p.ctx, wtPath); err != nil {
 			return notify.ShowToastMsg{Message: "Terminal failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened terminal", Level: notify.Info}
@@ -454,7 +455,7 @@ func (p *Panel) changeDirectory(pathOverride string) (panels.Panel, tea.Cmd) {
 	}
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
-			if err := panels.OpenInTerminal(path); err != nil {
+			if err := panels.OpenInTerminal(p.ctx, path); err != nil {
 				errMsg := err.Error()
 				return notify.ShowToastMsg{Message: "Terminal error: " + errMsg, Level: notify.Error}
 			}
@@ -537,7 +538,16 @@ func (p *Panel) worktreeSelectedCmd() tea.Cmd {
 // Worktree operations
 // ---------------------------------------------------------------------------
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pending = opNone
+	p.pendingPath = ""
+	p.pendingName = ""
+}
+
 func (p *Panel) requestCreate() (panels.Panel, tea.Cmd) {
+	p.clearPending()
 	p.pending = opCreate
 	return p, notify.ShowInput("New Worktree", "branch-name")
 }
@@ -552,6 +562,7 @@ func (p *Panel) requestDelete() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot remove main worktree", Level: notify.Warn}
 		}
 	}
+	p.clearPending()
 	p.pending = opDelete
 	p.pendingPath = item.worktree.Path
 	displayName := filepath.Base(item.worktree.Path)
@@ -572,6 +583,7 @@ func (p *Panel) requestPrune() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "No missing worktrees to prune", Level: notify.Info}
 		}
 	}
+	p.clearPending()
 	p.pending = opPrune
 	return p, notify.ShowConfirm("Prune Worktrees", "Force-remove all missing worktrees?")
 }
@@ -583,9 +595,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	op := p.pending
 	pendingPath := p.pendingPath
 	pendingName := p.pendingName
-	p.pending = opNone
-	p.pendingPath = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -600,12 +610,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		wtPath := worktreePath(p.repoRoot, branch)
 		return p, func() tea.Msg {
 			err := g.WorktreeAdd(ctx, wtPath, branch)
-			return worktreeOpResultMsg{op: "created", name: branch, err: err}
+			return worktreeOpResultMsg{op: opCreated, name: branch, err: err}
 		}
 	case opDelete:
 		return p, func() tea.Msg {
 			err := g.WorktreeRemove(ctx, pendingPath, false)
-			return worktreeOpResultMsg{op: "removed", name: filepath.Base(pendingPath), err: err}
+			return worktreeOpResultMsg{op: opRemoved, name: filepath.Base(pendingPath), err: err}
 		}
 	case opPrune:
 		return p.pruneAllMissing()

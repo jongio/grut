@@ -91,7 +91,7 @@ func TestOpenInEditor_VISUALWithValidBinary(t *testing.T) {
 	} else {
 		t.Setenv("VISUAL", "echo")
 		t.Setenv("EDITOR", "")
-		err := OpenInEditor("/tmp/test.txt")
+		err := OpenInEditor(context.Background(), "/tmp/test.txt")
 		assert.NoError(t, err)
 	}
 }
@@ -104,7 +104,7 @@ func TestOpenInEditor_EDITORFallback(t *testing.T) {
 	}
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "echo")
-	err := OpenInEditor("testfile.txt")
+	err := OpenInEditor(context.Background(), "testfile.txt")
 	_ = err
 }
 

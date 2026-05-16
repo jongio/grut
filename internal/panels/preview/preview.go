@@ -42,7 +42,7 @@ type Preview struct {
 	lines      []string // rendered lines (with ANSI for syntax highlighting)
 	blameLines []git.BlameLine
 	diffLines  []string // pre-rendered diff lines for current file
-	cfg        config.PreviewConfig
+	cfg        Config
 	scrollY    int
 	// Panel state
 	width   int
@@ -99,13 +99,13 @@ type diffLoadedMsg struct {
 var _ panels.Panel = (*Preview)(nil)
 
 // New creates a new Preview panel with the given configuration.
-func New(cfg config.PreviewConfig, editorCfg config.EditorConfig, th *theme.Theme) *Preview {
+func New(cfg Config, editorCfg config.EditorConfig, th *theme.Theme) *Preview {
 	return &Preview{
 		cfg:            cfg,
 		editCfg:        editorCfg,
-		lineNumbers:    cfg.LineNumbers,
-		wordWrap:       cfg.WordWrap,
-		renderMarkdown: cfg.RenderMarkdown,
+		lineNumbers:    cfg.GetLineNumbers(),
+		wordWrap:       cfg.GetWordWrap(),
+		renderMarkdown: cfg.GetRenderMarkdown(),
 		theme:          th,
 	}
 }
@@ -593,7 +593,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			return result
 		}
 		// Check max file size
-		if cfg.MaxFileSize > 0 && info.Size() > int64(cfg.MaxFileSize) {
+		if cfg.GetMaxFileSize() > 0 && info.Size() > int64(cfg.GetMaxFileSize()) {
 			result.isLarge = true
 			result.lines = buildMetadataLines(path, info)
 			return result
@@ -639,17 +639,17 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		ext := strings.ToLower(filepath.Ext(path))
 		// Render based on file type
 		switch ext {
-		case ".md", ".markdown", ".mdown", ".mkd":
+		case extMD, extMarkdown, extMdown, extMkd:
 			if renderMD {
 				result.lines = markdown.RenderStatic(source, width)
-			} else if cfg.SyntaxHighlighting {
-				result.lines = renderHighlightedStatic(source, path, cfg.Theme)
+			} else if cfg.GetSyntaxHighlighting() {
+				result.lines = renderHighlightedStatic(source, path, cfg.GetTheme())
 			} else {
 				result.lines = strings.Split(source, "\n")
 			}
 		default:
-			if cfg.SyntaxHighlighting {
-				result.lines = renderHighlightedStatic(source, path, cfg.Theme)
+			if cfg.GetSyntaxHighlighting() {
+				result.lines = renderHighlightedStatic(source, path, cfg.GetTheme())
 			} else {
 				result.lines = strings.Split(source, "\n")
 			}
@@ -674,26 +674,7 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		addedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
-		removedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
-		headerStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
-		var lines []string
-		for _, d := range diffs {
-			for _, h := range d.Hunks {
-				lines = append(lines, headerStyle.Render(h.Header))
-				for _, l := range h.Lines {
-					switch l.Type {
-					case git.DiffLineAdded:
-						lines = append(lines, addedStyle.Render(l.Content))
-					case git.DiffLineRemoved:
-						lines = append(lines, removedStyle.Render(l.Content))
-					default:
-						lines = append(lines, l.Content)
-					}
-				}
-			}
-		}
-		return diffLoadedMsg{path: path, lines: lines}
+		return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
 	}
 }
 
@@ -811,9 +792,9 @@ func renderHighlightedStatic(source, filename, theme string) []string {
 // statusIcon returns a clean Unicode icon for a job or step status/conclusion.
 func statusIcon(status, conclusion string) string {
 	switch conclusion {
-	case "success":
+	case statusSuccess:
 		return "✓"
-	case "failure":
+	case statusFailure:
 		return "✗"
 	case "cancelled":
 		return "⊘"
@@ -821,11 +802,11 @@ func statusIcon(status, conclusion string) string {
 		return "⊘"
 	}
 	switch status {
-	case "in_progress":
+	case statusInProgress:
 		return "●"
 	case "queued", "waiting", "pending":
 		return "○"
-	case "completed":
+	case statusCompleted:
 		return "✓"
 	}
 	return "○"
@@ -1156,7 +1137,7 @@ func (p *Preview) scrollIndicator(totalLines, viewHeight int) string {
 // isMarkdownExt returns true if the file extension indicates a markdown file.
 func isMarkdownExt(ext string) bool {
 	switch strings.ToLower(ext) {
-	case ".md", ".markdown", ".mdown", ".mkd":
+	case extMD, extMarkdown, extMdown, extMkd:
 		return true
 	}
 	return false

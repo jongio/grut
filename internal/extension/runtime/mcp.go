@@ -19,6 +19,9 @@ import (
 	"github.com/jongio/grut/internal/extension"
 )
 
+// runtimeNameMCP is the canonical identifier for the MCP runtime.
+const runtimeNameMCP = "mcp"
+
 // MCPRuntime manages an MCP extension server as a subprocess,
 // communicating via JSON-RPC 2.0 over stdin/stdout pipes.
 type MCPRuntime struct {
@@ -107,23 +110,8 @@ func NewMCPRuntime(manifest *extension.Manifest) (*MCPRuntime, error) {
 }
 
 // Name returns the runtime type identifier.
-func (m *MCPRuntime) Name() string { return "mcp" }
+func (m *MCPRuntime) Name() string { return runtimeNameMCP }
 
-// Security: MCP extension trust model
-//
-// MCP extension subprocesses inherit the invoking user's full OS permissions.
-// Unlike the Lua runtime (sandboxed VM) or the WASM runtime (wazero with
-// memory and time limits), an MCP subprocess can access the filesystem,
-// network, and any other resource available to the user's account. This is
-// the same trust model used by VS Code extensions — users must trust
-// installed extensions before running them.
-//
-// The CheckPermission() function in package extension declares a permission
-// system (file_read, network, process, etc.) and manifests can list required
-// permissions, but enforcement is not currently wired into this runtime.
-// Planned work: a future release will gate subprocess capabilities behind
-// the permission system so that, for example, an MCP extension without
-// "network" permission cannot open outbound connections.
 // Load starts the MCP server subprocess using the given entry point.
 // The interpreter is determined from the entry point file extension:
 //   - .py → python3 (python on Windows)
@@ -131,6 +119,18 @@ func (m *MCPRuntime) Name() string { return "mcp" }
 //   - .ts → npx tsx
 //   - binary (no ext or .exe) → direct execution
 func (m *MCPRuntime) Load(entryPoint string) error {
+	// Enforce the "process" permission before spawning a subprocess.
+	// MCP extensions inherit the user's full OS privileges; without this
+	// gate an extension that omits "process" could still spawn arbitrary
+	// processes (CWE-862).
+	if !extension.ManifestHasPermission(m.manifest, extension.PermProcess) {
+		return &extension.PermissionDeniedError{
+			Extension:  m.manifest.Name,
+			Permission: extension.PermProcess,
+			Operation:  "spawn subprocess",
+		}
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.cmd != nil {
@@ -166,6 +166,9 @@ func (m *MCPRuntime) Load(entryPoint string) error {
 		_ = stdin.Close()
 		return fmt.Errorf("mcp runtime: start %q: %w", name, err)
 	}
+	// Assign the process to a containment group (Job Object on Windows)
+	// so the entire subprocess tree is terminated on Close (CWE-269).
+	postStartProcGroup(cmd)
 	m.cmd = cmd
 	m.stdin = stdin
 	m.stdout = stdout

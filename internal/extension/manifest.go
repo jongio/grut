@@ -23,14 +23,11 @@ type Manifest struct {
 	Permissions []string `toml:"permissions"`
 }
 
-// manifestFileName is the expected manifest file inside an extension directory.
-const manifestFileName = "extension.toml"
-
 // validRuntimes lists the runtimes an extension may declare.
 var validRuntimes = map[string]struct{}{
-	"lua":  {},
-	"wasm": {},
-	"mcp":  {},
+	extTypeLua:  {},
+	extTypeWasm: {},
+	extTypeMCP:  {},
 }
 
 // semverRe matches a basic semver string (major.minor.patch with optional
@@ -55,7 +52,7 @@ func ParseManifest(data []byte) (*Manifest, error) {
 
 // LoadManifest reads extension.toml from dir and returns the parsed manifest.
 func LoadManifest(dir string) (*Manifest, error) {
-	data, err := os.ReadFile(filepath.Join(dir, manifestFileName))
+	data, err := os.ReadFile(filepath.Join(dir, configFile))
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
@@ -81,7 +78,7 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("manifest: runtime is required")
 	}
 	if _, ok := validRuntimes[m.Runtime]; !ok {
-		return fmt.Errorf("manifest: invalid runtime %q (want lua, wasm, or mcp)", m.Runtime)
+		return fmt.Errorf("manifest: invalid runtime %q (want %s, %s, or %s)", m.Runtime, extTypeLua, extTypeWasm, extTypeMCP)
 	}
 	// Validate entry_point: reject path traversal and absolute paths.
 	if m.EntryPoint != "" {

@@ -64,9 +64,9 @@ func TestBisectCandidate_ProbabilityBounds(t *testing.T) {
 func TestBisectAnalyzer_Analyze(t *testing.T) {
 	respJSON := `{"candidates":[{"hash":"abc","subject":"feat: change","probability":0.7,"reason":"risky change"}],"summary":"abc is the likely culprit"}`
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		completeResp: ai.CompletionResponse{Content: respJSON},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -87,9 +87,9 @@ func TestBisectAnalyzer_Analyze(t *testing.T) {
 
 func TestBisectAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
-		name:         "mock",
-		available:    true,
-		completeResp: ai.CompletionResponse{Content: "{broken"},
+		name:      "mock",
+		available: true,
+		response:  ai.CompletionResponse{Content: "{broken"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -106,9 +106,9 @@ func TestBisectAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 
 func TestBisectAnalyzer_Analyze_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
-		name:        "mock",
-		available:   true,
-		completeErr: errors.New("timeout"),
+		name:      "mock",
+		available: true,
+		err:       errors.New("timeout"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

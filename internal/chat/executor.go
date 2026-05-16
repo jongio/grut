@@ -14,15 +14,38 @@ import (
 
 	"github.com/jongio/grut/internal/ai"
 	"github.com/jongio/grut/internal/git"
-	"github.com/jongio/grut/internal/mcp"
 )
+
+// PathValidator confines file operations to a directory tree.
+// *mcp.PathJail satisfies this interface.
+type PathValidator interface {
+	// Validate resolves path within the jail and returns the absolute
+	// resolved path, or an error if the path escapes the root.
+	Validate(path string) (string, error)
+	// Root returns the jail root directory.
+	Root() string
+}
+
+// RateLimiter controls the rate of tool executions by category.
+// *mcp.RateLimiter satisfies this interface.
+type RateLimiter interface {
+	// Allow returns true if the operation in the given category is
+	// permitted under current rate limits.
+	Allow(category string) bool
+}
+
+// SensitivePathChecker is a function that returns a non-nil error when a
+// path targets a sensitive file (e.g. .env, private keys, .git internals).
+// mcp.IsSensitivePath satisfies this type.
+type SensitivePathChecker func(path string) error
 
 // ToolExecutor maps AI tool calls to actual git and file operations.
 type ToolExecutor struct {
-	client   git.GitClient
-	jail     *mcp.PathJail
-	limiter  *mcp.RateLimiter
-	registry *ToolRegistry
+	client      git.GitClient
+	jail        PathValidator
+	limiter     RateLimiter
+	isSensitive SensitivePathChecker
+	registry    *ToolRegistry
 }
 
 // maxListEntries caps the number of entries returned by file listing and
@@ -39,13 +62,14 @@ type ToolResult struct {
 }
 
 // NewToolExecutor creates a ToolExecutor wired to the given git client,
-// path jail, rate limiter, and tool registry.
-func NewToolExecutor(client git.GitClient, jail *mcp.PathJail, limiter *mcp.RateLimiter, registry *ToolRegistry) *ToolExecutor {
+// path validator, rate limiter, sensitive-path checker, and tool registry.
+func NewToolExecutor(client git.GitClient, jail PathValidator, limiter RateLimiter, isSensitive SensitivePathChecker, registry *ToolRegistry) *ToolExecutor {
 	return &ToolExecutor{
-		client:   client,
-		jail:     jail,
-		limiter:  limiter,
-		registry: registry,
+		client:      client,
+		jail:        jail,
+		limiter:     limiter,
+		isSensitive: isSensitive,
+		registry:    registry,
 	}
 }
 
@@ -94,10 +118,10 @@ func (e *ToolExecutor) rateCategory(name string) string {
 	// Read-only tools and safe write tools (stage, commit) use the read
 	// bucket since they are frequent, low-risk operations.
 	switch name {
-	case "file_write", "file_delete", "file_rename", "file_mkdir", //nolint:goconst // inline tool names are easier to scan here
-		"git_push", "git_branch_delete", "git_rebase", "git_reset", //nolint:goconst // inline tool names are easier to scan here
-		"git_tag_delete", "git_discard", //nolint:goconst // inline tool names are easier to scan here
-		"bulk_delete", "bulk_rename": //nolint:goconst // inline tool names are easier to scan here
+	case ToolFileWrite, ToolFileDelete, ToolFileRename, ToolFileMkdir,
+		ToolGitPush, ToolGitBranchDelete, ToolGitRebase, ToolGitReset,
+		ToolGitTagDelete, ToolGitDiscard,
+		ToolBulkDelete, ToolBulkRename:
 		return "write"
 	default:
 		return "read"
@@ -108,104 +132,104 @@ func (e *ToolExecutor) rateCategory(name string) string {
 func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[string]any) (string, error) {
 	switch name {
 	// ── File operations ──────────────────────────────────────────────
-	case "file_read":
+	case ToolFileRead:
 		return e.fileRead(ctx, args)
-	case "file_write":
+	case ToolFileWrite:
 		return e.fileWrite(ctx, args)
-	case "file_delete":
+	case ToolFileDelete:
 		return e.fileDelete(ctx, args)
-	case "file_rename":
+	case ToolFileRename:
 		return e.fileRename(ctx, args)
-	case "file_list":
+	case ToolFileList:
 		return e.fileList(ctx, args)
-	case "file_mkdir":
+	case ToolFileMkdir:
 		return e.fileMkdir(ctx, args)
 	// ── Git read operations ──────────────────────────────────────────
-	case "git_status":
+	case ToolGitStatus:
 		return e.gitStatus(ctx)
-	case "git_diff":
+	case ToolGitDiff:
 		return e.gitDiff(ctx, args)
-	case "git_log":
+	case ToolGitLog:
 		return e.gitLog(ctx, args)
-	case "git_blame":
+	case ToolGitBlame:
 		return e.gitBlame(ctx, args)
-	case "git_branch_list":
+	case ToolGitBranchList:
 		return e.gitBranchList(ctx)
-	case "git_stash_list":
+	case ToolGitStashList:
 		return e.gitStashList(ctx)
-	case "git_worktree_list":
+	case ToolGitWorktreeList:
 		return e.gitWorktreeList(ctx)
 	// ── Git write operations ─────────────────────────────────────────
-	case "git_stage":
+	case ToolGitStage:
 		return e.gitStage(ctx, args)
-	case "git_unstage":
+	case ToolGitUnstage:
 		return e.gitUnstage(ctx, args)
-	case "git_commit":
+	case ToolGitCommit:
 		return e.gitCommit(ctx, args)
-	case "git_push":
+	case ToolGitPush:
 		return e.gitPush(ctx, args)
-	case "git_pull":
+	case ToolGitPull:
 		return e.gitPull(ctx, args)
-	case "git_fetch":
+	case ToolGitFetch:
 		return e.gitFetch(ctx, args)
-	case "git_checkout":
+	case ToolGitCheckout:
 		return e.gitCheckout(ctx, args)
-	case "git_branch_create":
+	case ToolGitBranchCreate:
 		return e.gitBranchCreate(ctx, args)
-	case "git_branch_delete":
+	case ToolGitBranchDelete:
 		return e.gitBranchDelete(ctx, args)
-	case "git_merge":
+	case ToolGitMerge:
 		return e.gitMerge(ctx, args)
-	case "git_rebase":
+	case ToolGitRebase:
 		return e.gitRebase(ctx, args)
-	case "git_stash_push":
+	case ToolGitStashPush:
 		return e.gitStashPush(ctx, args)
-	case "git_stash_pop":
+	case ToolGitStashPop:
 		return e.gitStashPop(ctx, args)
-	case "git_reset":
+	case ToolGitReset:
 		return e.gitReset(ctx, args)
-	case "git_tag_create":
+	case ToolGitTagCreate:
 		return e.gitTagCreate(ctx, args)
-	case "git_tag_delete": //nolint:goconst // inline tool names are easier to scan here
+	case ToolGitTagDelete:
 		return e.gitTagDelete(ctx, args)
-	case "git_discard":
+	case ToolGitDiscard:
 		return e.gitDiscard(ctx, args)
 	// ── Navigation & search ──────────────────────────────────────────
-	case "navigate_to":
+	case ToolNavigateTo:
 		return e.navigateTo(args)
-	case "search_files":
+	case ToolSearchFiles:
 		return e.searchFiles(ctx, args)
-	case "search_content":
+	case ToolSearchContent:
 		return e.searchContent(ctx, args)
-	case "explain":
+	case ToolExplain:
 		return e.explain(args)
 	// ── Bulk operations ──────────────────────────────────────────────
-	case "bulk_stage":
+	case ToolBulkStage:
 		return e.bulkStage(ctx, args)
-	case "bulk_delete":
+	case ToolBulkDelete:
 		return e.bulkDelete(ctx, args)
-	case "bulk_rename":
+	case ToolBulkRename:
 		return e.bulkRename(ctx, args)
 	// ── GitHub operations ────────────────────────────────────────────
-	case "gh_issues":
+	case ToolGHIssues:
 		return e.ghIssues(ctx, args)
-	case "gh_issue_view":
+	case ToolGHIssueView:
 		return e.ghIssueView(ctx, args)
-	case "gh_prs":
+	case ToolGHPRs:
 		return e.ghPRs(ctx, args)
-	case "gh_pr_view":
+	case ToolGHPRView:
 		return e.ghPRView(ctx, args)
-	case "gh_pr_diff":
+	case ToolGHPRDiff:
 		return e.ghPRDiff(ctx, args)
-	case "gh_actions":
+	case ToolGHActions:
 		return e.ghActions(ctx, args)
-	case "gh_actions_logs":
+	case ToolGHActionsLogs:
 		return e.ghActionsLogs(ctx, args)
-	case "gh_comment":
+	case ToolGHComment:
 		return e.ghComment(ctx, args)
-	case "gh_pr_review":
+	case ToolGHPRReview:
 		return e.ghPRReview(ctx, args)
-	case "gh_actions_rerun":
+	case ToolGHActionsRerun:
 		return e.ghActionsRerun(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
@@ -216,7 +240,7 @@ func (e *ToolExecutor) dispatch(ctx context.Context, name string, args map[strin
 // File operation handlers
 // ---------------------------------------------------------------------------
 func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -225,12 +249,12 @@ func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string,
 		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
 		return "", fmt.Errorf("invalid path")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
 	}
 	// CR-008: Check resolved path against sensitive patterns to catch
 	// symlinks inside jail that point to sensitive files.
-	if err := mcp.IsSensitivePath(resolved); err != nil {
+	if err := e.isSensitive(resolved); err != nil {
 		return "", fmt.Errorf("path blocked (resolved): %w", err)
 	}
 	// CR-004: Open the file once and stat+read from the same fd to
@@ -259,8 +283,8 @@ func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string,
 }
 
 func (e *ToolExecutor) fileWrite(_ context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
-	content := getString(args, "content")
+	path := getString(args, PropPath)
+	content := getString(args, PropContent)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -274,7 +298,7 @@ func (e *ToolExecutor) fileWrite(_ context.Context, args map[string]any) (string
 		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
 		return "", fmt.Errorf("invalid path")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
 	}
 	// Ensure parent directory exists.
@@ -302,11 +326,11 @@ func (e *ToolExecutor) fileWrite(_ context.Context, args map[string]any) (string
 }
 
 func (e *ToolExecutor) fileDelete(_ context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", err
 	}
 	resolved, err := e.jail.Validate(path)
@@ -321,15 +345,15 @@ func (e *ToolExecutor) fileDelete(_ context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) fileRename(_ context.Context, args map[string]any) (string, error) {
-	oldPath := getString(args, "old_path")
-	newPath := getString(args, "new_path")
+	oldPath := getString(args, PropOldPath)
+	newPath := getString(args, PropNewPath)
 	if oldPath == "" || newPath == "" {
 		return "", fmt.Errorf("old_path and new_path are required")
 	}
-	if err := mcp.IsSensitivePath(oldPath); err != nil {
+	if err := e.isSensitive(oldPath); err != nil {
 		return "", err
 	}
-	if err := mcp.IsSensitivePath(newPath); err != nil {
+	if err := e.isSensitive(newPath); err != nil {
 		return "", err
 	}
 	resolvedOld, err := e.jail.Validate(oldPath)
@@ -359,11 +383,11 @@ func (e *ToolExecutor) fileRename(_ context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) fileList(_ context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		path = "."
 	}
-	recursive := getBool(args, "recursive")
+	recursive := getBool(args, PropRecursive)
 	resolved, err := e.jail.Validate(path)
 	if err != nil {
 		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
@@ -422,11 +446,11 @@ func (e *ToolExecutor) fileList(_ context.Context, args map[string]any) (string,
 }
 
 func (e *ToolExecutor) fileMkdir(_ context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", err
 	}
 	resolved, err := e.jail.Validate(path)
@@ -456,8 +480,8 @@ func (e *ToolExecutor) gitStatus(ctx context.Context) (string, error) {
 
 func (e *ToolExecutor) gitDiff(ctx context.Context, args map[string]any) (string, error) {
 	opts := git.DiffOpts{
-		Staged: getBool(args, "staged"),
-		Path:   getString(args, "path"),
+		Staged: getBool(args, PropStagged),
+		Path:   getString(args, PropPath),
 	}
 	diffs, err := e.client.Diff(ctx, opts)
 	if err != nil {
@@ -470,13 +494,13 @@ func (e *ToolExecutor) gitDiff(ctx context.Context, args map[string]any) (string
 }
 
 func (e *ToolExecutor) gitLog(ctx context.Context, args map[string]any) (string, error) {
-	count := getInt(args, "count")
+	count := getInt(args, PropCount)
 	if count <= 0 {
 		count = 10
 	}
 	opts := git.LogOpts{
 		MaxCount: count,
-		Path:     getString(args, "path"),
+		Path:     getString(args, PropPath),
 	}
 	commits, err := e.client.Log(ctx, opts)
 	if err != nil {
@@ -489,7 +513,7 @@ func (e *ToolExecutor) gitLog(ctx context.Context, args map[string]any) (string,
 }
 
 func (e *ToolExecutor) gitBlame(ctx context.Context, args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -531,7 +555,7 @@ func (e *ToolExecutor) gitWorktreeList(ctx context.Context) (string, error) {
 // Git write handlers
 // ---------------------------------------------------------------------------
 func (e *ToolExecutor) gitStage(ctx context.Context, args map[string]any) (string, error) {
-	paths := getStringSlice(args, "paths")
+	paths := getStringSlice(args, PropPaths)
 	if len(paths) == 0 {
 		return "", fmt.Errorf("paths is required")
 	}
@@ -542,7 +566,7 @@ func (e *ToolExecutor) gitStage(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) gitUnstage(ctx context.Context, args map[string]any) (string, error) {
-	paths := getStringSlice(args, "paths")
+	paths := getStringSlice(args, PropPaths)
 	if len(paths) == 0 {
 		return "", fmt.Errorf("paths is required")
 	}
@@ -553,7 +577,7 @@ func (e *ToolExecutor) gitUnstage(ctx context.Context, args map[string]any) (str
 }
 
 func (e *ToolExecutor) gitCommit(ctx context.Context, args map[string]any) (string, error) {
-	message := getString(args, "message")
+	message := getString(args, PropMessage)
 	if message == "" {
 		return "", fmt.Errorf("message is required")
 	}
@@ -566,8 +590,8 @@ func (e *ToolExecutor) gitCommit(ctx context.Context, args map[string]any) (stri
 
 func (e *ToolExecutor) gitPush(ctx context.Context, args map[string]any) (string, error) {
 	opts := git.PushOpts{
-		Remote: getString(args, "remote"),
-		Force:  getBool(args, "force"),
+		Remote: getString(args, PropRemote),
+		Force:  getBool(args, PropForce),
 	}
 	if opts.Remote == "" {
 		opts.Remote = "origin" //nolint:goconst // default remote name is clearer inline
@@ -580,7 +604,7 @@ func (e *ToolExecutor) gitPush(ctx context.Context, args map[string]any) (string
 
 func (e *ToolExecutor) gitPull(ctx context.Context, args map[string]any) (string, error) {
 	opts := git.PullOpts{
-		Remote: getString(args, "remote"),
+		Remote: getString(args, PropRemote),
 	}
 	if opts.Remote == "" {
 		opts.Remote = "origin"
@@ -593,7 +617,7 @@ func (e *ToolExecutor) gitPull(ctx context.Context, args map[string]any) (string
 
 func (e *ToolExecutor) gitFetch(ctx context.Context, args map[string]any) (string, error) {
 	opts := git.FetchOpts{
-		Remote: getString(args, "remote"),
+		Remote: getString(args, PropRemote),
 	}
 	if err := e.client.Fetch(ctx, opts); err != nil {
 		return "", fmt.Errorf("git fetch: %w", err)
@@ -602,7 +626,7 @@ func (e *ToolExecutor) gitFetch(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) gitCheckout(ctx context.Context, args map[string]any) (string, error) {
-	ref := getString(args, "ref")
+	ref := getString(args, PropRef)
 	if ref == "" {
 		return "", fmt.Errorf("ref is required")
 	}
@@ -613,11 +637,11 @@ func (e *ToolExecutor) gitCheckout(ctx context.Context, args map[string]any) (st
 }
 
 func (e *ToolExecutor) gitBranchCreate(ctx context.Context, args map[string]any) (string, error) {
-	name := getString(args, "name")
+	name := getString(args, PropName)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	startPoint := getString(args, "start_point")
+	startPoint := getString(args, PropStartPoint)
 	if err := e.client.BranchCreate(ctx, name, startPoint); err != nil {
 		return "", fmt.Errorf("git branch create: %w", err)
 	}
@@ -625,11 +649,11 @@ func (e *ToolExecutor) gitBranchCreate(ctx context.Context, args map[string]any)
 }
 
 func (e *ToolExecutor) gitBranchDelete(ctx context.Context, args map[string]any) (string, error) {
-	name := getString(args, "name")
+	name := getString(args, PropName)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	force := getBool(args, "force")
+	force := getBool(args, PropForce)
 	if err := e.client.BranchDelete(ctx, name, force); err != nil {
 		return "", fmt.Errorf("git branch delete: %w", err)
 	}
@@ -637,7 +661,7 @@ func (e *ToolExecutor) gitBranchDelete(ctx context.Context, args map[string]any)
 }
 
 func (e *ToolExecutor) gitMerge(ctx context.Context, args map[string]any) (string, error) {
-	branch := getString(args, "branch")
+	branch := getString(args, PropBranch)
 	if branch == "" {
 		return "", fmt.Errorf("branch is required")
 	}
@@ -648,7 +672,7 @@ func (e *ToolExecutor) gitMerge(ctx context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) gitRebase(ctx context.Context, args map[string]any) (string, error) {
-	onto := getString(args, "onto")
+	onto := getString(args, PropOnto)
 	if onto == "" {
 		return "", fmt.Errorf("onto is required")
 	}
@@ -660,7 +684,7 @@ func (e *ToolExecutor) gitRebase(ctx context.Context, args map[string]any) (stri
 
 func (e *ToolExecutor) gitStashPush(ctx context.Context, args map[string]any) (string, error) {
 	opts := git.StashOpts{
-		Message: getString(args, "message"),
+		Message: getString(args, PropMessage),
 	}
 	if err := e.client.StashPush(ctx, opts); err != nil {
 		return "", fmt.Errorf("git stash push: %w", err)
@@ -669,7 +693,7 @@ func (e *ToolExecutor) gitStashPush(ctx context.Context, args map[string]any) (s
 }
 
 func (e *ToolExecutor) gitStashPop(ctx context.Context, args map[string]any) (string, error) {
-	index := getInt(args, "index")
+	index := getInt(args, PropIndex)
 	if err := e.client.StashPop(ctx, index); err != nil {
 		return "", fmt.Errorf("git stash pop: %w", err)
 	}
@@ -677,7 +701,7 @@ func (e *ToolExecutor) gitStashPop(ctx context.Context, args map[string]any) (st
 }
 
 func (e *ToolExecutor) gitReset(_ context.Context, args map[string]any) (string, error) {
-	ref := getString(args, "ref")
+	ref := getString(args, PropRef)
 	if ref == "" {
 		return "", fmt.Errorf("ref is required")
 	}
@@ -688,12 +712,12 @@ func (e *ToolExecutor) gitReset(_ context.Context, args map[string]any) (string,
 }
 
 func (e *ToolExecutor) gitTagCreate(ctx context.Context, args map[string]any) (string, error) {
-	name := getString(args, "name")
+	name := getString(args, PropName)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	ref := getString(args, "ref")
-	message := getString(args, "message")
+	ref := getString(args, PropRef)
+	message := getString(args, PropMessage)
 	if err := e.client.TagCreate(ctx, name, ref, message); err != nil {
 		return "", fmt.Errorf("git tag create: %w", err)
 	}
@@ -701,7 +725,7 @@ func (e *ToolExecutor) gitTagCreate(ctx context.Context, args map[string]any) (s
 }
 
 func (e *ToolExecutor) gitTagDelete(ctx context.Context, args map[string]any) (string, error) {
-	name := getString(args, "name")
+	name := getString(args, PropName)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
@@ -712,7 +736,7 @@ func (e *ToolExecutor) gitTagDelete(ctx context.Context, args map[string]any) (s
 }
 
 func (e *ToolExecutor) gitDiscard(_ context.Context, args map[string]any) (string, error) {
-	paths := getStringSlice(args, "paths")
+	paths := getStringSlice(args, PropPaths)
 	if len(paths) == 0 {
 		return "", fmt.Errorf("paths is required")
 	}
@@ -725,7 +749,7 @@ func (e *ToolExecutor) gitDiscard(_ context.Context, args map[string]any) (strin
 // Navigation & search handlers
 // ---------------------------------------------------------------------------
 func (e *ToolExecutor) navigateTo(args map[string]any) (string, error) {
-	path := getString(args, "path")
+	path := getString(args, PropPath)
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -739,11 +763,11 @@ func (e *ToolExecutor) navigateTo(args map[string]any) (string, error) {
 }
 
 func (e *ToolExecutor) searchFiles(ctx context.Context, args map[string]any) (string, error) {
-	pattern := getString(args, "pattern")
+	pattern := getString(args, PropPattern)
 	if pattern == "" {
 		return "", fmt.Errorf("pattern is required")
 	}
-	searchPath := getString(args, "path")
+	searchPath := getString(args, PropPath)
 	if searchPath == "" {
 		searchPath = "."
 	}
@@ -789,7 +813,7 @@ func (e *ToolExecutor) searchFiles(ctx context.Context, args map[string]any) (st
 }
 
 func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (string, error) {
-	pattern := getString(args, "pattern")
+	pattern := getString(args, PropPattern)
 	if pattern == "" {
 		return "", fmt.Errorf("pattern is required")
 	}
@@ -800,7 +824,7 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 	if len(pattern) > maxPatternLen {
 		return "", fmt.Errorf("pattern too long: %d bytes (max %d)", len(pattern), maxPatternLen)
 	}
-	searchPath := getString(args, "path")
+	searchPath := getString(args, PropPath)
 	if searchPath == "" {
 		searchPath = "."
 	}
@@ -840,7 +864,7 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 			return nil //nolint:nilerr // skip files with unresolvable paths
 		}
 		rel = filepath.ToSlash(rel)
-		if err := mcp.IsSensitivePath(rel); err != nil {
+		if err := e.isSensitive(rel); err != nil {
 			return nil //nolint:nilerr // skip sensitive files
 		}
 		// Skip binary-looking or very large files.
@@ -877,7 +901,7 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 }
 
 func (e *ToolExecutor) explain(args map[string]any) (string, error) {
-	topic := getString(args, "topic")
+	topic := getString(args, PropTopic)
 	if topic == "" {
 		return "", fmt.Errorf("topic is required")
 	}
@@ -890,7 +914,7 @@ func (e *ToolExecutor) explain(args map[string]any) (string, error) {
 // Bulk operation handlers
 // ---------------------------------------------------------------------------
 func (e *ToolExecutor) bulkStage(ctx context.Context, args map[string]any) (string, error) {
-	patterns := getStringSlice(args, "patterns")
+	patterns := getStringSlice(args, PropPatterns)
 	if len(patterns) == 0 {
 		return "", fmt.Errorf("patterns is required")
 	}
@@ -919,14 +943,14 @@ func (e *ToolExecutor) bulkStage(ctx context.Context, args map[string]any) (stri
 }
 
 func (e *ToolExecutor) bulkDelete(_ context.Context, args map[string]any) (string, error) {
-	paths := getStringSlice(args, "paths")
+	paths := getStringSlice(args, PropPaths)
 	if len(paths) == 0 {
 		return "", fmt.Errorf("paths is required")
 	}
 	var deleted int
 	var errs []string
 	for _, p := range paths {
-		if err := mcp.IsSensitivePath(p); err != nil {
+		if err := e.isSensitive(p); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
 			continue
 		}
@@ -949,7 +973,7 @@ func (e *ToolExecutor) bulkDelete(_ context.Context, args map[string]any) (strin
 }
 
 func (e *ToolExecutor) bulkRename(_ context.Context, args map[string]any) (string, error) {
-	renames, ok := args["renames"]
+	renames, ok := args[PropRenames]
 	if !ok {
 		return "", fmt.Errorf("renames is required")
 	}
@@ -965,17 +989,17 @@ func (e *ToolExecutor) bulkRename(_ context.Context, args map[string]any) (strin
 			errs = append(errs, "invalid rename entry")
 			continue
 		}
-		oldPath := getString(m, "old")
-		newPath := getString(m, "new")
+		oldPath := getString(m, PropOld)
+		newPath := getString(m, PropNew)
 		if oldPath == "" || newPath == "" {
 			errs = append(errs, "rename entry missing old or new path")
 			continue
 		}
-		if err := mcp.IsSensitivePath(oldPath); err != nil {
+		if err := e.isSensitive(oldPath); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", oldPath, err))
 			continue
 		}
-		if err := mcp.IsSensitivePath(newPath); err != nil {
+		if err := e.isSensitive(newPath); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", newPath, err))
 			continue
 		}

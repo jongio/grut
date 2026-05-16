@@ -11,7 +11,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 )
 
@@ -34,7 +33,7 @@ func (ft *FileTree) loadChildren(n *node) {
 	}
 
 	// Max depth enforcement.
-	if n.depth+1 >= ft.cfg.MaxDepth {
+	if n.depth+1 >= ft.cfg.GetMaxDepth() {
 		n.loaded = true
 		return
 	}
@@ -93,11 +92,11 @@ func (ft *FileTree) loadChildren(n *node) {
 // loadChildrenStatic is a standalone version of loadChildren that uses
 // an explicit config rather than the FileTree receiver. Safe for use in
 // background goroutines launched by tea.Cmd (F05).
-func loadChildrenStatic(n *node, cfg config.FileTreeConfig) {
+func loadChildrenStatic(n *node, cfg Config) {
 	if n.loaded || !n.isDir {
 		return
 	}
-	if n.depth+1 >= cfg.MaxDepth {
+	if n.depth+1 >= cfg.GetMaxDepth() {
 		n.loaded = true
 		return
 	}
@@ -136,7 +135,7 @@ func loadChildrenStatic(n *node, cfg config.FileTreeConfig) {
 		}
 		children = append(children, child)
 	}
-	sortChildrenStatic(children, cfg.SortDirectoriesFirst)
+	sortChildrenStatic(children, cfg.GetSortDirectoriesFirst())
 	n.children = children
 	n.loaded = true
 }
@@ -162,7 +161,7 @@ func sortChildrenStatic(children []*node, dirFirst bool) {
 func (ft *FileTree) sortChildren(children []*node) {
 	// Stable sort: directories first (when configured), then case-insensitive
 	// alphabetical. Uses stdlib slices.SortStableFunc (Go 1.21+).
-	dirFirst := ft.cfg.SortDirectoriesFirst
+	dirFirst := ft.cfg.GetSortDirectoriesFirst()
 	slices.SortStableFunc(children, func(a, b *node) int {
 		if dirFirst && a.isDir != b.isDir {
 			if a.isDir {
@@ -238,10 +237,10 @@ func (ft *FileTree) walkVisible(n *node) {
 		// the hidden-file check.  Without this, dotfile changes
 		// (e.g. .github/) are suppressed before the filter runs.
 		if !ft.showHidden && isHidden(child.name) {
-			inFilteredMode := (ft.commitFilesMode && ft.commitChangedPaths != nil) ||
-				(ft.prFilesMode && ft.prChangedPaths != nil) ||
-				(ft.branchFilesMode && ft.branchChangedPaths != nil) ||
-				(ft.gitFilter && ft.gitChangedPaths != nil)
+			inFilteredMode := (ft.commitFilesMode && ft.commitChanged.loaded()) ||
+				(ft.prFilesMode && ft.prChanged.loaded()) ||
+				(ft.branchFilesMode && ft.branchChanged.loaded()) ||
+				(ft.gitFilter && ft.gitChanged.loaded())
 			if !inFilteredMode {
 				continue
 			}
@@ -249,47 +248,47 @@ func (ft *FileTree) walkVisible(n *node) {
 		// Commit-files filter: skip files/dirs not in the commit-changed set.
 		// Takes priority over git filter since the user explicitly selected
 		// a commit to inspect.
-		if ft.commitFilesMode && ft.commitChangedPaths != nil {
+		if ft.commitFilesMode && ft.commitChanged.loaded() {
 			if child.isDir {
-				if !ft.commitChangedDirs[child.path] {
+				if !ft.commitChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.commitChangedPaths[child.path] {
+				if !ft.commitChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.prFilesMode && ft.prChangedPaths != nil {
+		} else if ft.prFilesMode && ft.prChanged.loaded() {
 			// PR-files filter: skip files/dirs not in the PR-changed set.
 			if child.isDir {
-				if !ft.prChangedDirs[child.path] {
+				if !ft.prChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.prChangedPaths[child.path] {
+				if !ft.prChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.branchFilesMode && ft.branchChangedPaths != nil {
+		} else if ft.branchFilesMode && ft.branchChanged.loaded() {
 			// Branch-files filter: skip files/dirs not in the branch-changed set.
 			if child.isDir {
-				if !ft.branchChangedDirs[child.path] {
+				if !ft.branchChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.branchChangedPaths[child.path] {
+				if !ft.branchChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.gitFilter && ft.gitChangedPaths != nil {
+		} else if ft.gitFilter && ft.gitChanged.loaded() {
 			// Git filter: skip files not in the changed set, and skip
 			// directories that contain no changed descendants.
 			if child.isDir {
-				if !ft.gitChangedDirs[child.path] {
+				if !ft.gitChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.gitChangedPaths[child.path] {
+				if !ft.gitChanged.hasPath(child.path) {
 					continue
 				}
 			}
@@ -505,8 +504,8 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		if err != nil {
 			rel = n.name
 		}
-		if ft.cfg.ShowIcons {
-			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+		if ft.cfg.GetShowIcons() {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.GetIconMode()); icon != "" {
 				b.WriteString(icon)
 				b.WriteByte(' ')
 			}
@@ -520,14 +519,14 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		b.WriteString(strings.Repeat("  ", n.depth))
 
 		if n.isDir {
-			b.WriteString(getExpandIcon(n.expanded, ft.cfg.IconMode))
+			b.WriteString(getExpandIcon(n.expanded, ft.cfg.GetIconMode()))
 			b.WriteByte(' ')
 		} else {
 			b.WriteString("  ")
 		}
 
-		if ft.cfg.ShowIcons {
-			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+		if ft.cfg.GetShowIcons() {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.GetIconMode()); icon != "" {
 				b.WriteString(icon)
 				b.WriteByte(' ')
 			}
@@ -582,13 +581,13 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 			case "U":
 				gitColor = "#C9A227"
 			}
-			gitIndicator = gitStatusIcon(indicator, ft.cfg.IconMode)
+			gitIndicator = gitStatusIcon(indicator, ft.cfg.GetIconMode())
 			gitIndicatorW = 1 + displayWidth(gitIndicator) // " " + icon
 		}
 	}
 	// Show ignored indicator when no other git status is present.
 	if ignored && gitIndicator == "" {
-		gitIndicator = gitStatusIcon("!", ft.cfg.IconMode)
+		gitIndicator = gitStatusIcon("!", ft.cfg.GetIconMode())
 		gitColor = ft.colors.Dim
 		gitIndicatorW = 1 + displayWidth(gitIndicator)
 	}

@@ -140,7 +140,7 @@ func (p *Panel) View(width, height int) string {
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	prefixKey := p.cfg.PrefixKey
 	if prefixKey == "" {
-		prefixKey = "ctrl+b"
+		prefixKey = defaultPrefixKey
 	}
 	return []panels.KeyBinding{
 		{Key: "i/enter", Description: "Enter insert mode", Action: "insert_mode"},
@@ -246,7 +246,7 @@ func (p *Panel) handleInsertKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	// Check prefix key to exit insert mode.
 	prefixKey := p.cfg.PrefixKey
 	if prefixKey == "" {
-		prefixKey = "ctrl+b"
+		prefixKey = defaultPrefixKey
 	}
 	if key == prefixKey {
 		p.mode = modeNormal
