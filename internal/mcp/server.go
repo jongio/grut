@@ -95,14 +95,36 @@ func (s *Server) addTool(name string, category string, tool mcplib.Tool, handler
 	s.mcp.AddTool(tool, s.wrapHandler(name, category, handler))
 }
 
-// wrapHandler wraps a tool handler with rate limiting and audit logging.
+// wrapHandler wraps a tool handler with security checks: allowed-command
+// filtering, write-confirmation gating, rate limiting, and audit logging.
 func (s *Server) wrapHandler(name string, category string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		start := time.Now()
+
+		// 1. Allowed-commands allowlist: if configured, reject tools not in the list.
+		if !s.isCommandAllowed(name) {
+			s.audit.Log(name, req.GetArguments(), "command_blocked", time.Since(start))
+			return mcplib.NewToolResultErrorf("tool %q is not in the allowed commands list", name), nil
+		}
+
+		// 2. Write-confirmation gate: write tools require explicit confirmation.
+		if category == categoryWrite && s.cfg.MCP.Security.RequireConfirmation {
+			args := req.GetArguments()
+			confirmed, _ := args["_confirmed"].(bool)
+			if !confirmed {
+				s.audit.Log(name, args, "confirmation_required", time.Since(start))
+				return mcplib.NewToolResultErrorf(
+					"tool %q is a write operation and requires confirmation: "+
+						"re-invoke with \"_confirmed\": true to proceed", name), nil
+			}
+		}
+
+		// 3. Rate limiting.
 		if !s.limiter.Allow(category) {
 			s.audit.Log(name, req.GetArguments(), "rate_limited", time.Since(start))
 			return mcplib.NewToolResultError("rate limit exceeded"), nil
 		}
+
 		result, err := handler(ctx, req)
 		status := "success"
 		if err != nil {
@@ -113,6 +135,21 @@ func (s *Server) wrapHandler(name string, category string, handler mcpserver.Too
 		s.audit.Log(name, req.GetArguments(), status, time.Since(start))
 		return result, err
 	}
+}
+
+// isCommandAllowed reports whether the named tool is permitted by the
+// AllowedCommands allowlist. An empty list means all commands are allowed.
+func (s *Server) isCommandAllowed(name string) bool {
+	allowed := s.cfg.MCP.Security.AllowedCommands
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, cmd := range allowed {
+		if cmd == name {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonResult marshals data to JSON and returns it as a text tool result.
