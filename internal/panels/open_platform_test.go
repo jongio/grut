@@ -1,6 +1,7 @@
 package panels
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,7 +49,7 @@ func TestOpenInEditor_CommonEditorLookPath(t *testing.T) {
 
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	err := OpenInEditor("somefile.txt")
+	err := OpenInEditor(context.Background(), "somefile.txt")
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
@@ -80,7 +81,7 @@ func TestOpenInEditor_PlatformDefaultWindows(t *testing.T) {
 	require.NoError(t, err)
 	_ = f.Close()
 
-	err = OpenInEditor(f.Name())
+	err = OpenInEditor(context.Background(), f.Name())
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
@@ -100,7 +101,7 @@ func TestOpenInBrowser_WindowsPlatform(t *testing.T) {
 
 	getCaptured := stubStartDetachedCapture(t)
 
-	err := OpenInBrowser("https://127.0.0.1:1")
+	err := OpenInBrowser(context.Background(), "https://127.0.0.1:1")
 	assert.NoError(t, err)
 
 	cmd := getCaptured()
@@ -120,7 +121,7 @@ func TestOpenInTerminal_WindowsPlatform(t *testing.T) {
 	getCaptured := stubStartDetachedCapture(t)
 
 	dir := t.TempDir()
-	err := OpenInTerminal(dir)
+	err := OpenInTerminal(context.Background(), dir)
 	assert.NoError(t, err)
 
 	cmd := getCaptured()

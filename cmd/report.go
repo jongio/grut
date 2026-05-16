@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -136,10 +137,10 @@ func runReportLatest(noBrowser bool) error {
 		fmt.Println(body)
 		fmt.Println()
 		fmt.Println("The crash report is too long for a URL. The report body has been printed above -- copy and paste it into the issue form.")
-		return panels.OpenInBrowser(minimalURL)
+		return panels.OpenInBrowser(context.Background(), minimalURL)
 	}
 
-	if err := panels.OpenInBrowser(fullURL); err != nil {
+	if err := panels.OpenInBrowser(context.Background(), fullURL); err != nil {
 		return fmt.Errorf("opening browser: %w", err)
 	}
 	fmt.Println("Browser opened. Review the issue details before submitting.")

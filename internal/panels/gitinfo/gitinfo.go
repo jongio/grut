@@ -1952,7 +1952,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			}
 		}
 		return p, func() tea.Msg {
-			if err := panels.OpenInBrowser(url); err != nil {
+			if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 				return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 			}
 			return notify.ShowToastMsg{Message: "Opened " + item.remote.Name, Level: notify.Info}
@@ -1969,7 +1969,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		return p, func() tea.Msg {
-			if err := panels.OpenInBrowser(url); err != nil {
+			if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 				return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened issue #%d", item.issue.Number), Level: notify.Info}
@@ -1980,7 +1980,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		return p, func() tea.Msg {
-			if err := panels.OpenInBrowser(url); err != nil {
+			if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 				return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened PR #%d", item.pr.Number), Level: notify.Info}
@@ -1991,7 +1991,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		return p, func() tea.Msg {
-			if err := panels.OpenInBrowser(url); err != nil {
+			if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 				return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 			}
 			return notify.ShowToastMsg{Message: fmt.Sprintf("Opened run #%d", item.actionRun.RunNumber), Level: notify.Info}
@@ -2004,7 +2004,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		return p, func() tea.Msg {
-			if err := panels.OpenInBrowser(url); err != nil {
+			if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 				return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 			}
 			return notify.ShowToastMsg{Message: "Opened release " + item.release.TagName, Level: notify.Info}
@@ -2061,7 +2061,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionOpenTerminal:
 			p.pendingPath = ""
 			return p, func() tea.Msg {
-				if err := panels.OpenInTerminal(wtPath); err != nil {
+				if err := panels.OpenInTerminal(p.ctx, wtPath); err != nil {
 					return notify.ShowToastMsg{Message: "Terminal error: " + err.Error(), Level: notify.Error}
 				}
 				return notify.ShowToastMsg{Message: "Opened terminal at " + wtPath, Level: notify.Success}
@@ -2236,7 +2236,7 @@ func (p *Panel) openRepoInBrowser() (panels.Panel, tea.Cmd) {
 // openURLAndToast opens a URL in the browser and shows a toast notification.
 func (p *Panel) openURLAndToast(url, label string) (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
-		if err := panels.OpenInBrowser(url); err != nil {
+		if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened " + label, Level: notify.Info}
@@ -2337,7 +2337,7 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 	}
 	if p.cfg.WorktreeOpenMode == openModeNewTerminal {
 		return p, func() tea.Msg {
-			if err := panels.OpenInTerminal(path); err != nil {
+			if err := panels.OpenInTerminal(p.ctx, path); err != nil {
 				errMsg := err.Error()
 				return notify.ShowToastMsg{Message: "Terminal error: " + errMsg, Level: notify.Error}
 			}
@@ -2367,7 +2367,7 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 		if p.ghOwner != "" && p.ghRepo != "" {
 			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.ghOwner, p.ghRepo)
 			return p, func() tea.Msg {
-				if err := panels.OpenInBrowser(url); err != nil {
+				if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 					return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 				}
 				return notify.ShowToastMsg{Message: "Opened new issue page", Level: notify.Info}
@@ -2495,7 +2495,7 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 		}
 	}
 	return p, func() tea.Msg {
-		if err := panels.OpenInBrowser(url); err != nil {
+		if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened " + label, Level: notify.Info}

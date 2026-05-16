@@ -428,7 +428,7 @@ func (ft *FileTree) openInEditor() (panels.Panel, tea.Cmd) {
 	filePath := n.path
 	fileName := n.name
 	return ft, func() tea.Msg {
-		if err := panels.OpenInEditor(filePath); err != nil {
+		if err := panels.OpenInEditor(ft.safeCtx(), filePath); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened " + fileName, Level: notify.Info}

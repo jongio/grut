@@ -407,7 +407,7 @@ func (p *Panel) openTerminal(pathOverride string) (panels.Panel, tea.Cmd) {
 		wtPath = p.items[p.cursor].worktree.Path
 	}
 	return p, func() tea.Msg {
-		if err := panels.OpenInTerminal(wtPath); err != nil {
+		if err := panels.OpenInTerminal(p.ctx, wtPath); err != nil {
 			return notify.ShowToastMsg{Message: "Terminal failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened terminal", Level: notify.Info}
@@ -454,7 +454,7 @@ func (p *Panel) changeDirectory(pathOverride string) (panels.Panel, tea.Cmd) {
 	}
 	if p.cfg.WorktreeOpenMode == "new_terminal" {
 		return p, func() tea.Msg {
-			if err := panels.OpenInTerminal(path); err != nil {
+			if err := panels.OpenInTerminal(p.ctx, path); err != nil {
 				errMsg := err.Error()
 				return notify.ShowToastMsg{Message: "Terminal error: " + errMsg, Level: notify.Error}
 			}
