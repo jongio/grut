@@ -158,13 +158,16 @@ type githubPollTickMsg struct{ time.Time }
 type actionsWatchTickMsg struct{ time.Time }
 
 // watchFrames defines the 4-frame cycle for the CI watch animation.
-var watchFrames = []string{"●", "◐", "○", "◑"}
+var watchFrames = []string{runDot, "◐", "○", "◑"}
 
 // checkMark is the success icon used in status indicators.
 const checkMark = "✓"
 
 // crossMark is the failure icon used in status indicators.
 const crossMark = "✗"
+
+// runDot is the running/in-progress icon used in status indicators.
+const runDot = "●"
 
 // GitHub Actions conclusion strings used in switch cases.
 const (
@@ -1881,7 +1884,7 @@ func prActionIconFrom(c panelColors, pr ghPRItem) (icon string, color string) {
 	}
 	switch pr.ActionStatus {
 	case statusInProgress, statusQueued:
-		return "●", c.ActionRun
+		return runDot, c.ActionRun
 	}
 	return "", ""
 }
@@ -1972,10 +1975,10 @@ func (p *Panel) renderActionRun(item listItem, width int, isCursor bool) string 
 		fg = p.colors.ActionFail
 	default:
 		if run.Status == statusInProgress || run.Status == statusQueued {
-			icon = "●"
+			icon = runDot
 			fg = p.colors.ActionRun
 		} else {
-			icon = "●"
+			icon = runDot
 			fg = p.colors.Dim
 		}
 	}
@@ -2024,7 +2027,7 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	var fg string
 	switch wf.State {
 	case stateActive:
-		icon = "●"
+		icon = runDot
 		fg = p.colors.Workflow
 	case stateDisabledManually, stateDisabledInactivity:
 		icon = "○"
@@ -2074,7 +2077,7 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 	var fg string
 	switch {
 	case rel.Draft:
-		icon = "●"
+		icon = runDot
 		fg = p.colors.RelDraft
 	case rel.Prerelease:
 		icon = "⚠"
