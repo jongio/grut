@@ -1308,7 +1308,7 @@ func TestWriteRateLimit(t *testing.T) {
 	// 1000 read ops, but only 1 write op.
 	limiter := mcp.NewRateLimiter(1000, 1)
 	registry := NewToolRegistry()
-	exec := NewToolExecutor(mock, jail, limiter, registry)
+	exec := NewToolExecutor(mock, jail, limiter, mcp.IsSensitivePath, registry)
 
 	// First call uses the single write token.
 	r1 := exec.Execute(context.Background(), ai.ToolCall{

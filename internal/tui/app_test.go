@@ -721,7 +721,7 @@ func newTestChatModel(t *testing.T) *chat.Model {
 	cfg := ai.NewRegistry(config.AIConfig{Provider: "mock"})
 	th := &theme.Theme{Name: "test", Variant: "dark"}
 	toolReg := chat.NewToolRegistry()
-	executor := chat.NewToolExecutor(nil, nil, nil, toolReg)
+	executor := chat.NewToolExecutor(nil, nil, nil, nil, toolReg)
 	confirmer := chat.NewConfirmationManager(toolReg)
 	sysBuilder := chat.NewSystemPromptBuilder(nil, "test")
 	redactor := ai.NewRedactor(nil)

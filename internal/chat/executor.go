@@ -14,15 +14,38 @@ import (
 
 	"github.com/jongio/grut/internal/ai"
 	"github.com/jongio/grut/internal/git"
-	"github.com/jongio/grut/internal/mcp"
 )
+
+// PathValidator confines file operations to a directory tree.
+// *mcp.PathJail satisfies this interface.
+type PathValidator interface {
+	// Validate resolves path within the jail and returns the absolute
+	// resolved path, or an error if the path escapes the root.
+	Validate(path string) (string, error)
+	// Root returns the jail root directory.
+	Root() string
+}
+
+// RateLimiter controls the rate of tool executions by category.
+// *mcp.RateLimiter satisfies this interface.
+type RateLimiter interface {
+	// Allow returns true if the operation in the given category is
+	// permitted under current rate limits.
+	Allow(category string) bool
+}
+
+// SensitivePathChecker is a function that returns a non-nil error when a
+// path targets a sensitive file (e.g. .env, private keys, .git internals).
+// mcp.IsSensitivePath satisfies this type.
+type SensitivePathChecker func(path string) error
 
 // ToolExecutor maps AI tool calls to actual git and file operations.
 type ToolExecutor struct {
-	client   git.GitClient
-	jail     *mcp.PathJail
-	limiter  *mcp.RateLimiter
-	registry *ToolRegistry
+	client         git.GitClient
+	jail           PathValidator
+	limiter        RateLimiter
+	isSensitive    SensitivePathChecker
+	registry       *ToolRegistry
 }
 
 // maxListEntries caps the number of entries returned by file listing and
@@ -39,13 +62,14 @@ type ToolResult struct {
 }
 
 // NewToolExecutor creates a ToolExecutor wired to the given git client,
-// path jail, rate limiter, and tool registry.
-func NewToolExecutor(client git.GitClient, jail *mcp.PathJail, limiter *mcp.RateLimiter, registry *ToolRegistry) *ToolExecutor {
+// path validator, rate limiter, sensitive-path checker, and tool registry.
+func NewToolExecutor(client git.GitClient, jail PathValidator, limiter RateLimiter, isSensitive SensitivePathChecker, registry *ToolRegistry) *ToolExecutor {
 	return &ToolExecutor{
-		client:   client,
-		jail:     jail,
-		limiter:  limiter,
-		registry: registry,
+		client:      client,
+		jail:        jail,
+		limiter:     limiter,
+		isSensitive: isSensitive,
+		registry:    registry,
 	}
 }
 
@@ -225,12 +249,12 @@ func (e *ToolExecutor) fileRead(_ context.Context, args map[string]any) (string,
 		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
 		return "", fmt.Errorf("invalid path")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
 	}
 	// CR-008: Check resolved path against sensitive patterns to catch
 	// symlinks inside jail that point to sensitive files.
-	if err := mcp.IsSensitivePath(resolved); err != nil {
+	if err := e.isSensitive(resolved); err != nil {
 		return "", fmt.Errorf("path blocked (resolved): %w", err)
 	}
 	// CR-004: Open the file once and stat+read from the same fd to
@@ -274,7 +298,7 @@ func (e *ToolExecutor) fileWrite(_ context.Context, args map[string]any) (string
 		slog.Debug("chat: invalid path rejected", "path", path, "error", err)
 		return "", fmt.Errorf("invalid path")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", fmt.Errorf("path blocked: %w", err)
 	}
 	// Ensure parent directory exists.
@@ -306,7 +330,7 @@ func (e *ToolExecutor) fileDelete(_ context.Context, args map[string]any) (strin
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", err
 	}
 	resolved, err := e.jail.Validate(path)
@@ -326,10 +350,10 @@ func (e *ToolExecutor) fileRename(_ context.Context, args map[string]any) (strin
 	if oldPath == "" || newPath == "" {
 		return "", fmt.Errorf("old_path and new_path are required")
 	}
-	if err := mcp.IsSensitivePath(oldPath); err != nil {
+	if err := e.isSensitive(oldPath); err != nil {
 		return "", err
 	}
-	if err := mcp.IsSensitivePath(newPath); err != nil {
+	if err := e.isSensitive(newPath); err != nil {
 		return "", err
 	}
 	resolvedOld, err := e.jail.Validate(oldPath)
@@ -426,7 +450,7 @@ func (e *ToolExecutor) fileMkdir(_ context.Context, args map[string]any) (string
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	if err := mcp.IsSensitivePath(path); err != nil {
+	if err := e.isSensitive(path); err != nil {
 		return "", err
 	}
 	resolved, err := e.jail.Validate(path)
@@ -840,7 +864,7 @@ func (e *ToolExecutor) searchContent(ctx context.Context, args map[string]any) (
 			return nil //nolint:nilerr // skip files with unresolvable paths
 		}
 		rel = filepath.ToSlash(rel)
-		if err := mcp.IsSensitivePath(rel); err != nil {
+		if err := e.isSensitive(rel); err != nil {
 			return nil //nolint:nilerr // skip sensitive files
 		}
 		// Skip binary-looking or very large files.
@@ -926,7 +950,7 @@ func (e *ToolExecutor) bulkDelete(_ context.Context, args map[string]any) (strin
 	var deleted int
 	var errs []string
 	for _, p := range paths {
-		if err := mcp.IsSensitivePath(p); err != nil {
+		if err := e.isSensitive(p); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
 			continue
 		}
@@ -971,11 +995,11 @@ func (e *ToolExecutor) bulkRename(_ context.Context, args map[string]any) (strin
 			errs = append(errs, "rename entry missing old or new path")
 			continue
 		}
-		if err := mcp.IsSensitivePath(oldPath); err != nil {
+		if err := e.isSensitive(oldPath); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", oldPath, err))
 			continue
 		}
-		if err := mcp.IsSensitivePath(newPath); err != nil {
+		if err := e.isSensitive(newPath); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", newPath, err))
 			continue
 		}
