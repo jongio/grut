@@ -61,6 +61,47 @@ func initColors(th *theme.Theme) panelColors {
 // keyEsc is the key name for the Escape key, used in mode-exit checks.
 const keyEsc = "esc"
 
+// changedFiles holds the set of changed file paths and the derived set of
+// directories that transitively contain those files. A nil *changedFiles
+// means "no data loaded yet" (different from an empty set).
+type changedFiles struct {
+	paths map[string]bool
+	dirs  map[string]bool
+}
+
+// hasPath reports whether p is in the changed-file set.
+func (cf *changedFiles) hasPath(p string) bool {
+	return cf != nil && cf.paths[p]
+}
+
+// hasDir reports whether d is in the changed-directory set.
+func (cf *changedFiles) hasDir(d string) bool {
+	return cf != nil && cf.dirs[d]
+}
+
+// loaded reports whether changed-file data has been populated.
+func (cf *changedFiles) loaded() bool {
+	return cf != nil && cf.paths != nil
+}
+
+// newChangedFiles builds a changedFiles from a set of absolute paths,
+// deriving the transitive directory set up to (and including) rootPath.
+func newChangedFiles(paths map[string]bool, rootPath string) *changedFiles {
+	dirs := make(map[string]bool)
+	for p := range paths {
+		dir := filepath.Dir(p)
+		for dir != "" && dir != "." && dir != rootPath {
+			if dirs[dir] {
+				break
+			}
+			dirs[dir] = true
+			dir = filepath.Dir(dir)
+		}
+		dirs[rootPath] = true
+	}
+	return &changedFiles{paths: paths, dirs: dirs}
+}
+
 // node represents a single entry (file or directory) in the file tree.
 type node struct {
 	loadErr       error // non-nil if directory loading failed (F06)
@@ -86,8 +127,7 @@ type FileTree struct {
 	ctx             context.Context // stored from Init for watcher lifecycle
 	root            *node           // root directory node (not rendered; depth = -1)
 	selected        map[string]bool // multi-select state keyed by path
-	gitChangedPaths map[string]bool // absolute paths of changed files
-	gitChangedDirs  map[string]bool // directories containing changed files
+	gitChanged *changedFiles // git-status changed files + dirs
 	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
 	gitFileStatus   map[string]string
 	gitIgnoredPaths map[string]bool
@@ -96,12 +136,9 @@ type FileTree struct {
 	gitModeExpanded    map[string]bool   // saved expand state for git mode
 	pending            *pendingOperation // operation awaiting modal confirmation
 	watcher            *watcher          // filesystem watcher
-	commitChangedPaths map[string]bool   // absolute paths of commit-changed files
-	commitChangedDirs  map[string]bool   // directories containing commit-changed files
-	prChangedPaths     map[string]bool   // absolute paths of PR-changed files
-	prChangedDirs      map[string]bool   // directories containing PR-changed files
-	branchChangedPaths map[string]bool   // absolute paths of branch-changed files
-	branchChangedDirs  map[string]bool   // directories containing branch-changed files
+	commitChanged *changedFiles // commit-changed files + dirs
+	prChanged     *changedFiles // PR-changed files + dirs
+	branchChanged *changedFiles // branch-changed files + dirs
 	rootPath           string
 	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
 	savedCursorPath string
@@ -198,8 +235,7 @@ func (ft *FileTree) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, 
 		ft.SetGitClient(client)
 	}
 	ft.gitFilter = false
-	ft.gitChangedPaths = nil
-	ft.gitChangedDirs = nil
+	ft.gitChanged = nil
 	ft.gitFileStatus = nil
 	ft.gitIgnoredPaths = nil
 	ft.gitModeExpanded = nil
@@ -263,14 +299,14 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case rootLoadedMsg:
 		ft.root = msg.root
-		if ft.gitFilter && ft.gitChangedPaths != nil {
+		if ft.gitFilter && ft.gitChanged.loaded() {
 			// Git status arrived before root loaded — apply filter
 			// but keep all folders collapsed on startup.
 			ft.rebuildVisible()
 			return ft, nil
 		}
 		ft.rebuildVisible()
-		if ft.gitFilter && ft.gitChangedPaths == nil && ft.gitClient != nil {
+		if ft.gitFilter && !ft.gitChanged.loaded() && ft.gitClient != nil {
 			return ft, ft.loadGitChangedFiles()
 		}
 		return ft, nil
@@ -375,8 +411,7 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return ft, nil
 	case panels.GitChangedFilesMsg:
-		ft.gitChangedPaths = msg.Paths
-		ft.buildGitChangedDirs()
+		ft.gitChanged = newChangedFiles(msg.Paths, ft.rootPath)
 		if ft.root.loaded {
 			// Auto-expand every directory that contains git-changed
 			// files so the user sees the changed files immediately.
@@ -588,23 +623,22 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 		ft.branchName = ""
 		ft.branchLabel = ""
 		ft.branchBaseRef = ""
-		ft.branchChangedPaths = nil
-		ft.branchChangedDirs = nil
+		ft.branchChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
 	}
 	// Build filter sets from commit file paths (analogous to gitFilter approach).
-	ft.commitChangedPaths = make(map[string]bool, len(msg.files))
-	for _, f := range msg.files {
-		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
-		ft.commitChangedPaths[abs] = true
-	}
-	ft.commitChangedDirs = buildChangedDirSet(ft.commitChangedPaths, ft.rootPath)
+	paths := make(map[string]bool, len(msg.files))
+for _, f := range msg.files {
+abs := filepath.Clean(filepath.Join(ft.rootPath, f))
+paths[abs] = true
+}
+ft.commitChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing commit-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.commitChangedDirs)
+	ft.expandDirsInSet(ft.root, ft.commitChanged.dirs)
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
@@ -617,8 +651,7 @@ func (ft *FileTree) exitCommitFilesMode() {
 	ft.commitFiles = nil
 	ft.commitHash = ""
 	ft.commitLabel = ""
-	ft.commitChangedPaths = nil
-	ft.commitChangedDirs = nil
+	ft.commitChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -637,8 +670,7 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 	if ft.commitFilesMode {
 		ft.commitFilesMode = false
 		ft.commitFiles = nil
-		ft.commitChangedPaths = nil
-		ft.commitChangedDirs = nil
+		ft.commitChanged = nil
 	}
 	// Exit branch-files mode if active.
 	if ft.branchFilesMode {
@@ -648,23 +680,22 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		ft.branchName = ""
 		ft.branchLabel = ""
 		ft.branchBaseRef = ""
-		ft.branchChangedPaths = nil
-		ft.branchChangedDirs = nil
+		ft.branchChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
 	}
 	// Build filter sets from PR file paths (analogous to gitFilter approach).
-	ft.prChangedPaths = make(map[string]bool, len(msg.Files))
-	for _, f := range msg.Files {
-		abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
-		ft.prChangedPaths[abs] = true
-	}
-	ft.prChangedDirs = buildChangedDirSet(ft.prChangedPaths, ft.rootPath)
+	paths := make(map[string]bool, len(msg.Files))
+for _, f := range msg.Files {
+abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
+paths[abs] = true
+}
+ft.prChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing PR-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.prChangedDirs)
+	ft.expandDirsInSet(ft.root, ft.prChanged.dirs)
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
@@ -677,8 +708,7 @@ func (ft *FileTree) exitPRFilesMode() {
 	ft.prFiles = nil
 	ft.prNumber = 0
 	ft.prLabel = ""
-	ft.prChangedPaths = nil
-	ft.prChangedDirs = nil
+	ft.prChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -728,30 +758,28 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 	if ft.commitFilesMode {
 		ft.commitFilesMode = false
 		ft.commitFiles = nil
-		ft.commitChangedPaths = nil
-		ft.commitChangedDirs = nil
+		ft.commitChanged = nil
 	}
 	// Exit PR-files mode if active.
 	if ft.prFilesMode {
 		ft.prFilesMode = false
 		ft.prFiles = nil
-		ft.prChangedPaths = nil
-		ft.prChangedDirs = nil
+		ft.prChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
 	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.cursor].path
 	}
 	// Build filter sets from branch file paths.
-	ft.branchChangedPaths = make(map[string]bool, len(msg.files))
-	for _, f := range msg.files {
-		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
-		ft.branchChangedPaths[abs] = true
-	}
-	ft.branchChangedDirs = buildChangedDirSet(ft.branchChangedPaths, ft.rootPath)
+	paths := make(map[string]bool, len(msg.files))
+for _, f := range msg.files {
+abs := filepath.Clean(filepath.Join(ft.rootPath, f))
+paths[abs] = true
+}
+ft.branchChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing branch-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.branchChangedDirs)
+	ft.expandDirsInSet(ft.root, ft.branchChanged.dirs)
 	ft.rebuildVisible()
 	ft.cursor = 0
 	ft.offset = 0
@@ -773,8 +801,7 @@ func (ft *FileTree) exitBranchFilesMode() {
 	ft.branchName = ""
 	ft.branchLabel = ""
 	ft.branchBaseRef = ""
-	ft.branchChangedPaths = nil
-	ft.branchChangedDirs = nil
+	ft.branchChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -819,8 +846,7 @@ func (ft *FileTree) cycleFileFilter() (panels.Panel, tea.Cmd) {
 	if ft.gitFilter {
 		cursorPath := ft.CursorPath()
 		ft.gitFilter = false
-		ft.gitChangedPaths = nil
-		ft.gitChangedDirs = nil
+		ft.gitChanged = nil
 		ft.rebuildVisible()
 		ft.restoreCursorToPath(cursorPath)
 		cmds := []tea.Cmd{
@@ -1247,7 +1273,7 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 		// Save cursor path across the async boundary so
 		// GitChangedFilesMsg handler can restore it.
 		ft.savedCursorPath = cursorPath
-		// Rebuild visible immediately — while gitChangedPaths is nil the
+		// Rebuild visible immediately — while gitChanged is nil the
 		// filter check is skipped and all files remain shown, avoiding a
 		// blank tree before the async result arrives.
 		ft.rebuildVisible()
@@ -1260,8 +1286,7 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 		)
 	}
 	// Unfilter: rebuild visible with all files
-	ft.gitChangedPaths = nil
-	ft.gitChangedDirs = nil
+	ft.gitChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(cursorPath)
 	return ft, tea.Batch(
@@ -1312,24 +1337,7 @@ func normalizeVolume(p, ref string) string {
 	return p
 }
 
-// buildGitChangedDirs builds a set of directory paths that contain (directly
-// or transitively) git-changed files, so directories can be shown in filtered
-// mode even though they are not themselves "changed".
-func (ft *FileTree) buildGitChangedDirs() {
-	ft.gitChangedDirs = make(map[string]bool)
-	for p := range ft.gitChangedPaths {
-		dir := filepath.Dir(p)
-		for dir != "" && dir != "." && dir != ft.rootPath {
-			if ft.gitChangedDirs[dir] {
-				break // already traversed this path
-			}
-			ft.gitChangedDirs[dir] = true
-			dir = filepath.Dir(dir)
-		}
-		// Mark rootPath itself if there are any changed files under it.
-		ft.gitChangedDirs[ft.rootPath] = true
-	}
-}
+
 
 // handleTabActivated reacts to tab switches by auto-enabling/disabling
 // git filter and preserving per-mode expand/collapse state.
@@ -1349,7 +1357,7 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 				ft.restoreExpanded(ft.root, ft.gitModeExpanded)
 			}
 			// Rebuild visible immediately so the tree shows all files
-			// while the async git status is loading (gitChangedPaths
+			// while the async git status is loading (gitChanged
 			// is nil, so the filter is skipped and all files show).
 			ft.rebuildVisible()
 			ft.restoreCursorToPath(cursorPath)
@@ -1366,8 +1374,7 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 		// Save git-mode expand state.
 		ft.gitModeExpanded = ft.collectExpanded(ft.root)
 		ft.gitFilter = false
-		ft.gitChangedPaths = nil
-		ft.gitChangedDirs = nil
+		ft.gitChanged = nil
 		// Restore explorer expand state.
 		ft.collapseAll(ft.root)
 		if ft.explorerExpanded != nil {
@@ -1380,9 +1387,9 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 }
 
 // expandGitChangedDirs walks the tree and expands every directory whose
-// path is in ft.gitChangedDirs, loading children as needed.
+// path is in ft.gitChanged.dirs, loading children as needed.
 func (ft *FileTree) expandGitChangedDirs() {
-	if len(ft.gitChangedDirs) == 0 {
+	if ft.gitChanged == nil || len(ft.gitChanged.dirs) == 0 {
 		return
 	}
 	ft.expandGitChangedDirsWalk(ft.root)
@@ -1390,7 +1397,7 @@ func (ft *FileTree) expandGitChangedDirs() {
 
 func (ft *FileTree) expandGitChangedDirsWalk(n *node) {
 	for _, child := range n.children {
-		if child.isDir && ft.gitChangedDirs[child.path] {
+		if child.isDir && ft.gitChanged.hasDir(child.path) {
 			ft.loadChildren(child)
 			child.expanded = true
 			ft.expandGitChangedDirsWalk(child)
@@ -1398,29 +1405,10 @@ func (ft *FileTree) expandGitChangedDirsWalk(n *node) {
 	}
 }
 
-// buildChangedDirSet builds a set of directory paths that contain (directly
-// or transitively) changed files. This is the shared logic used by
-// commitFilesMode and prFilesMode (analogous to buildGitChangedDirs).
-func buildChangedDirSet(changedPaths map[string]bool, rootPath string) map[string]bool {
-	dirs := make(map[string]bool)
-	for p := range changedPaths {
-		dir := filepath.Dir(p)
-		for dir != "" && dir != "." && dir != rootPath {
-			if dirs[dir] {
-				break // already traversed this path
-			}
-			dirs[dir] = true
-			dir = filepath.Dir(dir)
-		}
-		// Mark rootPath itself if there are any changed files under it.
-		dirs[rootPath] = true
-	}
-	return dirs
-}
+
 
 // expandDirsInSet walks the tree and expands every directory whose path is
-// in the given set, loading children as needed. Used by commitFilesMode and
-// prFilesMode to auto-expand directories containing changed files.
+// in the given set, loading children as needed. Used by commit/PR/branch modes to auto-expand directories containing changed files.
 func (ft *FileTree) expandDirsInSet(n *node, dirs map[string]bool) {
 	for _, child := range n.children {
 		if child.isDir && dirs[child.path] {

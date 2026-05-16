@@ -238,10 +238,10 @@ func (ft *FileTree) walkVisible(n *node) {
 		// the hidden-file check.  Without this, dotfile changes
 		// (e.g. .github/) are suppressed before the filter runs.
 		if !ft.showHidden && isHidden(child.name) {
-			inFilteredMode := (ft.commitFilesMode && ft.commitChangedPaths != nil) ||
-				(ft.prFilesMode && ft.prChangedPaths != nil) ||
-				(ft.branchFilesMode && ft.branchChangedPaths != nil) ||
-				(ft.gitFilter && ft.gitChangedPaths != nil)
+			inFilteredMode := (ft.commitFilesMode && ft.commitChanged.loaded()) ||
+				(ft.prFilesMode && ft.prChanged.loaded()) ||
+				(ft.branchFilesMode && ft.branchChanged.loaded()) ||
+				(ft.gitFilter && ft.gitChanged.loaded())
 			if !inFilteredMode {
 				continue
 			}
@@ -249,47 +249,47 @@ func (ft *FileTree) walkVisible(n *node) {
 		// Commit-files filter: skip files/dirs not in the commit-changed set.
 		// Takes priority over git filter since the user explicitly selected
 		// a commit to inspect.
-		if ft.commitFilesMode && ft.commitChangedPaths != nil {
+		if ft.commitFilesMode && ft.commitChanged.loaded() {
 			if child.isDir {
-				if !ft.commitChangedDirs[child.path] {
+				if !ft.commitChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.commitChangedPaths[child.path] {
+				if !ft.commitChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.prFilesMode && ft.prChangedPaths != nil {
+		} else if ft.prFilesMode && ft.prChanged.loaded() {
 			// PR-files filter: skip files/dirs not in the PR-changed set.
 			if child.isDir {
-				if !ft.prChangedDirs[child.path] {
+				if !ft.prChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.prChangedPaths[child.path] {
+				if !ft.prChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.branchFilesMode && ft.branchChangedPaths != nil {
+		} else if ft.branchFilesMode && ft.branchChanged.loaded() {
 			// Branch-files filter: skip files/dirs not in the branch-changed set.
 			if child.isDir {
-				if !ft.branchChangedDirs[child.path] {
+				if !ft.branchChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.branchChangedPaths[child.path] {
+				if !ft.branchChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.gitFilter && ft.gitChangedPaths != nil {
+		} else if ft.gitFilter && ft.gitChanged.loaded() {
 			// Git filter: skip files not in the changed set, and skip
 			// directories that contain no changed descendants.
 			if child.isDir {
-				if !ft.gitChangedDirs[child.path] {
+				if !ft.gitChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.gitChangedPaths[child.path] {
+				if !ft.gitChanged.hasPath(child.path) {
 					continue
 				}
 			}

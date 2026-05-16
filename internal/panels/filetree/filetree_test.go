@@ -282,8 +282,7 @@ func TestGitFilterShowsHiddenChangedFiles(t *testing.T) {
 	// Simulate git filter with changes in the hidden dir.
 	ft.gitFilter = true
 	absWorkflow := filepath.Clean(filepath.Join(dir, ".github", "workflow.yml"))
-	ft.gitChangedPaths = map[string]bool{absWorkflow: true}
-	ft.buildGitChangedDirs()
+	ft.gitChanged = newChangedFiles(map[string]bool{absWorkflow: true}, ft.rootPath)
 	// Ensure .github is loaded and expanded so children are reachable.
 	ft.expandGitChangedDirs()
 	ft.rebuildVisible()
@@ -318,8 +317,7 @@ func TestGitFilterShowsUntrackedInHiddenDir(t *testing.T) {
 	// Simulate git filter with an untracked file in the hidden dir.
 	ft.gitFilter = true
 	absNew := filepath.Clean(filepath.Join(dir, ".config", "settings", "new.toml"))
-	ft.gitChangedPaths = map[string]bool{absNew: true}
-	ft.buildGitChangedDirs()
+	ft.gitChanged = newChangedFiles(map[string]bool{absNew: true}, ft.rootPath)
 	ft.expandGitChangedDirs()
 	ft.rebuildVisible()
 
@@ -2118,8 +2116,8 @@ func TestToggleGitFilter_EnableDisable(t *testing.T) {
 	// Disable git filter.
 	ft.Update(keyMsg('f'))
 	assert.False(t, ft.gitFilter)
-	assert.Nil(t, ft.gitChangedPaths, "disabling should clear git paths")
-	assert.Nil(t, ft.gitChangedDirs, "disabling should clear git dirs")
+	assert.Nil(t, ft.gitChanged, "disabling should clear gitChanged")
+	// gitChanged nil covers both paths and dirs
 }
 
 func TestToggleGitFilter_PreservesCursorPath(t *testing.T) {
@@ -2184,13 +2182,12 @@ func TestHandleTabActivated_ExplorerTab(t *testing.T) {
 
 	// Enable git filter first.
 	ft.gitFilter = true
-	ft.gitChangedPaths = map[string]bool{"dummy": true}
-	ft.gitChangedDirs = map[string]bool{"dummy": true}
+	ft.gitChanged = &changedFiles{paths: map[string]bool{"dummy": true}, dirs: map[string]bool{"dummy": true}}
 
 	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "explorer"})
 	assert.False(t, ft.gitFilter, "switching to explorer tab should disable git filter")
-	assert.Nil(t, ft.gitChangedPaths)
-	assert.Nil(t, ft.gitChangedDirs)
+	assert.Nil(t, ft.gitChanged)
+	// gitChanged nil covers dirs
 	assert.NotNil(t, cmd)
 }
 
@@ -2225,11 +2222,11 @@ func TestGitChangedFilesMsg_Handling(t *testing.T) {
 
 	ft.Update(panels.GitChangedFilesMsg{Paths: changedPaths})
 
-	assert.Equal(t, changedPaths, ft.gitChangedPaths)
-	assert.NotNil(t, ft.gitChangedDirs)
-	// Dirs containing changed files should be in gitChangedDirs.
-	assert.True(t, ft.gitChangedDirs[filepath.Join(dir, "src")])
-	assert.True(t, ft.gitChangedDirs[dir])
+	assert.Equal(t, changedPaths, ft.gitChanged.paths)
+	assert.NotNil(t, ft.gitChanged.dirs)
+	// Dirs containing changed files should be in gitChanged.dirs.
+	assert.True(t, ft.gitChanged.dirs[filepath.Join(dir, "src")])
+	assert.True(t, ft.gitChanged.dirs[dir])
 }
 
 // ---------------------------------------------------------------------------
@@ -3234,9 +3231,9 @@ func TestBranchFilesMode_SameBranchTogglesOff(t *testing.T) {
 	ft.branchFilesMode = true
 	ft.branchName = "feature/auth"
 	ft.branchLabel = "branch: feature/auth"
-	ft.branchChangedPaths = map[string]bool{
+	ft.branchChanged = &changedFiles{paths: map[string]bool{
 		filepath.Join(dir, "main.go"): true,
-	}
+	}}
 
 	// Send BranchSelectedMsg with the same branch name — should toggle off.
 	ft.Update(panels.BranchSelectedMsg{Name: "feature/auth"})
@@ -3292,7 +3289,7 @@ func TestBranchFilesMode_ExitsCommitAndPRModes(t *testing.T) {
 	})
 	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
 	assert.False(t, ft.commitFilesMode, "commit-files mode should be exited")
-	assert.Nil(t, ft.commitChangedPaths, "commit changed paths should be cleared")
+	assert.Nil(t, ft.commitChanged, "commit changed should be cleared")
 }
 
 func TestBranchFilesMode_ExitsPRMode(t *testing.T) {
@@ -3316,7 +3313,7 @@ func TestBranchFilesMode_ExitsPRMode(t *testing.T) {
 	})
 	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
 	assert.False(t, ft.prFilesMode, "PR-files mode should be exited")
-	assert.Nil(t, ft.prChangedPaths, "PR changed paths should be cleared")
+	assert.Nil(t, ft.prChanged, "PR changed should be cleared")
 }
 
 func TestBranchFilesMode_Title(t *testing.T) {
@@ -3355,8 +3352,8 @@ func TestBranchFilesMode_EscExit(t *testing.T) {
 	assert.False(t, ft.branchFilesMode)
 	assert.Empty(t, ft.branchName)
 	assert.Empty(t, ft.branchLabel)
-	assert.Nil(t, ft.branchChangedPaths)
-	assert.Nil(t, ft.branchChangedDirs)
+	assert.Nil(t, ft.branchChanged)
+	// branchChanged nil covers both paths and dirs
 }
 
 func TestBranchSelectedMsg_NilGitClient(t *testing.T) {
@@ -3434,8 +3431,7 @@ func TestCommitFilesMode_ExitsBranchMode(t *testing.T) {
 	assert.True(t, ft.commitFilesMode, "should enter commit-files mode")
 	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
 	assert.Empty(t, ft.branchName, "branchName should be cleared")
-	assert.Nil(t, ft.branchChangedPaths, "branchChangedPaths should be cleared")
-	assert.Nil(t, ft.branchChangedDirs, "branchChangedDirs should be cleared")
+	assert.Nil(t, ft.branchChanged, "branchChanged should be cleared")
 }
 
 func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
@@ -3461,7 +3457,7 @@ func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
 	assert.True(t, ft.prFilesMode, "should enter PR-files mode")
 	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
 	assert.Empty(t, ft.branchName, "branchName should be cleared")
-	assert.Nil(t, ft.branchChangedPaths, "branchChangedPaths should be cleared")
+	assert.Nil(t, ft.branchChanged, "branchChanged should be cleared")
 }
 
 // ---------------------------------------------------------------------------
@@ -3472,7 +3468,7 @@ func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
 // paths containing "../" traversal sequences, those paths resolve outside the
 // tree root and are therefore excluded from the visible tree. The filetree
 // builds its node tree from os.ReadDir rooted at rootPath, so files outside
-// the root can never appear as tree nodes. The branchChangedPaths map would
+// the root can never appear as tree nodes. The branchChanged.paths map would
 // contain the resolved absolute path (e.g. /etc/passwd), but since no tree
 // node matches that path, it is silently filtered out.
 func TestBranchFilesMode_PathTraversalInOutput(t *testing.T) {
@@ -3494,12 +3490,12 @@ func TestBranchFilesMode_PathTraversalInOutput(t *testing.T) {
 
 	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
 
-	// Verify that traversal paths are in branchChangedPaths as absolute paths
-	// outside the tree root — they were resolved by filepath.Clean(filepath.Join(...)).
+	// Verify that traversal paths are in branchChanged.paths as absolute paths
+	// outside the tree root - they were resolved by filepath.Clean(filepath.Join(...)).
 	for _, trav := range []string{"../../../etc/passwd", "../../.ssh/id_rsa"} {
 		abs := filepath.Clean(filepath.Join(dir, trav))
-		assert.True(t, ft.branchChangedPaths[abs],
-			"traversal path %q should be in branchChangedPaths as %q", trav, abs)
+		assert.True(t, ft.branchChanged.hasPath(abs),
+			"traversal path %q should be in branchChanged.paths as %q", trav, abs)
 		// But verify the absolute path is outside the tree root.
 		assert.False(t, strings.HasPrefix(abs, dir+string(filepath.Separator)),
 			"traversal path %q should resolve outside tree root", abs)
@@ -3541,9 +3537,9 @@ func TestBranchFilesMode_LargeFileList(t *testing.T) {
 	})
 
 	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
-	// branchChangedPaths should have all 5001 entries.
-	assert.Equal(t, 5001, len(ft.branchChangedPaths),
-		"all file paths should be in branchChangedPaths")
+	// branchChanged.paths should have all 5001 entries.
+	assert.Equal(t, 5001, len(ft.branchChanged.paths),
+		"all file paths should be in branchChanged.paths")
 	// Only main.go is a real file in the tree, so visible should contain just it.
 	var visibleFiles []string
 	for _, v := range ft.visible {
