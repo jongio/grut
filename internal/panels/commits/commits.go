@@ -675,6 +675,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.cursor = idx
 	itemType := actions.ItemCommit
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pendingOp = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -703,6 +704,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := c.ShortHash + " " + panels.StripANSI(c.Subject)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemCommit, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -712,12 +714,18 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pendingOp = ""
+	p.pendingName = ""
+}
+
 // handleModalResult processes the result from the action picker modal.
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
 	name := p.pendingName
-	p.pendingOp = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}

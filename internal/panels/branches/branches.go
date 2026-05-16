@@ -405,6 +405,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.ensureCursorVisible()
 	itemType := p.currentItemType()
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -431,6 +432,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	itemType := p.currentItemType()
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, itemType, b.Name)
 	if cmd != nil {
+		p.clearPending()
 		p.pending = opRightClickPick
 		return p, cmd
 	}
@@ -571,6 +573,7 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 }
 
 func (p *Panel) requestCreate() (panels.Panel, tea.Cmd) {
+	p.clearPending()
 	p.pending = opCreate
 	return p, notify.ShowInput("New Branch", "branch-name")
 }
@@ -590,6 +593,7 @@ func (p *Panel) requestDelete() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot delete remote branch locally", Level: notify.Warn}
 		}
 	}
+	p.clearPending()
 	p.pending = opDelete
 	p.pendingBranch = b.Name
 	return p, notify.ShowConfirm("Delete Branch", fmt.Sprintf("Delete branch %q?", b.Name))
@@ -605,6 +609,7 @@ func (p *Panel) requestRename() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot rename remote branch", Level: notify.Warn}
 		}
 	}
+	p.clearPending()
 	p.pending = opRename
 	p.pendingBranch = b.Name
 	return p, notify.ShowInput("Rename Branch", b.Name)
@@ -679,13 +684,20 @@ func (p *Panel) doCopy() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handling
 // ---------------------------------------------------------------------------
+
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pending = opNone
+	p.pendingBranch = ""
+	p.pendingName = ""
+}
+
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	branch := p.pendingBranch
 	name := p.pendingName
-	p.pending = opNone
-	p.pendingBranch = ""
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
