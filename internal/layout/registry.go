@@ -98,7 +98,7 @@ func (r *Registry) Names() []string {
 // use fallback colors.
 func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *theme.Theme) {
 	// Panels still using placeholders
-	for _, name := range []string{"status"} {
+	for _, name := range []string{slotStatus} {
 		r.Register(name, func() panels.Panel {
 			return panels.NewPlaceholder(name, th)
 		})
@@ -112,7 +112,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		return p
 	}
 	// File tree panel — real implementation
-	r.Register("filetree", func() panels.Panel {
+	r.Register(slotFiletree, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
@@ -125,7 +125,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		return setActionsCfg(ft)
 	})
 	// Preview panel — real implementation
-	r.Register("preview", func() panels.Panel {
+	r.Register(slotPreview, func() panels.Panel {
 		p := preview.New(cfg.Preview, cfg.Editor, th)
 		if gc != nil {
 			p.SetGitClient(gc)
@@ -137,7 +137,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		return fuzzyfinder.New(th)
 	})
 	// Git status panel — real implementation
-	r.Register("gitstatus", func() panels.Panel {
+	r.Register(slotGitstatus, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
@@ -145,7 +145,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		client, err := git.NewClient(cwd)
 		if err != nil {
 			// Fall back to placeholder if git is unavailable.
-			return panels.NewPlaceholder("gitstatus", th)
+			return panels.NewPlaceholder(slotGitstatus, th)
 		}
 		return setActionsCfg(gitstatus.New(client, th))
 	})
@@ -179,14 +179,14 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		return setActionsCfg(gitlog.New(client, cfg.Git, th))
 	})
 	// Commits panel — selection-driven commit history
-	r.Register("commits", func() panels.Panel {
+	r.Register(slotCommits, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("commits", th)
+			return panels.NewPlaceholder(slotCommits, th)
 		}
 		return setActionsCfg(commits.New(client, th))
 	})
@@ -227,61 +227,61 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		return setActionsCfg(stash.New(client, th))
 	})
 	// Git info panel — git tabs only (branches, worktrees, remotes, stash, tags, reflog)
-	r.Register("gitinfo", func() panels.Panel {
+	r.Register(slotGitinfo, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("gitinfo", th)
+			return panels.NewPlaceholder(slotGitinfo, th)
 		}
 		return gitinfo.New(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode, th)
 	})
 	// GitHub panel — GitHub tabs only (issues, PRs, actions, workflows, releases)
-	r.Register("github", func() panels.Panel {
+	r.Register(slotGithub, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
 		}
 		client, err := git.NewClient(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("github", th)
+			return panels.NewPlaceholder(slotGithub, th)
 		}
 		return gitinfo.NewGitHub(client, cfg.Git, cfg.GitHub, cfg.Actions, cwd, cfg.FileTree.IconMode, th)
 	})
 	// Diff review panel — real implementation
-	r.Register("review", func() panels.Panel {
+	r.Register(slotReview, func() panels.Panel {
 		return setActionsCfg(review.New(gc, th))
 	})
 	// Agent monitor panel — real implementation
-	r.Register("agents", func() panels.Panel {
+	r.Register(slotAgents, func() panels.Panel {
 		maxProcs := cfg.MCP.Security.MaxAgentProcesses
 		timeout := cfg.MCP.Security.AgentTimeout
 		tracker := mcp.NewAgentTracker(maxProcs, timeout)
 		return setActionsCfg(agents.New(tracker, th))
 	})
 	// Context builder panel — real implementation
-	r.Register("context", func() panels.Panel {
+	r.Register(slotContext, func() panels.Panel {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
 		}
 		builder, err := ctxbuilder.NewBuilder(cwd)
 		if err != nil {
-			return panels.NewPlaceholder("context", th)
+			return panels.NewPlaceholder(slotContext, th)
 		}
 		return setActionsCfg(ctxpanel.New(builder, th))
 	})
 	// Embedded terminal panel — real implementation
-	r.Register("terminal", func() panels.Panel {
+	r.Register(slotTerminal, func() panels.Panel {
 		shell := cfg.Terminal.Shell
 		if shell == "" {
 			shell = terminal.DefaultShell()
 		}
 		runner, err := terminal.New(shell, cfg.Terminal.Scrollback)
 		if err != nil {
-			return panels.NewPlaceholder("terminal", th)
+			return panels.NewPlaceholder(slotTerminal, th)
 		}
 		return termpanel.New(cfg.Terminal, runner, shell, th)
 	})

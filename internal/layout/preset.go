@@ -18,23 +18,23 @@ func ExplorerPreset() Preset {
 		First: &SplitNode{
 			Direction: Vertical,
 			Ratio:     0.35,
-			First:     &LeafNode{Panel: "filetree"},
+			First:     &LeafNode{Panel: slotFiletree},
 			Second: &SplitNode{
 				Direction: Vertical,
 				Ratio:     0.385, // 25/(25+20+20) ≈ 0.385
-				First:     &LeafNode{Panel: "gitinfo"},
+				First:     &LeafNode{Panel: slotGitinfo},
 				Second: &SplitNode{
 					Direction: Vertical,
 					Ratio:     0.5, // 20/(20+20) = 0.5
-					First:     &LeafNode{Panel: "github"},
-					Second:    &LeafNode{Panel: "commits"},
+					First:     &LeafNode{Panel: slotGithub},
+					Second:    &LeafNode{Panel: slotCommits},
 				},
 			},
 		},
-		Second: &LeafNode{Panel: "preview"},
+		Second: &LeafNode{Panel: slotPreview},
 	}
 	return Preset{
-		Name:   "explorer",
+		Name:   layoutExplorer,
 		Tree:   tree,
 		Panels: tree.PanelNames(),
 	}
@@ -48,11 +48,11 @@ func GitPreset() Preset {
 	tree := &SplitNode{
 		Direction: Horizontal,
 		Ratio:     0.3,
-		First:     &LeafNode{Panel: "filetree"},
-		Second:    &LeafNode{Panel: "preview"},
+		First:     &LeafNode{Panel: slotFiletree},
+		Second:    &LeafNode{Panel: slotPreview},
 	}
 	return Preset{
-		Name:   "git",
+		Name:   layoutGit,
 		Tree:   tree,
 		Panels: tree.PanelNames(),
 	}
@@ -64,16 +64,16 @@ func ReviewPreset() Preset {
 	tree := &SplitNode{
 		Direction: Horizontal,
 		Ratio:     0.2,
-		First:     &LeafNode{Panel: "filetree"},
+		First:     &LeafNode{Panel: slotFiletree},
 		Second: &SplitNode{
 			Direction: Horizontal,
 			Ratio:     0.625, // 50/(50+30) ≈ 0.625
-			First:     &LeafNode{Panel: "review"},
-			Second:    &LeafNode{Panel: "context"},
+			First:     &LeafNode{Panel: slotReview},
+			Second:    &LeafNode{Panel: slotContext},
 		},
 	}
 	return Preset{
-		Name:   "review",
+		Name:   layoutReview,
 		Tree:   tree,
 		Panels: tree.PanelNames(),
 	}
@@ -85,16 +85,16 @@ func AgentPreset() Preset {
 	tree := &SplitNode{
 		Direction: Horizontal,
 		Ratio:     0.2,
-		First:     &LeafNode{Panel: "filetree"},
+		First:     &LeafNode{Panel: slotFiletree},
 		Second: &SplitNode{
 			Direction: Horizontal,
 			Ratio:     0.5,
-			First:     &LeafNode{Panel: "terminal"},
-			Second:    &LeafNode{Panel: "agents"},
+			First:     &LeafNode{Panel: slotTerminal},
+			Second:    &LeafNode{Panel: slotAgents},
 		},
 	}
 	return Preset{
-		Name:   "agent",
+		Name:   layoutAgent,
 		Tree:   tree,
 		Panels: tree.PanelNames(),
 	}
@@ -106,21 +106,21 @@ func FullPreset() Preset {
 	tree := &SplitNode{
 		Direction: Horizontal,
 		Ratio:     0.15,
-		First:     &LeafNode{Panel: "filetree"},
+		First:     &LeafNode{Panel: slotFiletree},
 		Second: &SplitNode{
 			Direction: Horizontal,
 			Ratio:     0.294, // 25/(25+35+25) ≈ 0.294
-			First:     &LeafNode{Panel: "gitstatus"},
+			First:     &LeafNode{Panel: slotGitstatus},
 			Second: &SplitNode{
 				Direction: Horizontal,
 				Ratio:     0.583, // 35/(35+25) ≈ 0.583
-				First:     &LeafNode{Panel: "preview"},
-				Second:    &LeafNode{Panel: "terminal"},
+				First:     &LeafNode{Panel: slotPreview},
+				Second:    &LeafNode{Panel: slotTerminal},
 			},
 		},
 	}
 	return Preset{
-		Name:   "full",
+		Name:   layoutFull,
 		Tree:   tree,
 		Panels: tree.PanelNames(),
 	}
@@ -129,10 +129,10 @@ func FullPreset() Preset {
 // Presets returns all built-in layout presets keyed by name.
 func Presets() map[string]Preset {
 	return map[string]Preset{
-		"explorer": ExplorerPreset(),
-		"git":      GitPreset(),
-		"review":   ReviewPreset(),
-		"agent":    AgentPreset(),
-		"full":     FullPreset(),
+		layoutExplorer: ExplorerPreset(),
+		layoutGit:      GitPreset(),
+		layoutReview:   ReviewPreset(),
+		layoutAgent:    AgentPreset(),
+		layoutFull:     FullPreset(),
 	}
 }
