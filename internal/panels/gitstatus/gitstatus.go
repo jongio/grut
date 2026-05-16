@@ -7,6 +7,7 @@ package gitstatus
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -318,11 +319,12 @@ func (p *GitStatus) View(width, height int) string {
 			Render("Loading git status...")
 	}
 	if p.err != nil && len(p.rows) == 0 {
+		slog.Warn("git status panel error", "err", p.err)
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(lipgloss.Color(p.colors.Removed)).
-			Render(fmt.Sprintf("Error: %v", p.err))
+			Render("Could not load git status")
 	}
 	if len(p.rows) == 0 {
 		return lipgloss.NewStyle().

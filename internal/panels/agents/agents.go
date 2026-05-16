@@ -6,6 +6,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -174,11 +175,12 @@ func (p *Agents) View(width, height int) string {
 			Render("Loading agents...")
 	}
 	if p.err != nil && len(p.agents) == 0 {
+		slog.Warn("agent panel error", "err", p.err)
 		return lipgloss.NewStyle().
 			Width(width).Height(height).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(panels.ColorOf(p.themeColors().NormalRed, "#C44B4B")).
-			Render(fmt.Sprintf("Error: %v", p.err))
+			Render("Could not load agents")
 	}
 	if len(p.agents) == 0 {
 		return lipgloss.NewStyle().
