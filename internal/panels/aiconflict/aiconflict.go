@@ -430,67 +430,58 @@ func (p *Panel) renderKeyHints(width int) string {
 // ---------------------------------------------------------------------------
 // Color helpers — prefer theme, fall back to hard-coded Dracula palette
 // ---------------------------------------------------------------------------
-func (p *Panel) headerHex() string {
-	if p.theme != nil && p.theme.Colors.DiffHeader != "" {
-		return p.theme.Colors.DiffHeader
+
+// colorOrDefault returns themeColor when non-empty, otherwise fallback.
+func colorOrDefault(themeColor, fallback string) string {
+	if themeColor != "" {
+		return themeColor
 	}
-	return "#C9A227"
+	return fallback
+}
+
+// themeColor returns the theme value for the given accessor (if a theme is
+// loaded), falling back to fallback.
+func (p *Panel) themeColor(accessor func(*theme.Colors) string, fallback string) string {
+	if p.theme != nil {
+		return colorOrDefault(accessor(&p.theme.Colors), fallback)
+	}
+	return fallback
+}
+
+func (p *Panel) headerHex() string {
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffHeader }, "#C9A227")
 }
 
 func (p *Panel) regionHex() string {
-	if p.theme != nil && p.theme.Colors.DiffHunk != "" {
-		return p.theme.Colors.DiffHunk
-	}
-	return "#555555"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffHunk }, "#555555")
 }
 
 func (p *Panel) oursHex() string {
-	if p.theme != nil && p.theme.Colors.DiffAdded != "" {
-		return p.theme.Colors.DiffAdded
-	}
-	return "#6B9E56"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffAdded }, "#6B9E56")
 }
 
 func (p *Panel) theirsHex() string {
-	if p.theme != nil && p.theme.Colors.DiffRemoved != "" {
-		return p.theme.Colors.DiffRemoved
-	}
-	return "#C44B4B"
+	return p.themeColor(func(c *theme.Colors) string { return c.DiffRemoved }, "#C44B4B")
 }
 
 func (p *Panel) aiHex() string {
-	if p.theme != nil && p.theme.Colors.NormalCyan != "" {
-		return p.theme.Colors.NormalCyan
-	}
-	return "#5E8E8B"
+	return p.themeColor(func(c *theme.Colors) string { return c.NormalCyan }, "#5E8E8B")
 }
 
 func (p *Panel) dimHex() string {
-	if p.theme != nil && p.theme.Colors.BrightBlack != "" {
-		return p.theme.Colors.BrightBlack
-	}
-	return "#555555"
+	return p.themeColor(func(c *theme.Colors) string { return c.BrightBlack }, "#555555")
 }
 
 func (p *Panel) successHex() string {
-	if p.theme != nil && p.theme.Colors.NotifySuccess != "" {
-		return p.theme.Colors.NotifySuccess
-	}
-	return "#6B9E56"
+	return p.themeColor(func(c *theme.Colors) string { return c.NotifySuccess }, "#6B9E56")
 }
 
 func (p *Panel) hintHex() string {
-	if p.theme != nil && p.theme.Colors.StatusBarFg != "" {
-		return p.theme.Colors.StatusBarFg
-	}
-	return "#D4D4D4"
+	return p.themeColor(func(c *theme.Colors) string { return c.StatusBarFg }, "#D4D4D4")
 }
 
 func (p *Panel) hintBgHex() string {
-	if p.theme != nil && p.theme.Colors.StatusBarBg != "" {
-		return p.theme.Colors.StatusBarBg
-	}
-	return "#2A2A2A"
+	return p.themeColor(func(c *theme.Colors) string { return c.StatusBarBg }, "#2A2A2A")
 }
 
 // ---------------------------------------------------------------------------
