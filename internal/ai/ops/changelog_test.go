@@ -91,7 +91,7 @@ func TestGenerate_Success(t *testing.T) {
 	provider := &mockAIProvider{
 		name:      "stub",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: `[{"category": "added", "description": "New feature", "commit_hashes": ["aaa1111"]}]`,
 		},
 	}
@@ -111,7 +111,7 @@ func TestGenerate_ProviderError(t *testing.T) {
 	provider := &mockAIProvider{
 		name:        "stub",
 		available:   true,
-		completeErr: fmt.Errorf("provider unavailable"),
+		err: fmt.Errorf("provider unavailable"),
 	}
 	registry := ai.NewRegistry(config.AIConfig{Provider: "stub"})
 	registry.Register("stub", provider)
@@ -127,7 +127,7 @@ func TestGenerate_InvalidResponse(t *testing.T) {
 	provider := &mockAIProvider{
 		name:      "stub",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: `{"not": "an array"}`,
 		},
 	}

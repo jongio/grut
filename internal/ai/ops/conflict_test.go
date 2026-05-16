@@ -354,7 +354,7 @@ func main() { greet() }
 	mock := &mockAIProvider{
 		name:         "test",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: string(respJSON)},
+		response: ai.CompletionResponse{Content: string(respJSON)},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "test"})
@@ -400,7 +400,7 @@ func TestResolve_ProviderReturnsError(t *testing.T) {
 
 	conflictWriteTestFile(t, tmpDir, "f.go", "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
 
-	tp := &testProvider{
+	tp := &mockAIProvider{
 		name:      "fail",
 		available: true,
 		err:       errMockProvider,
@@ -423,7 +423,7 @@ func TestResolve_ProviderReturnsInvalidJSON(t *testing.T) {
 
 	conflictWriteTestFile(t, tmpDir, "f.go", "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
 
-	tp := &testProvider{
+	tp := &mockAIProvider{
 		name:      "bad",
 		available: true,
 		response:  ai.CompletionResponse{Content: "I can't resolve this conflict"},

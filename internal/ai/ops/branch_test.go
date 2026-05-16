@@ -90,7 +90,7 @@ func TestBranchAnalyzer_Analyze(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: respJSON},
+		response: ai.CompletionResponse{Content: respJSON},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -159,7 +159,7 @@ func TestBranchAnalyzer_Analyze_InvalidJSON(t *testing.T) {
 	mock := &mockAIProvider{
 		name:         "mock",
 		available:    true,
-		completeResp: ai.CompletionResponse{Content: "not valid json"},
+		response: ai.CompletionResponse{Content: "not valid json"},
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})
@@ -181,7 +181,7 @@ func TestBranchAnalyzer_Analyze_ProviderError(t *testing.T) {
 	mock := &mockAIProvider{
 		name:        "mock",
 		available:   true,
-		completeErr: errors.New("service unavailable"),
+		err: errors.New("service unavailable"),
 	}
 
 	registry := ai.NewRegistry(config.AIConfig{Provider: "mock"})

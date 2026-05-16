@@ -127,7 +127,7 @@ func TestSuggest_Success(t *testing.T) {
 	provider := &mockAIProvider{
 		name:      "stub",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: `{"pieces": [{"files": ["main.go"], "commit_message": "feat: init", "reason": "entrypoint", "order": 1}]}`,
 		},
 	}
@@ -148,7 +148,7 @@ func TestSuggest_ProviderError(t *testing.T) {
 	provider := &mockAIProvider{
 		name:        "stub",
 		available:   true,
-		completeErr: fmt.Errorf("AI down"),
+		err: fmt.Errorf("AI down"),
 	}
 	registry := ai.NewRegistry(config.AIConfig{Provider: "stub"})
 	registry.Register("stub", provider)
@@ -164,7 +164,7 @@ func TestSuggest_InvalidResponse(t *testing.T) {
 	provider := &mockAIProvider{
 		name:      "stub",
 		available: true,
-		completeResp: ai.CompletionResponse{
+		response: ai.CompletionResponse{
 			Content: `[1, 2, 3]`,
 		},
 	}
