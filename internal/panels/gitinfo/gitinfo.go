@@ -3552,29 +3552,8 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-		// Enrich open PRs with mergeable state (parallel individual fetches).
-		if len(result.prs) > 0 {
-			var wg sync.WaitGroup
-			var mu sync.Mutex
-			for i, pr := range result.prs {
-				if pr.State != prStateOpen {
-					continue
-				}
-				wg.Add(1)
-				go func(idx int, num int) {
-					defer wg.Done()
-					detail, err := client.GetPR(ctx, owner, repo, num)
-					if err != nil {
-						slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", err)
-						return
-					}
-					mu.Lock()
-					result.prs[idx].MergeableState = detail.GetMergeableState()
-					mu.Unlock()
-				}(i, pr.Number)
-			}
-			wg.Wait()
-		}
+		// Enrich open PRs with mergeable state (concurrency-limited).
+		enrichPRsMergeableState(ctx, client, owner, repo, result.prs)
 
 		// Cross-reference action runs to PRs by head branch.
 		if len(result.prs) > 0 && len(result.actions) > 0 {
@@ -3818,31 +3797,42 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 				HTMLURL:    ghPR.GetHTMLURL(),
 			})
 		}
-		// Enrich open PRs with mergeable state (parallel individual fetches).
-		if len(items) > 0 {
-			var wg sync.WaitGroup
-			var mu sync.Mutex
-			for i, item := range items {
-				if item.State != prStateOpen {
-					continue
-				}
-				wg.Add(1)
-				go func(idx int, num int) {
-					defer wg.Done()
-					detail, detailErr := client.GetPR(ctx, owner, repo, num)
-					if detailErr != nil {
-						slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", detailErr)
-						return
-					}
-					mu.Lock()
-					items[idx].MergeableState = detail.GetMergeableState()
-					mu.Unlock()
-				}(i, item.Number)
-			}
-			wg.Wait()
-		}
+		// Enrich open PRs with mergeable state (concurrency-limited).
+		enrichPRsMergeableState(ctx, client, owner, repo, items)
 		return ghPRsPageMsg{prs: items, nextPage: pr.NextPage, replace: replace}
 	}
+}
+
+// enrichPRsMergeableState fetches the mergeable state for each open PR in prs
+// using at most maxPREnrichConcurrency parallel GetPR calls.  This avoids the
+// N+1 fan-out that would otherwise saturate GitHub API rate limits.
+func enrichPRsMergeableState(ctx context.Context, client ghclient.Client, owner, repo string, prs []ghPRItem) {
+	if len(prs) == 0 {
+		return
+	}
+	sem := make(chan struct{}, maxPREnrichConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for i, pr := range prs {
+		if pr.State != prStateOpen {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{} // acquire slot
+		go func(idx int, num int) {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
+			detail, err := client.GetPR(ctx, owner, repo, num)
+			if err != nil {
+				slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", err)
+				return
+			}
+			mu.Lock()
+			prs[idx].MergeableState = detail.GetMergeableState()
+			mu.Unlock()
+		}(i, pr.Number)
+	}
+	wg.Wait()
 }
 
 // loadActionsPage fetches a single page of workflow runs.
