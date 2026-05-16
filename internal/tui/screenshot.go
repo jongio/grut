@@ -7,6 +7,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -520,7 +521,7 @@ func newScreenshotModel(width, height int, preset layout.Preset, th *theme.Theme
 	cfg.FileTree.IconMode = "nerd"
 
 	reg := layout.NewRegistry()
-	layout.RegisterDefaults(reg, cfg, nil, th)
+	layout.RegisterDefaults(context.Background(), reg, cfg, nil, th)
 
 	engine, err := layout.NewEngine(reg, preset)
 	if err != nil {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -319,7 +320,7 @@ func TestAddRestoredTabs_SingleTabMode(t *testing.T) {
 	cfg := &config.Config{}
 	th, err := theme.Load("default")
 	require.NoError(t, err)
-	layout.RegisterDefaults(reg, cfg, nil, th)
+	layout.RegisterDefaults(context.Background(), reg, cfg, nil, th)
 	engine, err := layout.NewEngine(reg, layout.ExplorerPreset())
 	require.NoError(t, err)
 
@@ -483,7 +484,7 @@ func TestInitChainSucceeds(t *testing.T) {
 	require.NoError(t, err, "theme.Load(%q)", cfg.Theme.Name)
 
 	reg := layout.NewRegistry()
-	layout.RegisterDefaults(reg, cfg, nil, th)
+	layout.RegisterDefaults(context.Background(), reg, cfg, nil, th)
 
 	preset := layout.ExplorerPreset()
 	engine, err := layout.NewEngine(reg, preset)

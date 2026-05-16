@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -96,7 +97,7 @@ func (r *Registry) Names() []string {
 // the git client for git-aware panels; if nil, git panels are not registered.
 // The th parameter provides the theme for styled panels; if nil, panels
 // use fallback colors.
-func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *theme.Theme) {
+func RegisterDefaults(ctx context.Context, r *Registry, cfg *config.Config, gc git.GitClient, th *theme.Theme) {
 	// Panels still using placeholders
 	for _, name := range []string{slotStatus} {
 		r.Register(name, func() panels.Panel {
@@ -279,7 +280,7 @@ func RegisterDefaults(r *Registry, cfg *config.Config, gc git.GitClient, th *the
 		if shell == "" {
 			shell = terminal.DefaultShell()
 		}
-		runner, err := terminal.New(shell, cfg.Terminal.Scrollback)
+		runner, err := terminal.New(ctx, shell, cfg.Terminal.Scrollback)
 		if err != nil {
 			return panels.NewPlaceholder(slotTerminal, th)
 		}

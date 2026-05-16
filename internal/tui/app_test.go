@@ -31,7 +31,7 @@ func newTestModel(t *testing.T) Model {
 	t.Helper()
 	reg := layout.NewRegistry()
 	cfg, _ := config.LoadDefaults()
-	layout.RegisterDefaults(reg, cfg, nil, nil)
+	layout.RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	preset := layout.ExplorerPreset()
 	engine, err := layout.NewEngine(reg, preset)
 	require.NoError(t, err)

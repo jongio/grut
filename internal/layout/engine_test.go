@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,7 +24,7 @@ func newTestEngine(t *testing.T) *Engine {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	preset := ExplorerPreset()
 	engine, err := NewEngine(reg, preset)
 	require.NoError(t, err)
@@ -450,7 +451,7 @@ func TestEngineRotatePreviewPosition(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	preset := GitPreset() // git preset: filetree | preview (simple 2-leaf)
 	engine, err := NewEngine(reg, preset)
 	require.NoError(t, err)
@@ -499,7 +500,7 @@ func TestEngineCurrentPreviewPosition(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, GitPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -528,7 +529,7 @@ func TestEngineSetPreviewPosition(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, GitPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -576,7 +577,7 @@ func TestEngineSetPreviewPositionNoOp(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, GitPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -599,7 +600,7 @@ func TestEngineSetPreviewPositionAllTabs(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, GitPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -633,7 +634,7 @@ func TestEnginePreviewPositionExplorerPreset(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, ExplorerPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -687,7 +688,7 @@ func TestEngineRotatePreviewPositionExplorerPreset(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 	engine, err := NewEngine(reg, ExplorerPreset())
 	require.NoError(t, err)
 	engine.SetSize(100, 25)
@@ -1671,7 +1672,7 @@ func TestRegistryHasAndNames(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 
 	// Verify all expected panel types are registered.
 	names := reg.Names()
@@ -1688,7 +1689,7 @@ func TestRegistryCreate_AllPanels(t *testing.T) {
 	reg := NewRegistry()
 	cfg, err := testConfig()
 	require.NoError(t, err)
-	RegisterDefaults(reg, cfg, nil, nil)
+	RegisterDefaults(context.Background(), reg, cfg, nil, nil)
 
 	// Create each registered panel to exercise the factory closures.
 	for _, name := range reg.Names() {
