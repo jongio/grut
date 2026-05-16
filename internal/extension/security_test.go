@@ -255,8 +255,11 @@ func TestGitHeadHash_ValidRepo(t *testing.T) {
 }
 
 func TestGitHeadHash_NotARepo(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
+	// Force git to look for a repo only in the temp dir by pointing GIT_DIR
+	// at it (which has no valid git objects). This prevents the flaky behavior
+	// where git discovers a repo via parent directory traversal in worktrees.
+	t.Setenv("GIT_DIR", filepath.Join(dir, ".git"))
 	_, err := gitHeadHash(context.Background(), dir)
 	require.Error(t, err)
 }
