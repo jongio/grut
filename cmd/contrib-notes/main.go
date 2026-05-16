@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -23,21 +24,23 @@ func main() {
 		ToRef:   *to,
 	}
 
+	ctx := context.Background()
+
 	switch *format {
 	case "contributors":
-		contribs, err := contributors.ExtractAll(opts)
+		contribs, err := contributors.ExtractAll(ctx, opts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Print(contributors.FormatContributorsMD(contribs))
 	default:
-		contribs, err := contributors.Extract(opts)
+		contribs, err := contributors.Extract(ctx, opts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		if err := contributors.MarkFirstTimers(contribs, opts); err != nil {
+		if err := contributors.MarkFirstTimers(ctx, contribs, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not detect first-timers: %v\n", err)
 		}
 		switch *format {

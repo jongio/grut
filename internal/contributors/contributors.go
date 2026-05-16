@@ -104,11 +104,10 @@ func (o *Options) refRange() string {
 // Extract returns contributors for the given ref range.
 // It parses commit authors AND Co-authored-by trailers, deduplicates by
 // email, and filters out bot accounts.
-func Extract(opts Options) ([]Contributor, error) {
+func Extract(ctx context.Context, opts Options) ([]Contributor, error) {
 	run := opts.runner()
 	dir := opts.repoDir()
 	rng := opts.refRange()
-	ctx := context.Background()
 
 	// Get commit authors with dates.
 	authorOut, err := run(
@@ -238,7 +237,7 @@ func isBot(name, email string) bool {
 // MarkFirstTimers marks contributors whose first commit to the project
 // falls within the given range. It compares against all-time contributors
 // extracted from the full history up to fromRef.
-func MarkFirstTimers(contributors []Contributor, opts Options) error {
+func MarkFirstTimers(ctx context.Context, contributors []Contributor, opts Options) error {
 	if opts.FromRef == "" {
 		// No previous history to compare against; all are first-timers.
 		for i := range contributors {
@@ -253,7 +252,7 @@ func MarkFirstTimers(contributors []Contributor, opts Options) error {
 		ToRef:   opts.FromRef,
 		gitRun:  opts.gitRun,
 	}
-	prev, err := Extract(prevOpts)
+	prev, err := Extract(ctx, prevOpts)
 	if err != nil {
 		return fmt.Errorf("mark first timers: %w", err)
 	}
@@ -271,11 +270,11 @@ func MarkFirstTimers(contributors []Contributor, opts Options) error {
 }
 
 // ExtractAll returns all-time contributors across the full git history.
-func ExtractAll(opts Options) ([]Contributor, error) {
+func ExtractAll(ctx context.Context, opts Options) ([]Contributor, error) {
 	allOpts := Options{
 		RepoDir: opts.RepoDir,
 		ToRef:   refHEAD,
 		gitRun:  opts.gitRun,
 	}
-	return Extract(allOpts)
+	return Extract(ctx, allOpts)
 }
