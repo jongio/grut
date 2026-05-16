@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -818,6 +819,53 @@ func TestReadFileContent_AppliesRedaction(t *testing.T) {
 	content := b.readFileContent(root, "config.go")
 	assert.Contains(t, content, RedactedPlaceholder)
 	assert.NotContains(t, content, "SuperSecret1234567")
+}
+
+// ---------------------------------------------------------------------------
+// redactString fail-closed on RedactContent error (#77)
+// ---------------------------------------------------------------------------
+
+func TestRedactString_ReturnsPlaceholderOnError(t *testing.T) {
+	redactor := NewRedactor(nil)
+	redactor.forceErr = errors.New("simulated redaction failure")
+	b := NewBuilder(&mockGitClient{}, redactor, 0)
+
+	secret := `password = "SuperSecret1234567"`
+	result := b.redactString(secret)
+
+	assert.Equal(t, RedactionFailedPlaceholder, result,
+		"redactString must return safe placeholder when RedactContent fails")
+	assert.NotContains(t, result, "SuperSecret",
+		"original secret must never appear in output on error")
+}
+
+func TestReadFileContent_ReturnsPlaceholderOnRedactionError(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "secret.go", `token = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn"`)
+
+	redactor := NewRedactor(nil)
+	redactor.forceErr = errors.New("simulated redaction failure")
+	b := NewBuilder(&mockGitClient{}, redactor, 0)
+
+	content := b.readFileContent(root, "secret.go")
+	assert.Equal(t, RedactionFailedPlaceholder, content,
+		"readFileContent must return safe placeholder when redaction fails")
+	assert.NotContains(t, content, "ghp_",
+		"secrets must never leak when redaction fails")
+}
+
+func TestRedactString_SuccessPath(t *testing.T) {
+	redactor := NewRedactor(nil)
+	b := NewBuilder(&mockGitClient{}, redactor, 0)
+
+	// Content with a secret should be redacted normally.
+	result := b.redactString(`api_key = "AKIAIOSFODNN7EXAMPLE"`)
+	assert.Contains(t, result, RedactedPlaceholder)
+	assert.NotContains(t, result, "AKIAIOSFODNN7EXAMPLE")
+
+	// Clean content passes through unchanged.
+	clean := "func main() {}"
+	assert.Equal(t, clean, b.redactString(clean))
 }
 
 // ---------------------------------------------------------------------------

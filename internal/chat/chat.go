@@ -352,8 +352,12 @@ func trimMessages(msgs []ai.ChatMessage) []ai.ChatMessage {
 }
 
 func (m Model) sendMessage(content string) (Model, tea.Cmd) {
-	// Redact user content before storing.
-	redacted, _ := m.redactor.RedactContent(content)
+	// Redact user content before storing — fail-closed: if redaction errors,
+	// use a safe placeholder rather than leaking secrets to the AI provider.
+	redacted, _, err := m.redactor.RedactContent(content)
+	if err != nil {
+		redacted = ai.RedactionFailedPlaceholder
+	}
 	m.messages = append(m.messages, ai.ChatMessage{
 		Role:    RoleUser,
 		Content: redacted,

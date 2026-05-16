@@ -147,11 +147,16 @@ func (b *Builder) shouldExclude(path string) bool {
 }
 
 // redactString applies content redaction if a redactor is configured.
+// On error it returns a safe placeholder instead of the original content
+// to ensure secrets are never leaked to AI providers (CWE-200).
 func (b *Builder) redactString(content string) string {
 	if b.redactor == nil {
 		return content
 	}
-	redacted, _ := b.redactor.RedactContent(content)
+	redacted, _, err := b.redactor.RedactContent(content)
+	if err != nil {
+		return RedactionFailedPlaceholder
+	}
 	return redacted
 }
 
