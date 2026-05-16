@@ -14,9 +14,26 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testRenderCommitLine is a test helper that calls commitrender.RenderLine
+// with the panel's cached styles and the standard gitlog options (refs, author,
+// date all enabled).
+func testRenderCommitLine(p *Panel, c git.Commit, graphPrefix string, width int, isCursor bool) string {
+	return commitrender.RenderLine(commitrender.Params{
+		Commit:      c,
+		Width:       width,
+		IsCursor:    isCursor,
+		GraphPrefix: graphPrefix,
+		Styles:      p.clStyles,
+		ShowRefs:    true,
+		ShowAuthor:  true,
+		ShowDate:    true,
+	})
+}
 
 // mockGitClient implements git.StatusReader for testing.
 type mockGitClient struct {
@@ -200,7 +217,7 @@ func TestCommitEntryFormatting(t *testing.T) {
 		Parents:     []string{"parent1"},
 	}
 
-	line := p.renderCommitLine(c, "*", 120, false)
+	line := testRenderCommitLine(p, c, "*", 120, false)
 
 	// Check key parts are present.
 	assert.Contains(t, line, "abc123d")
@@ -221,7 +238,7 @@ func TestCommitEntryFormatting_NoRefs(t *testing.T) {
 		Subject:   "fix: preview scroll",
 	}
 
-	line := p.renderCommitLine(c, "| *", 120, false)
+	line := testRenderCommitLine(p, c, "| *", 120, false)
 
 	assert.Contains(t, line, "abc123d")
 	assert.Contains(t, line, "Jane")
@@ -268,7 +285,7 @@ func TestRefDecorations(t *testing.T) {
 				Subject:   "test",
 				Refs:      tt.refs,
 			}
-			line := p.renderCommitLine(c, "*", 200, false)
+			line := testRenderCommitLine(p, c, "*", 200, false)
 			if tt.want == "" {
 				assert.NotContains(t, line, "(")
 			} else {
@@ -545,12 +562,12 @@ func TestRebuildDisplay_WithBranch(t *testing.T) {
 
 func TestTruncateOrPad(t *testing.T) {
 	// Shorter than width: pad.
-	result := truncateOrPad("abc", 10)
+	result := commitrender.TruncateOrPad("abc", 10)
 	assert.Equal(t, 10, len(result))
 	assert.True(t, strings.HasPrefix(result, "abc"))
 
 	// Exact width: no change.
-	result = truncateOrPad("1234567890", 10)
+	result = commitrender.TruncateOrPad("1234567890", 10)
 	assert.Equal(t, "1234567890", result)
 }
 
@@ -1020,7 +1037,7 @@ func TestRenderCommitLine_NarrowWidth(t *testing.T) {
 	}
 
 	// Very narrow width — just enough for basic content.
-	line := p.renderCommitLine(c, "*", 30, false)
+	line := testRenderCommitLine(p, c, "*", 30, false)
 	assert.NotEmpty(t, line)
 	assert.Contains(t, line, "abc123d")
 }
@@ -1035,8 +1052,8 @@ func TestRenderCommitLine_CursorHighlight(t *testing.T) {
 		Subject:   "test commit",
 	}
 
-	lineCursor := p.renderCommitLine(c, "*", 100, true)
-	lineNoCursor := p.renderCommitLine(c, "*", 100, false)
+	lineCursor := testRenderCommitLine(p, c, "*", 100, true)
+	lineNoCursor := testRenderCommitLine(p, c, "*", 100, false)
 
 	// Both should contain the commit info.
 	assert.Contains(t, lineCursor, "abc123d")
@@ -1181,7 +1198,7 @@ func TestUpdate_BranchChangedMsg(t *testing.T) {
 }
 
 func TestTruncateOrPad_Truncate(t *testing.T) {
-	result := truncateOrPad("this is a long string", 5)
+	result := commitrender.TruncateOrPad("this is a long string", 5)
 	// Should be truncated to width 5 (lipgloss MaxWidth).
 	assert.Equal(t, 5, lipgloss.Width(result))
 }
@@ -1331,7 +1348,7 @@ func TestRenderCommitLine_ANSIInjection(t *testing.T) {
 		Refs:      []string{"\x1b]0;pwned-title\x07main"},
 	}
 
-	line := p.renderCommitLine(c, "*", 120, false)
+	line := testRenderCommitLine(p, c, "*", 120, false)
 	stripped := panels.StripANSI(line)
 
 	// After stripping lipgloss styling, no raw escape sequences should remain.

@@ -10,6 +10,7 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/panels/commitrender"
 )
 
 // ---------------------------------------------------------------------------
@@ -1360,7 +1361,7 @@ func TestTruncateOrPad(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := truncateOrPad(tt.input, tt.width)
+			result := commitrender.TruncateOrPad(tt.input, tt.width)
 			if result == "" && tt.width > 0 {
 				t.Error("expected non-empty result")
 			}
@@ -1369,7 +1370,7 @@ func TestTruncateOrPad(t *testing.T) {
 }
 
 func TestTruncateOrPad_PadsShortString(t *testing.T) {
-	result := truncateOrPad("hi", 10)
+	result := commitrender.TruncateOrPad("hi", 10)
 	// "hi" is 2 chars, should be padded to 10.
 	if len(result) != 10 {
 		t.Errorf("expected length 10, got %d", len(result))
@@ -1380,7 +1381,7 @@ func TestTruncateOrPad_PadsShortString(t *testing.T) {
 }
 
 func TestTruncateOrPad_ExactFit(t *testing.T) {
-	result := truncateOrPad("hello", 5)
+	result := commitrender.TruncateOrPad("hello", 5)
 	if result != "hello" {
 		t.Errorf("expected %q, got %q", "hello", result)
 	}
