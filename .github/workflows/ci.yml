@@ -97,7 +97,25 @@ jobs:
           version: v2.11.3
           install-mode: goinstall
 
-      - run: go test ./...
+      - name: Test with coverage
+        if: runner.os == 'Linux'
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Test
+        if: runner.os == 'Windows'
+        run: go test ./...
+
+      - name: Coverage summary
+        if: runner.os == 'Linux'
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Upload coverage artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.out
+          retention-days: 30
 
       - name: Test (race detector)
         if: runner.os == 'Linux'
