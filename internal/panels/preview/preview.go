@@ -42,7 +42,7 @@ type Preview struct {
 	lines      []string // rendered lines (with ANSI for syntax highlighting)
 	blameLines []git.BlameLine
 	diffLines  []string // pre-rendered diff lines for current file
-	cfg        config.PreviewConfig
+	cfg        Config
 	scrollY    int
 	// Panel state
 	width   int
@@ -99,13 +99,13 @@ type diffLoadedMsg struct {
 var _ panels.Panel = (*Preview)(nil)
 
 // New creates a new Preview panel with the given configuration.
-func New(cfg config.PreviewConfig, editorCfg config.EditorConfig, th *theme.Theme) *Preview {
+func New(cfg Config, editorCfg config.EditorConfig, th *theme.Theme) *Preview {
 	return &Preview{
 		cfg:            cfg,
 		editCfg:        editorCfg,
-		lineNumbers:    cfg.LineNumbers,
-		wordWrap:       cfg.WordWrap,
-		renderMarkdown: cfg.RenderMarkdown,
+		lineNumbers:    cfg.GetLineNumbers(),
+		wordWrap:       cfg.GetWordWrap(),
+		renderMarkdown: cfg.GetRenderMarkdown(),
 		theme:          th,
 	}
 }
@@ -593,7 +593,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			return result
 		}
 		// Check max file size
-		if cfg.MaxFileSize > 0 && info.Size() > int64(cfg.MaxFileSize) {
+		if cfg.GetMaxFileSize() > 0 && info.Size() > int64(cfg.GetMaxFileSize()) {
 			result.isLarge = true
 			result.lines = buildMetadataLines(path, info)
 			return result
@@ -642,14 +642,14 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		case extMD, extMarkdown, extMdown, extMkd:
 			if renderMD {
 				result.lines = markdown.RenderStatic(source, width)
-			} else if cfg.SyntaxHighlighting {
-				result.lines = renderHighlightedStatic(source, path, cfg.Theme)
+			} else if cfg.GetSyntaxHighlighting() {
+				result.lines = renderHighlightedStatic(source, path, cfg.GetTheme())
 			} else {
 				result.lines = strings.Split(source, "\n")
 			}
 		default:
-			if cfg.SyntaxHighlighting {
-				result.lines = renderHighlightedStatic(source, path, cfg.Theme)
+			if cfg.GetSyntaxHighlighting() {
+				result.lines = renderHighlightedStatic(source, path, cfg.GetTheme())
 			} else {
 				result.lines = strings.Split(source, "\n")
 			}

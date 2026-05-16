@@ -289,6 +289,84 @@ require.NoError(t, err)                // fatal - stops the test
 assert.Equal(t, http.StatusOK, resp.StatusCode) // non-fatal - keeps running
 ```
 
+## Config Interface Pattern
+
+Panels should depend on **narrow interfaces** rather than concrete config types
+from `internal/config`. This inverts the dependency (panels define what they
+need; the config package satisfies it) and enables lightweight test stubs
+without importing `internal/config`.
+
+### How it works
+
+1. **Define an interface in the consumer package** with only the getters the
+   panel actually uses:
+
+   ```go
+   // internal/panels/filetree/config.go
+   package filetree
+
+   type Config interface {
+       GetIconMode() string
+       GetMaxDepth() int
+       GetShowHidden() bool
+       // ... only what this panel needs
+   }
+   ```
+
+2. **Add getter methods to the config struct** so it satisfies the interface
+   implicitly (value receivers keep zero-copy passing):
+
+   ```go
+   // internal/config/getters.go
+   func (c FileTreeConfig) GetIconMode() string { return c.IconMode }
+   ```
+
+3. **Accept the interface in the constructor**:
+
+   ```go
+   func New(cfg Config, rootPath string, th *theme.Theme) *FileTree { ... }
+   ```
+
+4. **Use getter calls** instead of direct field access:
+
+   ```go
+   // Before:  ft.cfg.MaxDepth
+   // After:   ft.cfg.GetMaxDepth()
+   ```
+
+Callers (e.g. `internal/layout/registry.go`) need **zero changes** because
+`config.FileTreeConfig` already satisfies `filetree.Config` via Go's implicit
+interface satisfaction.
+
+### Packages converted so far
+
+| Package | Interface | Config struct |
+|---------|-----------|---------------|
+| `filetree` | `filetree.Config` | `config.FileTreeConfig` |
+| `preview` | `preview.Config` | `config.PreviewConfig` |
+
+### Packages still using concrete types
+
+The `ActionsConfig` type is shared across many panels via `SetActionsCfg` and
+the `rightclick` package. Converting it to an interface requires coordinating
+changes in `rightclick.Cmd` and `config.SaveDoubleClickChoice` - a separate,
+larger refactoring pass. Track progress in issue #68.
+
+### Writing tests with stubs
+
+Instead of importing `config` in tests, implement the interface directly:
+
+```go
+type stubConfig struct{}
+func (stubConfig) GetIconMode() string           { return "ascii" }
+func (stubConfig) GetMaxDepth() int              { return 10 }
+func (stubConfig) GetShowHidden() bool           { return false }
+func (stubConfig) GetShowIcons() bool            { return true }
+func (stubConfig) GetSortDirectoriesFirst() bool { return true }
+func (stubConfig) GetGitStatusMarkers() bool     { return true }
+func (stubConfig) GetFollowSymlinks() bool       { return false }
+```
+
 ## Submitting Changes
 
 ### Pull Request Process

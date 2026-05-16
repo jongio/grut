@@ -11,7 +11,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 )
 
@@ -34,7 +33,7 @@ func (ft *FileTree) loadChildren(n *node) {
 	}
 
 	// Max depth enforcement.
-	if n.depth+1 >= ft.cfg.MaxDepth {
+	if n.depth+1 >= ft.cfg.GetMaxDepth() {
 		n.loaded = true
 		return
 	}
@@ -93,11 +92,11 @@ func (ft *FileTree) loadChildren(n *node) {
 // loadChildrenStatic is a standalone version of loadChildren that uses
 // an explicit config rather than the FileTree receiver. Safe for use in
 // background goroutines launched by tea.Cmd (F05).
-func loadChildrenStatic(n *node, cfg config.FileTreeConfig) {
+func loadChildrenStatic(n *node, cfg Config) {
 	if n.loaded || !n.isDir {
 		return
 	}
-	if n.depth+1 >= cfg.MaxDepth {
+	if n.depth+1 >= cfg.GetMaxDepth() {
 		n.loaded = true
 		return
 	}
@@ -136,7 +135,7 @@ func loadChildrenStatic(n *node, cfg config.FileTreeConfig) {
 		}
 		children = append(children, child)
 	}
-	sortChildrenStatic(children, cfg.SortDirectoriesFirst)
+	sortChildrenStatic(children, cfg.GetSortDirectoriesFirst())
 	n.children = children
 	n.loaded = true
 }
@@ -162,7 +161,7 @@ func sortChildrenStatic(children []*node, dirFirst bool) {
 func (ft *FileTree) sortChildren(children []*node) {
 	// Stable sort: directories first (when configured), then case-insensitive
 	// alphabetical. Uses stdlib slices.SortStableFunc (Go 1.21+).
-	dirFirst := ft.cfg.SortDirectoriesFirst
+	dirFirst := ft.cfg.GetSortDirectoriesFirst()
 	slices.SortStableFunc(children, func(a, b *node) int {
 		if dirFirst && a.isDir != b.isDir {
 			if a.isDir {
@@ -505,8 +504,8 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		if err != nil {
 			rel = n.name
 		}
-		if ft.cfg.ShowIcons {
-			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+		if ft.cfg.GetShowIcons() {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.GetIconMode()); icon != "" {
 				b.WriteString(icon)
 				b.WriteByte(' ')
 			}
@@ -520,14 +519,14 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		b.WriteString(strings.Repeat("  ", n.depth))
 
 		if n.isDir {
-			b.WriteString(getExpandIcon(n.expanded, ft.cfg.IconMode))
+			b.WriteString(getExpandIcon(n.expanded, ft.cfg.GetIconMode()))
 			b.WriteByte(' ')
 		} else {
 			b.WriteString("  ")
 		}
 
-		if ft.cfg.ShowIcons {
-			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.IconMode); icon != "" {
+		if ft.cfg.GetShowIcons() {
+			if icon := getFileIcon(n.name, n.isDir, n.expanded, ft.cfg.GetIconMode()); icon != "" {
 				b.WriteString(icon)
 				b.WriteByte(' ')
 			}
@@ -582,13 +581,13 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 			case "U":
 				gitColor = "#C9A227"
 			}
-			gitIndicator = gitStatusIcon(indicator, ft.cfg.IconMode)
+			gitIndicator = gitStatusIcon(indicator, ft.cfg.GetIconMode())
 			gitIndicatorW = 1 + displayWidth(gitIndicator) // " " + icon
 		}
 	}
 	// Show ignored indicator when no other git status is present.
 	if ignored && gitIndicator == "" {
-		gitIndicator = gitStatusIcon("!", ft.cfg.IconMode)
+		gitIndicator = gitStatusIcon("!", ft.cfg.GetIconMode())
 		gitColor = ft.colors.Dim
 		gitIndicatorW = 1 + displayWidth(gitIndicator)
 	}

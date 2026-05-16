@@ -153,7 +153,7 @@ type FileTree struct {
 	commitFiles     []string // relative paths from diff-tree
 	branchFiles     []string // relative paths from branch diff
 	prFiles         []panels.PRFile
-	cfg             config.FileTreeConfig
+	cfg             Config
 	colors          panelColors
 	theme           *theme.Theme
 	// File operation state.
@@ -185,7 +185,7 @@ var _ panels.Panel = (*FileTree)(nil)
 var _ panels.Closer = (*FileTree)(nil)
 
 // New creates a new FileTree panel rooted at rootPath.
-func New(cfg config.FileTreeConfig, rootPath string, th *theme.Theme) *FileTree {
+func New(cfg Config, rootPath string, th *theme.Theme) *FileTree {
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		absRoot = rootPath
@@ -202,7 +202,7 @@ func New(cfg config.FileTreeConfig, rootPath string, th *theme.Theme) *FileTree 
 		colors:     initColors(th),
 		theme:      th,
 		selected:   make(map[string]bool),
-		showHidden: cfg.ShowHidden,
+		showHidden: cfg.GetShowHidden(),
 	}
 	// No directory I/O here — deferred to Init() (F05).
 	return ft
@@ -1198,7 +1198,7 @@ func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
 	if n.isDir {
 		// Guard symlink expansion.
 		if n.isSymlink {
-			if !ft.cfg.FollowSymlinks {
+			if !ft.cfg.GetFollowSymlinks() {
 				return ft, nil
 			}
 			if !ft.isPathSafe(n.path) || ft.isSymlinkLoop(n.path) {
