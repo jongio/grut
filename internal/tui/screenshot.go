@@ -21,9 +21,6 @@ import (
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/panels"
-	"github.com/jongio/grut/internal/panels/fuzzyfinder"
-	helppanel "github.com/jongio/grut/internal/panels/help"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
 	"github.com/jongio/grut/internal/theme"
 )
 
@@ -395,7 +392,7 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 			return nil, err
 		}
 		injectGitHubDemoData(m)
-		m.fuzzyFinder = fuzzyfinder.New(th)
+		m.fuzzyFinder = m.overlays.NewFuzzyFinder("files", nil)
 		m.fuzzyFinder.Focus()
 		w, h := m.fuzzyFinderDims()
 		m.fuzzyFinder.SetSize(w, h)
@@ -410,12 +407,11 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 		}
 		injectGitHubDemoData(m)
 		m.settingsShown = true
-		m.settingsPanel = settingspanel.New(
+		m.settingsPanel = m.overlays.NewSettingsPanel(
 			m.engine.CurrentPreviewPosition(),
 			"default",
 			theme.ListThemes(),
 			config.ActionsConfig{},
-			th,
 		)
 		m.settingsPanel.Focus()
 		sw, sh := m.settingsOverlayDims()
@@ -432,7 +428,7 @@ func captureThemeScreenshots(width, height int, th *theme.Theme) ([]Screenshot, 
 		}
 		injectGitHubDemoData(m)
 		m.helpShown = true
-		m.helpPanel = helppanel.New(th)
+		m.helpPanel = m.overlays.NewHelpPanel()
 		m.helpPanel.Focus()
 		hw, hh := m.helpOverlayDims()
 		m.helpPanel.SetSize(hw, hh)

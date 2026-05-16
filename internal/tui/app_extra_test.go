@@ -13,7 +13,6 @@ import (
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
 	"github.com/jongio/grut/internal/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +55,7 @@ func TestSetPreviewPositionMsgChangesPosition(t *testing.T) {
 		target = layout.PreviewRight
 	}
 
-	updated, cmd := m.Update(settingspanel.SetPreviewPositionMsg{Position: target})
+	updated, cmd := m.Update(panels.SetPreviewPositionMsg{Position: int(target)})
 	m = updated.(Model)
 
 	assert.Nil(t, cmd, "SetPreviewPositionMsg should return nil cmd")
@@ -67,7 +66,7 @@ func TestSetPreviewPositionMsgChangesPosition(t *testing.T) {
 func TestSetThemeMsgReturnsNil(t *testing.T) {
 	m := newTestModelReady(t)
 
-	updated, cmd := m.Update(settingspanel.SetThemeMsg{Name: "dracula"})
+	updated, cmd := m.Update(panels.SetThemeMsg{Name: "dracula"})
 	_ = updated.(Model)
 
 	assert.Nil(t, cmd, "SetThemeMsg should return nil cmd")
@@ -78,7 +77,7 @@ func TestResetActionPromptsMsgClearsConfirmed(t *testing.T) {
 	// Pre-populate some confirmed flags.
 	m.cfg.Actions.Confirmed = map[string]bool{"file.open": true, "file.delete": true}
 
-	updated, cmd := m.Update(settingspanel.ResetActionPromptsMsg{})
+	updated, cmd := m.Update(panels.ResetActionPromptsMsg{})
 	m = updated.(Model)
 
 	assert.Nil(t, cmd, "ResetActionPromptsMsg should return nil cmd")
@@ -88,7 +87,7 @@ func TestResetActionPromptsMsgClearsConfirmed(t *testing.T) {
 func TestSetDoubleClickActionMsgUpdatesConfig(t *testing.T) {
 	m := newTestModelWithConfig(t)
 
-	updated, cmd := m.Update(settingspanel.SetDoubleClickActionMsg{
+	updated, cmd := m.Update(panels.SetDoubleClickActionMsg{
 		ItemType: "file",
 		Action:   "open_editor",
 	})
@@ -100,7 +99,7 @@ func TestSetDoubleClickActionMsgUpdatesConfig(t *testing.T) {
 func TestSetRightClickActionMsgUpdatesConfig(t *testing.T) {
 	m := newTestModelWithConfig(t)
 
-	updated, cmd := m.Update(settingspanel.SetRightClickActionMsg{
+	updated, cmd := m.Update(panels.SetRightClickActionMsg{
 		ItemType: "file",
 		Action:   "copy_path",
 	})
@@ -115,7 +114,7 @@ func TestSetRightClickActionMsgInitializesNilMap(t *testing.T) {
 	m := newTestModelWithConfig(t)
 	m.cfg.Actions.RightClick = nil // force nil map
 
-	updated, _ := m.Update(settingspanel.SetRightClickActionMsg{
+	updated, _ := m.Update(panels.SetRightClickActionMsg{
 		ItemType: "directory",
 		Action:   "open_terminal",
 	})
@@ -403,7 +402,7 @@ func TestViewSettingsToggleOnOff(t *testing.T) {
 	m := newTestModelReady(t)
 
 	// Toggle settings on.
-	updated, _ := m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ := m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.True(t, m.settingsShown)
 
@@ -411,7 +410,7 @@ func TestViewSettingsToggleOnOff(t *testing.T) {
 	assert.Contains(t, view1.Content, "Settings", "settings overlay should be visible")
 
 	// Toggle settings off.
-	updated, _ = m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ = m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.False(t, m.settingsShown)
 }
@@ -445,7 +444,7 @@ func TestMouseWheelRoutesToSettingsOverlay(t *testing.T) {
 	m := newTestModelReady(t)
 
 	// Open settings.
-	updated, _ := m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ := m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.True(t, m.settingsShown)
 
@@ -870,7 +869,7 @@ func TestSettingsAndBookmarksOverlayCoexist(t *testing.T) {
 	m := newTestModelReady(t)
 
 	// Open settings.
-	updated, _ := m.Update(settingspanel.ToggleSettingsMsg{})
+	updated, _ := m.Update(panels.ToggleSettingsMsg{})
 	m = updated.(Model)
 	assert.True(t, m.settingsShown)
 
