@@ -21,3 +21,7 @@ func killProcGroup(cmd *exec.Cmd) {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 }
+
+// postStartProcGroup is a no-op on Unix; process group membership is
+// configured before start via setProcGroup / SysProcAttr.Setpgid.
+func postStartProcGroup(_ *exec.Cmd) {}
