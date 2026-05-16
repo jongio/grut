@@ -14,10 +14,9 @@ import (
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
-	welcomepanel "github.com/jongio/grut/internal/panels/welcome"
 )
 
 // handleWindowSizeMsg processes terminal resize events, propagating dimensions
@@ -236,38 +235,38 @@ func (m Model) handleOverlayMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toggleWelcome()
 
 	// Welcome overlay messages.
-	case welcomepanel.AnimTickMsg:
+	case panels.WelcomeAnimTickMsg:
 		if m.welcomeShown && m.welcomePanel != nil {
 			_, cmd := m.welcomePanel.Update(msg)
 			return m, cmd
 		}
 		return m, nil
-	case welcomepanel.DismissMsg:
+	case panels.WelcomeDismissMsg:
 		return m.dismissWelcome(msg)
 
 	// Settings overlay messages.
-	case settingspanel.ToggleSettingsMsg:
+	case panels.ToggleSettingsMsg:
 		return m.toggleSettings()
-	case settingspanel.SetPreviewPositionMsg:
-		m.engine.SetPreviewPosition(msg.Position)
-		if err := config.SaveUserSetting("preview.position", msg.Position.String()); err != nil {
+	case panels.SetPreviewPositionMsg:
+		m.engine.SetPreviewPosition(layout.PreviewPosition(msg.Position))
+		if err := config.SaveUserSetting("preview.position", layout.PreviewPosition(msg.Position).String()); err != nil {
 			slog.Warn("failed to persist preview position", "err", err)
 		}
 		return m, nil
-	case settingspanel.SetThemeMsg:
+	case panels.SetThemeMsg:
 		// Theme change is persisted and takes effect on next launch,
 		// matching dispatch's behaviour.
 		if err := config.SaveUserSetting("theme.name", msg.Name); err != nil {
 			slog.Warn("failed to persist theme", "err", err)
 		}
 		return m, nil
-	case settingspanel.SetDoubleClickActionMsg:
+	case panels.SetDoubleClickActionMsg:
 		// Persist action + confirmed flag to disk and update in-memory config.
 		config.SaveDoubleClickChoice(&m.cfg.Actions, msg.ItemType, msg.Action)
 		// Push updated config to all panels so double-click works immediately.
 		m.broadcastActionsCfg()
 		return m, nil
-	case settingspanel.SetRightClickActionMsg:
+	case panels.SetRightClickActionMsg:
 		if err := config.SetRightClickAction(actions.ItemType(msg.ItemType), actions.ActionID(msg.Action)); err != nil {
 			slog.Warn("failed to persist right-click action", "err", err)
 		}
@@ -278,7 +277,7 @@ func (m Model) handleOverlayMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.Actions.RightClick[msg.ItemType] = msg.Action
 		m.broadcastActionsCfg()
 		return m, nil
-	case settingspanel.ResetActionPromptsMsg:
+	case panels.ResetActionPromptsMsg:
 		if err := config.ResetAllActionConfirmations(); err != nil {
 			slog.Warn("failed to reset action confirmations", "err", err)
 		}

@@ -22,11 +22,6 @@ import (
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	bmpanel "github.com/jongio/grut/internal/panels/bookmarks"
-	"github.com/jongio/grut/internal/panels/fuzzyfinder"
-	helppanel "github.com/jongio/grut/internal/panels/help"
-	settingspanel "github.com/jongio/grut/internal/panels/settings"
-	welcomepanel "github.com/jongio/grut/internal/panels/welcome"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -53,13 +48,14 @@ type Model struct {
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	bookmarkPanel      *bmpanel.Panel                // overlay panel (nil = hidden)
-	fuzzyFinder        *fuzzyfinder.FuzzyFinder      // overlay fuzzy finder (nil = hidden)
-	helpPanel          *helppanel.Panel              // overlay help panel (nil = hidden)
+	overlays           *OverlayFactory               // factory for overlay panels
+	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
+	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
 	helpShown          bool                          // whether help overlay is visible
-	welcomePanel       *welcomepanel.Panel           // overlay welcome panel (nil = hidden)
+	welcomePanel       panels.Panel                  // overlay welcome panel (nil = hidden)
 	welcomeShown       bool                          // whether welcome overlay is visible
-	settingsPanel      *settingspanel.Panel          // overlay settings panel (nil = hidden)
+	settingsPanel      panels.Panel                  // overlay settings panel (nil = hidden)
 	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
 	cfg                *config.Config                // app config (nil = defaults)
 	sessionMgr         *session.Manager              // session persistence (nil = disabled)
@@ -95,6 +91,7 @@ func New(engine *layout.Engine, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Ma
 		keys:        km,
 		notify:      notify.NewManager(),
 		bookmarkMgr: bmMgr,
+		overlays:    NewOverlayFactory(th, bmMgr),
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -247,10 +244,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Overlays & settings.
 	case panels.ToggleHelpMsg, panels.FirstRunMsg,
-		welcomepanel.AnimTickMsg, welcomepanel.DismissMsg,
-		settingspanel.ToggleSettingsMsg, settingspanel.SetPreviewPositionMsg,
-		settingspanel.SetThemeMsg, settingspanel.SetDoubleClickActionMsg,
-		settingspanel.SetRightClickActionMsg, settingspanel.ResetActionPromptsMsg:
+		panels.WelcomeAnimTickMsg, panels.WelcomeDismissMsg,
+		panels.ToggleSettingsMsg, panels.SetPreviewPositionMsg,
+		panels.SetThemeMsg, panels.SetDoubleClickActionMsg,
+		panels.SetRightClickActionMsg, panels.ResetActionPromptsMsg:
 		return m.handleOverlayMsg(msg)
 
 	// Fuzzy finder.
@@ -529,7 +526,7 @@ func (m Model) toggleBookmarks() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.bookmarksShown = true
-	m.bookmarkPanel = bmpanel.New(m.bookmarkMgr, m.theme)
+	m.bookmarkPanel = m.overlays.NewBookmarkPanel()
 	m.bookmarkPanel.Focus()
 	m.bookmarkPanel.SetSize(m.bookmarkOverlayDims())
 	m.bookmarkPanel.Init(m.ctx)
@@ -544,7 +541,7 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.helpShown = true
-	m.helpPanel = helppanel.New(m.theme)
+	m.helpPanel = m.overlays.NewHelpPanel()
 	m.helpPanel.Focus()
 	w, h := m.helpOverlayDims()
 	m.helpPanel.SetSize(w, h)
@@ -591,7 +588,7 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 	}
 
 	m.welcomeShown = true
-	m.welcomePanel = welcomepanel.New(m.theme)
+	m.welcomePanel = m.overlays.NewWelcomePanel()
 	m.welcomePanel.Focus()
 	w, h := m.welcomeOverlayDims()
 	m.welcomePanel.SetSize(w, h)
@@ -605,7 +602,7 @@ func (m Model) toggleWelcome() (tea.Model, tea.Cmd) {
 }
 
 // dismissWelcome handles the welcome panel dismiss message.
-func (m Model) dismissWelcome(_ welcomepanel.DismissMsg) (tea.Model, tea.Cmd) {
+func (m Model) dismissWelcome(_ panels.WelcomeDismissMsg) (tea.Model, tea.Cmd) {
 	m.welcomeShown = false
 	m.welcomePanel = nil
 
@@ -660,12 +657,11 @@ func (m Model) toggleSettings() (tea.Model, tea.Cmd) {
 	if m.cfg != nil {
 		actionsCfg = m.cfg.Actions
 	}
-	m.settingsPanel = settingspanel.New(
+	m.settingsPanel = m.overlays.NewSettingsPanel(
 		m.engine.CurrentPreviewPosition(),
 		currentTheme,
 		theme.ListThemes(),
 		actionsCfg,
-		m.theme,
 	)
 	m.settingsPanel.Focus()
 	w, h := m.settingsOverlayDims()
@@ -951,26 +947,11 @@ func (m Model) bookmarkOverlayDims() (int, int) {
 // openFuzzyFinder creates and shows the fuzzy finder overlay with the
 // appropriate source based on mode ("files" or "commands").
 func (m Model) openFuzzyFinder(mode string) Model {
-	var sources []fuzzyfinder.Source
-	switch mode {
-	case "files":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewFileSource(cwd))
-	case "commands":
-		if m.keys != nil {
-			sources = append(sources, fuzzyfinder.NewCommandSource(m.keys.Bindings()))
-		}
-	case "directories":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth))
+	var bindings []keymap.Binding
+	if m.keys != nil {
+		bindings = m.keys.Bindings()
 	}
-	ff := fuzzyfinder.New(m.theme, sources...)
+	ff := m.overlays.NewFuzzyFinder(mode, bindings)
 	ff.Focus()
 	w, h := m.fuzzyFinderDims()
 	ff.SetSize(w, h)

@@ -15,12 +15,13 @@ import (
 	"github.com/jongio/grut/internal/theme"
 )
 
-// DismissMsg is sent when the user dismisses the welcome screen.
-// The first-run marker is always persisted; users can re-show with W.
-type DismissMsg struct{}
-
-// AnimTickMsg advances the welcome banner animation by one frame.
-type AnimTickMsg time.Time
+// Message type aliases — the canonical definitions now live in the panels
+// package so that the root TUI model can type-switch without importing
+// this package directly.
+type (
+	DismissMsg  = panels.WelcomeDismissMsg
+	AnimTickMsg = panels.WelcomeAnimTickMsg
+)
 
 // animInterval is the delay between animation frames.
 const animInterval = 50 * time.Millisecond

@@ -829,3 +829,47 @@ type EditModeEnteredMsg struct {
 type EditModeExitedMsg struct {
 	Path string
 }
+
+// ---------------------------------------------------------------------------
+// Overlay panel messages
+// ---------------------------------------------------------------------------
+// These message types were extracted from the concrete overlay panel packages
+// (settings, welcome) so that the root TUI model can type-switch on them
+// without importing those packages directly.
+
+// ToggleSettingsMsg requests showing or hiding the settings overlay.
+type ToggleSettingsMsg struct{}
+
+// SetPreviewPositionMsg is emitted when the user selects a preview position.
+// Position is stored as int to avoid a circular dependency between the panels
+// and layout packages.
+type SetPreviewPositionMsg struct {
+	Position int
+}
+
+// SetThemeMsg is emitted when the user selects a theme.
+type SetThemeMsg struct {
+	Name string
+}
+
+// SetDoubleClickActionMsg is emitted when the user changes a double-click action.
+type SetDoubleClickActionMsg struct {
+	ItemType string
+	Action   string
+}
+
+// SetRightClickActionMsg is emitted when the user changes a right-click action.
+type SetRightClickActionMsg struct {
+	ItemType string
+	Action   string
+}
+
+// ResetActionPromptsMsg is emitted when the user resets all action confirmations.
+type ResetActionPromptsMsg struct{}
+
+// WelcomeDismissMsg is sent when the user dismisses the welcome screen.
+// The first-run marker is always persisted; users can re-show with W.
+type WelcomeDismissMsg struct{}
+
+// WelcomeAnimTickMsg advances the welcome banner animation by one frame.
+type WelcomeAnimTickMsg time.Time
