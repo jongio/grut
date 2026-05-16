@@ -210,6 +210,85 @@ counter++
 time.Sleep(backoff)
 ```
 
+### Error Handling
+
+The codebase follows a small set of error handling rules. Stick to these so
+error messages stay consistent and debuggable.
+
+#### 1. Always wrap with context
+
+Use `fmt.Errorf` with `%w` at every call site so the full chain of operations
+is visible in the final error message:
+
+```go
+cfg, err := loadConfig(path)
+if err != nil {
+    return fmt.Errorf("init server: %w", err)
+}
+```
+
+The prefix describes what the current function was trying to do, not the
+function that failed.
+
+#### 2. No sentinel errors
+
+The codebase does not use module-level sentinel values like
+`var ErrNotFound = errors.New(...)`. Errors are ad-hoc and contextual -
+create them inline where they occur:
+
+```go
+// Good
+return fmt.Errorf("repo %q not found", name)
+
+// Avoid
+var ErrNotFound = errors.New("not found")
+```
+
+#### 3. No custom error types
+
+Use the standard `error` interface everywhere. Context is conveyed through
+the wrapped message chain, not through type assertions or `errors.As`:
+
+```go
+// Good - message chain carries all the context
+return fmt.Errorf("fetch remote %q: %w", remote, err)
+
+// Avoid - custom type for carrying context
+type FetchError struct { Remote string; Err error }
+```
+
+#### 4. Intentional nil returns
+
+When a function intentionally returns `nil` instead of an error (e.g., a
+missing file is not an error for that code path), annotate with `//nolint:nilerr`
+and a brief explanation:
+
+```go
+if errors.Is(err, os.ErrNotExist) {
+    return nil //nolint:nilerr // missing config is fine, use defaults
+}
+```
+
+#### 5. No silent swallowing
+
+Errors must always be returned or logged. If you intentionally discard an
+error, make it explicit with a blank identifier and a comment:
+
+```go
+defer func() { _ = f.Close() }() // best-effort cleanup
+```
+
+#### 6. In tests
+
+Use `require.NoError` when the test cannot continue without success, and
+`assert.NoError` or `assert.Equal` for non-fatal checks:
+
+```go
+resp, err := client.Do(req)
+require.NoError(t, err)                // fatal - stops the test
+assert.Equal(t, http.StatusOK, resp.StatusCode) // non-fatal - keeps running
+```
+
 ## Submitting Changes
 
 ### Pull Request Process
