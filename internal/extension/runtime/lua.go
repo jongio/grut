@@ -186,7 +186,13 @@ func (r *LuaRuntime) registerHostAPI() {
 }
 
 // luaToast implements grut.toast(title, message, level).
+// Requires the "notify" permission.
 func (r *LuaRuntime) luaToast(l *lua.LState) int {
+	if !extension.ManifestHasPermission(r.manifest, extension.PermNotify) {
+		l.RaiseError("permission denied: %q requires %q permission",
+			"grut.toast", string(extension.PermNotify))
+		return 0
+	}
 	title := l.CheckString(1)
 	message := l.CheckString(2)
 	level := l.OptString(3, logInfo)

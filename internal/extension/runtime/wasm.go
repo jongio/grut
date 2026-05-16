@@ -113,6 +113,10 @@ func (w *WASMRuntime) registerHostFunctions(ctx context.Context) error {
 		WithFunc(func(ctx context.Context, mod api.Module,
 			titlePtr, titleLen, msgPtr, msgLen, level uint32,
 		) {
+			// Enforce "notify" permission before showing toasts (CWE-862).
+			if !extension.ManifestHasPermission(w.manifest, extension.PermNotify) {
+				return // silently deny — WASM host calls have no error return
+			}
 			title, okT := readString(mod, titlePtr, titleLen)
 			msg, okM := readString(mod, msgPtr, msgLen)
 			if !okT || !okM {
