@@ -59,6 +59,9 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
+      - name: Verify module integrity
+        run: go mod verify
+
       - name: Check strict formatting (gofumpt)
         run: |
           go install mvdan.cc/gofumpt@v0.9.2 || { echo "gofumpt install failed, skipping"; exit 0; }
