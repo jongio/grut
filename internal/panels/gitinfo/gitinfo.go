@@ -3962,6 +3962,10 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 	} else {
 		p.allIssues = append(p.allIssues, msg.issues...)
 	}
+	if len(p.allIssues) > ghclient.MaxPaginationItems {
+		p.allIssues = p.allIssues[:ghclient.MaxPaginationItems]
+		p.tabPaging[tabIssues].allLoaded = true
+	}
 	p.applyIssueFilter()
 	if !msg.replace {
 		p.tabCursor[tabIssues] = savedCursor
@@ -3983,6 +3987,10 @@ func (p *Panel) handlePRsPage(msg ghPRsPageMsg) (panels.Panel, tea.Cmd) {
 		p.allPRs = msg.prs
 	} else {
 		p.allPRs = append(p.allPRs, msg.prs...)
+	}
+	if len(p.allPRs) > ghclient.MaxPaginationItems {
+		p.allPRs = p.allPRs[:ghclient.MaxPaginationItems]
+		p.tabPaging[tabPRs].allLoaded = true
 	}
 	p.crossRefPRsActions()
 	p.applyPRFilter()
