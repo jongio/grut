@@ -13,6 +13,13 @@ type toast struct {
 	id           int64
 }
 
+// toastBaseStyle holds the invariant parts of a toast badge. Per-render
+// code only sets Background (level-dependent) and MaxWidth (width-dependent).
+var toastBaseStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FFFFFF")).
+	Bold(true).
+	Padding(0, 1)
+
 // view renders a single toast as a compact colored bar.
 func (t *toast) view(width int) string {
 	maxWidth := width
@@ -25,12 +32,9 @@ func (t *toast) view(width int) string {
 	color := levelColor(t.notification.Level)
 	icon := levelIcon(t.notification.Level)
 	label := fmt.Sprintf(" %s %s ", icon, t.notification.Message)
-	style := lipgloss.NewStyle().
+	style := toastBaseStyle.
 		Background(color).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		MaxWidth(maxWidth).
-		Padding(0, 1)
+		MaxWidth(maxWidth)
 	return style.Render(label)
 }
 
