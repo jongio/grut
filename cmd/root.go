@@ -168,7 +168,7 @@ Environment:
 				undoMgr = git.NewUndoManager(client)
 			}
 
-			layout.RegisterDefaults(reg, cfg, gc, th)
+			layout.RegisterDefaults(cmd.Context(), reg, cfg, gc, th)
 
 			// Create session manager and attempt to restore previous session.
 			sessMgr := session.NewManager()

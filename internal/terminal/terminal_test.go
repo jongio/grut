@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"runtime"
@@ -230,7 +231,7 @@ func TestDefaultShell(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewCreatesRunningProcess(t *testing.T) {
-	term, err := New("", 100)
+	term, err := New(context.Background(), "", 100)
 	require.NoError(t, err)
 	defer func() { _ = term.Close() }()
 
@@ -245,13 +246,13 @@ func TestNewCreatesRunningProcess(t *testing.T) {
 }
 
 func TestNewWithInvalidShell(t *testing.T) {
-	_, err := New("/nonexistent/shell/binary", 100)
+	_, err := New(context.Background(), "/nonexistent/shell/binary", 100)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting shell")
 }
 
 func TestWriteAndReadOutput(t *testing.T) {
-	term, err := New("", 100)
+	term, err := New(context.Background(), "", 100)
 	require.NoError(t, err)
 	defer func() { _ = term.Close() }()
 
@@ -279,7 +280,7 @@ func TestWriteAndReadOutput(t *testing.T) {
 }
 
 func TestScrollbackLimitIntegration(t *testing.T) {
-	term, err := New("", 5)
+	term, err := New(context.Background(), "", 5)
 	require.NoError(t, err)
 	defer func() { _ = term.Close() }()
 
@@ -302,7 +303,7 @@ func TestScrollbackLimitIntegration(t *testing.T) {
 }
 
 func TestCloseKillsProcess(t *testing.T) {
-	term, err := New("", 100)
+	term, err := New(context.Background(), "", 100)
 	require.NoError(t, err)
 
 	err = term.Close()
@@ -318,7 +319,7 @@ func TestCloseKillsProcess(t *testing.T) {
 }
 
 func TestDoneSignalsOnExit(t *testing.T) {
-	term, err := New("", 100)
+	term, err := New(context.Background(), "", 100)
 	require.NoError(t, err)
 
 	// Tell the shell to exit.
@@ -337,7 +338,7 @@ func TestDoneSignalsOnExit(t *testing.T) {
 }
 
 func TestWriteAfterClose(t *testing.T) {
-	term, err := New("", 100)
+	term, err := New(context.Background(), "", 100)
 	require.NoError(t, err)
 
 	_ = term.Close()
