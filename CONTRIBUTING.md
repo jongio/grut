@@ -71,6 +71,68 @@ go build ./...
 go test ./...
 ```
 
+#### Test file naming
+
+Test files follow a layered naming scheme so each concern lives in its own
+file:
+
+| Suffix | Purpose | Example |
+|---|---|---|
+| `feature_test.go` | Core unit tests for the happy path and basic error cases | `client_test.go` |
+| `feature_extra_test.go` | Edge cases, coverage gaps, and hardening scenarios | `executor_extra_test.go` |
+| `feature_integration_test.go` | Integration tests that exercise multiple packages together | `undo_integration_test.go` |
+| `feature_bench_test.go` | Benchmarks (`Benchmark*` functions) | `bench_test.go` |
+
+When adding tests, put them in the file that matches their purpose. Create a
+new `_extra_test.go` or `_integration_test.go` file when the existing unit-test
+file would become too large or when the tests have different setup needs.
+
+#### `TestMain` isolation
+
+Packages that shell out to external tools (e.g. `internal/git`,
+`internal/github`) use a `TestMain` function to isolate the test process from
+the host environment:
+
+```go
+func TestMain(m *testing.M) {
+    os.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+    os.Setenv("GIT_CONFIG_GLOBAL", "")
+    os.Setenv("GIT_TERMINAL_PROMPT", "0")
+    os.Exit(m.Run())
+}
+```
+
+This prevents user-level git configuration (GPG signing, credential helpers, LFS
+filters) from causing interactive prompts or hangs during CI. If your package
+invokes an external tool that reads user config, add a `TestMain` with the
+appropriate env-var overrides.
+
+#### Test helpers
+
+Mark reusable test setup functions with `t.Helper()` so that failure messages
+report the caller's line number instead of the helper's:
+
+```go
+func setupTestRepo(t *testing.T) string {
+    t.Helper()
+    dir := t.TempDir()
+    // ... init a git repo ...
+    return dir
+}
+```
+
+Use `t.TempDir()` for throwaway directories (cleaned up automatically) and
+`t.Setenv()` for scoped environment changes.
+
+#### Running tests
+
+| Command | What it does |
+|---|---|
+| `go test ./...` | Run all unit tests |
+| `go test -race ./...` | Run with the race detector |
+| `go test -bench=. ./internal/ai/` | Run benchmarks in a specific package |
+| `mage preflight` | Full 14-step preflight (see below) |
+
 ### Full Preflight Check
 
 Run all checks before submitting a PR:
