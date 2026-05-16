@@ -52,7 +52,7 @@ func NewCopilotProvider(model string) (*CopilotProvider, error) {
 }
 
 // Name returns "copilot".
-func (p *CopilotProvider) Name() string { return "copilot" }
+func (p *CopilotProvider) Name() string { return providerCopilot }
 
 // Available reports whether the Copilot SDK can authenticate. It lazily
 // starts the underlying CLI client and queries auth status.
@@ -273,7 +273,7 @@ func (p *CopilotProvider) buildPrompt(req CompletionRequest) string {
 // eventToResponse converts a SDK SessionEvent into a CompletionResponse.
 func eventToResponse(event *copilot.SessionEvent) CompletionResponse {
 	resp := CompletionResponse{
-		FinishReason: "stop",
+		FinishReason: finishReasonStop,
 		Metadata:     map[string]string{"provider": "copilot-sdk"},
 	}
 	if event == nil {

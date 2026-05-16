@@ -524,7 +524,7 @@ func TestForConflict_ExcludesRedacted(t *testing.T) {
 	writeTestFile(t, root, "secret.key", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> br\n")
 
 	mock := newMock("main", root)
-	redactor := NewRedactor([]string{"*.key"})
+	redactor := NewRedactor([]string{patternKeyFile})
 
 	b := NewBuilder(mock, redactor, 0)
 	gc, err := b.ForConflict(context.Background(), []string{"ok.go", "secret.key"})
@@ -725,7 +725,7 @@ func TestFilterDiffs_ExcludesPattern(t *testing.T) {
 
 	diffs := []git.FileDiff{
 		{Path: "main.go"},
-		{Path: ".env"},
+		{Path: patternDotEnv},
 		{Path: "app.go"},
 	}
 
@@ -740,7 +740,7 @@ func TestFilterDiffs_NilRedactor(t *testing.T) {
 	// created with built-in patterns, so .env files are still filtered.
 	b := NewBuilder(&mockGitClient{}, nil, 0)
 
-	diffs := []git.FileDiff{{Path: ".env"}, {Path: "main.go"}}
+	diffs := []git.FileDiff{{Path: patternDotEnv}, {Path: "main.go"}}
 	filtered := b.filterDiffs(diffs)
 	require.Len(t, filtered, 1, ".env should be excluded by default redactor")
 	assert.Equal(t, "main.go", filtered[0].Path)
@@ -939,8 +939,8 @@ func TestParseConflictMarkers_EmptyConflict(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRegistryPrimaryName(t *testing.T) {
-	r := &Registry{primary: "claude"}
-	assert.Equal(t, "claude", r.PrimaryName())
+	r := &Registry{primary: providerClaude}
+	assert.Equal(t, providerClaude, r.PrimaryName())
 }
 
 // ---------------------------------------------------------------------------

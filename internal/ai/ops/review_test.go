@@ -62,7 +62,7 @@ func TestParseFindingsValidJSON(t *testing.T) {
 	require.Len(t, findings, 1)
 	assert.Equal(t, "main.go", findings[0].File)
 	assert.Equal(t, 10, findings[0].Line)
-	assert.Equal(t, "warning", findings[0].Severity)
+	assert.Equal(t, severityWarning, findings[0].Severity)
 	assert.Equal(t, "style", findings[0].Category)
 	assert.Equal(t, "unused import", findings[0].Message)
 	assert.Equal(t, "remove it", findings[0].Suggestion)
@@ -107,15 +107,15 @@ func TestParseFindingsWhitespace(t *testing.T) {
 
 func TestSortFindingsBySeverity(t *testing.T) {
 	findings := []ReviewFinding{
-		{Severity: "hint", Message: "hint-1"},
-		{Severity: "error", Message: "error-1"},
-		{Severity: "info", Message: "info-1"},
-		{Severity: "warning", Message: "warning-1"},
-		{Severity: "error", Message: "error-2"},
+		{Severity: severityHint, Message: "hint-1"},
+		{Severity: severityError, Message: "error-1"},
+		{Severity: severityInfo, Message: "info-1"},
+		{Severity: severityWarning, Message: "warning-1"},
+		{Severity: severityError, Message: "error-2"},
 	}
 	sortFindings(findings)
 
-	expected := []string{"error", "error", "warning", "info", "hint"}
+	expected := []string{severityError, severityError, severityWarning, severityInfo, severityHint}
 	for i, f := range findings {
 		assert.Equal(t, expected[i], f.Severity, "index %d", i)
 	}
@@ -123,9 +123,9 @@ func TestSortFindingsBySeverity(t *testing.T) {
 
 func TestSortFindingsStableOrder(t *testing.T) {
 	findings := []ReviewFinding{
-		{Severity: "error", Message: "first"},
-		{Severity: "error", Message: "second"},
-		{Severity: "error", Message: "third"},
+		{Severity: severityError, Message: "first"},
+		{Severity: severityError, Message: "second"},
+		{Severity: severityError, Message: "third"},
 	}
 	sortFindings(findings)
 
@@ -137,13 +137,13 @@ func TestSortFindingsStableOrder(t *testing.T) {
 func TestSortFindingsUnknownSeverity(t *testing.T) {
 	findings := []ReviewFinding{
 		{Severity: "unknown", Message: "unknown"},
-		{Severity: "error", Message: "error"},
-		{Severity: "hint", Message: "hint"},
+		{Severity: severityError, Message: "error"},
+		{Severity: severityHint, Message: "hint"},
 	}
 	sortFindings(findings)
 
-	assert.Equal(t, "error", findings[0].Severity)
-	assert.Equal(t, "hint", findings[1].Severity)
+	assert.Equal(t, severityError, findings[0].Severity)
+	assert.Equal(t, severityHint, findings[1].Severity)
 	assert.Equal(t, "unknown", findings[2].Severity)
 }
 
@@ -174,8 +174,8 @@ func TestReviewReturnsFindings(t *testing.T) {
 	require.Len(t, findings, 2)
 
 	// Verify sorted: error before info.
-	assert.Equal(t, "error", findings[0].Severity)
-	assert.Equal(t, "info", findings[1].Severity)
+	assert.Equal(t, severityError, findings[0].Severity)
+	assert.Equal(t, severityInfo, findings[1].Severity)
 }
 
 func TestReviewEmptyDiff(t *testing.T) {
@@ -275,13 +275,13 @@ func TestNewReviewer(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSeverityRankKnown(t *testing.T) {
-	assert.Equal(t, 0, severityRank("error"))
-	assert.Equal(t, 1, severityRank("warning"))
-	assert.Equal(t, 2, severityRank("info"))
-	assert.Equal(t, 3, severityRank("hint"))
+	assert.Equal(t, 0, severityRank(severityError))
+	assert.Equal(t, 1, severityRank(severityWarning))
+	assert.Equal(t, 2, severityRank(severityInfo))
+	assert.Equal(t, 3, severityRank(severityHint))
 }
 
 func TestSeverityRankUnknown(t *testing.T) {
 	rank := severityRank("critical")
-	assert.Greater(t, rank, severityRank("hint"), "unknown severity should sort after hint")
+	assert.Greater(t, rank, severityRank(severityHint), "unknown severity should sort after hint")
 }

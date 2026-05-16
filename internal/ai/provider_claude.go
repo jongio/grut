@@ -60,7 +60,7 @@ func NewClaudeProvider(model string, maxTokens int) *ClaudeProvider {
 }
 
 // Name returns "claude".
-func (p *ClaudeProvider) Name() string { return "claude" }
+func (p *ClaudeProvider) Name() string { return providerClaude }
 
 // Available reports true when the ANTHROPIC_API_KEY env var is set.
 func (p *ClaudeProvider) Available(_ context.Context) (bool, error) {
@@ -147,13 +147,13 @@ func (p *ClaudeProvider) convertMessages(msgs []ChatMessage) []anthropic.Message
 
 	for _, msg := range msgs {
 		switch msg.Role {
-		case "user":
+		case roleUser:
 			result = append(
 				result,
 				anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)),
 			)
 
-		case "assistant":
+		case roleAssistant:
 			if len(msg.ToolCalls) > 0 {
 				blocks := make([]anthropic.ContentBlockParamUnion, 0, len(msg.ToolCalls)+1)
 				if msg.Content != "" {
@@ -234,7 +234,7 @@ func (p *ClaudeProvider) parseResponse(msg *anthropic.Message) CompletionRespons
 	// Map Anthropic stop reasons to grut's finish reasons.
 	switch msg.StopReason {
 	case anthropic.StopReasonEndTurn:
-		resp.FinishReason = "stop"
+		resp.FinishReason = finishReasonStop
 	case anthropic.StopReasonMaxTokens:
 		resp.FinishReason = "length"
 	case anthropic.StopReasonToolUse:
@@ -246,9 +246,9 @@ func (p *ClaudeProvider) parseResponse(msg *anthropic.Message) CompletionRespons
 	// Extract text and tool-use blocks from the response content.
 	for _, block := range msg.Content {
 		switch block.Type {
-		case "text":
+		case blockTypeText:
 			resp.Content += block.Text
-		case "tool_use":
+		case blockTypeToolUse:
 			var args map[string]any
 			if len(block.Input) > 0 {
 				if err := json.Unmarshal(block.Input, &args); err != nil {
@@ -310,7 +310,7 @@ func (p *ClaudeProvider) consumeStream(ctx context.Context, stream *ssestream.St
 			inputTokens = event.Message.Usage.InputTokens
 
 		case "content_block_start":
-			if event.ContentBlock.Type == "tool_use" {
+			if event.ContentBlock.Type == blockTypeToolUse {
 				currentToolID = event.ContentBlock.ID
 				currentToolName = event.ContentBlock.Name
 				currentToolJSON.Reset()
