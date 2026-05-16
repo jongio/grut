@@ -317,6 +317,7 @@ func (p *Agents) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (pane
 	label := fmt.Sprintf("PID:%d %s", p.agents[p.cursor].PID, p.agents[p.cursor].Command)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemAgent, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pendingOp = opRightClickPick
 		return p, cmd
 	}
@@ -326,10 +327,16 @@ func (p *Agents) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (pane
 	return p, nil
 }
 
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Agents) clearPending() {
+	p.pendingOp = ""
+}
+
 // handleModalResult processes the result from the action picker modal.
 func (p *Agents) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pendingOp
-	p.pendingOp = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}

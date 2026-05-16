@@ -331,6 +331,7 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 	p.ensureCursorVisible()
 	itemType := actions.ItemExtension
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		return p, rightclick.FirstUseCmd(itemType)
@@ -415,6 +416,7 @@ func (p *Panel) requestRemove() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	name := p.extensions[p.cursor].Manifest.Name
+	p.clearPending()
 	p.pending = opRemove
 	p.pendingName = name
 	return p, notify.ShowConfirm("Remove Extension",
@@ -422,15 +424,22 @@ func (p *Panel) requestRemove() (panels.Panel, tea.Cmd) {
 }
 
 func (p *Panel) requestInstall() (panels.Panel, tea.Cmd) {
+	p.clearPending()
 	p.pending = opInstall
 	return p, notify.ShowInput("Install Extension", "https://github.com/user/extension")
+}
+
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pending = opNone
+	p.pendingName = ""
 }
 
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	name := p.pendingName
-	p.pending = opNone
-	p.pendingName = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -472,6 +481,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := ext.Manifest.Name
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, actions.ItemExtension, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pending = opRightClickPick
 		return p, cmd
 	}

@@ -1539,6 +1539,7 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	label := p.rightClickLabel(item)
 	cmd, directAction := rightclick.Cmd(p.actionsCfg, itemType, label)
 	if cmd != nil {
+		p.clearPending()
 		p.pending = opRightClickPick
 		if item.kind == kindWorktree {
 			p.pendingPath = item.worktree.Path
@@ -1888,6 +1889,7 @@ func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 	}
 	// Check if user has confirmed this action type.
 	if !p.actionsCfg.IsConfirmed(string(itemType)) {
+		p.clearPending()
 		p.pending = opFirstUseConfirm
 		p.pendingName = string(itemType)
 		// Capture path at double-click time so it survives cursor resets
@@ -1959,6 +1961,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 		}
 	case kindStashEntry:
 		s := item.stash
+		p.clearPending()
 		p.pending = opStashAction
 		p.pendingName = fmt.Sprintf("%d", s.Index)
 		return p, notify.ShowInputWithValue("Stash Action",
@@ -2011,6 +2014,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 		}
 	case kindTag, kindRemoteTag:
 		tg := item.tag
+		p.clearPending()
 		p.pending = opTagCheckout
 		p.pendingName = tg.Name
 		return p, notify.ShowConfirm("Checkout Tag",
@@ -2085,6 +2089,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		s := item.stash
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionPromptAction:
+			p.clearPending()
 			p.pending = opStashAction
 			p.pendingName = fmt.Sprintf("%d", s.Index)
 			return p, notify.ShowInputWithValue("Stash Action", "apply, pop, or drop", actionApply)
@@ -2135,6 +2140,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 				return p, nil
 			}
 			ref := item.pr.HeadBranch
+			p.clearPending()
 			p.pending = opBranchCheckout
 			p.pendingName = ref
 			return p, notify.ShowConfirm("Checkout PR Branch", fmt.Sprintf("Switch to branch %q?", ref))
@@ -2186,6 +2192,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		switch action { //nolint:exhaustive // only relevant cases handled
 		case actions.ActionCheckout:
 			tg := item.tag
+			p.clearPending()
 			p.pending = opTagCheckout
 			p.pendingName = tg.Name
 			return p, notify.ShowConfirm("Checkout Tag",
@@ -2268,6 +2275,7 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 			ref = ref[idx+1:]
 		}
 	}
+	p.clearPending()
 	p.pending = opBranchCheckout
 	p.pendingName = ref
 	return p, notify.ShowConfirm("Switch Branch", fmt.Sprintf("Switch to branch %q?", ref))
@@ -2285,6 +2293,7 @@ func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd
 		}
 	}
 	if msg.dirty {
+		p.clearPending()
 		p.pending = opBranchCheckoutStash
 		p.pendingName = msg.ref
 		return p, notify.ShowConfirm("Uncommitted Changes",
@@ -2316,6 +2325,7 @@ func (p *Panel) doReflogCheckout() (panels.Panel, tea.Cmd) {
 	if len(hash) > 10 {
 		hash = hash[:10]
 	}
+	p.clearPending()
 	p.pending = opBranchCheckout
 	p.pendingName = item.reflog.Hash
 	return p, notify.ShowConfirm("Checkout Reflog Entry", fmt.Sprintf("Checkout %s (%s)?", hash, item.reflog.Message))
@@ -2352,15 +2362,19 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 	switch p.activeTab { //nolint:exhaustive // only relevant cases handled
 	case tabBranches:
+		p.clearPending()
 		p.pending = opBranchCreate
 		return p, notify.ShowInput("New Branch", "branch-name")
 	case tabWorktrees:
+		p.clearPending()
 		p.pending = opWorktreeCreate
 		return p, notify.ShowInput("New Worktree Branch", "branch-name")
 	case tabRemotes:
+		p.clearPending()
 		p.pending = opRemoteAdd
 		return p, notify.ShowInput("Remote Name", "remote-name")
 	case tabTags:
+		p.clearPending()
 		p.pending = opTagCreate
 		return p, notify.ShowInput("Tag Name", "tag-name")
 	case tabIssues:
@@ -2392,6 +2406,7 @@ func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Cannot delete current branch", Level: notify.Warn}
 			}
 		}
+		p.clearPending()
 		p.pending = opBranchDelete
 		p.pendingName = b.Name
 		return p, notify.ShowConfirm("Delete Branch", fmt.Sprintf("Delete branch %q?", b.Name))
@@ -2401,16 +2416,19 @@ func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
 		}
 	case kindWorktree:
 		wt := item.worktree
+		p.clearPending()
 		p.pending = opWorktreeDelete
 		p.pendingName = wt.Path
 		return p, notify.ShowConfirm("Remove Worktree", fmt.Sprintf("Remove worktree at %q?", wt.Path))
 	case kindRemote:
 		r := item.remote
+		p.clearPending()
 		p.pending = opRemoteDelete
 		p.pendingName = r.Name
 		return p, notify.ShowConfirm("Remove Remote", fmt.Sprintf("Remove remote %q?", r.Name))
 	case kindTag:
 		tg := item.tag
+		p.clearPending()
 		p.pending = opTagDelete
 		p.pendingName = tg.Name
 		return p, notify.ShowConfirm("Delete Tag", fmt.Sprintf("Delete tag %q?", tg.Name))
@@ -2432,6 +2450,7 @@ func (p *Panel) doRename() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Cannot rename remote branch", Level: notify.Warn}
 		}
 	}
+	p.clearPending()
 	p.pending = opBranchRename
 	p.pendingName = b.Name
 	return p, notify.ShowInput("Rename Branch", b.Name)
@@ -2533,13 +2552,20 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Modal result handling
 // ---------------------------------------------------------------------------
+
+// clearPending resets all pending-operation state so that no stale values
+// leak across interactions. Call this before setting new pending state.
+func (p *Panel) clearPending() {
+	p.pending = opNone
+	p.pendingName = ""
+	p.pendingPath = ""
+}
+
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	name := p.pendingName
 	pendingPath := p.pendingPath
-	p.pending = opNone
-	p.pendingName = ""
-	p.pendingPath = ""
+	p.clearPending()
 	if !msg.Accept {
 		return p, nil
 	}
@@ -4624,6 +4650,7 @@ func (p *Panel) doWorkflowDispatch() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	wf := items[cursor].workflow
+	p.clearPending()
 	p.pending = opWorkflowDispatch
 	p.pendingName = fmt.Sprintf("%d:%s", wf.ID, wf.Name)
 	branch := p.currentBranch()
@@ -4721,6 +4748,7 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	}
 
 	// Store PR details for multi-step flow.
+	p.clearPending()
 	p.pending = opPRMergeStrategy
 	p.pendingName = fmt.Sprintf("%d:%s:%s", pr.Number, pr.HeadBranch, pr.Title)
 
@@ -5262,6 +5290,7 @@ func (p *Panel) doTagPush() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	tg := item.tag
+	p.clearPending()
 	p.pending = opTagPush
 	p.pendingName = tg.Name
 	return p, notify.ShowConfirm("Push Tag",
@@ -5285,6 +5314,7 @@ func (p *Panel) doTagDelete() (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	tg := item.tag
+	p.clearPending()
 	p.pending = opTagDelete
 	p.pendingName = tg.Name
 	return p, notify.ShowConfirm("Delete Tag", fmt.Sprintf("Delete tag %q?", tg.Name))
