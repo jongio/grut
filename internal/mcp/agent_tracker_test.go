@@ -23,10 +23,7 @@ func sleepCmd() (string, []string) {
 // echoCmd returns a platform-appropriate command that prints output to stdout.
 func echoCmd(text string) (string, []string) {
 	if runtime.GOOS == "windows" {
-		return "powershell", []string{
-			"-NoProfile", "-NonInteractive", "-Command",
-			"Write-Output '" + text + "'",
-		}
+		return "cmd", []string{"/C", "echo", text}
 	}
 	return "echo", []string{text}
 }
