@@ -151,11 +151,13 @@ var oversizedMemoryWASM = []byte{
 }
 
 // wasmManifest returns a minimal manifest for WASM tests.
+// Includes "notify" so that toast host-import calls succeed.
 func wasmManifest() *extension.Manifest {
 	return &extension.Manifest{
-		Name:    "wasm-test",
-		Version: "1.0.0",
-		Runtime: "wasm",
+		Name:        "wasm-test",
+		Version:     "1.0.0",
+		Runtime:     "wasm",
+		Permissions: []string{"notify"},
 	}
 }
 

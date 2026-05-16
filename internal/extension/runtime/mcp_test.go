@@ -19,11 +19,14 @@ import (
 // ---------------------------------------------------------------------------
 
 // newTestManifest returns a minimal valid MCP manifest for testing.
+// Includes the "process" permission required by the MCP runtime's Load
+// method so existing lifecycle tests continue to pass.
 func newTestManifest() *extension.Manifest {
 	return &extension.Manifest{
-		Name:    "test-ext",
-		Version: "1.0.0",
-		Runtime: "mcp",
+		Name:        "test-ext",
+		Version:     "1.0.0",
+		Runtime:     "mcp",
+		Permissions: []string{"process"},
 	}
 }
 

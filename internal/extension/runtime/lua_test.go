@@ -64,11 +64,13 @@ func (m *mockHostAPI) Log(msg string) {
 }
 
 // testManifest returns a minimal valid manifest for test use.
+// Includes "notify" so that grut.toast calls succeed in existing tests.
 func testManifest() *extension.Manifest {
 	return &extension.Manifest{
-		Name:    "test-ext",
-		Version: "1.0.0",
-		Runtime: "lua",
+		Name:        "test-ext",
+		Version:     "1.0.0",
+		Runtime:     "lua",
+		Permissions: []string{"notify"},
 	}
 }
 
