@@ -256,7 +256,7 @@ func TestExitPRFilesMode_Extra(t *testing.T) {
 	ft.prNumber = 42
 	ft.prLabel = "test-pr"
 	ft.prFiles = []panels.PRFile{{Filename: "a.go"}, {Filename: "b.go"}}
-	ft.prChangedPaths = map[string]bool{"a.go": true}
+	ft.prChanged = &changedFiles{paths: map[string]bool{"a.go": true}}
 
 	ft.exitPRFilesMode()
 
@@ -264,7 +264,7 @@ func TestExitPRFilesMode_Extra(t *testing.T) {
 	assert.Equal(t, 0, ft.prNumber)
 	assert.Empty(t, ft.prLabel)
 	assert.Nil(t, ft.prFiles)
-	assert.Nil(t, ft.prChangedPaths)
+	assert.Nil(t, ft.prChanged)
 }
 
 // ---------------------------------------------------------------------------
