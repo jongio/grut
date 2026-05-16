@@ -58,13 +58,13 @@ type panelColors struct {
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
 		Hash:     "#D4B84A",
-		Date:     "#555555",
+		Date:     colorDim,
 		Author:   "#6B9E56",
 		Refs:     "#7A9EBF",
 		Subject:  "#999999",
-		Dim:      "#555555",
+		Dim:      colorDim,
 		CursorBg: "#2A2A2A",
-		Graph:    "#555555",
+		Graph:    colorDim,
 		SearchBg: "#2A2A2A",
 		SearchFg: "#D4D4D4",
 	}
@@ -265,7 +265,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Show commit details", Action: "detail"},
+		{Key: keyEnter, Description: "Show commit details", Action: "detail"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
@@ -742,7 +742,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.moveCursorDown()
 	case "k", "up":
 		p.moveCursorUp()
-	case "enter": //nolint:goconst // inline string is more readable here
+	case keyEnter:
 		p.showDetail()
 	case "pgdown":
 		p.pageDown()
@@ -774,7 +774,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		p.searchMode = false
 		// Keep filter active.
 	case "escape", "esc":
@@ -802,7 +802,7 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "escape", "esc", "enter", "q":
+	case "escape", "esc", keyEnter, "q":
 		p.detailMode = false
 		p.detailLines = nil
 		p.detailOffset = 0

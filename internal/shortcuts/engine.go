@@ -149,10 +149,10 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 	case OpCommit:
 		msg := step.Params[paramMessage]
 		opts := git.CommitOpts{
-			Amend: step.Params[paramAmend] == "true",
+			Amend: step.Params[paramAmend] == valTrue,
 			Fixup: step.Params[paramFixup],
 		}
-		if msg == "" && step.Params[paramAIMessage] != "true" && opts.Fixup == "" {
+		if msg == "" && step.Params[paramAIMessage] != valTrue && opts.Fixup == "" {
 			msg = "auto-commit"
 		}
 		var hash string
@@ -165,8 +165,8 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 		opts := git.PushOpts{
 			Remote:      step.Params[paramRemote],
 			Branch:      step.Params[paramBranch],
-			Force:       step.Params["force"] == "true",
-			SetUpstream: step.Params["set_upstream"] == "true",
+			Force:       step.Params[paramForce] == valTrue,
+			SetUpstream: step.Params[paramSetUpstream] == valTrue,
 		}
 		err = e.git.Push(ctx, opts)
 
@@ -174,15 +174,15 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 		opts := git.PullOpts{
 			Remote: step.Params[paramRemote],
 			Branch: step.Params[paramBranch],
-			Rebase: step.Params[paramRebase] == "true",
+			Rebase: step.Params[paramRebase] == valTrue,
 		}
 		err = e.git.Pull(ctx, opts)
 
 	case OpFetch:
 		opts := git.FetchOpts{
 			Remote: step.Params[paramRemote],
-			All:    step.Params[paramAll] == "true",
-			Prune:  step.Params["prune"] == "true",
+			All:    step.Params[paramAll] == valTrue,
+			Prune:  step.Params[paramPrune] == valTrue,
 		}
 		err = e.git.Fetch(ctx, opts)
 
@@ -193,14 +193,14 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 	case OpMerge:
 		branch := step.Params[paramBranch]
 		opts := git.MergeOpts{
-			Squash:  step.Params[paramSquash] == "true",
-			NoFF:    step.Params["no_ff"] == "true",
+			Squash:  step.Params[paramSquash] == valTrue,
+			NoFF:    step.Params[paramNoFF] == valTrue,
 			Message: step.Params[paramMessage],
 		}
 		err = e.git.Merge(ctx, branch, opts)
 
 	case OpCheckout:
-		ref := step.Params["ref"]
+		ref := step.Params[paramRef]
 		err = e.git.Checkout(ctx, ref)
 
 	case OpBranch:
@@ -211,8 +211,8 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 	case OpReset:
 		// Reset is implemented via Unstage for mixed, or requires
 		// checkout for soft. We map to available git client ops.
-		mode := step.Params["mode"]
-		ref := step.Params["ref"]
+		mode := step.Params[paramMode]
+		ref := step.Params[paramRef]
 		switch mode {
 		case resetModeSoft:
 			err = e.git.Checkout(ctx, ref)
@@ -229,7 +229,7 @@ func (e *Engine) executeStep(ctx context.Context, step Step) StepResult {
 		}
 
 	case OpDelete:
-		if step.Params[paramMerged] == "true" {
+		if step.Params[paramMerged] == valTrue {
 			err = e.deletemergedBranches(ctx)
 		} else {
 			branch := step.Params[paramBranch]
@@ -271,7 +271,7 @@ func (e *Engine) deletemergedBranches(ctx context.Context) error {
 		if b.IsCurrent || b.IsRemote {
 			continue
 		}
-		if b.Name == "main" || b.Name == "master" || b.Name == protectedDevelop {
+		if b.Name == branchMain || b.Name == protectedMaster || b.Name == protectedDevelop {
 			continue
 		}
 		if err := e.git.BranchDelete(ctx, b.Name, false); err != nil {

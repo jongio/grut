@@ -39,7 +39,7 @@ func scShortcut() Shortcut {
 		Confirm:     true,
 		Steps: []Step{
 			{Op: OpStage, Params: map[string]string{paramPaths: "."}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCommit, Params: map[string]string{paramAIMessage: "true"}, OnFail: OnFailStop, AIAssist: true},
+			{Op: OpCommit, Params: map[string]string{paramAIMessage: valTrue}, OnFail: OnFailStop, AIAssist: true},
 		},
 	}
 }
@@ -53,7 +53,7 @@ func scpShortcut() Shortcut {
 		Confirm:     true,
 		Steps: []Step{
 			{Op: OpStage, Params: map[string]string{paramPaths: "."}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCommit, Params: map[string]string{paramAIMessage: "true"}, OnFail: OnFailStop, AIAssist: true},
+			{Op: OpCommit, Params: map[string]string{paramAIMessage: valTrue}, OnFail: OnFailStop, AIAssist: true},
 			{Op: OpPush, Params: map[string]string{}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
@@ -68,7 +68,7 @@ func amendShortcut() Shortcut {
 		Confirm:     true,
 		Steps: []Step{
 			{Op: OpStage, Params: map[string]string{paramPaths: "."}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCommit, Params: map[string]string{paramAmend: "true"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCommit, Params: map[string]string{paramAmend: valTrue}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -95,7 +95,7 @@ func undoShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpReset, Params: map[string]string{"ref": refHeadTilde1, "mode": resetModeSoft}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpReset, Params: map[string]string{paramRef: refHeadTilde1, paramMode: resetModeSoft}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -108,7 +108,7 @@ func unstageShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     false,
 		Steps: []Step{
-			{Op: OpReset, Params: map[string]string{"ref": refHead, "mode": resetModeMixed}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpReset, Params: map[string]string{paramRef: refHead, paramMode: resetModeMixed}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -122,7 +122,7 @@ func rbShortcut() Shortcut {
 		Confirm:     true,
 		Args: []Arg{
 			{Name: paramRemote, Default: refOrigin, Prompt: "Remote name"},
-			{Name: paramBranch, Default: "main", Prompt: "Branch to rebase onto", Required: true},
+			{Name: paramBranch, Default: branchMain, Prompt: "Branch to rebase onto", Required: true},
 		},
 		Steps: []Step{
 			{Op: OpFetch, Params: map[string]string{paramRemote: placeholderRemote}, OnFail: OnFailStop, AIAssist: false},
@@ -139,7 +139,7 @@ func syncShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpFetch, Params: map[string]string{paramAll: "true"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpFetch, Params: map[string]string{paramAll: valTrue}, OnFail: OnFailStop, AIAssist: false},
 			{Op: OpRebase, Params: map[string]string{paramOnto: "upstream/main"}, OnFail: OnFailAsk, AIAssist: true},
 		},
 	}
@@ -154,7 +154,7 @@ func pullShortcut() Shortcut {
 		Confirm:     false,
 		Steps: []Step{
 			{Op: OpFetch, Params: map[string]string{paramRemote: refOrigin}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpPull, Params: map[string]string{paramRebase: "true"}, OnFail: OnFailAsk, AIAssist: true},
+			{Op: OpPull, Params: map[string]string{paramRebase: valTrue}, OnFail: OnFailAsk, AIAssist: true},
 		},
 	}
 }
@@ -168,12 +168,12 @@ func nbShortcut() Shortcut {
 		Confirm:     false,
 		Args: []Arg{
 			{Name: paramName, Prompt: "New branch name", Required: true},
-			{Name: paramBase, Default: "main", Prompt: "Base branch"},
+			{Name: paramBase, Default: branchMain, Prompt: "Base branch"},
 		},
 		Steps: []Step{
 			{Op: OpFetch, Params: map[string]string{paramRemote: refOrigin}, OnFail: OnFailContinue, AIAssist: false},
 			{Op: OpBranch, Params: map[string]string{paramName: "{{name}}", paramBase: "origin/{{base}}"}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCheckout, Params: map[string]string{"ref": "{{name}}"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: "{{name}}"}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -186,10 +186,10 @@ func doneShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Args: []Arg{
-			{Name: paramTarget, Default: "main", Prompt: "Branch to merge into"},
+			{Name: paramTarget, Default: branchMain, Prompt: "Branch to merge into"},
 		},
 		Steps: []Step{
-			{Op: OpCheckout, Params: map[string]string{"ref": placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
 			{Op: OpMerge, Params: map[string]string{paramBranch: refPrevBranch}, OnFail: OnFailAsk, AIAssist: true},
 			{Op: OpDelete, Params: map[string]string{paramBranch: refPrevBranch}, OnFail: OnFailContinue, AIAssist: false},
 		},
@@ -204,8 +204,8 @@ func cleanupShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpFetch, Params: map[string]string{"prune": "true"}, OnFail: OnFailContinue, AIAssist: false},
-			{Op: OpDelete, Params: map[string]string{paramMerged: "true"}, OnFail: OnFailContinue, AIAssist: false},
+			{Op: OpFetch, Params: map[string]string{paramPrune: valTrue}, OnFail: OnFailContinue, AIAssist: false},
+			{Op: OpDelete, Params: map[string]string{paramMerged: valTrue}, OnFail: OnFailContinue, AIAssist: false},
 		},
 	}
 }
@@ -218,8 +218,8 @@ func upShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     false,
 		Steps: []Step{
-			{Op: OpFetch, Params: map[string]string{paramAll: "true"}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpPull, Params: map[string]string{paramRebase: "true"}, OnFail: OnFailAsk, AIAssist: true},
+			{Op: OpFetch, Params: map[string]string{paramAll: valTrue}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpPull, Params: map[string]string{paramRebase: valTrue}, OnFail: OnFailAsk, AIAssist: true},
 		},
 	}
 }
@@ -236,7 +236,7 @@ func reviewShortcut() Shortcut {
 		},
 		Steps: []Step{
 			{Op: OpFetch, Params: map[string]string{paramRemote: refOrigin}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCheckout, Params: map[string]string{"ref": "{{branch}}"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: "{{branch}}"}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -252,7 +252,7 @@ func prShortcut() Shortcut {
 			{Name: paramRemote, Default: refOrigin, Prompt: "Remote to push to"},
 		},
 		Steps: []Step{
-			{Op: OpPush, Params: map[string]string{paramRemote: placeholderRemote, "set_upstream": "true"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpPush, Params: map[string]string{paramRemote: placeholderRemote, paramSetUpstream: valTrue}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -265,11 +265,11 @@ func shipShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Args: []Arg{
-			{Name: paramTarget, Default: "main", Prompt: "Branch to merge into"},
+			{Name: paramTarget, Default: branchMain, Prompt: "Branch to merge into"},
 		},
 		Steps: []Step{
-			{Op: OpCheckout, Params: map[string]string{"ref": placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpMerge, Params: map[string]string{paramBranch: refPrevBranch, "no_ff": "true"}, OnFail: OnFailAsk, AIAssist: true},
+			{Op: OpCheckout, Params: map[string]string{paramRef: placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpMerge, Params: map[string]string{paramBranch: refPrevBranch, paramNoFF: valTrue}, OnFail: OnFailAsk, AIAssist: true},
 			{Op: OpPush, Params: map[string]string{}, OnFail: OnFailStop, AIAssist: false},
 			{Op: OpDelete, Params: map[string]string{paramBranch: refPrevBranch}, OnFail: OnFailContinue, AIAssist: false},
 		},
@@ -279,17 +279,17 @@ func shipShortcut() Shortcut {
 // squash: squash-merge current branch into target with AI commit message.
 func squashShortcut() Shortcut {
 	return Shortcut{
-		Name:        "squash",
+		Name:        paramSquash,
 		Description: "Squash-merge current branch into target with AI commit message",
 		Builtin:     true,
 		Confirm:     true,
 		Args: []Arg{
-			{Name: paramTarget, Default: "main", Prompt: "Branch to squash into"},
+			{Name: paramTarget, Default: branchMain, Prompt: "Branch to squash into"},
 		},
 		Steps: []Step{
-			{Op: OpCheckout, Params: map[string]string{"ref": placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpMerge, Params: map[string]string{paramBranch: refPrevBranch, paramSquash: "true"}, OnFail: OnFailAsk, AIAssist: true},
-			{Op: OpCommit, Params: map[string]string{paramAIMessage: "true"}, OnFail: OnFailStop, AIAssist: true},
+			{Op: OpCheckout, Params: map[string]string{paramRef: placeholderTarget}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpMerge, Params: map[string]string{paramBranch: refPrevBranch, paramSquash: valTrue}, OnFail: OnFailAsk, AIAssist: true},
+			{Op: OpCommit, Params: map[string]string{paramAIMessage: valTrue}, OnFail: OnFailStop, AIAssist: true},
 			{Op: OpDelete, Params: map[string]string{paramBranch: refPrevBranch}, OnFail: OnFailContinue, AIAssist: false},
 		},
 	}
@@ -303,8 +303,8 @@ func tidyShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpFetch, Params: map[string]string{paramAll: "true", "prune": "true"}, OnFail: OnFailContinue, AIAssist: false},
-			{Op: OpDelete, Params: map[string]string{paramMerged: "true"}, OnFail: OnFailContinue, AIAssist: false},
+			{Op: OpFetch, Params: map[string]string{paramAll: valTrue, paramPrune: valTrue}, OnFail: OnFailContinue, AIAssist: false},
+			{Op: OpDelete, Params: map[string]string{paramMerged: valTrue}, OnFail: OnFailContinue, AIAssist: false},
 		},
 	}
 }
@@ -317,7 +317,7 @@ func nukeShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpReset, Params: map[string]string{"ref": refHead, "mode": resetModeHard}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpReset, Params: map[string]string{paramRef: refHead, paramMode: resetModeHard}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -330,7 +330,7 @@ func discardShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Steps: []Step{
-			{Op: OpCheckout, Params: map[string]string{"ref": "."}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: "."}, OnFail: OnFailStop, AIAssist: false},
 		},
 	}
 }
@@ -343,7 +343,7 @@ func saveShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     false,
 		Steps: []Step{
-			{Op: OpStash, Params: map[string]string{paramAIMessage: "true"}, OnFail: OnFailStop, AIAssist: true},
+			{Op: OpStash, Params: map[string]string{paramAIMessage: valTrue}, OnFail: OnFailStop, AIAssist: true},
 		},
 	}
 }
@@ -370,13 +370,13 @@ func freshShortcut() Shortcut {
 		Builtin:     true,
 		Confirm:     true,
 		Args: []Arg{
-			{Name: paramBase, Default: "main", Prompt: "Default branch to sync from"},
+			{Name: paramBase, Default: branchMain, Prompt: "Default branch to sync from"},
 		},
 		Steps: []Step{
 			{Op: OpStash, Params: map[string]string{}, OnFail: OnFailContinue, AIAssist: false},
-			{Op: OpCheckout, Params: map[string]string{"ref": "{{base}}"}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpPull, Params: map[string]string{paramRebase: "true"}, OnFail: OnFailStop, AIAssist: false},
-			{Op: OpCheckout, Params: map[string]string{"ref": "-"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: "{{base}}"}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpPull, Params: map[string]string{paramRebase: valTrue}, OnFail: OnFailStop, AIAssist: false},
+			{Op: OpCheckout, Params: map[string]string{paramRef: "-"}, OnFail: OnFailStop, AIAssist: false},
 			{Op: OpRebase, Params: map[string]string{paramOnto: "{{base}}"}, OnFail: OnFailAsk, AIAssist: true},
 			{Op: OpStashPop, Params: map[string]string{}, OnFail: OnFailContinue, AIAssist: false},
 		},

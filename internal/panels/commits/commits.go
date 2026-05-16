@@ -310,7 +310,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Move cursor down", Action: "cursor_down"},
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
-		{Key: "enter", Description: "Show commit details", Action: "detail"},
+		{Key: keyEnter, Description: "Show commit details", Action: "detail"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
@@ -776,7 +776,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.moveCursorDown()
 	case "k", "up":
 		p.moveCursorUp()
-	case "enter": //nolint:goconst // inline string is more readable here
+	case keyEnter:
 		return p.selectCommit()
 	case "pgdown":
 		p.pageDown()
@@ -821,7 +821,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		p.searchMode = false
 	case "esc":
 		p.searchMode = false
@@ -846,7 +846,7 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 func (p *Panel) handleDetailKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "enter", "q":
+	case "esc", keyEnter, "q":
 		p.detailMode = false
 		p.detailLines = nil
 		p.detailOffset = 0
@@ -1106,7 +1106,7 @@ func relativeDate(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return labelJustNow
 	case d < time.Hour:
 		m := int(d.Minutes())
 		if m == 1 {

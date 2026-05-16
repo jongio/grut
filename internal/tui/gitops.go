@@ -97,7 +97,7 @@ func (m Model) executeCommit(commitMsg string) (tea.Model, tea.Cmd) {
 				Type:      pendingActionCommit,
 				RefBefore: hash,
 				Metadata: map[string]string{
-					"message": commitMsg,
+					metaKeyMessage: commitMsg,
 				},
 			})
 		}
@@ -169,7 +169,7 @@ func (m Model) executeAmend(commitMsg string) (tea.Model, tea.Cmd) {
 				Type:      pendingActionAmend,
 				RefBefore: hash,
 				Metadata: map[string]string{
-					"message": commitMsg,
+					metaKeyMessage: commitMsg,
 				},
 			})
 		}
@@ -208,7 +208,7 @@ func (m Model) executeReword(commitMsg string) (tea.Model, tea.Cmd) {
 				Type:      pendingActionReword,
 				RefBefore: hash,
 				Metadata: map[string]string{
-					"message": commitMsg,
+					metaKeyMessage: commitMsg,
 				},
 			})
 		}
@@ -238,7 +238,7 @@ func (m Model) handlePush() (tea.Model, tea.Cmd) {
 
 	return m, func() tea.Msg {
 		err := gc.Push(ctx, git.PushOpts{})
-		return panels.AsyncOpDoneMsg{Description: "push", Err: err}
+		return panels.AsyncOpDoneMsg{Description: actionPush, Err: err}
 	}
 }
 
@@ -278,7 +278,7 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 
 	return m, func() tea.Msg {
 		err := gc.Fetch(ctx, git.FetchOpts{All: true, Prune: true})
-		return panels.AsyncOpDoneMsg{Description: "fetch", Err: err}
+		return panels.AsyncOpDoneMsg{Description: actionFetch, Err: err}
 	}
 }
 

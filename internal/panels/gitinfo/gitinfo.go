@@ -316,7 +316,7 @@ func (f IssueFilterKind) String() string {
 	case issueFilterCreated:
 		return "Created"
 	default:
-		return "All"
+		return labelAll
 	}
 }
 
@@ -337,9 +337,9 @@ func (f PRFilterKind) String() string {
 	case prFilterMine:
 		return "Mine"
 	case prFilterDraft:
-		return "Draft"
+		return labelDraft
 	default:
-		return "All"
+		return labelAll
 	}
 }
 
@@ -490,33 +490,33 @@ type panelColors struct {
 
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
-		Current:    "#6B9E56",
+		Current:    colorGreen,
 		Local:      "#D4D4D4",
-		Remote:     "#C9A227",
+		Remote:     colorYellow,
 		Header:     "#7A9EBF",
-		Hash:       "#555555",
+		Hash:       colorGray,
 		CursorBg:   "#2A2A2A",
-		Dim:        "#555555",
-		Worktree:   "#C9875A",
-		RemoteC:    "#C9A227",
-		URL:        "#555555",
+		Dim:        colorGray,
+		Worktree:   colorOrange,
+		RemoteC:    colorYellow,
+		URL:        colorGray,
 		Issue:      "#D4D4D4",
-		PR:         "#6B9E56",
+		PR:         colorGreen,
 		PRConflict: "#C44B4B",
 		PRUnstable: "#D4B84A",
-		PRBlocked:  "#C9875A",
-		PRUnknown:  "#555555",
+		PRBlocked:  colorOrange,
+		PRUnknown:  colorGray,
 		PRClosed:   "#8B3A3A",
-		PRDraft:    "#C9875A",
-		PRMerged:   "#C9A227",
-		ActionOK:   "#6B9E56",
+		PRDraft:    colorOrange,
+		PRMerged:   colorYellow,
+		ActionOK:   colorGreen,
 		ActionFail: "#C44B4B",
 		ActionRun:  "#D4B84A",
-		Tag:        "#C9A227",
-		RemoteTag:  "#C9A227",
-		Release:    "#6B9E56",
-		RelDraft:   "#555555",
-		RelPre:     "#C9875A",
+		Tag:        colorYellow,
+		RemoteTag:  colorYellow,
+		Release:    colorGreen,
+		RelDraft:   colorGray,
+		RelPre:     colorOrange,
 		Workflow:   "#7A9EBF",
 	}
 	if th != nil {
@@ -658,23 +658,23 @@ func (p *Panel) tabBarHeight() int {
 // Valid names: "branches", "worktrees", "remotes", "stash", "tags", "reflog", "issues", "prs", "actions".
 func (p *Panel) SetActiveTab(name string) {
 	switch name {
-	case "branches":
+	case sectionBranches:
 		p.activeTab = tabBranches
-	case "worktrees":
+	case sectionWorktrees:
 		p.activeTab = tabWorktrees
-	case "remotes":
+	case sectionRemotes:
 		p.activeTab = tabRemotes
-	case "stash":
+	case sectionStash:
 		p.activeTab = tabStash
-	case "tags":
+	case sectionTags:
 		p.activeTab = tabTags
-	case "reflog":
+	case sectionReflog:
 		p.activeTab = tabReflog
-	case "issues":
+	case sectionIssues:
 		p.activeTab = tabIssues
-	case "prs":
+	case sectionPRs:
 		p.activeTab = tabPRs
-	case "actions":
+	case sectionActions:
 		p.activeTab = tabActions
 	case "workflows":
 		p.activeTab = tabWorkflows
@@ -687,7 +687,7 @@ func (p *Panel) SetActiveTab(name string) {
 // worktrees, remotes, stash, tags, reflog).
 func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string, th *theme.Theme) *Panel {
 	return &Panel{
-		BasePanel:  panels.BasePanel{PanelTitle: "gitinfo"},
+		BasePanel:  panels.BasePanel{PanelTitle: panelGitinfo},
 		mode:       ModeGit,
 		git:        gitOps,
 		cfg:        cfg,
@@ -879,7 +879,7 @@ func (p *Panel) githubPollTickCmd() tea.Cmd {
 	d := time.Duration(p.ghCfg.PollInterval) * time.Second
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return panels.TargetedPanelMsg{
-			Target: "gitinfo",
+			Target: panelGitinfo,
 			Inner:  githubPollTickMsg{t},
 		}
 	})
@@ -894,7 +894,7 @@ func (p *Panel) actionsWatchTickCmd() tea.Cmd {
 	}
 	return tea.Tick(actionsWatchTickInterval, func(t time.Time) tea.Msg {
 		return panels.TargetedPanelMsg{
-			Target: "gitinfo",
+			Target: panelGitinfo,
 			Inner:  actionsWatchTickMsg{t},
 		}
 	})
@@ -1147,7 +1147,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 	name := msg.name
 	cmds := []tea.Cmd{p.loadData()}
 	switch op {
-	case "checkout":
+	case opCheckout:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
@@ -1164,19 +1164,19 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Stashed changes, switched to " + name, Level: notify.Success}
 			},
 		)
-	case "branch_created":
+	case eventBranchCreated:
 		cmds = append(cmds, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Branch created: " + name, Level: notify.Success}
 		})
-	case "branch_deleted":
+	case eventBranchDeleted:
 		cmds = append(cmds, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Branch deleted: " + name, Level: notify.Success}
 		})
-	case "branch_renamed":
+	case eventBranchRenamed:
 		cmds = append(cmds, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Branch renamed to: " + name, Level: notify.Success}
 		})
-	case "worktree_added":
+	case eventWorktreeAdded:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -1184,7 +1184,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Worktree created: " + name, Level: notify.Success}
 			},
 		)
-	case "worktree_removed":
+	case eventWorktreeRemoved:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -1192,11 +1192,11 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Worktree removed: " + name, Level: notify.Success}
 			},
 		)
-	case "worktree_switch":
+	case eventWorktreeSwitch:
 		cmds = append(cmds, func() tea.Msg {
 			return panels.ChangeDirectoryMsg{Path: name}
 		})
-	case "remote_added":
+	case eventRemoteAdded:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.RemoteChangedMsg{} },
@@ -1204,7 +1204,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Remote added: " + name, Level: notify.Success}
 			},
 		)
-	case "remote_removed":
+	case eventRemoteRemoved:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.RemoteChangedMsg{} },
@@ -1212,11 +1212,11 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Remote removed: " + name, Level: notify.Success}
 			},
 		)
-	case "fetched":
+	case opFetched:
 		cmds = append(cmds, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Fetched: " + name, Level: notify.Success}
 		})
-	case "stash_applied":
+	case eventStashApplied:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
@@ -1224,7 +1224,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Applied " + name, Level: notify.Success}
 			},
 		)
-	case "stash_popped":
+	case eventStashPopped:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
@@ -1232,7 +1232,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Popped " + name, Level: notify.Success}
 			},
 		)
-	case "stash_dropped":
+	case eventStashDropped:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.StashChangedMsg{} },
@@ -1240,7 +1240,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Dropped " + name, Level: notify.Success}
 			},
 		)
-	case "tag_created":
+	case eventTagCreated:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
@@ -1248,7 +1248,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Tag created: " + name, Level: notify.Success}
 			},
 		)
-	case "tag_deleted":
+	case eventTagDeleted:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
@@ -1256,7 +1256,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Tag deleted: " + name, Level: notify.Success}
 			},
 		)
-	case "tag_pushed":
+	case eventTagPushed:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.TagChangedMsg{} },
@@ -1264,7 +1264,7 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Tag pushed: " + name, Level: notify.Success}
 			},
 		)
-	case "tag_checkout":
+	case eventTagCheckout:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
@@ -1616,12 +1616,12 @@ func (p *Panel) handleTabBarClick(col int) {
 		id          tabID
 	}
 	tabs := []tabEntry{
-		{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-		{id: tabWorktrees, name: "Worktrees", short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
-		{id: tabRemotes, name: "Remotes", short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
-		{id: tabStash, name: "Stash", short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
-		{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
-		{id: tabReflog, name: "Reflog", short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
+		{id: tabBranches, name: labelBranches, short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+		{id: tabWorktrees, name: labelWorktrees, short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
+		{id: tabRemotes, name: labelRemotes, short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
+		{id: tabStash, name: labelStash, short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
+		{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+		{id: tabReflog, name: labelReflog, short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
 	}
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
@@ -1962,7 +1962,7 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 		p.pending = opStashAction
 		p.pendingName = fmt.Sprintf("%d", s.Index)
 		return p, notify.ShowInputWithValue("Stash Action",
-			"apply, pop, or drop", "apply")
+			"apply, pop, or drop", actionApply)
 	case kindIssue:
 		url := item.issue.HTMLURL
 		if url == "" {
@@ -2087,24 +2087,24 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionPromptAction:
 			p.pending = opStashAction
 			p.pendingName = fmt.Sprintf("%d", s.Index)
-			return p, notify.ShowInputWithValue("Stash Action", "apply, pop, or drop", "apply")
+			return p, notify.ShowInputWithValue("Stash Action", "apply, pop, or drop", actionApply)
 		case actions.ActionApply:
 			idx := s.Index
 			return p, func() tea.Msg {
 				err := p.git.StashApply(p.ctx, idx)
-				return opResultMsg{op: "stash_applied", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashApplied, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
 		case actions.ActionPop:
 			idx := s.Index
 			return p, func() tea.Msg {
 				err := p.git.StashPop(p.ctx, idx)
-				return opResultMsg{op: "stash_popped", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashPopped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
 		case actions.ActionDrop:
 			idx := s.Index
 			return p, func() tea.Msg {
 				err := p.git.StashDrop(p.ctx, idx)
-				return opResultMsg{op: "stash_dropped", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashDropped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
 		}
 	case kindIssue:
@@ -2281,7 +2281,7 @@ func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd
 		ref := msg.ref
 		return p, func() tea.Msg {
 			err := g.Checkout(ctx, ref)
-			return opResultMsg{op: "checkout", name: ref, err: err}
+			return opResultMsg{op: opCheckout, name: ref, err: err}
 		}
 	}
 	if msg.dirty {
@@ -2301,7 +2301,7 @@ func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd
 			}
 		}()
 		err := g.Checkout(ctx, ref)
-		return opResultMsg{op: "checkout", name: ref, err: err}
+		return opResultMsg{op: opCheckout, name: ref, err: err}
 	}
 }
 
@@ -2335,7 +2335,7 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 		}
 		path = wt.Path
 	}
-	if p.cfg.WorktreeOpenMode == "new_terminal" {
+	if p.cfg.WorktreeOpenMode == openModeNewTerminal {
 		return p, func() tea.Msg {
 			if err := panels.OpenInTerminal(path); err != nil {
 				errMsg := err.Error()
@@ -2345,7 +2345,7 @@ func (p *Panel) requestWorktreeSwitch() (panels.Panel, tea.Cmd) {
 		}
 	}
 	return p, func() tea.Msg {
-		return opResultMsg{op: "worktree_switch", name: path}
+		return opResultMsg{op: eventWorktreeSwitch, name: path}
 	}
 }
 
@@ -2514,7 +2514,7 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 			},
 			func() tea.Msg {
 				err := g.Fetch(ctx, git.FetchOpts{Remote: name, Prune: true})
-				return opResultMsg{op: "fetched", name: name, err: err}
+				return opResultMsg{op: opFetched, name: name, err: err}
 			},
 		)
 	}
@@ -2525,7 +2525,7 @@ func (p *Panel) doFetch() (panels.Panel, tea.Cmd) {
 		},
 		func() tea.Msg {
 			err := g.Fetch(ctx, git.FetchOpts{All: true, Prune: true})
-			return opResultMsg{op: "fetched", name: "all remotes", err: err}
+			return opResultMsg{op: opFetched, name: "all remotes", err: err}
 		},
 	)
 }
@@ -2553,12 +2553,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		}
 		return p, func() tea.Msg {
 			err := g.BranchCreate(ctx, newName, "")
-			return opResultMsg{op: "branch_created", name: newName, err: err}
+			return opResultMsg{op: eventBranchCreated, name: newName, err: err}
 		}
 	case opBranchDelete:
 		return p, func() tea.Msg {
 			err := g.BranchDelete(ctx, name, false)
-			return opResultMsg{op: "branch_deleted", name: name, err: err}
+			return opResultMsg{op: eventBranchDeleted, name: name, err: err}
 		}
 	case opBranchRename:
 		newName := strings.TrimSpace(msg.Value)
@@ -2567,7 +2567,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		}
 		return p, func() tea.Msg {
 			err := g.BranchRename(ctx, name, newName)
-			return opResultMsg{op: "branch_renamed", name: newName, err: err}
+			return opResultMsg{op: eventBranchRenamed, name: newName, err: err}
 		}
 	case opWorktreeCreate:
 		branch := strings.TrimSpace(msg.Value)
@@ -2577,12 +2577,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		path := worktreePath(p.repoRoot, branch)
 		return p, func() tea.Msg {
 			err := g.WorktreeAdd(ctx, path, branch)
-			return opResultMsg{op: "worktree_added", name: branch, err: err}
+			return opResultMsg{op: eventWorktreeAdded, name: branch, err: err}
 		}
 	case opWorktreeDelete:
 		return p, func() tea.Msg {
 			err := g.WorktreeRemove(ctx, name, false)
-			return opResultMsg{op: "worktree_removed", name: name, err: err}
+			return opResultMsg{op: eventWorktreeRemoved, name: name, err: err}
 		}
 	case opRemoteAdd:
 		remoteName := strings.TrimSpace(msg.Value)
@@ -2601,12 +2601,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		remoteName := name
 		return p, func() tea.Msg {
 			err := g.RemoteAdd(ctx, remoteName, url)
-			return opResultMsg{op: "remote_added", name: remoteName, err: err}
+			return opResultMsg{op: eventRemoteAdded, name: remoteName, err: err}
 		}
 	case opRemoteDelete:
 		return p, func() tea.Msg {
 			err := g.RemoteRemove(ctx, name)
-			return opResultMsg{op: "remote_removed", name: name, err: err}
+			return opResultMsg{op: eventRemoteRemoved, name: name, err: err}
 		}
 	case opBranchCheckout:
 		ref := name
@@ -2632,12 +2632,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			}()
 			err := g.StashPush(ctx, git.StashOpts{Message: "grut: auto-stash before switching to " + ref})
 			if err != nil {
-				return opResultMsg{op: "checkout", name: ref, err: fmt.Errorf("stash failed: %w", err)}
+				return opResultMsg{op: opCheckout, name: ref, err: fmt.Errorf("stash failed: %w", err)}
 			}
 			err = g.Checkout(ctx, ref)
 			if err != nil {
 				_ = g.StashPop(ctx, 0) // restore stash on checkout failure
-				return opResultMsg{op: "checkout", name: ref, err: err}
+				return opResultMsg{op: opCheckout, name: ref, err: err}
 			}
 			return opResultMsg{op: "checkout_stashed", name: ref}
 		}
@@ -2648,20 +2648,20 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 			return p, nil
 		}
 		switch action {
-		case "apply", "a":
+		case actionApply, "a":
 			return p, func() tea.Msg {
 				err := g.StashApply(ctx, idx)
-				return opResultMsg{op: "stash_applied", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashApplied, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
-		case "pop", "p":
+		case actionPop, "p":
 			return p, func() tea.Msg {
 				err := g.StashPop(ctx, idx)
-				return opResultMsg{op: "stash_popped", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashPopped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
-		case "drop", "d":
+		case actionDrop, "d":
 			return p, func() tea.Msg {
 				err := g.StashDrop(ctx, idx)
-				return opResultMsg{op: "stash_dropped", name: fmt.Sprintf("stash@{%d}", idx), err: err}
+				return opResultMsg{op: eventStashDropped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
 			}
 		default:
 			return p, func() tea.Msg {
@@ -2690,23 +2690,23 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		message := strings.TrimSpace(msg.Value)
 		return p, func() tea.Msg {
 			err := g.TagCreate(ctx, tagName, "", message)
-			return opResultMsg{op: "tag_created", name: tagName, err: err}
+			return opResultMsg{op: eventTagCreated, name: tagName, err: err}
 		}
 	case opTagDelete:
 		return p, func() tea.Msg {
 			err := g.TagDelete(ctx, name)
-			return opResultMsg{op: "tag_deleted", name: name, err: err}
+			return opResultMsg{op: eventTagDeleted, name: name, err: err}
 		}
 	case opTagPush:
 		tagName := name
 		return p, func() tea.Msg {
 			err := g.TagPush(ctx, "origin", tagName)
-			return opResultMsg{op: "tag_pushed", name: tagName, err: err}
+			return opResultMsg{op: eventTagPushed, name: tagName, err: err}
 		}
 	case opTagCheckout:
 		return p, func() tea.Msg {
 			err := g.Checkout(ctx, name)
-			return opResultMsg{op: "tag_checkout", name: name, err: err}
+			return opResultMsg{op: eventTagCheckout, name: name, err: err}
 		}
 	case opWorkflowDispatch:
 		// Step 1 complete: got the ref. Fetch workflow inputs before
@@ -3088,12 +3088,12 @@ func (p *Panel) renderTabBar(width int) string {
 		return lipgloss.NewStyle().MaxWidth(width).Render(line)
 	}
 	gitTabs := []tabDef{
-		{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-		{id: tabWorktrees, name: "Worktrees", short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
-		{id: tabRemotes, name: "Remotes", short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
-		{id: tabStash, name: "Stash", short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
-		{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
-		{id: tabReflog, name: "Reflog", short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
+		{id: tabBranches, name: labelBranches, short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+		{id: tabWorktrees, name: labelWorktrees, short: "Wt", count: fmt.Sprintf("%d", len(p.tabItems[tabWorktrees]))},
+		{id: tabRemotes, name: labelRemotes, short: "Rm", count: fmt.Sprintf("%d", p.remoteCount)},
+		{id: tabStash, name: labelStash, short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
+		{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+		{id: tabReflog, name: labelReflog, short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
 	}
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()
@@ -3106,17 +3106,17 @@ func (p *Panel) renderTabBar(width int) string {
 		prsCount = p.prFilter.String()
 	}
 	ghTabs := []tabDef{
-		{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
-		{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
-		{id: tabActions, name: "Actions", short: "Act", count: actionsCount},
+		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
+		{id: tabPRs, name: labelPRs, short: shortPRs, count: prsCount},
+		{id: tabActions, name: labelActions, short: shortAct, count: actionsCount},
 		{id: tabWorkflows, name: "Workflows", short: "Wf", count: p.ghTabCountStr(tabWorkflows)},
 		{id: tabReleases, name: "Releases", short: "Rel", count: p.ghTabCountStr(tabReleases)},
 	}
 	// In ModeGitHub, prepend Branches and Tags to the GitHub tab row.
 	if p.mode == ModeGitHub {
 		ghTabs = append([]tabDef{
-			{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-			{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+			{id: tabBranches, name: labelBranches, short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+			{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		}, ghTabs...)
 	}
 	switch p.mode {
@@ -3377,8 +3377,8 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 	if p.mode == ModeGitHub {
 		tabs = append(
 			tabs,
-			tabEntry{id: tabBranches, name: "Branches", short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
-			tabEntry{id: tabTags, name: "Tags", short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
+			tabEntry{id: tabBranches, name: labelBranches, short: "Br", count: fmt.Sprintf("%d", len(p.tabItems[tabBranches]))},
+			tabEntry{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		)
 	}
 	issuesCount := fmt.Sprintf("%d", len(p.tabItems[tabIssues]))
@@ -3391,9 +3391,9 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 	}
 	tabs = append(
 		tabs,
-		tabEntry{id: tabIssues, name: "Issues", short: "Iss", count: issuesCount},
-		tabEntry{id: tabPRs, name: "PRs", short: "PRs", count: prsCount},
-		tabEntry{id: tabActions, name: "Actions", short: "Act", count: p.actionsStatusIcon()},
+		tabEntry{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
+		tabEntry{id: tabPRs, name: labelPRs, short: shortPRs, count: prsCount},
+		tabEntry{id: tabActions, name: labelActions, short: shortAct, count: p.actionsStatusIcon()},
 		tabEntry{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
 		tabEntry{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
 	)
@@ -3513,7 +3513,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 			for _, pr := range prs {
 				state := pr.GetState()
 				if pr.GetDraft() {
-					state = "draft" //nolint:goconst // inline string is more readable here
+					state = stateDraft //nolint:goconst // inline string is more readable here
 				}
 				if pr.GetMerged() {
 					state = prStateMerged
@@ -3800,7 +3800,7 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 		for _, ghPR := range prs {
 			state := ghPR.GetState()
 			if ghPR.GetDraft() {
-				state = "draft"
+				state = stateDraft
 			}
 			if ghPR.GetMerged() {
 				state = prStateMerged
@@ -4186,7 +4186,7 @@ func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
 	filter := p.issueFilter.String()
 	return p, func() tea.Msg {
 		return panels.GitHubFilterChangedMsg{
-			Tab:    "issues",
+			Tab:    sectionIssues,
 			Filter: filter,
 		}
 	}
@@ -4198,7 +4198,7 @@ func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
 	filter := p.prFilter.String()
 	return p, func() tea.Msg {
 		return panels.GitHubFilterChangedMsg{
-			Tab:    "prs",
+			Tab:    sectionPRs,
 			Filter: filter,
 		}
 	}
@@ -4253,7 +4253,7 @@ func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
 	case prFilterMine:
 		return pr.Author == p.ghUser
 	case prFilterDraft:
-		return pr.State == "draft"
+		return pr.State == stateDraft
 	default:
 		return true
 	}
@@ -4502,7 +4502,7 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 	// Auto-fetch logs for the first failed job.
 	if p.ghClient != nil {
 		for _, j := range jobs {
-			if j.Conclusion == "failure" {
+			if j.Conclusion == conclusionFailure {
 				cmds = append(cmds, p.loadActionLog(runID, j.ID))
 				break // only fetch logs for the first failed job
 			}
@@ -4684,12 +4684,12 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 // mergeStrategyLabel returns a human-readable label for a merge strategy ID.
 func mergeStrategyLabel(strategy string) string {
 	switch strategy {
-	case "squash":
+	case strategySquash:
 		return "squash and merge"
-	case "rebase":
+	case strategyRebase:
 		return "rebase and merge"
 	default:
-		return "merge commit"
+		return mergeCommitLabel
 	}
 }
 
@@ -4708,7 +4708,7 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	if pr.State != prStateOpen {
 		stateLabel := pr.State
 		if stateLabel == "" {
-			stateLabel = "unknown"
+			stateLabel = stateUnknown
 		}
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{
@@ -4727,9 +4727,9 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	p.pendingName = fmt.Sprintf("%d:%s:%s", pr.Number, pr.HeadBranch, pr.Title)
 
 	mergeActions := []notify.ActionOption{
-		{ID: "merge", Label: "Merge commit"},
-		{ID: "squash", Label: "Squash and merge"},
-		{ID: "rebase", Label: "Rebase and merge"},
+		{ID: strategyMerge, Label: "Merge commit"},
+		{ID: strategySquash, Label: "Squash and merge"},
+		{ID: strategyRebase, Label: "Rebase and merge"},
 	}
 
 	title := fmt.Sprintf("Merge PR #%d", pr.Number)
@@ -4903,21 +4903,21 @@ func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 // mergeable status, using the given color palette.
 func prColorFrom(c panelColors, pr ghPRItem) string {
 	switch pr.State {
-	case "draft":
+	case stateDraft:
 		return c.PRDraft
 	case prStateMerged:
 		return c.PRMerged
-	case "closed":
+	case stateClosed:
 		return c.PRClosed
 	default: // prStateOpen
 		switch pr.MergeableState {
-		case "dirty":
+		case stateDirty:
 			return c.PRConflict
 		case "unstable":
 			return c.PRUnstable
 		case "blocked":
 			return c.PRBlocked
-		case "unknown":
+		case stateUnknown:
 			return c.PRUnknown
 		default: // "clean" or ""
 			return c.PR
@@ -5081,10 +5081,10 @@ func (p *Panel) renderWorkflow(item listItem, width int, isCursor bool) string {
 	var icon string
 	var fg string
 	switch wf.State {
-	case "active":
+	case stateActive:
 		icon = "●"
 		fg = p.colors.Workflow
-	case "disabled_manually", "disabled_inactivity":
+	case stateDisabledManually, stateDisabledInactivity:
 		icon = "○"
 		fg = p.colors.Dim
 	default:
@@ -5297,14 +5297,14 @@ func (p *Panel) doTagDelete() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // worktreePath computes the worktree directory for a branch following the
 // convention: <parent>/.worktrees/<repo-name>/<branch-slug>
-// currentBranch returns the name of the current (checked-out) branch, or "main" as fallback.
+// currentBranch returns the name of the current (checked-out) branch, or branchMain as fallback.
 func (p *Panel) currentBranch() string {
 	for _, item := range p.tabItems[tabBranches] {
 		if item.kind == kindLocalBranch && item.branch.IsCurrent {
 			return item.branch.Name
 		}
 	}
-	return "main"
+	return branchMain
 }
 
 // worktreePath is an alias to the canonical implementation in the git package.

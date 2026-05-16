@@ -11,7 +11,7 @@ import (
 // newVersionCmd creates the version command.
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
+		Use:   cmdVersion,
 		Short: "Print the version of grut",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println(config.AppVersion)

@@ -146,7 +146,7 @@ var sensitiveExtensions = map[string]bool{
 
 // sensitiveExactNames are exact basenames of files that must be blocked.
 var sensitiveExactNames = map[string]bool{
-	"id_rsa":           true,
+	patternIDRSA:       true,
 	"id_ed25519":       true,
 	"id_ecdsa":         true,
 	".npmrc":           true,
@@ -191,7 +191,7 @@ func isSensitiveBasename(base string) bool {
 	}
 
 	// .env or .env.* pattern.
-	if lower == ".env" || strings.HasPrefix(lower, ".env.") {
+	if lower == patternDotEnv || strings.HasPrefix(lower, patternDotEnv+".") {
 		return true
 	}
 

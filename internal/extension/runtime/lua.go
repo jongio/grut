@@ -185,7 +185,7 @@ func (r *LuaRuntime) registerHostAPI() {
 func (r *LuaRuntime) luaToast(l *lua.LState) int {
 	title := l.CheckString(1)
 	message := l.CheckString(2)
-	level := l.OptString(3, "info")
+	level := l.OptString(3, logInfo)
 	r.hostAPI.ShowToast(title, message, level)
 	return 0
 }

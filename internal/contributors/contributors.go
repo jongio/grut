@@ -58,6 +58,9 @@ func defaultGitRunner(ctx context.Context, repoDir string, args ...string) (stri
 	return string(out), nil
 }
 
+// refHEAD is the default git ref used when no explicit ToRef is provided.
+const refHEAD = "HEAD"
+
 // Options configures contributor extraction.
 type Options struct {
 	// RepoDir is the repository root. Defaults to "." if empty.
@@ -90,7 +93,7 @@ func (o *Options) repoDir() string {
 func (o *Options) refRange() string {
 	to := o.ToRef
 	if to == "" {
-		to = "HEAD"
+		to = refHEAD
 	}
 	if o.FromRef == "" {
 		return to
@@ -271,7 +274,7 @@ func MarkFirstTimers(contributors []Contributor, opts Options) error {
 func ExtractAll(opts Options) ([]Contributor, error) {
 	allOpts := Options{
 		RepoDir: opts.RepoDir,
-		ToRef:   "HEAD",
+		ToRef:   refHEAD,
 		gitRun:  opts.gitRun,
 	}
 	return Extract(allOpts)

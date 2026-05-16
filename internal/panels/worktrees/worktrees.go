@@ -76,7 +76,7 @@ type worktreesLoadedMsg struct {
 // worktreeOpResultMsg carries the result of a worktree operation.
 type worktreeOpResultMsg struct {
 	err  error
-	op   string // "created", "removed", "pruned"
+	op   string // opCreated, opRemoved, "pruned"
 	name string // branch or path involved
 }
 
@@ -290,7 +290,7 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 	name := msg.name
 	cmds := []tea.Cmd{p.loadWorktrees()}
 	switch op {
-	case "created":
+	case opCreated:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -298,7 +298,7 @@ func (p *Panel) handleOpResult(msg worktreeOpResultMsg) (panels.Panel, tea.Cmd) 
 				return notify.ShowToastMsg{Message: "Worktree created for " + name, Level: notify.Success}
 			},
 		)
-	case "removed":
+	case opRemoved:
 		cmds = append(
 			cmds,
 			func() tea.Msg { return panels.WorktreeChangedMsg{} },
@@ -600,12 +600,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		wtPath := worktreePath(p.repoRoot, branch)
 		return p, func() tea.Msg {
 			err := g.WorktreeAdd(ctx, wtPath, branch)
-			return worktreeOpResultMsg{op: "created", name: branch, err: err}
+			return worktreeOpResultMsg{op: opCreated, name: branch, err: err}
 		}
 	case opDelete:
 		return p, func() tea.Msg {
 			err := g.WorktreeRemove(ctx, pendingPath, false)
-			return worktreeOpResultMsg{op: "removed", name: filepath.Base(pendingPath), err: err}
+			return worktreeOpResultMsg{op: opRemoved, name: filepath.Base(pendingPath), err: err}
 		}
 	case opPrune:
 		return p.pruneAllMissing()

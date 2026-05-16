@@ -44,6 +44,9 @@ func (c *clientImpl) GetWorkflowInputs(ctx context.Context, owner, repo, path, r
 	return inputs, nil
 }
 
+// fieldType is the YAML key for an input's type property.
+const fieldType = "type"
+
 // parseWorkflowInputs extracts workflow_dispatch input definitions from
 // a GitHub Actions workflow YAML file. It uses yaml.Node traversal to
 // handle all variants of the "on" key (string, array, mapping) and the
@@ -97,7 +100,7 @@ func parseWorkflowInputs(yamlContent []byte) ([]WorkflowInput, error) {
 					input.Required = val.Value == "true"
 				case "default":
 					input.Default = val.Value
-				case "type":
+				case fieldType:
 					input.Type = val.Value
 				case "options":
 					if val.Kind == yaml.SequenceNode {

@@ -177,6 +177,6 @@ func levelToString(level uint32) string {
 	case toastLevelError:
 		return "error"
 	default:
-		return "info"
+		return logInfo
 	}
 }

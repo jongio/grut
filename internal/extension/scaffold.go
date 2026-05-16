@@ -55,20 +55,20 @@ func mustReadTemplate(path string) string {
 func loadBuiltinTemplates() []Template {
 	return []Template{
 		{
-			Name:        "lua",
+			Name:        extTypeLua,
 			Description: "Lua scripting extension",
-			Runtime:     "lua",
+			Runtime:     extTypeLua,
 			Files: map[string]string{
-				"extension.toml": mustReadTemplate("templates/lua/extension.toml"),
+				configFile: mustReadTemplate("templates/lua/extension.toml"),
 				"init.lua":       mustReadTemplate("templates/lua/init.lua"),
 			},
 		},
 		{
 			Name:        "wasm-go",
 			Description: "WebAssembly extension built with TinyGo",
-			Runtime:     "wasm",
+			Runtime:     extTypeWasm,
 			Files: map[string]string{
-				"extension.toml": mustReadTemplate("templates/wasm-go/extension.toml"),
+				configFile: mustReadTemplate("templates/wasm-go/extension.toml"),
 				"main.go":        mustReadTemplate("templates/wasm-go/main.go.tmpl"),
 				"Makefile":       mustReadTemplate("templates/wasm-go/Makefile"),
 				"README.md":      mustReadTemplate("templates/wasm-go/README.md"),
@@ -77,9 +77,9 @@ func loadBuiltinTemplates() []Template {
 		{
 			Name:        "mcp-python",
 			Description: "Python MCP server extension",
-			Runtime:     "mcp",
+			Runtime:     extTypeMCP,
 			Files: map[string]string{
-				"extension.toml":   mustReadTemplate("templates/mcp-python/extension.toml"),
+				configFile:         mustReadTemplate("templates/mcp-python/extension.toml"),
 				"server.py":        mustReadTemplate("templates/mcp-python/server.py"),
 				"requirements.txt": mustReadTemplate("templates/mcp-python/requirements.txt"),
 			},
@@ -87,9 +87,9 @@ func loadBuiltinTemplates() []Template {
 		{
 			Name:        "mcp-node",
 			Description: "Node.js MCP server extension",
-			Runtime:     "mcp",
+			Runtime:     extTypeMCP,
 			Files: map[string]string{
-				"extension.toml": mustReadTemplate("templates/mcp-node/extension.toml"),
+				configFile: mustReadTemplate("templates/mcp-node/extension.toml"),
 				"server.js":      mustReadTemplate("templates/mcp-node/server.js"),
 				"package.json":   mustReadTemplate("templates/mcp-node/package.json"),
 			},

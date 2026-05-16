@@ -216,10 +216,10 @@ func registerGitOpsTools(s *Server) {
 		mcplib.NewTool(
 			"git_stash_push",
 			mcplib.WithDescription("Stash the current working directory changes"),
-			mcplib.WithString("message", mcplib.Description("Stash message")),
+			mcplib.WithString(fieldMessage, mcplib.Description("Stash message")),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-			msg := req.GetString("message", "")
+			msg := req.GetString(fieldMessage, "")
 			if msg != "" {
 				if err := validateGitMessage(msg); err != nil {
 					return mcplib.NewToolResultErrorf("invalid stash message: %v", err), nil
@@ -303,7 +303,7 @@ func registerGitOpsTools(s *Server) {
 			mcplib.WithDescription("Create a new tag"),
 			mcplib.WithString("name", mcplib.Required(), mcplib.Description("Tag name")),
 			mcplib.WithString("ref", mcplib.Description("Ref to tag (default HEAD)")),
-			mcplib.WithString("message", mcplib.Description("Annotation message (creates annotated tag if provided)")),
+			mcplib.WithString(fieldMessage, mcplib.Description("Annotation message (creates annotated tag if provided)")),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			name, err := req.RequireString("name")
@@ -311,7 +311,7 @@ func registerGitOpsTools(s *Server) {
 				return mcplib.NewToolResultError("name is required"), nil //nolint:nilerr // error returned as MCP tool result
 			}
 			ref := req.GetString("ref", "")
-			message := req.GetString("message", "")
+			message := req.GetString(fieldMessage, "")
 			if message != "" {
 				if err := validateGitMessage(message); err != nil {
 					return mcplib.NewToolResultErrorf("invalid tag message: %v", err), nil
@@ -513,10 +513,10 @@ func registerGitOpsTools(s *Server) {
 		mcplib.NewTool(
 			"git_revert",
 			mcplib.WithDescription("Create a new commit that undoes the changes from a given commit"),
-			mcplib.WithString("hash", mcplib.Required(), mcplib.Description("Commit hash to revert")),
+			mcplib.WithString(paramHash, mcplib.Required(), mcplib.Description("Commit hash to revert")),
 		),
 		func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-			hash, err := req.RequireString("hash")
+			hash, err := req.RequireString(paramHash)
 			if err != nil {
 				return mcplib.NewToolResultError("hash is required"), nil //nolint:nilerr // error returned as MCP tool result
 			}

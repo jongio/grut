@@ -180,7 +180,7 @@ func (p *Panel) View(width, height int) string {
 	previewLabel := positionLabel(p.previewPos)
 	themeLabel := p.themeName
 	if themeLabel == "" {
-		themeLabel = "default"
+		themeLabel = labelDefault
 	}
 	rendered := []string{
 		emptyLine,
@@ -474,7 +474,7 @@ func cyclePreviewPosition(current layout.PreviewPosition) layout.PreviewPosition
 func positionLabel(pos layout.PreviewPosition) string {
 	switch pos {
 	case layout.PreviewRight:
-		return "Right"
+		return labelRight
 	case layout.PreviewBottom:
 		return "Bottom"
 	case layout.PreviewLeft:
@@ -482,7 +482,7 @@ func positionLabel(pos layout.PreviewPosition) string {
 	case layout.PreviewTop:
 		return "Top"
 	default:
-		return "Right"
+		return labelRight
 	}
 }
 
@@ -492,7 +492,7 @@ func (p *Panel) cycleTheme(current string) string {
 		return current
 	}
 	if current == "" {
-		current = "default"
+		current = labelDefault
 	}
 	for i, name := range p.themeNames {
 		if name == current {

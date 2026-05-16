@@ -122,7 +122,7 @@ func loadGitIgnore(root string) *ignore.GitIgnore {
 		patterns = append(patterns, lines...)
 	}
 	// Also read .git/info/exclude if it exists.
-	exclude := filepath.Join(root, ".git", "info", "exclude")
+	exclude := filepath.Join(root, dirGit, "info", "exclude")
 	if _, err := os.Stat(exclude); err == nil {
 		patterns = append(patterns, readIgnoreLines(exclude)...)
 	}
@@ -158,7 +158,7 @@ var nonNavigableDirs = map[string]bool{
 	"node_modules": true,
 	"vendor":       true,
 	"__pycache__":  true,
-	".git":         true,
+	dirGit:         true,
 	"dist":         true,
 	"build":        true,
 	".next":        true,
@@ -198,7 +198,7 @@ func (fs *FileSource) Items() []Item {
 		}
 		name := d.Name()
 		// Always skip .git directory.
-		if name == ".git" && d.IsDir() {
+		if name == dirGit && d.IsDir() {
 			return filepath.SkipDir
 		}
 		// Skip hidden directories and files.
@@ -229,7 +229,7 @@ func (fs *FileSource) Items() []Item {
 		}
 		items = append(items, Item{
 			Text:     rel,
-			Category: "file",
+			Category: categoryFile,
 			Value:    path,
 		})
 		return nil
@@ -287,7 +287,7 @@ func (ds *DirectorySource) Items() []Item {
 		}
 		name := d.Name()
 		// Always skip .git directory regardless of .gitignore.
-		if name == ".git" && d.IsDir() {
+		if name == dirGit && d.IsDir() {
 			return filepath.SkipDir
 		}
 		// Skip hidden directories (except root itself).
@@ -375,7 +375,7 @@ func (cs *CommandSource) Items() []Item {
 		items = append(items, Item{
 			Text:        b.Action,
 			Description: desc,
-			Category:    "command",
+			Category:    categoryCommand,
 			Value:       b.Action,
 		})
 	}

@@ -112,7 +112,7 @@ func dirtyGuardCmd(p *Preview, action string) tea.Cmd {
 			Actions: []notify.ActionOption{
 				{ID: "save_" + action, Label: "Save & " + action},
 				{ID: "discard_" + action, Label: "Discard"},
-				{ID: "cancel", Label: "Cancel"},
+				{ID: actionCancel, Label: "Cancel"},
 			},
 		}
 	}
@@ -128,7 +128,7 @@ func handleModalResult(p *Preview, msg notify.ModalResultMsg) (panels.Panel, tea
 	}
 	value := msg.Value
 	switch {
-	case value == "cancel":
+	case value == actionCancel:
 		return p, nil
 	case strings.HasPrefix(value, "save_"):
 		// Save, then perform the action.
