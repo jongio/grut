@@ -519,7 +519,12 @@ func (c *AIGitClient) logAudit(operation, result string, opErr error) {
 		errMsg := opErr.Error()
 		if c.builder != nil {
 			redactor := ai.NewRedactor(nil)
-			errMsg, _ = redactor.RedactContent(errMsg)
+			redacted, _, redactErr := redactor.RedactContent(errMsg)
+			if redactErr != nil {
+				errMsg = ai.RedactionFailedPlaceholder
+			} else {
+				errMsg = redacted
+			}
 		}
 		entry.Error = errMsg
 	}

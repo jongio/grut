@@ -86,7 +86,7 @@ func TestSecurityNoSecretSurvivesRedaction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.NotContains(t, got, tt.mustRedact,
 				"secret pattern %q should have been redacted", tt.mustRedact)
 			assert.Contains(t, got, RedactedPlaceholder)
@@ -117,7 +117,7 @@ func TestSecurityAllSecretsRedactedInComposite(t *testing.T) {
 		"# End of config",
 	}, "\n")
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	// Every secret type must be redacted.
 	secretFragments := []string{
@@ -165,7 +165,7 @@ func TestSecurityNonSecretsPreserved(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.Equal(t, tt.input, got,
 				"non-secret content should pass through unchanged")
 			assert.Equal(t, 0, count)
@@ -245,7 +245,7 @@ func TestSecurityRedactionPlaceholderConsistency(t *testing.T) {
 	}
 
 	for _, input := range inputs {
-		got, count := r.RedactContent(input)
+		got, count, _ := r.RedactContent(input)
 		if count > 0 {
 			assert.Contains(t, got, RedactedPlaceholder,
 				"all redactions must use the canonical RedactedPlaceholder")

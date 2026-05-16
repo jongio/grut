@@ -416,25 +416,25 @@ func TestIntegration_Redactor_FileExclusion_And_ContentRedaction(t *testing.T) {
 	assert.False(t, redactor.ShouldExcludeFile("README.md"))
 
 	// Content redaction: AWS key.
-	redacted, count := redactor.RedactContent(`token = "AKIA1234567890ABCDEF"`)
+	redacted, count, _ := redactor.RedactContent(`token = "AKIA1234567890ABCDEF"`)
 	assert.Greater(t, count, 0)
 	assert.Contains(t, redacted, ai.RedactedPlaceholder)
 	assert.NotContains(t, redacted, "AKIA1234567890ABCDEF")
 
 	// Content redaction: GitHub token.
-	redacted, count = redactor.RedactContent(`GH_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn`)
+	redacted, count, _ = redactor.RedactContent(`GH_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn`)
 	assert.Greater(t, count, 0)
 	assert.Contains(t, redacted, ai.RedactedPlaceholder)
 
 	// Content redaction: PEM private key block.
 	pemContent := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z...\n-----END RSA PRIVATE KEY-----"
-	redacted, count = redactor.RedactContent(pemContent)
+	redacted, count, _ = redactor.RedactContent(pemContent)
 	assert.Greater(t, count, 0)
 	assert.NotContains(t, redacted, "BEGIN RSA PRIVATE KEY")
 
 	// Clean content passes through unchanged.
 	cleanContent := "func main() { fmt.Println(\"hello\") }"
-	redacted, count = redactor.RedactContent(cleanContent)
+	redacted, count, _ = redactor.RedactContent(cleanContent)
 	assert.Equal(t, 0, count)
 	assert.Equal(t, cleanContent, redacted)
 }

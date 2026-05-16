@@ -67,7 +67,7 @@ func TestRedactAWSAccessKey(t *testing.T) {
 	r := NewRedactor(nil)
 
 	input := "aws_access_key_id = AKIAIOSFODNN7EXAMPLE and some text"
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "AKIAIOSFODNN7EXAMPLE")
 	assert.Contains(t, got, RedactedPlaceholder)
@@ -88,7 +88,7 @@ YMORn7y8k6P/0LqDx3kTt1z7/cMiRuPQ1Q==
 -----END RSA PRIVATE KEY-----`
 	input := "before\n" + pem + "\nafter"
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "BEGIN RSA PRIVATE KEY")
 	assert.NotContains(t, got, "END RSA PRIVATE KEY")
@@ -106,7 +106,7 @@ func TestRedactPEMBlockECDSA(t *testing.T) {
 MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVxuB1kU7FsJEIaEAA
 -----END EC PRIVATE KEY-----`
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.NotContains(t, got, "BEGIN EC PRIVATE KEY")
 	assert.Equal(t, RedactedPlaceholder, got)
@@ -135,7 +135,7 @@ func TestRedactConnectionStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.NotContains(t, got, tt.gone)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
@@ -167,7 +167,7 @@ func TestRedactGitHubTokens(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			token := tt.prefix + suffix
 			input := "GITHUB_TOKEN=" + token
-			got, count := r.RedactContent(input)
+			got, count, _ := r.RedactContent(input)
 
 			assert.NotContains(t, got, token)
 			assert.Contains(t, got, RedactedPlaceholder)
@@ -195,7 +195,7 @@ func TestRedactAPIKeyAssignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
 		})
@@ -220,7 +220,7 @@ func TestRedactGenericSecretKeywords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)
 		})
@@ -246,7 +246,7 @@ func main() {
 	}
 }
 `
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 
 	assert.Equal(t, input, got)
 	assert.Equal(t, 0, count)
@@ -265,7 +265,7 @@ func TestRedactContentCountAccuracy(t *testing.T) {
 		"db=postgres://user:pass@host:5432/db\n" +
 		"gh=" + ghToken + "\n"
 
-	_, count := r.RedactContent(input)
+	_, count, _ := r.RedactContent(input)
 
 	assert.GreaterOrEqual(t, count, 3, "expected at least 3 redactions")
 }
@@ -321,7 +321,7 @@ func TestNewRedactorNilPatterns(t *testing.T) {
 
 func TestRedactEmptyContent(t *testing.T) {
 	r := NewRedactor(nil)
-	got, count := r.RedactContent("")
+	got, count, _ := r.RedactContent("")
 	assert.Equal(t, "", got)
 	assert.Equal(t, 0, count)
 }
@@ -339,7 +339,7 @@ func TestRedactOverlappingPatterns(t *testing.T) {
 	ghToken := "ghp_" + strings.Repeat("A", 36)
 	input := `token = "` + ghToken + `"`
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 	assert.NotContains(t, got, ghToken)
 	assert.Contains(t, got, RedactedPlaceholder)
 	// At least 1 redaction (may be more if both patterns match).
@@ -355,7 +355,7 @@ func TestRedactMultipleSecretsOnOneLine(t *testing.T) {
 
 	input := "AKIAIOSFODNN7EXAMPLE ghp_" + strings.Repeat("B", 36) + " postgres://user:pass@host/db"
 
-	got, count := r.RedactContent(input)
+	got, count, _ := r.RedactContent(input)
 	assert.NotContains(t, got, "AKIAIOSFODNN7EXAMPLE")
 	assert.NotContains(t, got, "postgres://")
 	assert.GreaterOrEqual(t, count, 3)
@@ -369,7 +369,7 @@ func TestRedactMultipleSecretsOnOneLine(t *testing.T) {
 
 func TestRedactWhitespaceContent(t *testing.T) {
 	r := NewRedactor(nil)
-	got, count := r.RedactContent("   \n\t\n   ")
+	got, count, _ := r.RedactContent("   \n\t\n   ")
 	assert.Equal(t, "   \n\t\n   ", got)
 	assert.Equal(t, 0, count)
 }
@@ -393,7 +393,7 @@ func TestRedactCredentialInURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, count := r.RedactContent(tt.input)
+			got, count, _ := r.RedactContent(tt.input)
 			assert.NotContains(t, got, tt.gone)
 			assert.Contains(t, got, RedactedPlaceholder)
 			assert.GreaterOrEqual(t, count, 1)

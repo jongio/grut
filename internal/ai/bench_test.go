@@ -70,7 +70,7 @@ func BenchmarkRedactContent(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 
@@ -80,7 +80,7 @@ func BenchmarkRedactContent(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 
@@ -90,7 +90,7 @@ func BenchmarkRedactContent(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 }
@@ -102,7 +102,7 @@ func BenchmarkRedactContent_NoMatch(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 
@@ -112,7 +112,7 @@ func BenchmarkRedactContent_NoMatch(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 
@@ -122,7 +122,7 @@ func BenchmarkRedactContent_NoMatch(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			benchResultStr, benchResultInt = r.RedactContent(content)
+			benchResultStr, benchResultInt, _ = r.RedactContent(content)
 		}
 	})
 }
