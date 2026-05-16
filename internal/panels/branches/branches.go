@@ -651,7 +651,7 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 	}
 	branchURL := base + "/tree/" + name
 	return p, func() tea.Msg {
-		if err := panels.OpenInBrowser(branchURL); err != nil {
+		if err := panels.OpenInBrowser(p.ctx, branchURL); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened branch " + name, Level: notify.Info}
