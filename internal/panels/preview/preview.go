@@ -674,26 +674,7 @@ func (p *Preview) loadDiffCmd(path string) tea.Cmd {
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		addedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
-		removedStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
-		headerStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
-		var lines []string
-		for _, d := range diffs {
-			for _, h := range d.Hunks {
-				lines = append(lines, headerStyle.Render(h.Header))
-				for _, l := range h.Lines {
-					switch l.Type {
-					case git.DiffLineAdded:
-						lines = append(lines, addedStyle.Render(l.Content))
-					case git.DiffLineRemoved:
-						lines = append(lines, removedStyle.Render(l.Content))
-					default:
-						lines = append(lines, l.Content)
-					}
-				}
-			}
-		}
-		return diffLoadedMsg{path: path, lines: lines}
+		return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
 	}
 }
 
