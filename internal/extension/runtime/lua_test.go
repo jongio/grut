@@ -276,6 +276,71 @@ func TestLuaRuntime_EntryPointNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "read entry point")
 }
 
+// ---------------------------------------------------------------------------
+// Security: ValidateEntryPoint — path traversal and injection prevention
+// ---------------------------------------------------------------------------
+
+func TestValidateEntryPoint_RejectsPathTraversal(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"unix-traversal", "/ext/../../../etc/passwd"},
+		{"windows-traversal", `C:\ext\..\..\..\Windows\System32\config\SAM`},
+		{"mid-traversal", "extensions/../secret.lua"},
+		{"bare-dotdot", ".."},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEntryPoint(tt.path)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "path traversal")
+		})
+	}
+}
+
+func TestValidateEntryPoint_RejectsNullByte(t *testing.T) {
+	err := ValidateEntryPoint("init\x00.lua")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "null byte")
+}
+
+func TestValidateEntryPoint_RejectsEmpty(t *testing.T) {
+	err := ValidateEntryPoint("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be empty")
+}
+
+func TestValidateEntryPoint_RejectsDashPrefix(t *testing.T) {
+	err := ValidateEntryPoint("/extensions/-malicious.lua")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not start with '-'")
+}
+
+func TestValidateEntryPoint_AcceptsValidPaths(t *testing.T) {
+	valid := []string{
+		"/home/user/.grut/extensions/my-ext/init.lua",
+		`C:\Users\dev\.grut\extensions\my-ext\init.lua`,
+		"extensions/hello/main.lua",
+	}
+	for _, p := range valid {
+		t.Run(p, func(t *testing.T) {
+			assert.NoError(t, ValidateEntryPoint(p))
+		})
+	}
+}
+
+func TestLuaRuntime_LoadRejectsTraversal(t *testing.T) {
+	api := newMockHostAPI()
+	rt, err := NewLuaRuntime(testManifest(), api)
+	require.NoError(t, err)
+	defer rt.Close()
+
+	err = rt.Load("/ext/../../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
 func TestLuaRuntime_Close(t *testing.T) {
 	api := newMockHostAPI()
 	rt, err := NewLuaRuntime(testManifest(), api)

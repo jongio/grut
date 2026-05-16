@@ -170,6 +170,28 @@ func TestValidateSourceURL_EmptyAllowlist(t *testing.T) {
 	assert.Contains(t, err.Error(), "not in the trusted registry")
 }
 
+func TestValidateSourceURL_RejectsFlagInjection(t *testing.T) {
+	t.Parallel()
+	allowed := []string{"github.com"}
+
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"upload-pack", "--upload-pack=evil"},
+		{"single-dash", "-c http.proxy=http://evil"},
+		{"double-dash-flag", "--config=http.proxy=evil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateSourceURL(tt.url, allowed)
+			require.Error(t, err, "URL %q starting with '-' must be rejected", tt.url)
+			assert.Contains(t, err.Error(), "option injection")
+		})
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Install — registry allowlist integration
 // ──────────────────────────────────────────────────────────────────────────

@@ -114,6 +114,9 @@ func TestValidateEditorPath_RejectsShellMetachars(t *testing.T) {
 		{"carriage-return", "file\rmalicious"},
 		{"double-quote", `file"inject`},
 		{"single-quote", "file'inject"},
+		{"percent-env-expand", "%USERPROFILE%"},
+		{"caret-cmd-escape", "^inject"},
+		{"exclamation-delayed-expand", "!var!"},
 	}
 	for _, tt := range dangerous {
 		t.Run(tt.name, func(t *testing.T) {
