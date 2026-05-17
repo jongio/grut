@@ -117,8 +117,48 @@ type node struct {
 	expanded      bool
 }
 
+// viewportState holds cursor position and viewport dimensions used together
+// for scroll/viewport calculations.
+type viewportState struct {
+	cursor int // index into visible
+	offset int // viewport scroll offset
+	width  int
+	height int
+}
+
+// filterState holds all git/commit/PR/branch filter mode fields. These
+// control which subset of files the tree displays.
+type filterState struct {
+	commitChanged *changedFiles // commit-changed files + dirs
+	prChanged     *changedFiles // PR-changed files + dirs
+	branchChanged *changedFiles // branch-changed files + dirs
+	commitHash    string        // short hash for display
+	commitLabel   string        // e.g. "abc1234 Fix auth bug"
+	prLabel       string
+	branchName    string   // selected branch name
+	branchLabel   string   // e.g. "branch: feature/auth"
+	branchBaseRef string   // base ref for branch comparison (e.g., "main")
+	baseBranch    string   // configured default/base branch for "b" toggle
+	commitFiles   []string // relative paths from diff-tree
+	branchFiles   []string // relative paths from branch diff
+	prFiles       []panels.PRFile
+	prNumber      int
+	// Git-aware filtering state.
+	gitFilter bool // when true, only show git-changed files
+	// Commit-files mode: shows files changed by a specific commit.
+	commitFilesMode bool // when true, view shows commit-changed files
+	// PR-files mode: shows files changed in a pull request.
+	prFilesMode bool
+	// Branch-files mode: shows files changed on a selected branch.
+	branchFilesMode bool
+	// Branch-diff filter: user toggled "b" to see origination diff.
+	branchDiffFilter bool
+}
+
 // FileTree is the file explorer panel. It implements [panels.Panel].
 type FileTree struct {
+	viewport viewportState
+	filter   filterState
 	// Right-click action configuration.
 	actionsCfg config.ActionsConfig
 	gitClient  git.StatusReader // git client for fetching status (nil = no git)
@@ -136,46 +176,18 @@ type FileTree struct {
 	gitModeExpanded  map[string]bool   // saved expand state for git mode
 	pending          *pendingOperation // operation awaiting modal confirmation
 	watcher          *watcher          // filesystem watcher
-	commitChanged    *changedFiles     // commit-changed files + dirs
-	prChanged        *changedFiles     // PR-changed files + dirs
-	branchChanged    *changedFiles     // branch-changed files + dirs
 	rootPath         string
 	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
 	savedCursorPath string
-	commitHash      string // short hash for display
-	commitLabel     string // e.g. "abc1234 Fix auth bug"
-	prLabel         string
-	branchName      string   // selected branch name
-	branchLabel     string   // e.g. "branch: feature/auth"
-	branchBaseRef   string   // base ref for branch comparison (e.g., "main")
-	baseBranch      string   // configured default/base branch for "b" toggle
-	visible         []*node  // flattened list of currently visible nodes
-	commitFiles     []string // relative paths from diff-tree
-	branchFiles     []string // relative paths from branch diff
-	prFiles         []panels.PRFile
+	visible         []*node // flattened list of currently visible nodes
 	cfg             Config
 	colors          panelColors
 	theme           *theme.Theme
 	// File operation state.
 	clip       clipboard // cut/copy clipboard
-	cursor     int       // index into visible
-	offset     int       // viewport scroll offset
-	width      int
-	height     int
-	prNumber   int
 	focused    bool
 	showHidden bool
 	listMode   bool // true = flat list with relative paths, false = tree view
-	// Git-aware filtering state.
-	gitFilter bool // when true, only show git-changed files
-	// Commit-files mode: shows files changed by a specific commit.
-	commitFilesMode bool // when true, view shows commit-changed files
-	// PR-files mode: shows files changed in a pull request.
-	prFilesMode bool
-	// Branch-files mode: shows files changed on a selected branch.
-	branchFilesMode bool
-	// Branch-diff filter: user toggled "b" to see origination diff.
-	branchDiffFilter bool
 }
 
 // Compile-time interface check.
@@ -221,7 +233,7 @@ func (ft *FileTree) SetGitClient(gc git.StatusReader) {
 // SetBaseBranch configures the default base branch for the "b" toggle
 // (branch diff filter). Typically set from config.GitConfig.DefaultBranch.
 func (ft *FileTree) SetBaseBranch(branch string) {
-	ft.baseBranch = branch
+	ft.filter.baseBranch = branch
 }
 
 // handleRepoChanged replaces the git client so git-aware features (file
@@ -234,7 +246,7 @@ func (ft *FileTree) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, 
 	} else {
 		ft.SetGitClient(client)
 	}
-	ft.gitFilter = false
+	ft.filter.gitFilter = false
 	ft.gitChanged = nil
 	ft.gitFileStatus = nil
 	ft.gitIgnoredPaths = nil
@@ -299,14 +311,14 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case rootLoadedMsg:
 		ft.root = msg.root
-		if ft.gitFilter && ft.gitChanged.loaded() {
+		if ft.filter.gitFilter && ft.gitChanged.loaded() {
 			// Git status arrived before root loaded — apply filter
 			// but keep all folders collapsed on startup.
 			ft.rebuildVisible()
 			return ft, nil
 		}
 		ft.rebuildVisible()
-		if ft.gitFilter && !ft.gitChanged.loaded() && ft.gitClient != nil {
+		if ft.filter.gitFilter && !ft.gitChanged.loaded() && ft.gitClient != nil {
 			return ft, ft.loadGitChangedFiles()
 		}
 		return ft, nil
@@ -398,14 +410,14 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		cmds := []tea.Cmd{ft.loadGitFileStatus()}
 		// If in git filter mode, also reload the changed-files list so
 		// discarded/unstaged files disappear from the filtered view.
-		if ft.gitFilter && ft.gitClient != nil {
+		if ft.filter.gitFilter && ft.gitClient != nil {
 			ft.savedCursorPath = ft.CursorPath()
 			cmds = append(cmds, ft.loadGitChangedFiles())
 		}
 		return ft, tea.Batch(cmds...)
 	case panels.RefreshGitChangedFilesMsg:
 		// Direct request to reload git-changed files (e.g. after discard/unstage).
-		if ft.gitFilter && ft.gitClient != nil {
+		if ft.filter.gitFilter && ft.gitClient != nil {
 			ft.savedCursorPath = ft.CursorPath()
 			return ft, ft.loadGitChangedFiles()
 		}
@@ -482,7 +494,7 @@ func (ft *FileTree) View(width, height int) string {
 		label := "Empty"
 		if !ft.root.loaded {
 			label = "Loading..."
-		} else if ft.gitFilter {
+		} else if ft.filter.gitFilter {
 			label = "No changed files\n\nPress g to show all files"
 		}
 		return lipgloss.NewStyle().
@@ -492,12 +504,12 @@ func (ft *FileTree) View(width, height int) string {
 			Render(label)
 	}
 	lines := make([]string, 0, height)
-	end := ft.offset + height
+	end := ft.viewport.offset + height
 	if end > len(ft.visible) {
 		end = len(ft.visible)
 	}
-	for i := ft.offset; i < end; i++ {
-		lines = append(lines, ft.renderLine(ft.visible[i], width, i == ft.cursor))
+	for i := ft.viewport.offset; i < end; i++ {
+		lines = append(lines, ft.renderLine(ft.visible[i], width, i == ft.viewport.cursor))
 	}
 	// Pad remaining height with blank lines.
 	emptyLine := strings.Repeat(" ", width)
@@ -515,22 +527,22 @@ func (ft *FileTree) Blur() { ft.focused = false }
 
 // SetSize implements panels.Panel.
 func (ft *FileTree) SetSize(width, height int) {
-	ft.width = width
-	ft.height = height
+	ft.viewport.width = width
+	ft.viewport.height = height
 }
 
 // Title implements panels.Panel.
 func (ft *FileTree) Title() string {
-	if ft.branchFilesMode {
-		return "Files: " + ft.branchLabel
+	if ft.filter.branchFilesMode {
+		return "Files: " + ft.filter.branchLabel
 	}
-	if ft.commitFilesMode {
-		return "Files: " + ft.commitLabel
+	if ft.filter.commitFilesMode {
+		return "Files: " + ft.filter.commitLabel
 	}
-	if ft.prFilesMode {
-		return "Files: " + ft.prLabel
+	if ft.filter.prFilesMode {
+		return "Files: " + ft.filter.prLabel
 	}
-	if ft.gitFilter {
+	if ft.filter.gitFilter {
 		return "Files (git changed)"
 	}
 	if len(ft.gitFileStatus) > 0 {
@@ -611,23 +623,23 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 			return notify.ShowToastMsg{Message: "diff-tree: " + errMsg, Level: notify.Error}
 		}
 	}
-	ft.commitFilesMode = true
-	ft.commitFiles = msg.files
-	ft.commitHash = msg.hash
-	ft.commitLabel = msg.label
+	ft.filter.commitFilesMode = true
+	ft.filter.commitFiles = msg.files
+	ft.filter.commitHash = msg.hash
+	ft.filter.commitLabel = msg.label
 	// Exit branch-files mode if active.
-	if ft.branchFilesMode {
-		ft.branchFilesMode = false
-		ft.branchDiffFilter = false
-		ft.branchFiles = nil
-		ft.branchName = ""
-		ft.branchLabel = ""
-		ft.branchBaseRef = ""
-		ft.branchChanged = nil
+	if ft.filter.branchFilesMode {
+		ft.filter.branchFilesMode = false
+		ft.filter.branchDiffFilter = false
+		ft.filter.branchFiles = nil
+		ft.filter.branchName = ""
+		ft.filter.branchLabel = ""
+		ft.filter.branchBaseRef = ""
+		ft.filter.branchChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		ft.savedCursorPath = ft.visible[ft.cursor].path
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
 	}
 	// Build filter sets from commit file paths (analogous to gitFilter approach).
 	paths := make(map[string]bool, len(msg.files))
@@ -635,23 +647,23 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
 		paths[abs] = true
 	}
-	ft.commitChanged = newChangedFiles(paths, ft.rootPath)
+	ft.filter.commitChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing commit-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.commitChanged.dirs)
+	ft.expandDirsInSet(ft.root, ft.filter.commitChanged.dirs)
 	ft.rebuildVisible()
-	ft.cursor = 0
-	ft.offset = 0
+	ft.viewport.cursor = 0
+	ft.viewport.offset = 0
 	return ft, ft.emitCursorFileSelected()
 }
 
 // exitCommitFilesMode restores the normal file tree view.
 func (ft *FileTree) exitCommitFilesMode() {
-	ft.commitFilesMode = false
-	ft.commitFiles = nil
-	ft.commitHash = ""
-	ft.commitLabel = ""
-	ft.commitChanged = nil
+	ft.filter.commitFilesMode = false
+	ft.filter.commitFiles = nil
+	ft.filter.commitHash = ""
+	ft.filter.commitLabel = ""
+	ft.filter.commitChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -662,29 +674,29 @@ func (ft *FileTree) exitCommitFilesMode() {
 // ---------------------------------------------------------------------------
 // handlePRFilesLoaded enters PR-files mode with the loaded file list.
 func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Panel, tea.Cmd) {
-	ft.prFilesMode = true
-	ft.prFiles = msg.Files
-	ft.prNumber = msg.Number
-	ft.prLabel = fmt.Sprintf("PR #%d", msg.Number)
+	ft.filter.prFilesMode = true
+	ft.filter.prFiles = msg.Files
+	ft.filter.prNumber = msg.Number
+	ft.filter.prLabel = fmt.Sprintf("PR #%d", msg.Number)
 	// Exit commit-files mode if active.
-	if ft.commitFilesMode {
-		ft.commitFilesMode = false
-		ft.commitFiles = nil
-		ft.commitChanged = nil
+	if ft.filter.commitFilesMode {
+		ft.filter.commitFilesMode = false
+		ft.filter.commitFiles = nil
+		ft.filter.commitChanged = nil
 	}
 	// Exit branch-files mode if active.
-	if ft.branchFilesMode {
-		ft.branchFilesMode = false
-		ft.branchDiffFilter = false
-		ft.branchFiles = nil
-		ft.branchName = ""
-		ft.branchLabel = ""
-		ft.branchBaseRef = ""
-		ft.branchChanged = nil
+	if ft.filter.branchFilesMode {
+		ft.filter.branchFilesMode = false
+		ft.filter.branchDiffFilter = false
+		ft.filter.branchFiles = nil
+		ft.filter.branchName = ""
+		ft.filter.branchLabel = ""
+		ft.filter.branchBaseRef = ""
+		ft.filter.branchChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		ft.savedCursorPath = ft.visible[ft.cursor].path
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
 	}
 	// Build filter sets from PR file paths (analogous to gitFilter approach).
 	paths := make(map[string]bool, len(msg.Files))
@@ -692,23 +704,23 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
 		paths[abs] = true
 	}
-	ft.prChanged = newChangedFiles(paths, ft.rootPath)
+	ft.filter.prChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing PR-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.prChanged.dirs)
+	ft.expandDirsInSet(ft.root, ft.filter.prChanged.dirs)
 	ft.rebuildVisible()
-	ft.cursor = 0
-	ft.offset = 0
+	ft.viewport.cursor = 0
+	ft.viewport.offset = 0
 	return ft, ft.emitCursorFileSelected()
 }
 
 // exitPRFilesMode restores the normal file tree view.
 func (ft *FileTree) exitPRFilesMode() {
-	ft.prFilesMode = false
-	ft.prFiles = nil
-	ft.prNumber = 0
-	ft.prLabel = ""
-	ft.prChanged = nil
+	ft.filter.prFilesMode = false
+	ft.filter.prFiles = nil
+	ft.filter.prNumber = 0
+	ft.filter.prLabel = ""
+	ft.filter.prChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -721,7 +733,7 @@ func (ft *FileTree) exitPRFilesMode() {
 // handleBranchSelected starts loading files changed on the selected branch.
 func (ft *FileTree) handleBranchSelected(msg panels.BranchSelectedMsg) (panels.Panel, tea.Cmd) {
 	// Toggle off if same branch selected again or empty name.
-	if msg.Name == "" || msg.Name == ft.branchName {
+	if msg.Name == "" || msg.Name == ft.filter.branchName {
 		ft.exitBranchFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
@@ -745,30 +757,30 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 			return notify.ShowToastMsg{Message: "branch diff: " + errMsg, Level: notify.Error}
 		}
 	}
-	ft.branchFilesMode = true
-	ft.branchFiles = msg.files
-	ft.branchName = msg.branch
-	ft.branchBaseRef = msg.branch
-	if ft.branchDiffFilter {
-		ft.branchLabel = "diff vs " + msg.branch
+	ft.filter.branchFilesMode = true
+	ft.filter.branchFiles = msg.files
+	ft.filter.branchName = msg.branch
+	ft.filter.branchBaseRef = msg.branch
+	if ft.filter.branchDiffFilter {
+		ft.filter.branchLabel = "diff vs " + msg.branch
 	} else {
-		ft.branchLabel = "branch: " + msg.branch
+		ft.filter.branchLabel = "branch: " + msg.branch
 	}
 	// Exit commit-files mode if active.
-	if ft.commitFilesMode {
-		ft.commitFilesMode = false
-		ft.commitFiles = nil
-		ft.commitChanged = nil
+	if ft.filter.commitFilesMode {
+		ft.filter.commitFilesMode = false
+		ft.filter.commitFiles = nil
+		ft.filter.commitChanged = nil
 	}
 	// Exit PR-files mode if active.
-	if ft.prFilesMode {
-		ft.prFilesMode = false
-		ft.prFiles = nil
-		ft.prChanged = nil
+	if ft.filter.prFilesMode {
+		ft.filter.prFilesMode = false
+		ft.filter.prFiles = nil
+		ft.filter.prChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		ft.savedCursorPath = ft.visible[ft.cursor].path
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
 	}
 	// Build filter sets from branch file paths.
 	paths := make(map[string]bool, len(msg.files))
@@ -776,16 +788,16 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 		abs := filepath.Clean(filepath.Join(ft.rootPath, f))
 		paths[abs] = true
 	}
-	ft.branchChanged = newChangedFiles(paths, ft.rootPath)
+	ft.filter.branchChanged = newChangedFiles(paths, ft.rootPath)
 	// Expand directories containing branch-changed files so the tree
 	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.branchChanged.dirs)
+	ft.expandDirsInSet(ft.root, ft.filter.branchChanged.dirs)
 	ft.rebuildVisible()
-	ft.cursor = 0
-	ft.offset = 0
+	ft.viewport.cursor = 0
+	ft.viewport.offset = 0
 	cmds := []tea.Cmd{ft.emitCursorFileSelected()}
-	if ft.branchDiffFilter {
-		baseBranch := ft.branchBaseRef
+	if ft.filter.branchDiffFilter {
+		baseBranch := ft.filter.branchBaseRef
 		cmds = append(cmds, func() tea.Msg {
 			return panels.BranchDiffFilterActiveMsg{Active: true, BaseBranch: baseBranch}
 		})
@@ -795,13 +807,13 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 
 // exitBranchFilesMode restores the normal file tree view.
 func (ft *FileTree) exitBranchFilesMode() {
-	ft.branchFilesMode = false
-	ft.branchDiffFilter = false
-	ft.branchFiles = nil
-	ft.branchName = ""
-	ft.branchLabel = ""
-	ft.branchBaseRef = ""
-	ft.branchChanged = nil
+	ft.filter.branchFilesMode = false
+	ft.filter.branchDiffFilter = false
+	ft.filter.branchFiles = nil
+	ft.filter.branchName = ""
+	ft.filter.branchLabel = ""
+	ft.filter.branchBaseRef = ""
+	ft.filter.branchChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -811,11 +823,11 @@ func (ft *FileTree) exitBranchFilesMode() {
 // differ from the configured base branch (e.g., main). Uses three-dot diff
 // to show changes introduced on the current branch since it diverged.
 func (ft *FileTree) activateBranchDiffFilter() (panels.Panel, tea.Cmd) {
-	base := ft.baseBranch
+	base := ft.filter.baseBranch
 	if base == "" {
 		base = "main"
 	}
-	ft.branchDiffFilter = true
+	ft.filter.branchDiffFilter = true
 	gc := ft.gitClient
 	ctx := ft.ctx
 	return ft, func() tea.Msg {
@@ -835,17 +847,17 @@ func (ft *FileTree) cycleFileFilter() (panels.Panel, tea.Cmd) {
 		return ft, nil
 	}
 	// If in a panel-driven branch mode (not from our cycle), exit first.
-	if ft.branchFilesMode && !ft.branchDiffFilter {
+	if ft.filter.branchFilesMode && !ft.filter.branchDiffFilter {
 		return ft.exitBranchDiffWithCmd()
 	}
 	// Cycle: branchDiff → all
-	if ft.branchDiffFilter {
+	if ft.filter.branchDiffFilter {
 		return ft.exitBranchDiffWithCmd()
 	}
 	// Cycle: gitFilter → branchDiff
-	if ft.gitFilter {
+	if ft.filter.gitFilter {
 		cursorPath := ft.CursorPath()
-		ft.gitFilter = false
+		ft.filter.gitFilter = false
 		ft.gitChanged = nil
 		ft.rebuildVisible()
 		ft.restoreCursorToPath(cursorPath)
@@ -865,7 +877,7 @@ func (ft *FileTree) cycleFileFilter() (panels.Panel, tea.Cmd) {
 // exitBranchDiffWithCmd exits branch-files mode and emits the appropriate
 // deactivation messages.
 func (ft *FileTree) exitBranchDiffWithCmd() (panels.Panel, tea.Cmd) {
-	wasDiffFilter := ft.branchDiffFilter
+	wasDiffFilter := ft.filter.branchDiffFilter
 	ft.exitBranchFilesMode()
 	var cmds []tea.Cmd
 	cmds = append(cmds, ft.emitCursorFileSelected())
@@ -885,17 +897,17 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft, nil
 	}
 	// In commit-files mode, Escape returns to normal tree view.
-	if ft.commitFilesMode && msg.String() == keyEsc {
+	if ft.filter.commitFilesMode && msg.String() == keyEsc {
 		ft.exitCommitFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	// In PR-files mode, Escape returns to normal tree view.
-	if ft.prFilesMode && msg.String() == keyEsc {
+	if ft.filter.prFilesMode && msg.String() == keyEsc {
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	// In branch-files mode, Escape returns to normal tree view.
-	if ft.branchFilesMode && msg.String() == keyEsc {
+	if ft.filter.branchFilesMode && msg.String() == keyEsc {
 		return ft.exitBranchDiffWithCmd()
 	}
 	switch msg.String() {
@@ -954,13 +966,13 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 
 // handleMouseClick processes a left-click in the filetree panel.
 // ContentRow is the row within the content area (0-based), which maps
-// directly to ft.offset + row in the visible node slice.
+// directly to ft.viewport.offset + row in the visible node slice.
 func (ft *FileTree) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
-	idx := ft.offset + msg.ContentRow
+	idx := ft.viewport.offset + msg.ContentRow
 	if idx < 0 || idx >= len(ft.visible) {
 		return ft, nil
 	}
-	ft.cursor = idx
+	ft.viewport.cursor = idx
 	n := ft.visible[idx]
 	if n.isDir {
 		return ft.selectOrExpand()
@@ -973,13 +985,13 @@ func (ft *FileTree) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Pane
 // in the user's preferred editor.
 func (ft *FileTree) handleMouseDoubleClick(_ panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
 	// Use the cursor set by the first click instead of recomputing
-	// from ft.offset + ContentRow.  A background refresh (filesystem
+	// from ft.viewport.offset + ContentRow.  A background refresh (filesystem
 	// watcher, git-status update) between the two clicks can change
-	// ft.offset, making the recomputed index wrong or out of bounds.
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	// ft.viewport.offset, making the recomputed index wrong or out of bounds.
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-	n := ft.visible[ft.cursor]
+	n := ft.visible[ft.viewport.cursor]
 	if !n.isDir {
 		itemType := actions.ItemFile
 		if !ft.actionsCfg.IsConfirmed(string(itemType)) {
@@ -1003,11 +1015,11 @@ func (ft *FileTree) SetActionsCfg(cfg config.ActionsConfig) { ft.actionsCfg = cf
 
 // handleMouseRightClick processes a right-click in the filetree panel.
 func (ft *FileTree) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panels.Panel, tea.Cmd) {
-	idx := ft.offset + msg.ContentRow
+	idx := ft.viewport.offset + msg.ContentRow
 	if idx < 0 || idx >= len(ft.visible) {
 		return ft, nil
 	}
-	ft.cursor = idx
+	ft.viewport.cursor = idx
 	ft.ensureCursorVisible()
 	n := ft.visible[idx]
 	itemType := actions.ItemFile
@@ -1030,18 +1042,18 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 	m := msg.Mouse()
 	switch m.Button {
 	case tea.MouseWheelUp:
-		ft.offset -= panels.ScrollDelta
-		if ft.offset < 0 {
-			ft.offset = 0
+		ft.viewport.offset -= panels.ScrollDelta
+		if ft.viewport.offset < 0 {
+			ft.viewport.offset = 0
 		}
 	case tea.MouseWheelDown:
-		maxOffset := len(ft.visible) - ft.height
+		maxOffset := len(ft.visible) - ft.viewport.height
 		if maxOffset < 0 {
 			maxOffset = 0
 		}
-		ft.offset += panels.ScrollDelta
-		if ft.offset > maxOffset {
-			ft.offset = maxOffset
+		ft.viewport.offset += panels.ScrollDelta
+		if ft.viewport.offset > maxOffset {
+			ft.viewport.offset = maxOffset
 		}
 	}
 	// Keep cursor within the visible viewport so that background events
@@ -1049,12 +1061,12 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 	// ensureCursorVisible() don't snap the viewport back to the old
 	// cursor position.
 	cursorMoved := false
-	if ft.cursor < ft.offset {
-		ft.cursor = ft.offset
+	if ft.viewport.cursor < ft.viewport.offset {
+		ft.viewport.cursor = ft.viewport.offset
 		cursorMoved = true
 	}
-	if ft.height > 0 && ft.cursor >= ft.offset+ft.height {
-		ft.cursor = ft.offset + ft.height - 1
+	if ft.viewport.height > 0 && ft.viewport.cursor >= ft.viewport.offset+ft.viewport.height {
+		ft.viewport.cursor = ft.viewport.offset + ft.viewport.height - 1
 		cursorMoved = true
 	}
 	if cursorMoved {
@@ -1067,15 +1079,15 @@ func (ft *FileTree) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.C
 // Navigation
 // ---------------------------------------------------------------------------
 func (ft *FileTree) moveCursorDown() {
-	if ft.cursor < len(ft.visible)-1 {
-		ft.cursor++
+	if ft.viewport.cursor < len(ft.visible)-1 {
+		ft.viewport.cursor++
 		ft.ensureCursorVisible()
 	}
 }
 
 func (ft *FileTree) moveCursorUp() {
-	if ft.cursor > 0 {
-		ft.cursor--
+	if ft.viewport.cursor > 0 {
+		ft.viewport.cursor--
 		ft.ensureCursorVisible()
 	}
 }
@@ -1085,10 +1097,10 @@ func (ft *FileTree) moveCursorUp() {
 // In branch-files mode, it emits ShowDiffMsg with ref comparison context so
 // the diff panel shows the branch comparison instead of working tree diff.
 func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return nil
 	}
-	n := ft.visible[ft.cursor]
+	n := ft.visible[ft.viewport.cursor]
 	if n.isDir {
 		path := n.path
 		return func() tea.Msg { return panels.FolderSelectedMsg{Path: path} }
@@ -1097,37 +1109,37 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 	// Build the DiffContext based on the filetree's current mode.
 	var dc *panels.DiffContext
 	switch {
-	case ft.commitFilesMode && ft.commitHash != "":
+	case ft.filter.commitFilesMode && ft.filter.commitHash != "":
 		dc = &panels.DiffContext{
 			Type:    panels.DiffContextCommit,
-			CommitA: ft.commitHash + "~1",
-			CommitB: ft.commitHash,
+			CommitA: ft.filter.commitHash + "~1",
+			CommitB: ft.filter.commitHash,
 		}
-	case ft.prFilesMode:
+	case ft.filter.prFilesMode:
 		dc = &panels.DiffContext{
 			Type: panels.DiffContextPR,
 		}
-	case ft.branchFilesMode && ft.branchBaseRef != "":
+	case ft.filter.branchFilesMode && ft.filter.branchBaseRef != "":
 		dc = &panels.DiffContext{
 			Type:     panels.DiffContextBranch,
-			CommitA:  ft.branchBaseRef,
+			CommitA:  ft.filter.branchBaseRef,
 			CommitB:  "HEAD",
 			ThreeDot: true,
 		}
-	case ft.gitFilter:
+	case ft.filter.gitFilter:
 		dc = &panels.DiffContext{
 			Type: panels.DiffContextWorking,
 		}
 	}
 
 	// In branch-files mode, also emit ShowDiffMsg for the gitdiff panel.
-	if ft.branchFilesMode && ft.branchBaseRef != "" {
+	if ft.filter.branchFilesMode && ft.filter.branchBaseRef != "" {
 		relPath, err := filepath.Rel(ft.rootPath, path)
 		if err != nil {
 			relPath = path
 		}
 		relPath = filepath.ToSlash(relPath)
-		baseRef := ft.branchBaseRef
+		baseRef := ft.filter.branchBaseRef
 		return tea.Batch(
 			func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc} },
 			func() tea.Msg {
@@ -1144,57 +1156,57 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 }
 
 func (ft *FileTree) goToTop() {
-	ft.cursor = 0
+	ft.viewport.cursor = 0
 	ft.ensureCursorVisible()
 }
 
 func (ft *FileTree) goToBottom() {
 	if n := len(ft.visible); n > 0 {
-		ft.cursor = n - 1
+		ft.viewport.cursor = n - 1
 		ft.ensureCursorVisible()
 	}
 }
 
 // pageDown moves the cursor down by one page (viewport height).
 func (ft *FileTree) pageDown() {
-	if ft.height <= 0 {
+	if ft.viewport.height <= 0 {
 		return
 	}
 	n := len(ft.visible)
-	ft.cursor += ft.height
-	if ft.cursor >= n {
-		ft.cursor = n - 1
+	ft.viewport.cursor += ft.viewport.height
+	if ft.viewport.cursor >= n {
+		ft.viewport.cursor = n - 1
 	}
-	if ft.cursor < 0 {
-		ft.cursor = 0
+	if ft.viewport.cursor < 0 {
+		ft.viewport.cursor = 0
 	}
 	ft.ensureCursorVisible()
 }
 
 // pageUp moves the cursor up by one page (viewport height).
 func (ft *FileTree) pageUp() {
-	if ft.height <= 0 {
+	if ft.viewport.height <= 0 {
 		return
 	}
-	ft.cursor -= ft.height
-	if ft.cursor < 0 {
-		ft.cursor = 0
+	ft.viewport.cursor -= ft.viewport.height
+	if ft.viewport.cursor < 0 {
+		ft.viewport.cursor = 0
 	}
 	ft.ensureCursorVisible()
 }
 
 func (ft *FileTree) ensureCursorVisible() {
-	ft.offset = panels.EnsureCursorVisible(ft.cursor, ft.offset, ft.height)
+	ft.viewport.offset = panels.EnsureCursorVisible(ft.viewport.cursor, ft.viewport.offset, ft.viewport.height)
 }
 
 // ---------------------------------------------------------------------------
 // Selection & expand/collapse
 // ---------------------------------------------------------------------------
 func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-	n := ft.visible[ft.cursor]
+	n := ft.visible[ft.viewport.cursor]
 	if n.isDir {
 		// Guard symlink expansion.
 		if n.isSymlink {
@@ -1222,10 +1234,10 @@ func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
 }
 
 func (ft *FileTree) collapseOrParent() (panels.Panel, tea.Cmd) {
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-	n := ft.visible[ft.cursor]
+	n := ft.visible[ft.viewport.cursor]
 	// Collapse if the node is an expanded directory.
 	if n.isDir && n.expanded {
 		n.expanded = false
@@ -1234,9 +1246,9 @@ func (ft *FileTree) collapseOrParent() (panels.Panel, tea.Cmd) {
 	}
 	// Otherwise navigate to the parent directory.
 	targetDepth := n.depth - 1
-	for i := ft.cursor - 1; i >= 0; i-- {
+	for i := ft.viewport.cursor - 1; i >= 0; i-- {
 		if ft.visible[i].depth == targetDepth && ft.visible[i].isDir {
-			ft.cursor = i
+			ft.viewport.cursor = i
 			ft.ensureCursorVisible()
 			break
 		}
@@ -1245,10 +1257,10 @@ func (ft *FileTree) collapseOrParent() (panels.Panel, tea.Cmd) {
 }
 
 func (ft *FileTree) toggleSelection() {
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return
 	}
-	p := ft.visible[ft.cursor].path
+	p := ft.visible[ft.viewport.cursor].path
 	if ft.selected[p] {
 		delete(ft.selected, p)
 	} else {
@@ -1268,8 +1280,8 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 	}
 	// Save cursor path before switching modes.
 	cursorPath := ft.CursorPath()
-	ft.gitFilter = !ft.gitFilter
-	if ft.gitFilter {
+	ft.filter.gitFilter = !ft.filter.gitFilter
+	if ft.filter.gitFilter {
 		// Save cursor path across the async boundary so
 		// GitChangedFilesMsg handler can restore it.
 		ft.savedCursorPath = cursorPath
@@ -1343,10 +1355,10 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 	// Save cursor path before any mode switch so it can be restored.
 	cursorPath := ft.CursorPath()
 	if msg.PresetName == presetGit {
-		if !ft.gitFilter {
+		if !ft.filter.gitFilter {
 			// Save explorer expand state.
 			ft.explorerExpanded = ft.collectExpanded(ft.root)
-			ft.gitFilter = true
+			ft.filter.gitFilter = true
 			// Save cursor across the async boundary.
 			ft.savedCursorPath = cursorPath
 			// If we have a saved git-mode state, restore it.
@@ -1368,10 +1380,10 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 		return ft, nil
 	}
 	// Switching away from git mode.
-	if ft.gitFilter {
+	if ft.filter.gitFilter {
 		// Save git-mode expand state.
 		ft.gitModeExpanded = ft.collectExpanded(ft.root)
-		ft.gitFilter = false
+		ft.filter.gitFilter = false
 		ft.gitChanged = nil
 		// Restore explorer expand state.
 		ft.collapseAll(ft.root)

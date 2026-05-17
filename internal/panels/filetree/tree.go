@@ -213,14 +213,14 @@ func (ft *FileTree) rebuildVisible() {
 
 	// Clamp cursor.
 	if len(ft.visible) == 0 {
-		ft.cursor = 0
+		ft.viewport.cursor = 0
 		return
 	}
-	if ft.cursor >= len(ft.visible) {
-		ft.cursor = len(ft.visible) - 1
+	if ft.viewport.cursor >= len(ft.visible) {
+		ft.viewport.cursor = len(ft.visible) - 1
 	}
-	if ft.cursor < 0 {
-		ft.cursor = 0
+	if ft.viewport.cursor < 0 {
+		ft.viewport.cursor = 0
 	}
 
 	ft.ensureCursorVisible()
@@ -237,10 +237,10 @@ func (ft *FileTree) walkVisible(n *node) {
 		// the hidden-file check.  Without this, dotfile changes
 		// (e.g. .github/) are suppressed before the filter runs.
 		if !ft.showHidden && isHidden(child.name) {
-			inFilteredMode := (ft.commitFilesMode && ft.commitChanged.loaded()) ||
-				(ft.prFilesMode && ft.prChanged.loaded()) ||
-				(ft.branchFilesMode && ft.branchChanged.loaded()) ||
-				(ft.gitFilter && ft.gitChanged.loaded())
+			inFilteredMode := (ft.filter.commitFilesMode && ft.filter.commitChanged.loaded()) ||
+				(ft.filter.prFilesMode && ft.filter.prChanged.loaded()) ||
+				(ft.filter.branchFilesMode && ft.filter.branchChanged.loaded()) ||
+				(ft.filter.gitFilter && ft.gitChanged.loaded())
 			if !inFilteredMode {
 				continue
 			}
@@ -248,39 +248,39 @@ func (ft *FileTree) walkVisible(n *node) {
 		// Commit-files filter: skip files/dirs not in the commit-changed set.
 		// Takes priority over git filter since the user explicitly selected
 		// a commit to inspect.
-		if ft.commitFilesMode && ft.commitChanged.loaded() {
+		if ft.filter.commitFilesMode && ft.filter.commitChanged.loaded() {
 			if child.isDir {
-				if !ft.commitChanged.hasDir(child.path) {
+				if !ft.filter.commitChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.commitChanged.hasPath(child.path) {
+				if !ft.filter.commitChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.prFilesMode && ft.prChanged.loaded() {
+		} else if ft.filter.prFilesMode && ft.filter.prChanged.loaded() {
 			// PR-files filter: skip files/dirs not in the PR-changed set.
 			if child.isDir {
-				if !ft.prChanged.hasDir(child.path) {
+				if !ft.filter.prChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.prChanged.hasPath(child.path) {
+				if !ft.filter.prChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.branchFilesMode && ft.branchChanged.loaded() {
+		} else if ft.filter.branchFilesMode && ft.filter.branchChanged.loaded() {
 			// Branch-files filter: skip files/dirs not in the branch-changed set.
 			if child.isDir {
-				if !ft.branchChanged.hasDir(child.path) {
+				if !ft.filter.branchChanged.hasDir(child.path) {
 					continue
 				}
 			} else {
-				if !ft.branchChanged.hasPath(child.path) {
+				if !ft.filter.branchChanged.hasPath(child.path) {
 					continue
 				}
 			}
-		} else if ft.gitFilter && ft.gitChanged.loaded() {
+		} else if ft.filter.gitFilter && ft.gitChanged.loaded() {
 			// Git filter: skip files not in the changed set, and skip
 			// directories that contain no changed descendants.
 			if child.isDir {
@@ -326,8 +326,8 @@ func (ft *FileTree) handleRefresh() (panels.Panel, tea.Cmd) {
 func (ft *FileTree) reloadTree() {
 	// Remember the current cursor path for restoration.
 	var cursorPath string
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		cursorPath = ft.visible[ft.cursor].path
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		cursorPath = ft.visible[ft.viewport.cursor].path
 	}
 
 	// Collect expanded directories.
@@ -351,7 +351,7 @@ func (ft *FileTree) reloadTree() {
 	if cursorPath != "" {
 		for i, n := range ft.visible {
 			if n.path == cursorPath {
-				ft.cursor = i
+				ft.viewport.cursor = i
 				ft.ensureCursorVisible()
 				return
 			}
@@ -654,16 +654,16 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 // position. Returns "" when the visible list is empty or cursor is out of
 // range.
 func (ft *FileTree) CursorPath() string {
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		return ft.visible[ft.cursor].path
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		return ft.visible[ft.viewport.cursor].path
 	}
 	return ""
 }
 
 // CursorIsDir reports whether the node under the cursor is a directory.
 func (ft *FileTree) CursorIsDir() bool {
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		return ft.visible[ft.cursor].isDir
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		return ft.visible[ft.viewport.cursor].isDir
 	}
 	return false
 }
@@ -677,17 +677,17 @@ func (ft *FileTree) restoreCursorToPath(path string) {
 	}
 	for i, n := range ft.visible {
 		if n.path == path {
-			ft.cursor = i
+			ft.viewport.cursor = i
 			ft.ensureCursorVisible()
 			return
 		}
 	}
 	// Path not in current view — clamp cursor.
-	if ft.cursor >= len(ft.visible) {
-		ft.cursor = len(ft.visible) - 1
+	if ft.viewport.cursor >= len(ft.visible) {
+		ft.viewport.cursor = len(ft.visible) - 1
 	}
-	if ft.cursor < 0 {
-		ft.cursor = 0
+	if ft.viewport.cursor < 0 {
+		ft.viewport.cursor = 0
 	}
 	ft.ensureCursorVisible()
 }
@@ -747,7 +747,7 @@ func (ft *FileTree) revealFile(path string) {
 // ---------------------------------------------------------------------------
 
 // cursor returns the current cursor index.
-func (ft *FileTree) cursorIndex() int { return ft.cursor }
+func (ft *FileTree) cursorIndex() int { return ft.viewport.cursor }
 
 // visibleCount returns the number of currently visible nodes.
 func (ft *FileTree) visibleCount() int { return len(ft.visible) }

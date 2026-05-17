@@ -38,16 +38,16 @@ func (ft *FileTree) selectedPaths() []string {
 		}
 		return paths
 	}
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		return []string{ft.visible[ft.cursor].path}
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		return []string{ft.visible[ft.viewport.cursor].path}
 	}
 	return nil
 }
 
 // cursorNode returns the node under the cursor, or nil.
 func (ft *FileTree) cursorNode() *node {
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		return ft.visible[ft.cursor]
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		return ft.visible[ft.viewport.cursor]
 	}
 	return nil
 }
@@ -418,10 +418,10 @@ func (ft *FileTree) executeRightClickAction(action actions.ActionID) (panels.Pan
 
 // openInEditor opens the file at the cursor in the user's external editor.
 func (ft *FileTree) openInEditor() (panels.Panel, tea.Cmd) {
-	if ft.cursor < 0 || ft.cursor >= len(ft.visible) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return ft, nil
 	}
-	n := ft.visible[ft.cursor]
+	n := ft.visible[ft.viewport.cursor]
 	if n.isDir {
 		return ft.selectOrExpand()
 	}
