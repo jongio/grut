@@ -283,7 +283,14 @@ Environment:
 				addr := "127.0.0.1:" + pprofPort
 				go func() {
 					slog.Info("pprof server starting", "addr", "http://"+addr+"/debug/pprof/")
-					if err := http.ListenAndServe(addr, nil); err != nil { //nolint:gosec // pprof is opt-in dev tool
+					srv := &http.Server{ //nolint:gosec // pprof is opt-in dev tool
+						Addr:              addr,
+						ReadHeaderTimeout: 10 * time.Second,
+						ReadTimeout:       30 * time.Second,
+						WriteTimeout:      60 * time.Second,
+						IdleTimeout:       120 * time.Second,
+					}
+					if err := srv.ListenAndServe(); err != nil {
 						slog.Error("pprof server failed", "err", err)
 					}
 				}()
