@@ -33,7 +33,7 @@ var safePermissionKinds = map[copilot.PermissionRequestKind]struct{}{
 
 // permissionDenied is the result returned for dangerous permission requests.
 var permissionDenied = copilot.PermissionRequestResult{
-	Kind: copilot.PermissionRequestResultKindDeniedByRules,
+	Kind: copilot.PermissionRequestResultKindUserNotAvailable,
 }
 
 // permissionApproved is the result returned for safe permission requests.

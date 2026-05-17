@@ -101,7 +101,7 @@ func TestPolicyHandler_DeniesWrite(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 func TestPolicyHandler_DeniesShell(t *testing.T) {
@@ -114,7 +114,7 @@ func TestPolicyHandler_DeniesShell(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 func TestPolicyHandler_DeniesURL(t *testing.T) {
@@ -127,7 +127,7 @@ func TestPolicyHandler_DeniesURL(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 func TestPolicyHandler_DeniesCustomTool(t *testing.T) {
@@ -140,7 +140,7 @@ func TestPolicyHandler_DeniesCustomTool(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 func TestPolicyHandler_DeniesMCPWithWriteAccess(t *testing.T) {
@@ -153,7 +153,7 @@ func TestPolicyHandler_DeniesMCPWithWriteAccess(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 func TestPolicyHandler_DeniesMCPWithNilReadOnly(t *testing.T) {
@@ -162,7 +162,7 @@ func TestPolicyHandler_DeniesMCPWithNilReadOnly(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ func TestPolicyHandler_DeniesUnknownKind(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +214,7 @@ func TestPolicyHandler_HandlesNilOptionalFields(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ func TestBuildSessionConfig_UsesPermissionPolicy(t *testing.T) {
 		copilot.PermissionInvocation{SessionID: "test"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindDeniedByRules, result.Kind)
+	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
 
 	// Invoke with a safe request — must be approved.
 	result, err = cfg.OnPermissionRequest(
