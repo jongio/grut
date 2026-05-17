@@ -123,8 +123,8 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 				}
 				_, _ = fmt.Fprint(w, "\nProceed? [y/N] ")
 				var answer string
-				_, scanErr := fmt.Fscanln(os.Stdin, &answer)
-				if scanErr != nil || (answer != "y" && answer != "Y") {
+				fmt.Fscanln(os.Stdin, &answer) //nolint:errcheck // scan failure = empty answer = abort
+				if answer != "y" && answer != "Y" {
 					_, _ = fmt.Fprintln(w, "Aborted.")
 					return nil
 				}
