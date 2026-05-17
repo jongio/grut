@@ -27,8 +27,8 @@ import (
 // read-only with no destructive side-effects. Only these are
 // auto-approved.
 var safePermissionKinds = map[copilot.PermissionRequestKind]struct{}{
-	copilot.Read:   {}, // file / directory reads
-	copilot.Memory: {}, // storing facts / conventions
+	copilot.PermissionRequestKindRead:   {}, // file / directory reads
+	copilot.PermissionRequestKindMemory: {}, // storing facts / conventions
 }
 
 // permissionDenied is the result returned for dangerous permission requests.
@@ -45,7 +45,7 @@ var permissionApproved = copilot.PermissionRequestResult{
 // as safe (read-only, no side-effects). MCP requests are safe only when
 // the SDK marks them as ReadOnly.
 func isSafePermission(req copilot.PermissionRequest) bool {
-	if req.Kind == copilot.MCP {
+	if req.Kind == copilot.PermissionRequestKindMcp {
 		return req.ReadOnly != nil && *req.ReadOnly
 	}
 	_, safe := safePermissionKinds[req.Kind]

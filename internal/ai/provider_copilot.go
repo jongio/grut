@@ -149,30 +149,30 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 	}
 	session.On(func(event copilot.SessionEvent) {
 		switch event.Type { //nolint:exhaustive // only relevant cases handled
-		case copilot.AssistantMessageDelta:
-			if event.Data.DeltaContent != nil && *event.Data.DeltaContent != "" {
+		case copilot.SessionEventTypeAssistantMessageDelta:
+			if d, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok && d.DeltaContent != "" {
 				select {
-				case ch <- StreamChunk{Delta: *event.Data.DeltaContent}:
+				case ch <- StreamChunk{Delta: d.DeltaContent}:
 				case <-ctx.Done():
 				}
 			}
-		case copilot.AssistantUsage:
-			if u := extractUsage(event.Data); u != nil {
-				usageMu.Lock()
-				lastUsage = u
-				usageMu.Unlock()
+		case copilot.SessionEventTypeAssistantUsage:
+			if d, ok := event.Data.(*copilot.AssistantUsageData); ok {
+				if u := extractUsage(d); u != nil {
+					usageMu.Lock()
+					lastUsage = u
+					usageMu.Unlock()
+				}
 			}
-		case copilot.SessionIdle:
+		case copilot.SessionEventTypeSessionIdle:
 			usageMu.Lock()
 			u := lastUsage
 			usageMu.Unlock()
 			finish(StreamChunk{Done: true, TokensUsed: u})
-		case copilot.SessionError:
+		case copilot.SessionEventTypeSessionError:
 			errMsg := "unknown error"
-			if event.Data.ErrorReason != nil {
-				errMsg = *event.Data.ErrorReason
-			} else if event.Data.Content != nil {
-				errMsg = *event.Data.Content
+			if d, ok := event.Data.(*copilot.SessionErrorData); ok {
+				errMsg = d.Message
 			}
 			finish(StreamChunk{Done: true, Err: fmt.Errorf("copilot stream: %s", errMsg)})
 		}
@@ -279,19 +279,21 @@ func eventToResponse(event *copilot.SessionEvent) CompletionResponse {
 	if event == nil {
 		return resp
 	}
-	if event.Data.Content != nil {
-		resp.Content = *event.Data.Content
+	if d, ok := event.Data.(*copilot.AssistantMessageData); ok {
+		resp.Content = d.Content
 	}
-	if u := extractUsage(event.Data); u != nil {
-		resp.TokensUsed = *u
+	if d, ok := event.Data.(*copilot.AssistantUsageData); ok {
+		if u := extractUsage(d); u != nil {
+			resp.TokensUsed = *u
+		}
 	}
 	return resp
 }
 
-// extractUsage extracts token usage from a session event's Data payload.
+// extractUsage extracts token usage from an AssistantUsageData payload.
 // Returns nil if neither input nor output token counts are present.
-func extractUsage(data copilot.Data) *TokenUsage {
-	if data.InputTokens == nil && data.OutputTokens == nil {
+func extractUsage(data *copilot.AssistantUsageData) *TokenUsage {
+	if data == nil || (data.InputTokens == nil && data.OutputTokens == nil) {
 		return nil
 	}
 	u := &TokenUsage{}

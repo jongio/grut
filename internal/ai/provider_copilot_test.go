@@ -214,10 +214,9 @@ func TestEventToResponse_NilEvent(t *testing.T) {
 }
 
 func TestEventToResponse_WithContent(t *testing.T) {
-	content := "Hello, how can I help?"
 	event := &copilot.SessionEvent{
-		Data: copilot.Data{
-			Content: &content,
+		Data: &copilot.AssistantMessageData{
+			Content: "Hello, how can I help?",
 		},
 	}
 
@@ -228,12 +227,10 @@ func TestEventToResponse_WithContent(t *testing.T) {
 }
 
 func TestEventToResponse_WithUsage(t *testing.T) {
-	content := "response text"
 	inputTokens := float64(10)
 	outputTokens := float64(5)
 	event := &copilot.SessionEvent{
-		Data: copilot.Data{
-			Content:      &content,
+		Data: &copilot.AssistantUsageData{
 			InputTokens:  &inputTokens,
 			OutputTokens: &outputTokens,
 		},
@@ -241,14 +238,13 @@ func TestEventToResponse_WithUsage(t *testing.T) {
 
 	resp := eventToResponse(event)
 
-	assert.Equal(t, "response text", resp.Content)
 	assert.Equal(t, 10, resp.TokensUsed.InputTokens)
 	assert.Equal(t, 5, resp.TokensUsed.OutputTokens)
 }
 
 func TestEventToResponse_NilContent(t *testing.T) {
 	event := &copilot.SessionEvent{
-		Data: copilot.Data{},
+		Data: &copilot.RawSessionEventData{},
 	}
 
 	resp := eventToResponse(event)
@@ -261,13 +257,18 @@ func TestEventToResponse_NilContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestExtractUsage_BothNil(t *testing.T) {
-	u := extractUsage(copilot.Data{})
+	u := extractUsage(nil)
+	assert.Nil(t, u)
+}
+
+func TestExtractUsage_NoTokenFields(t *testing.T) {
+	u := extractUsage(&copilot.AssistantUsageData{})
 	assert.Nil(t, u)
 }
 
 func TestExtractUsage_InputOnly(t *testing.T) {
 	input := float64(42)
-	u := extractUsage(copilot.Data{InputTokens: &input})
+	u := extractUsage(&copilot.AssistantUsageData{InputTokens: &input})
 
 	require.NotNil(t, u)
 	assert.Equal(t, 42, u.InputTokens)
@@ -276,7 +277,7 @@ func TestExtractUsage_InputOnly(t *testing.T) {
 
 func TestExtractUsage_OutputOnly(t *testing.T) {
 	output := float64(7)
-	u := extractUsage(copilot.Data{OutputTokens: &output})
+	u := extractUsage(&copilot.AssistantUsageData{OutputTokens: &output})
 
 	require.NotNil(t, u)
 	assert.Equal(t, 0, u.InputTokens)
@@ -286,7 +287,7 @@ func TestExtractUsage_OutputOnly(t *testing.T) {
 func TestExtractUsage_Both(t *testing.T) {
 	input := float64(100)
 	output := float64(50)
-	u := extractUsage(copilot.Data{
+	u := extractUsage(&copilot.AssistantUsageData{
 		InputTokens:  &input,
 		OutputTokens: &output,
 	})
@@ -299,7 +300,7 @@ func TestExtractUsage_Both(t *testing.T) {
 func TestExtractUsage_ZeroValues(t *testing.T) {
 	input := float64(0)
 	output := float64(0)
-	u := extractUsage(copilot.Data{
+	u := extractUsage(&copilot.AssistantUsageData{
 		InputTokens:  &input,
 		OutputTokens: &output,
 	})
