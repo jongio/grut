@@ -183,7 +183,7 @@ func TestExecute_FunctionExists(t *testing.T) {
 	// We can't easily test Execute() without it trying to start the TUI,
 	// but we can verify it compiles and is callable.
 	// This is a compile-time test — if Execute signature changes, this breaks.
-	var fn = Execute
+	fn := Execute
 	assert.NotNil(t, fn, "Execute function must exist")
 }
 
