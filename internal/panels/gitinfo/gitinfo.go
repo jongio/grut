@@ -313,32 +313,32 @@ type githubState struct {
 // ---------------------------------------------------------------------------
 // Panel is the gitinfo panel. It implements [panels.Panel].
 type Panel struct {
-	actionsCfg config.ActionsConfig
-	git        gitOps
-	ctx        context.Context
-	iconMode    string          // "nerd" or "ascii"
+	actionsCfg  config.ActionsConfig
+	git         gitOps
+	ctx         context.Context
+	iconMode    string // "nerd" or "ascii"
 	repoRoot    string
-	pendingName string // name for pending operation
-	pendingPath string // path captured at double-click time (survives async modal delay)
+	pendingName string               // name for pending operation
+	pendingPath string               // path captured at double-click time (survives async modal delay)
 	tabItems    [tabCount][]listItem // items per tab
-	gitData  gitState
-	gh       githubState
+	gitData     gitState
+	gh          githubState
 	panels.BasePanel
 	cfg               config.GitConfig
 	colors            panelColors
 	theme             *theme.Theme
-	tabCursor         [tabCount]int   // cursor per tab
-	tabOffset         [tabCount]int   // viewport offset per tab
-	mode              PanelMode       // which tab subset to display
-	activeTab         tabID           // currently active tab
-	remoteCount       int             // actual number of remotes (distinct from tabItems len which includes sub-rows)
-	pending           pendingOp       // operation awaiting modal result
-	actionsWatchFrame int             // current animation frame index into watchFrames
-	lastWidth         int             // last rendered width, used for click zone calculation
+	tabCursor         [tabCount]int // cursor per tab
+	tabOffset         [tabCount]int // viewport offset per tab
+	mode              PanelMode     // which tab subset to display
+	activeTab         tabID         // currently active tab
+	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
+	pending           pendingOp     // operation awaiting modal result
+	actionsWatchFrame int           // current animation frame index into watchFrames
+	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
 	// Per-tab pagination state for lazy-loading GitHub tabs.
-	tabPaging  [tabCount]tabPagination
+	tabPaging [tabCount]tabPagination
 }
 
 // Compile-time interface check.

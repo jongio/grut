@@ -73,8 +73,6 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 	return allIssues, nil
 }
 
-
-
 func (c *clientImpl) ListIssuesPage(ctx context.Context, owner, repo string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, PageResult, error) {
 	local := gh.IssueListByRepoOptions{}
 	if opts != nil {
