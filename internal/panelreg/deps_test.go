@@ -57,9 +57,9 @@ type mockPanel struct {
 	panels.BasePanel
 }
 
-func (m *mockPanel) Init(_ context.Context) tea.Cmd            { return nil }
-func (m *mockPanel) Update(_ tea.Msg) (panels.Panel, tea.Cmd)  { return m, nil }
-func (m *mockPanel) View(_, _ int) string                      { return "" }
+func (m *mockPanel) Init(_ context.Context) tea.Cmd           { return nil }
+func (m *mockPanel) Update(_ tea.Msg) (panels.Panel, tea.Cmd) { return m, nil }
+func (m *mockPanel) View(_, _ int) string                     { return "" }
 
 // mockPanelWithActions implements the optional SetActionsCfg interface.
 type mockPanelWithActions struct {
@@ -68,9 +68,9 @@ type mockPanelWithActions struct {
 	cfg     config.ActionsConfig
 }
 
-func (m *mockPanelWithActions) Init(_ context.Context) tea.Cmd            { return nil }
-func (m *mockPanelWithActions) Update(_ tea.Msg) (panels.Panel, tea.Cmd)  { return m, nil }
-func (m *mockPanelWithActions) View(_, _ int) string                      { return "" }
+func (m *mockPanelWithActions) Init(_ context.Context) tea.Cmd           { return nil }
+func (m *mockPanelWithActions) Update(_ tea.Msg) (panels.Panel, tea.Cmd) { return m, nil }
+func (m *mockPanelWithActions) View(_, _ int) string                     { return "" }
 
 func (m *mockPanelWithActions) SetActionsCfg(c config.ActionsConfig) {
 	m.applied = true
