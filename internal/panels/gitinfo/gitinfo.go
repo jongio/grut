@@ -6,8 +6,6 @@ package gitinfo
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -2028,316 +2026,60 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	if !msg.Accept {
 		return p, nil
 	}
-	g := p.git
-	ctx := p.ctx
+	a := modalArgs{
+		msg:         msg,
+		name:        name,
+		pendingPath: pendingPath,
+		git:         p.git,
+		ctx:         p.ctx,
+	}
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opBranchCreate:
-		newName := strings.TrimSpace(msg.Value)
-		if newName == "" {
-			return p, nil
-		}
-		return p, func() tea.Msg {
-			err := g.BranchCreate(ctx, newName, "")
-			return opResultMsg{op: eventBranchCreated, name: newName, err: err}
-		}
+		return p.handleBranchCreate(a)
 	case opBranchDelete:
-		return p, func() tea.Msg {
-			err := g.BranchDelete(ctx, name, false)
-			return opResultMsg{op: eventBranchDeleted, name: name, err: err}
-		}
+		return p.handleBranchDelete(a)
 	case opBranchRename:
-		newName := strings.TrimSpace(msg.Value)
-		if newName == "" || newName == name {
-			return p, nil
-		}
-		return p, func() tea.Msg {
-			err := g.BranchRename(ctx, name, newName)
-			return opResultMsg{op: eventBranchRenamed, name: newName, err: err}
-		}
+		return p.handleBranchRename(a)
 	case opWorktreeCreate:
-		branch := strings.TrimSpace(msg.Value)
-		if branch == "" {
-			return p, nil
-		}
-		path := worktreePath(p.repoRoot, branch)
-		return p, func() tea.Msg {
-			err := g.WorktreeAdd(ctx, path, branch)
-			return opResultMsg{op: eventWorktreeAdded, name: branch, err: err}
-		}
+		return p.handleWorktreeCreate(a)
 	case opWorktreeDelete:
-		return p, func() tea.Msg {
-			err := g.WorktreeRemove(ctx, name, false)
-			return opResultMsg{op: eventWorktreeRemoved, name: name, err: err}
-		}
+		return p.handleWorktreeDelete(a)
 	case opRemoteAdd:
-		remoteName := strings.TrimSpace(msg.Value)
-		if remoteName == "" {
-			return p, nil
-		}
-		// Two-step: first get name, then URL.
-		p.pending = opRemoteAddURL
-		p.pendingName = remoteName
-		return p, notify.ShowInput("Remote URL", "https://github.com/user/repo")
+		return p.handleRemoteAdd(a)
 	case opRemoteAddURL:
-		url := strings.TrimSpace(msg.Value)
-		if url == "" {
-			return p, nil
-		}
-		remoteName := name
-		return p, func() tea.Msg {
-			err := g.RemoteAdd(ctx, remoteName, url)
-			return opResultMsg{op: eventRemoteAdded, name: remoteName, err: err}
-		}
+		return p.handleRemoteAddURL(a)
 	case opRemoteDelete:
-		return p, func() tea.Msg {
-			err := g.RemoteRemove(ctx, name)
-			return opResultMsg{op: eventRemoteRemoved, name: name, err: err}
-		}
+		return p.handleRemoteDelete(a)
 	case opBranchCheckout:
-		ref := name
-		return p, func() tea.Msg {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("panic during branch checkout", "ref", ref, "panic", r)
-				}
-			}()
-			files, err := g.Status(ctx)
-			if err != nil {
-				return checkoutDirtyMsg{ref: ref, err: err}
-			}
-			return checkoutDirtyMsg{ref: ref, dirty: len(files) > 0}
-		}
+		return p.handleBranchCheckout(a)
 	case opBranchCheckoutStash:
-		ref := name
-		return p, func() tea.Msg {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("panic during stash checkout", "ref", ref, "panic", r)
-				}
-			}()
-			err := g.StashPush(ctx, git.StashOpts{Message: "grut: auto-stash before switching to " + ref})
-			if err != nil {
-				return opResultMsg{op: opCheckout, name: ref, err: fmt.Errorf("stash failed: %w", err)}
-			}
-			err = g.Checkout(ctx, ref)
-			if err != nil {
-				_ = g.StashPop(ctx, 0) // restore stash on checkout failure
-				return opResultMsg{op: opCheckout, name: ref, err: err}
-			}
-			return opResultMsg{op: "checkout_stashed", name: ref}
-		}
+		return p.handleBranchCheckoutStash(a)
 	case opStashAction:
-		action := strings.TrimSpace(strings.ToLower(msg.Value))
-		idx, err := strconv.Atoi(name)
-		if err != nil {
-			return p, nil
-		}
-		switch action {
-		case actionApply, "a":
-			return p, func() tea.Msg {
-				err := g.StashApply(ctx, idx)
-				return opResultMsg{op: eventStashApplied, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		case actionPop, "p":
-			return p, func() tea.Msg {
-				err := g.StashPop(ctx, idx)
-				return opResultMsg{op: eventStashPopped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		case actionDrop, "d":
-			return p, func() tea.Msg {
-				err := g.StashDrop(ctx, idx)
-				return opResultMsg{op: eventStashDropped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		default:
-			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: "Unknown stash action: " + action, Level: notify.Warn}
-			}
-		}
+		return p.handleStashAction(a)
 	case opFirstUseConfirm:
-		if msg.Remember {
-			config.SaveDoubleClickChoice(&p.actionsCfg, name, msg.Value)
-		}
-		p.pendingPath = pendingPath // restore for executeRightClickAction
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.handleFirstUseConfirm(a)
 	case opRightClickPick:
-		p.pendingPath = pendingPath // restore for executeRightClickAction
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.handleRightClickPick(a)
 	case opTagCreate:
-		tagName := strings.TrimSpace(msg.Value)
-		if tagName == "" {
-			return p, nil
-		}
-		p.pending = opTagMessage
-		p.pendingName = tagName
-		return p, notify.ShowInput("Tag Message", "(leave empty for lightweight)")
+		return p.handleTagCreate(a)
 	case opTagMessage:
-		tagName := name
-		message := strings.TrimSpace(msg.Value)
-		return p, func() tea.Msg {
-			err := g.TagCreate(ctx, tagName, "", message)
-			return opResultMsg{op: eventTagCreated, name: tagName, err: err}
-		}
+		return p.handleTagMessage(a)
 	case opTagDelete:
-		return p, func() tea.Msg {
-			err := g.TagDelete(ctx, name)
-			return opResultMsg{op: eventTagDeleted, name: name, err: err}
-		}
+		return p.handleTagDelete(a)
 	case opTagPush:
-		tagName := name
-		return p, func() tea.Msg {
-			err := g.TagPush(ctx, "origin", tagName)
-			return opResultMsg{op: eventTagPushed, name: tagName, err: err}
-		}
+		return p.handleTagPush(a)
 	case opTagCheckout:
-		return p, func() tea.Msg {
-			err := g.Checkout(ctx, name)
-			return opResultMsg{op: eventTagCheckout, name: name, err: err}
-		}
+		return p.handleTagCheckout(a)
 	case opWorkflowDispatch:
-		// Step 1 complete: got the ref. Fetch workflow inputs before
-		// showing the inputs dialog so we can pre-populate fields.
-		ref := strings.TrimSpace(msg.Value)
-		if ref == "" {
-			ref = p.currentBranch()
-		}
-		// Parse workflow ID and name from pendingName ("id:name").
-		var workflowID int64
-		var workflowName string
-		if parts := strings.SplitN(name, ":", 2); len(parts) == 2 {
-			workflowID, _ = strconv.ParseInt(parts[0], 10, 64)
-			workflowName = parts[1]
-		}
-		if workflowID == 0 {
-			return p, nil
-		}
-		// Look up the workflow path from the cached items.
-		var workflowPath string
-		for _, item := range p.tabItems[tabWorkflows] {
-			if item.kind == kindWorkflow && item.workflow.ID == workflowID {
-				workflowPath = item.workflow.Path
-				break
-			}
-		}
-		// Fetch workflow_dispatch inputs asynchronously.
-		owner, repo := p.ghOwner, p.ghRepo
-		ghClient := p.ghClient
-		return p, func() tea.Msg {
-			var wfInputs []ghclient.WorkflowInput
-			if ghClient != nil && workflowPath != "" {
-				fetched, err := ghClient.GetWorkflowInputs(ctx, owner, repo, workflowPath, ref)
-				if err != nil {
-					// Non-fatal: fall back to generic dialog.
-					_ = err
-				} else {
-					wfInputs = fetched
-				}
-			}
-			return workflowInputsFetchedMsg{
-				workflowID:   workflowID,
-				workflowName: workflowName,
-				ref:          ref,
-				inputs:       wfInputs,
-			}
-		}
+		return p.handleWorkflowDispatch(a)
 	case opWorkflowDispatchInputs:
-		// Step 2 complete: got the inputs. Parse and dispatch.
-		// pendingName format: "id:name:ref"
-		var workflowID int64
-		var workflowName, ref string
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) == 3 {
-			workflowID, _ = strconv.ParseInt(parts[0], 10, 64)
-			workflowName = parts[1]
-			ref = parts[2]
-		}
-		if workflowID == 0 || ref == "" {
-			return p, nil
-		}
-		// Parse inputs from "key=value" lines.
-		var inputs map[string]any
-		inputText := strings.TrimSpace(msg.Value)
-		if inputText != "" {
-			inputs = make(map[string]any)
-			for _, line := range strings.Split(inputText, "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
-					inputs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-				}
-			}
-			if len(inputs) == 0 {
-				inputs = nil
-			}
-		}
-		owner, repo := p.ghOwner, p.ghRepo
-		ghClient := p.ghClient
-		return p, func() tea.Msg {
-			err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
-			return workflowDispatchResultMsg{workflowName: workflowName, err: err}
-		}
-
+		return p.handleWorkflowDispatchInputs(a)
 	case opPRMergeStrategy:
-		// User selected a merge strategy from the picker.
-		// pendingName format: "number:headBranch:title"
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) < 3 {
-			return p, nil
-		}
-		prNumber, _ := strconv.Atoi(parts[0])
-		headBranch := parts[1]
-		prTitle := parts[2]
-		if prNumber == 0 {
-			return p, nil
-		}
-
-		strategy := msg.Value // "merge", "squash", or "rebase"
-
-		// Store merge details for the confirmation step.
-		p.pending = opPRMergeConfirm
-		p.pendingName = fmt.Sprintf("%d:%s:%s", prNumber, strategy, headBranch)
-
-		label := mergeStrategyLabel(strategy)
-		confirmMsg := fmt.Sprintf("Merge PR #%d %q using %s?", prNumber, prTitle, label)
-		return p, notify.ShowConfirm("Confirm Merge", confirmMsg)
-
+		return p.handlePRMergeStrategy(a)
 	case opPRMergeConfirm:
-		// User confirmed the merge. Execute it.
-		// pendingName format: "number:strategy:headBranch"
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) < 3 {
-			return p, nil
-		}
-		prNumber, _ := strconv.Atoi(parts[0])
-		strategy := parts[1]
-		headBranch := parts[2]
-		if prNumber == 0 {
-			return p, nil
-		}
-		return p, p.mergePRCmd(prNumber, strategy, headBranch)
-
+		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
-		// User confirmed post-merge branch deletion.
-		branch := name
-		if branch == "" {
-			return p, nil
-		}
-		client := p.ghClient
-		owner, repo := p.ghOwner, p.ghRepo
-		g := p.git
-		return p, func() tea.Msg {
-			remoteErr := client.DeleteBranch(ctx, owner, repo, branch)
-			var localErr error
-			if g != nil {
-				localErr = g.BranchDelete(ctx, branch, false)
-			}
-			return prBranchDeleteResultMsg{
-				branch:    branch,
-				remoteErr: remoteErr,
-				localErr:  localErr,
-			}
-		}
+		return p.handlePRDeleteBranchAfterMerge(a)
 	}
 	return p, nil
 }
