@@ -27,14 +27,14 @@ func TestTitle_GitMode(t *testing.T) {
 func TestTitle_GitHubPublic(t *testing.T) {
 	t.Parallel()
 	p := newTestGitHubPanel(defaultMock())
-	p.repoPrivate = false
+	p.gh.repoPrivate = false
 	assert.Equal(t, "GitHub", p.Title())
 }
 
 func TestTitle_GitHubPrivateASCII(t *testing.T) {
 	t.Parallel()
 	p := newTestGitHubPanel(defaultMock())
-	p.repoPrivate = true
+	p.gh.repoPrivate = true
 	p.iconMode = "ascii"
 	assert.Equal(t, "GitHub (private)", p.Title())
 }
@@ -42,7 +42,7 @@ func TestTitle_GitHubPrivateASCII(t *testing.T) {
 func TestTitle_GitHubPrivateNerd(t *testing.T) {
 	t.Parallel()
 	p := newTestGitHubPanel(defaultMock())
-	p.repoPrivate = true
+	p.gh.repoPrivate = true
 	p.iconMode = "nerd"
 	assert.Equal(t, "GitHub \uf023", p.Title())
 }
@@ -111,7 +111,7 @@ func TestTabBarHeight_ModeAll_WithGHClient(t *testing.T) {
 	mock := defaultMock()
 	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
-	p.ghClient = &mockGHClientFull{} // non-nil → 2 rows
+	p.gh.client = &mockGHClientFull{} // non-nil → 2 rows
 	assert.Equal(t, 2, p.tabBarHeight())
 }
 
@@ -120,7 +120,7 @@ func TestTabBarHeight_ModeAll_NoGHClient(t *testing.T) {
 	mock := defaultMock()
 	p := New(mock, config.GitConfig{}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.mode = ModeAll
-	p.ghClient = nil // nil → 1 row
+	p.gh.client = nil // nil → 1 row
 	assert.Equal(t, 1, p.tabBarHeight())
 }
 
@@ -943,7 +943,7 @@ func TestHandleModalResult_WorkflowDispatchInputs(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "456:Deploy:main"
-	p.ghClient = &mockGHClientFull{} // non-nil to avoid panic
+	p.gh.client = &mockGHClientFull{} // non-nil to avoid panic
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "env=prod\nversion=1.0"})
 	require.NotNil(t, cmd)
@@ -959,7 +959,7 @@ func TestHandleModalResult_WorkflowDispatchInputs_EmptyInputs(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "456:Deploy:main"
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: ""})
 	require.NotNil(t, cmd)

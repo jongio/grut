@@ -48,8 +48,8 @@ func (p *Panel) branchSelectedCmd() tea.Cmd {
 // guessBranchRemoteURL returns the fetch URL of the first remote, used to
 // construct a browser-openable URL for local branches.
 func (p *Panel) guessBranchRemoteURL(_ git.Branch) string {
-	if len(p.lastRemotes) > 0 {
-		return p.lastRemotes[0].FetchURL
+	if len(p.gitData.lastRemotes) > 0 {
+		return p.gitData.lastRemotes[0].FetchURL
 	}
 	return ""
 }

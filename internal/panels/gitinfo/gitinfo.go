@@ -280,6 +280,34 @@ func initColors(th *theme.Theme) panelColors {
 // helper functions (prColor, prActionIcon) that are called from tests.
 var defaultColors = initColors(nil)
 
+// gitState holds cached git data used to rebuild tab items without
+// re-fetching from the repository.
+type gitState struct {
+	lastBranches  []git.Branch
+	lastWorktrees []git.Worktree
+	lastRemotes   []git.Remote
+	lastStashes   []git.StashEntry
+	lastTags      []git.Tag
+	lastReflog    []git.ReflogEntry
+}
+
+// githubState holds all GitHub-related integration state: API client,
+// repository metadata, and cached issue / PR data.
+type githubState struct {
+	client      ghclient.Client
+	err         error
+	owner       string
+	repo        string
+	user        string
+	allIssues   []ghIssueItem
+	allPRs      []ghPRItem
+	cfg         config.GitHubConfig
+	issueFilter IssueFilterKind
+	prFilter    PRFilterKind
+	repoPrivate bool
+	pageSize    int
+}
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
@@ -288,27 +316,13 @@ type Panel struct {
 	actionsCfg config.ActionsConfig
 	git        gitOps
 	ctx        context.Context
-	// GitHub integration fields.
-	ghClient    ghclient.Client // may be nil if auth fails
-	ghErr       error           // non-nil if GitHub init failed
 	iconMode    string          // "nerd" or "ascii"
 	repoRoot    string
 	pendingName string // name for pending operation
 	pendingPath string // path captured at double-click time (survives async modal delay)
-	ghOwner     string
-	ghRepo      string
-	ghUser      string               // authenticated user login
 	tabItems    [tabCount][]listItem // items per tab
-	// Cached data for rebuild.
-	lastBranches  []git.Branch
-	lastWorktrees []git.Worktree
-	lastRemotes   []git.Remote
-	lastStashes   []git.StashEntry
-	lastTags      []git.Tag
-	lastReflog    []git.ReflogEntry
-	allIssues     []ghIssueItem // unfiltered issue list
-	allPRs        []ghPRItem    // unfiltered PR list
-	ghCfg         config.GitHubConfig
+	gitData  gitState
+	gh       githubState
 	panels.BasePanel
 	cfg               config.GitConfig
 	colors            panelColors
@@ -319,17 +333,12 @@ type Panel struct {
 	activeTab         tabID           // currently active tab
 	remoteCount       int             // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp       // operation awaiting modal result
-	issueFilter       IssueFilterKind // current issue quick-filter
-	prFilter          PRFilterKind    // current PR quick-filter
 	actionsWatchFrame int             // current animation frame index into watchFrames
 	lastWidth         int             // last rendered width, used for click zone calculation
-	// Repo visibility — true when the GitHub repo is private.
-	repoPrivate bool
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
 	// Per-tab pagination state for lazy-loading GitHub tabs.
 	tabPaging  [tabCount]tabPagination
-	ghPageSize int // effective page size from config or default
 }
 
 // Compile-time interface check.
@@ -371,7 +380,7 @@ func (p *Panel) tabBarHeight() int {
 	case ModeGitHub:
 		return 1 // GitHub row only
 	default: // ModeAll
-		if p.ghClient != nil {
+		if p.gh.client != nil {
 			return 2 // git row + GitHub row
 		}
 		return 1 // git row only (GitHub unavailable)
@@ -415,7 +424,7 @@ func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actions
 		mode:       ModeGit,
 		git:        gitOps,
 		cfg:        cfg,
-		ghCfg:      ghCfg,
+		gh:         githubState{cfg: ghCfg},
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
@@ -433,7 +442,7 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 		activeTab:  tabIssues,
 		git:        gitOps,
 		cfg:        cfg,
-		ghCfg:      ghCfg,
+		gh:         githubState{cfg: ghCfg},
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
@@ -449,20 +458,20 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
 	// Resolve GitHub owner/repo from config or git remote.
-	p.ghOwner, p.ghRepo = p.ghCfg.ResolveGitHubRepo(ctx, p.repoRoot)
+	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
 	// Only create GitHub client when we have a valid owner/repo.
-	if p.ghOwner != "" && p.ghRepo != "" {
+	if p.gh.owner != "" && p.gh.repo != "" {
 		client, err := ghclient.NewClient(ctx)
 		if err != nil {
-			p.ghErr = fmt.Errorf("GitHub auth unavailable: %w", err)
+			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", err)
 		} else {
-			p.ghClient = client
+			p.gh.client = client
 		}
 	}
 	// Load git data + GitHub data in parallel.
 	cmds := []tea.Cmd{p.loadData()}
-	if p.ghClient != nil {
-		p.ghPageSize = p.ghCfg.EffectivePageSize()
+	if p.gh.client != nil {
+		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
@@ -491,28 +500,28 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	}
 	p.repoRoot = msg.Path
 	// Clear all cached git data.
-	p.lastBranches = nil
-	p.lastWorktrees = nil
-	p.lastRemotes = nil
-	p.lastStashes = nil
-	p.lastTags = nil
-	p.lastReflog = nil
+	p.gitData.lastBranches = nil
+	p.gitData.lastWorktrees = nil
+	p.gitData.lastRemotes = nil
+	p.gitData.lastStashes = nil
+	p.gitData.lastTags = nil
+	p.gitData.lastReflog = nil
 	for i := range p.tabItems {
 		p.tabItems[i] = nil
 		p.tabCursor[i] = 0
 		p.tabOffset[i] = 0
 	}
 	// Reset GitHub client — the new directory may be a different repo.
-	p.ghClient = nil
-	p.ghOwner = ""
-	p.ghRepo = ""
-	p.ghUser = ""
-	p.ghErr = nil
-	p.allIssues = nil
-	p.allPRs = nil
+	p.gh.client = nil
+	p.gh.owner = ""
+	p.gh.repo = ""
+	p.gh.user = ""
+	p.gh.err = nil
+	p.gh.allIssues = nil
+	p.gh.allPRs = nil
 	p.actionsWatching = false
 	p.actionsWatchFrame = 0
-	p.repoPrivate = false
+	p.gh.repoPrivate = false
 	// Reset pagination state.
 	for i := range p.tabPaging {
 		p.tabPaging[i] = tabPagination{}
@@ -522,21 +531,21 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	p.ghOwner, p.ghRepo = p.ghCfg.ResolveGitHubRepo(ctx, p.repoRoot)
-	if p.ghOwner != "" && p.ghRepo != "" {
+	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
+	if p.gh.owner != "" && p.gh.repo != "" {
 		ghc, ghErr := ghclient.NewClient(ctx)
 		if ghErr != nil {
-			p.ghErr = fmt.Errorf("GitHub auth unavailable: %w", ghErr)
+			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", ghErr)
 		} else {
-			p.ghClient = ghc
+			p.gh.client = ghc
 		}
 	}
 	if p.git == nil {
 		return p, nil
 	}
 	cmds := []tea.Cmd{p.loadData()}
-	if p.ghClient != nil {
-		p.ghPageSize = p.ghCfg.EffectivePageSize()
+	if p.gh.client != nil {
+		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
@@ -597,10 +606,10 @@ func (p *Panel) loadData() tea.Cmd {
 // The tick is wrapped in a TargetedPanelMsg so only the gitinfo panel receives
 // it, avoiding a full broadcast to all panels.
 func (p *Panel) githubPollTickCmd() tea.Cmd {
-	if p.ghClient == nil || p.ghCfg.PollInterval <= 0 {
+	if p.gh.client == nil || p.gh.cfg.PollInterval <= 0 {
 		return nil
 	}
-	d := time.Duration(p.ghCfg.PollInterval) * time.Second
+	d := time.Duration(p.gh.cfg.PollInterval) * time.Second
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return panels.TargetedPanelMsg{
 			Target: panelGitinfo,
@@ -758,7 +767,7 @@ func (p *Panel) View(width, height int) string {
 	items := p.tabItems[p.activeTab]
 	if len(items) == 0 {
 		label := "No items"
-		if p.activeTab >= tabIssues && p.ghErr != nil {
+		if p.activeTab >= tabIssues && p.gh.err != nil {
 			label = "GitHub unavailable"
 		}
 		empty := lipgloss.NewStyle().
@@ -797,7 +806,7 @@ func (p *Panel) View(width, height int) string {
 // Title implements panels.Panel, overriding BasePanel.
 func (p *Panel) Title() string {
 	if p.mode == ModeGitHub {
-		if p.repoPrivate {
+		if p.gh.repoPrivate {
 			if p.iconMode == "nerd" {
 				return "GitHub \uf023"
 			}
@@ -833,7 +842,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "P", Description: "Push tag", Action: "push_tag"},
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}
-	if p.ghClient != nil {
+	if p.gh.client != nil {
 		bindings = append(
 			bindings,
 			panels.KeyBinding{Key: "i", Description: "Issues tab", Action: "tab_issues"},
@@ -1042,7 +1051,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.activeTab = tabWorktrees
 		return p, p.activeTabSelectionCmd()
 	case "r":
-		if p.activeTab == tabActions && p.ghClient != nil {
+		if p.activeTab == tabActions && p.gh.client != nil {
 			return p.doActionsRerun()
 		}
 		if p.mode != ModeGitHub {
@@ -1050,7 +1059,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p, p.activeTabSelectionCmd()
 		}
 	case "x":
-		if p.activeTab == tabActions && p.ghClient != nil {
+		if p.activeTab == tabActions && p.gh.client != nil {
 			return p.doActionsCancel()
 		}
 		return p.doDelete()
@@ -1070,26 +1079,26 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.activeTab = tabReflog
 		return p, p.activeTabSelectionCmd()
 	case "i":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabIssues
 			return p, p.activeTabSelectionCmd()
 		}
 	case "p":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabPRs
 			return p, p.activeTabSelectionCmd()
 		}
 	case "a":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabActions
 			return p, p.activeTabSelectionCmd()
 		}
 	case "D":
-		if p.activeTab == tabWorkflows && p.ghClient != nil {
+		if p.activeTab == tabWorkflows && p.gh.client != nil {
 			return p.doWorkflowDispatch()
 		}
 	case "m":
-		if p.activeTab == tabPRs && p.ghClient != nil {
+		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.doMergePR()
 		}
 	case "pgdown":
@@ -1843,11 +1852,11 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 // openRepoInBrowser opens the repository's GitHub page in the default browser.
 // Returns nil cmd when owner/repo are unavailable (e.g. pure git mode).
 func (p *Panel) openRepoInBrowser() (panels.Panel, tea.Cmd) {
-	if p.ghOwner == "" || p.ghRepo == "" {
+	if p.gh.owner == "" || p.gh.repo == "" {
 		return p, nil
 	}
-	url := fmt.Sprintf("https://github.com/%s/%s", p.ghOwner, p.ghRepo)
-	return p.openURLAndToast(url, p.ghOwner+"/"+p.ghRepo)
+	url := fmt.Sprintf("https://github.com/%s/%s", p.gh.owner, p.gh.repo)
+	return p.openURLAndToast(url, p.gh.owner+"/"+p.gh.repo)
 }
 
 // openURLAndToast opens a URL in the browser and shows a toast notification.
@@ -1879,8 +1888,8 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 		p.pending = opTagCreate
 		return p, notify.ShowInput("Tag Name", "tag-name")
 	case tabIssues:
-		if p.ghOwner != "" && p.ghRepo != "" {
-			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.ghOwner, p.ghRepo)
+		if p.gh.owner != "" && p.gh.repo != "" {
+			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.gh.owner, p.gh.repo)
 			return p, func() tea.Msg {
 				if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 					return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
@@ -2090,23 +2099,23 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 // buildItems constructs the per-tab item lists and positions cursors.
 func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remotes []git.Remote, stashes []git.StashEntry, tags []git.Tag, reflog []git.ReflogEntry) {
 	// Store data for rebuilds.
-	p.lastBranches = branches
-	p.lastWorktrees = worktrees
-	p.lastRemotes = remotes
-	p.lastStashes = stashes
-	p.lastTags = tags
-	p.lastReflog = reflog
+	p.gitData.lastBranches = branches
+	p.gitData.lastWorktrees = worktrees
+	p.gitData.lastRemotes = remotes
+	p.gitData.lastStashes = stashes
+	p.gitData.lastTags = tags
+	p.gitData.lastReflog = reflog
 	p.doBuildItems()
 }
 
 // doBuildItems constructs items from cached data into per-tab lists.
 func (p *Panel) doBuildItems() {
-	branches := p.lastBranches
-	worktrees := p.lastWorktrees
-	remotes := p.lastRemotes
-	stashes := p.lastStashes
-	tags := p.lastTags
-	reflog := p.lastReflog
+	branches := p.gitData.lastBranches
+	worktrees := p.gitData.lastWorktrees
+	remotes := p.gitData.lastRemotes
+	stashes := p.gitData.lastStashes
+	tags := p.gitData.lastTags
+	reflog := p.gitData.lastReflog
 	var local, remote []git.Branch
 	for _, b := range branches {
 		if b.IsRemote {
@@ -2325,12 +2334,12 @@ func (p *Panel) renderTabBar(width int) string {
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()
 	issuesCount := p.ghTabCountStr(tabIssues)
-	if p.issueFilter != issueFilterAll {
-		issuesCount = p.issueFilter.String()
+	if p.gh.issueFilter != issueFilterAll {
+		issuesCount = p.gh.issueFilter.String()
 	}
 	prsCount := p.ghTabCountStr(tabPRs)
-	if p.prFilter != prFilterAll {
-		prsCount = p.prFilter.String()
+	if p.gh.prFilter != prFilterAll {
+		prsCount = p.gh.prFilter.String()
 	}
 	ghTabs := []tabDef{
 		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
@@ -2353,7 +2362,7 @@ func (p *Panel) renderTabBar(width int) string {
 		return renderRow(ghTabs, isGitHubTab(p.activeTab))
 	default: // ModeAll
 		gitRow := renderRow(gitTabs, isGitTab(p.activeTab))
-		if p.ghClient == nil {
+		if p.gh.client == nil {
 			return gitRow
 		}
 		ghRow := renderRow(ghTabs, !isGitTab(p.activeTab))

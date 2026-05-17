@@ -274,8 +274,8 @@ func (p *Panel) handleWorkflowDispatch(a modalArgs) (panels.Panel, tea.Cmd) {
 		}
 	}
 	// Fetch workflow_dispatch inputs asynchronously.
-	owner, repo := p.ghOwner, p.ghRepo
-	ghClient := p.ghClient
+	owner, repo := p.gh.owner, p.gh.repo
+	ghClient := p.gh.client
 	ctx := a.ctx
 	return p, func() tea.Msg {
 		var wfInputs []ghclient.WorkflowInput
@@ -329,8 +329,8 @@ func (p *Panel) handleWorkflowDispatchInputs(a modalArgs) (panels.Panel, tea.Cmd
 			inputs = nil
 		}
 	}
-	owner, repo := p.ghOwner, p.ghRepo
-	ghClient := p.ghClient
+	owner, repo := p.gh.owner, p.gh.repo
+	ghClient := p.gh.client
 	ctx := a.ctx
 	return p, func() tea.Msg {
 		err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
@@ -385,8 +385,8 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 	if branch == "" {
 		return p, nil
 	}
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	g := a.git
 	ctx := a.ctx
 	return p, func() tea.Msg {

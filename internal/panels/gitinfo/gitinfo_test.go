@@ -485,8 +485,8 @@ func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = "myorg"
-	p.ghRepo = "myrepo"
+	p.gh.owner = "myorg"
+	p.gh.repo = "myrepo"
 	p.SetSize(80, 20)
 
 	// Stub the browser launcher so the test never opens a real browser
@@ -508,8 +508,8 @@ func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 func TestHeaderDoubleClick_NoOwner_Noop(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = ""
-	p.ghRepo = "repo"
+	p.gh.owner = ""
+	p.gh.repo = "repo"
 	p.SetSize(80, 20)
 
 	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
@@ -519,8 +519,8 @@ func TestHeaderDoubleClick_NoOwner_Noop(t *testing.T) {
 func TestHeaderDoubleClick_NoRepo_Noop(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = "owner"
-	p.ghRepo = ""
+	p.gh.owner = "owner"
+	p.gh.repo = ""
 	p.SetSize(80, 20)
 
 	_, cmd := p.Update(panels.PanelHeaderDoubleClickMsg{ContentCol: 0})
@@ -530,8 +530,8 @@ func TestHeaderDoubleClick_NoRepo_Noop(t *testing.T) {
 func TestMouseDoubleClick_TabBar_Noop_WithGitHub(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.SetSize(80, 20)
 
 	// Even with ghOwner/ghRepo set, double-clicking on the tab bar row
@@ -543,8 +543,8 @@ func TestMouseDoubleClick_TabBar_Noop_WithGitHub(t *testing.T) {
 func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = "jongio"
-	p.ghRepo = "grut"
+	p.gh.owner = "jongio"
+	p.gh.repo = "grut"
 
 	// Stub the browser launcher so the test never opens a real browser tab.
 	orig := panels.StartDetachedFn
@@ -562,8 +562,8 @@ func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
 func TestMouseDoubleClick_ContentRow_StillWorks(t *testing.T) {
 	mock := defaultMock()
 	p := newTestPanel(mock)
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.SetSize(80, 20)
 	p.Focused = true
 
@@ -652,9 +652,9 @@ func TestKeyBindings_RRemotesAction(t *testing.T) {
 // but the simplest approach is to use the panel's own handleGHDataLoaded
 // to populate GitHub state.
 func populateGH(p *Panel, issues []ghIssueItem, prs []ghPRItem, actions []ghActionItem) {
-	p.ghUser = "testuser"
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.user = "testuser"
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.buildGitHubItems(issues, prs, actions, nil, nil)
 }
 
@@ -725,12 +725,12 @@ func TestHandleGHDataLoaded_Error(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{err: assert.AnError})
 	assert.Nil(t, cmd) // error is stored on panel, no cmd returned
-	assert.NotNil(t, p.ghErr)
+	assert.NotNil(t, p.gh.err)
 }
 
 func TestHandleGHDataLoaded_ValidData(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghUser = ""
+	p.gh.user = ""
 	issues := sampleIssues()
 	prs := samplePRs()
 	actions := sampleActions()
@@ -744,7 +744,7 @@ func TestHandleGHDataLoaded_ValidData(t *testing.T) {
 	// sampleActions contains an in_progress run → watch tick starts.
 	assert.NotNil(t, cmd, "should start watch tick for in-progress runs")
 	assert.True(t, p.actionsWatching, "should be watching with in-progress runs")
-	assert.Equal(t, "testuser", p.ghUser)
+	assert.Equal(t, "testuser", p.gh.user)
 	assert.Equal(t, len(issues), len(p.tabItems[tabIssues]))
 	assert.Equal(t, len(prs), len(p.tabItems[tabPRs]))
 	assert.Equal(t, len(actions), len(p.tabItems[tabActions]))
@@ -1425,7 +1425,7 @@ func TestRebuildFromCurrent_CursorClamped(t *testing.T) {
 	p.tabCursor[tabBranches] = 2 // beyond last item (ModeGit has 2 local branches)
 
 	// Shrink branches.
-	p.lastBranches = []git.Branch{{Name: "only", Hash: "xxx"}}
+	p.gitData.lastBranches = []git.Branch{{Name: "only", Hash: "xxx"}}
 	p.rebuildFromCurrent()
 
 	// Cursor should be clamped to len-1 = 0.
@@ -1437,7 +1437,7 @@ func TestRebuildFromCurrent_EmptyList(t *testing.T) {
 	p := newTestPanel(mock)
 	p.tabCursor[tabBranches] = 2
 
-	p.lastBranches = nil
+	p.gitData.lastBranches = nil
 	p.rebuildFromCurrent()
 	assert.Equal(t, 0, p.tabCursor[tabBranches])
 }
@@ -1630,38 +1630,38 @@ func TestCycleIssueFilter(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	populateGH(p, sampleIssues(), nil, nil)
 
-	assert.Equal(t, issueFilterAll, p.issueFilter)
+	assert.Equal(t, issueFilterAll, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // All -> Assigned
-	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // Assigned -> Mentioned
-	assert.Equal(t, issueFilterMentioned, p.issueFilter)
+	assert.Equal(t, issueFilterMentioned, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // Mentioned -> Created
-	assert.Equal(t, issueFilterCreated, p.issueFilter)
+	assert.Equal(t, issueFilterCreated, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // Created -> All
-	assert.Equal(t, issueFilterAll, p.issueFilter)
+	assert.Equal(t, issueFilterAll, p.gh.issueFilter)
 }
 
 func TestCyclePRFilter(t *testing.T) {
 	p := newTestPanel(defaultMock())
 	populateGH(p, nil, samplePRs(), nil)
 
-	assert.Equal(t, prFilterAll, p.prFilter)
+	assert.Equal(t, prFilterAll, p.gh.prFilter)
 
 	p.cyclePRFilter() // All -> NeedsReview
-	assert.Equal(t, prFilterNeedsReview, p.prFilter)
+	assert.Equal(t, prFilterNeedsReview, p.gh.prFilter)
 
 	p.cyclePRFilter() // NeedsReview -> Mine
-	assert.Equal(t, prFilterMine, p.prFilter)
+	assert.Equal(t, prFilterMine, p.gh.prFilter)
 
 	p.cyclePRFilter() // Mine -> Draft
-	assert.Equal(t, prFilterDraft, p.prFilter)
+	assert.Equal(t, prFilterDraft, p.gh.prFilter)
 
 	p.cyclePRFilter() // Draft -> All
-	assert.Equal(t, prFilterAll, p.prFilter)
+	assert.Equal(t, prFilterAll, p.gh.prFilter)
 }
 
 func TestCycleIssueFilter_FiltersItems(t *testing.T) {
@@ -1673,7 +1673,7 @@ func TestCycleIssueFilter_FiltersItems(t *testing.T) {
 
 	// Assigned: only issue 1 (assignee = testuser).
 	p.cycleIssueFilter()
-	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 	assert.Equal(t, 1, len(p.tabItems[tabIssues]))
 
 	// Mentioned: all issues.
@@ -1714,49 +1714,49 @@ func TestCyclePRFilter_FiltersItems(t *testing.T) {
 
 func TestMatchesIssueFilter_AllCases(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghUser = "testuser"
+	p.gh.user = "testuser"
 
 	iss := ghIssueItem{Author: "testuser", Assignee: "testuser"}
 
-	p.issueFilter = issueFilterAll
+	p.gh.issueFilter = issueFilterAll
 	assert.True(t, p.matchesIssueFilter(iss))
 
-	p.issueFilter = issueFilterAssigned
+	p.gh.issueFilter = issueFilterAssigned
 	assert.True(t, p.matchesIssueFilter(iss))
 
-	p.issueFilter = issueFilterAssigned
+	p.gh.issueFilter = issueFilterAssigned
 	assert.False(t, p.matchesIssueFilter(ghIssueItem{Assignee: "other"}))
 
-	p.issueFilter = issueFilterMentioned
+	p.gh.issueFilter = issueFilterMentioned
 	assert.True(t, p.matchesIssueFilter(iss))
 
-	p.issueFilter = issueFilterCreated
+	p.gh.issueFilter = issueFilterCreated
 	assert.True(t, p.matchesIssueFilter(iss))
 
-	p.issueFilter = issueFilterCreated
+	p.gh.issueFilter = issueFilterCreated
 	assert.False(t, p.matchesIssueFilter(ghIssueItem{Author: "other"}))
 }
 
 func TestMatchesPRFilter_AllCases(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghUser = "testuser"
+	p.gh.user = "testuser"
 
 	pr := ghPRItem{Author: "other", State: "open"}
 
-	p.prFilter = prFilterAll
+	p.gh.prFilter = prFilterAll
 	assert.True(t, p.matchesPRFilter(pr))
 
-	p.prFilter = prFilterNeedsReview
+	p.gh.prFilter = prFilterNeedsReview
 	assert.True(t, p.matchesPRFilter(pr))
 
-	p.prFilter = prFilterNeedsReview
+	p.gh.prFilter = prFilterNeedsReview
 	assert.False(t, p.matchesPRFilter(ghPRItem{Author: "testuser", State: "open"}))
 
-	p.prFilter = prFilterMine
+	p.gh.prFilter = prFilterMine
 	assert.False(t, p.matchesPRFilter(pr))
 	assert.True(t, p.matchesPRFilter(ghPRItem{Author: "testuser"}))
 
-	p.prFilter = prFilterDraft
+	p.gh.prFilter = prFilterDraft
 	assert.False(t, p.matchesPRFilter(pr))
 	assert.True(t, p.matchesPRFilter(ghPRItem{State: "draft"}))
 }
@@ -1996,7 +1996,7 @@ func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
 
 func TestGithubPollTickCmd_NilClient(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghCfg.PollInterval = 30
+	p.gh.cfg.PollInterval = 30
 	// ghClient is nil by default.
 	cmd := p.githubPollTickCmd()
 	assert.Nil(t, cmd)
@@ -2004,14 +2004,14 @@ func TestGithubPollTickCmd_NilClient(t *testing.T) {
 
 func TestGithubPollTickCmd_ZeroPollInterval(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghCfg.PollInterval = 0
+	p.gh.cfg.PollInterval = 0
 	cmd := p.githubPollTickCmd()
 	assert.Nil(t, cmd)
 }
 
 func TestGithubPollTickCmd_NegativePollInterval(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghCfg.PollInterval = -1
+	p.gh.cfg.PollInterval = -1
 	cmd := p.githubPollTickCmd()
 	assert.Nil(t, cmd)
 }
@@ -2135,7 +2135,7 @@ func TestEscKey_BranchesTab_NoOp(t *testing.T) {
 
 func TestView_GitHubUnavailable(t *testing.T) {
 	p := newTestPanel(defaultMock())
-	p.ghErr = assert.AnError
+	p.gh.err = assert.AnError
 	p.activeTab = tabIssues
 	// No items in issues tab + ghErr set → should show "GitHub unavailable".
 	view := p.View(80, 20)
@@ -2230,7 +2230,7 @@ func TestDoActionsRerun_WithItem(t *testing.T) {
 	// doActionsRerun needs ghClient to actually create the cmd.
 	// Without ghClient, rerunFailedJobsCmd will panic. Test the selection logic.
 	_, cmd := p.doActionsRerun()
-	// rerunFailedJobsCmd calls p.ghClient which is nil, but the cmd func is returned.
+	// rerunFailedJobsCmd calls p.gh.client which is nil, but the cmd func is returned.
 	// The test verifies doActionsRerun found the item and returned a cmd (lazy eval).
 	assert.NotNil(t, cmd)
 }
@@ -2533,9 +2533,9 @@ func (m *mockGHClientFull) ListReleasesPage(_ context.Context, _, _ string, _ *g
 // newGHPanelWithClient creates a panel with a real mock ghClient for full GitHub testing.
 func newGHPanelWithClient(mock *mockGitOps, ghMock *mockGHClientFull) *Panel {
 	p := newTestGitHubPanel(mock)
-	p.ghClient = ghMock
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.client = ghMock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.ctx = context.Background()
 	return p
 }
@@ -2999,7 +2999,7 @@ func TestHandleKey_F_IssuesTab(t *testing.T) {
 	p.activeTab = tabIssues
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f'})
 	assert.NotNil(t, cmd, "'f' on issues tab should cycle filter")
-	assert.Equal(t, issueFilterAssigned, p.issueFilter)
+	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 }
 
 func TestHandleKey_F_PRsTab(t *testing.T) {
@@ -3009,7 +3009,7 @@ func TestHandleKey_F_PRsTab(t *testing.T) {
 	p.activeTab = tabPRs
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f'})
 	assert.NotNil(t, cmd, "'f' on PRs tab should cycle filter")
-	assert.Equal(t, prFilterNeedsReview, p.prFilter)
+	assert.Equal(t, prFilterNeedsReview, p.gh.prFilter)
 }
 
 func TestHandleKey_R_Remotes_WithGHClient(t *testing.T) {
@@ -3106,7 +3106,7 @@ func TestRenderTabBar_WithIssueFilter(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
-	p.issueFilter = issueFilterAssigned
+	p.gh.issueFilter = issueFilterAssigned
 	p.activeTab = tabIssues
 
 	bar := panels.StripANSI(p.renderTabBar(80))
@@ -3117,7 +3117,7 @@ func TestRenderTabBar_WithPRFilter(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
-	p.prFilter = prFilterMine
+	p.gh.prFilter = prFilterMine
 	p.activeTab = tabPRs
 
 	bar := panels.StripANSI(p.renderTabBar(80))
@@ -3181,7 +3181,7 @@ func TestKeyBindings_WithGHClient(t *testing.T) {
 func TestGithubPollTickCmd_ValidConfig(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
-	p.ghCfg.PollInterval = 30
+	p.gh.cfg.PollInterval = 30
 	cmd := p.githubPollTickCmd()
 	assert.NotNil(t, cmd, "valid ghClient + positive interval should return a tick cmd")
 }
@@ -3236,7 +3236,7 @@ func TestView_WithGHClient_TinyHeight(t *testing.T) {
 func TestView_WithGHClient_GHUnavailable(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
-	p.ghErr = assert.AnError
+	p.gh.err = assert.AnError
 	p.activeTab = tabPRs
 	view := p.View(80, 20)
 	assert.Contains(t, view, "GitHub unavailable")
@@ -3718,7 +3718,7 @@ func TestDoDelete_StashEntry(t *testing.T) {
 func TestUpdate_GithubPollTickMsg_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
-	p.ghCfg.PollInterval = 30
+	p.gh.cfg.PollInterval = 30
 	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
 	assert.NotNil(t, cmd, "poll tick with ghClient should trigger loadGitHubData + next tick")
 }
@@ -4310,7 +4310,7 @@ func TestActionsWatchTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
 func TestGithubPollTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
 	p := newGHPanelWithClient(defaultMock(), ghMock)
-	p.ghCfg.PollInterval = 1 // 1 second — fast for test
+	p.gh.cfg.PollInterval = 1 // 1 second — fast for test
 	cmd := p.githubPollTickCmd()
 	require.NotNil(t, cmd)
 
