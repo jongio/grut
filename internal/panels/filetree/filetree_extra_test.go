@@ -40,7 +40,7 @@ func TestBookmarkCurrent_Extra(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := createTestTree(t)
 			ft := newTestFT(t, defaultCfg(), dir)
-			ft.cursor = tt.cursor
+			ft.viewport.cursor = tt.cursor
 			_, cmd := ft.bookmarkCurrent()
 			require.NotNil(t, cmd)
 			msg := cmd()
@@ -82,7 +82,7 @@ func TestAddToContext_Extra(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := createTestTree(t)
 			ft := newTestFT(t, defaultCfg(), dir)
-			ft.cursor = tt.cursor
+			ft.viewport.cursor = tt.cursor
 			_, cmd := ft.addToContext()
 			assert.Equal(t, tt.wantCmd, cmd != nil)
 			if cmd != nil {
@@ -124,7 +124,7 @@ func TestCopyPath_Extra(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := createTestTree(t)
 			ft := newTestFT(t, defaultCfg(), dir)
-			ft.cursor = tt.cursor
+			ft.viewport.cursor = tt.cursor
 			_, cmd := ft.copyPath()
 			assert.Equal(t, tt.wantCmd, cmd != nil)
 			if cmd != nil {
@@ -174,7 +174,7 @@ func TestStageFile_Extra(t *testing.T) {
 			dir := createTestTree(t)
 			tt.prepare(t, dir)
 			ft := newTestFT(t, defaultCfg(), dir)
-			ft.cursor = tt.cursor
+			ft.viewport.cursor = tt.cursor
 			_, cmd := ft.stageFile()
 			assert.Equal(t, tt.wantCmd, cmd != nil)
 			if cmd != nil {
@@ -252,19 +252,19 @@ func TestExitPRFilesMode_Extra(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 
 	// Set up PR files mode
-	ft.prFilesMode = true
-	ft.prNumber = 42
-	ft.prLabel = "test-pr"
-	ft.prFiles = []panels.PRFile{{Filename: "a.go"}, {Filename: "b.go"}}
-	ft.prChanged = &changedFiles{paths: map[string]bool{"a.go": true}}
+	ft.filter.prFilesMode = true
+	ft.filter.prNumber = 42
+	ft.filter.prLabel = "test-pr"
+	ft.filter.prFiles = []panels.PRFile{{Filename: "a.go"}, {Filename: "b.go"}}
+	ft.filter.prChanged = &changedFiles{paths: map[string]bool{"a.go": true}}
 
 	ft.exitPRFilesMode()
 
-	assert.False(t, ft.prFilesMode)
-	assert.Equal(t, 0, ft.prNumber)
-	assert.Empty(t, ft.prLabel)
-	assert.Nil(t, ft.prFiles)
-	assert.Nil(t, ft.prChanged)
+	assert.False(t, ft.filter.prFilesMode)
+	assert.Equal(t, 0, ft.filter.prNumber)
+	assert.Empty(t, ft.filter.prLabel)
+	assert.Nil(t, ft.filter.prFiles)
+	assert.Nil(t, ft.filter.prChanged)
 }
 
 // ---------------------------------------------------------------------------

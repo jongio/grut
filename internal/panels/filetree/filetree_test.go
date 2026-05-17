@@ -280,7 +280,7 @@ func TestGitFilterShowsHiddenChangedFiles(t *testing.T) {
 	assert.Equal(t, 1, ft.visibleCount(), "only README.md visible without git filter")
 
 	// Simulate git filter with changes in the hidden dir.
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 	absWorkflow := filepath.Clean(filepath.Join(dir, ".github", "workflow.yml"))
 	ft.gitChanged = newChangedFiles(map[string]bool{absWorkflow: true}, ft.rootPath)
 	// Ensure .github is loaded and expanded so children are reachable.
@@ -315,7 +315,7 @@ func TestGitFilterShowsUntrackedInHiddenDir(t *testing.T) {
 	}
 
 	// Simulate git filter with an untracked file in the hidden dir.
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 	absNew := filepath.Clean(filepath.Join(dir, ".config", "settings", "new.toml"))
 	ft.gitChanged = newChangedFiles(map[string]bool{absNew: true}, ft.rootPath)
 	ft.expandGitChangedDirs()
@@ -606,7 +606,7 @@ func TestSymlinkDirNotExpandedWhenFollowDisabled(t *testing.T) {
 	// Find the symlink dir and try to expand it.
 	for i := 0; i < ft.visibleCount(); i++ {
 		if ft.visibleName(i) == "link_dir" {
-			ft.cursor = i
+			ft.viewport.cursor = i
 			break
 		}
 	}
@@ -637,7 +637,7 @@ func TestSymlinkLoopDetection(t *testing.T) {
 	// Find "loop" and try to expand.
 	for i := 0; i < ft.visibleCount(); i++ {
 		if ft.visibleName(i) == "loop" {
-			ft.cursor = i
+			ft.viewport.cursor = i
 			break
 		}
 	}
@@ -720,7 +720,7 @@ func TestScrolling(t *testing.T) {
 
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.Focus()
-	ft.height = 5 // small viewport
+	ft.viewport.height = 5 // small viewport
 
 	// Move cursor beyond viewport.
 	for i := 0; i < 10; i++ {
@@ -728,8 +728,8 @@ func TestScrolling(t *testing.T) {
 	}
 	assert.Equal(t, 10, ft.cursorIndex())
 	// Cursor should still be visible (offset adjusted).
-	assert.LessOrEqual(t, ft.offset, ft.cursorIndex())
-	assert.Greater(t, ft.offset+ft.height, ft.cursorIndex())
+	assert.LessOrEqual(t, ft.viewport.offset, ft.cursorIndex())
+	assert.Greater(t, ft.viewport.offset+ft.viewport.height, ft.cursorIndex())
 }
 
 // ---------------------------------------------------------------------------
@@ -759,8 +759,8 @@ func TestKeyIgnoredWhenBlurred(t *testing.T) {
 func TestSetSize(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), t.TempDir())
 	ft.SetSize(80, 24)
-	assert.Equal(t, 80, ft.width)
-	assert.Equal(t, 24, ft.height)
+	assert.Equal(t, 80, ft.viewport.width)
+	assert.Equal(t, 24, ft.viewport.height)
 }
 
 // ---------------------------------------------------------------------------
@@ -855,7 +855,7 @@ func TestSymlinkDirExpandsWhenFollowEnabled(t *testing.T) {
 	// Find the symlink dir and expand it.
 	for i := 0; i < ft.visibleCount(); i++ {
 		if ft.visibleName(i) == "link_sub" {
-			ft.cursor = i
+			ft.viewport.cursor = i
 			break
 		}
 	}
@@ -1538,7 +1538,7 @@ func TestTitle_Default(t *testing.T) {
 func TestTitle_GitFilter(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 
 	assert.Equal(t, "Files (git changed)", ft.Title())
 }
@@ -1547,8 +1547,8 @@ func TestTitle_CommitFilesMode(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	ft.commitFilesMode = true
-	ft.commitLabel = "abc1234 Fix auth bug"
+	ft.filter.commitFilesMode = true
+	ft.filter.commitLabel = "abc1234 Fix auth bug"
 
 	assert.Equal(t, "Files: abc1234 Fix auth bug", ft.Title())
 }
@@ -1566,8 +1566,8 @@ func TestCommitFilesMode_EnterAndExit(t *testing.T) {
 		label: "abc1234 Fix auth bug",
 	})
 
-	assert.True(t, ft.commitFilesMode)
-	assert.Equal(t, "abc1234 Fix auth bug", ft.commitLabel)
+	assert.True(t, ft.filter.commitFilesMode)
+	assert.Equal(t, "abc1234 Fix auth bug", ft.filter.commitLabel)
 	// Tree structure: docs/ (dir) > guide.md, main.go = 3 visible nodes.
 	assert.Equal(t, 3, len(ft.visible))
 	assert.Equal(t, "Files: abc1234 Fix auth bug", ft.Title())
@@ -1597,8 +1597,8 @@ func TestCommitFilesMode_EnterAndExit(t *testing.T) {
 	// Press Escape to exit.
 	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
-	assert.False(t, ft.commitFilesMode)
-	assert.Empty(t, ft.commitLabel)
+	assert.False(t, ft.filter.commitFilesMode)
+	assert.Empty(t, ft.filter.commitLabel)
 	assert.Equal(t, "Files", ft.Title())
 	// Visible should be rebuilt from normal tree.
 	assert.Greater(t, len(ft.visible), 0)
@@ -1612,7 +1612,7 @@ func TestCommitFilesMode_Error(t *testing.T) {
 		err: assert.AnError,
 	})
 
-	assert.False(t, ft.commitFilesMode, "should not enter commit-files mode on error")
+	assert.False(t, ft.filter.commitFilesMode, "should not enter commit-files mode on error")
 	require.NotNil(t, cmd)
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
@@ -1632,7 +1632,7 @@ func TestCommitFilesMode_SurvivesRefreshMsg(t *testing.T) {
 		hash:  "abc1234",
 		label: "abc1234 Fix auth bug",
 	})
-	require.True(t, ft.commitFilesMode)
+	require.True(t, ft.filter.commitFilesMode)
 	// Tree structure: docs/ > guide.md, main.go = 3 nodes.
 	require.Equal(t, 3, len(ft.visible))
 
@@ -1640,7 +1640,7 @@ func TestCommitFilesMode_SurvivesRefreshMsg(t *testing.T) {
 	ft.Update(RefreshMsg{})
 
 	// Commit-files mode must survive: flag still set, visible list unchanged.
-	assert.True(t, ft.commitFilesMode, "commitFilesMode should survive RefreshMsg")
+	assert.True(t, ft.filter.commitFilesMode, "commitFilesMode should survive RefreshMsg")
 	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only commit files after RefreshMsg")
 }
 
@@ -1655,7 +1655,7 @@ func TestCommitFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
 		hash:  "abc1234",
 		label: "abc1234 Fix auth bug",
 	})
-	require.True(t, ft.commitFilesMode)
+	require.True(t, ft.filter.commitFilesMode)
 	// Tree structure: docs/ > guide.md, main.go = 3 nodes.
 	require.Equal(t, 3, len(ft.visible))
 
@@ -1669,7 +1669,7 @@ func TestCommitFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
 
 	// Commit-files mode must survive: flag still set, visible list unchanged
 	// because commit filter takes priority over git filter.
-	assert.True(t, ft.commitFilesMode, "commitFilesMode should survive GitChangedFilesMsg")
+	assert.True(t, ft.filter.commitFilesMode, "commitFilesMode should survive GitChangedFilesMsg")
 	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only commit files after GitChangedFilesMsg")
 }
 
@@ -1687,7 +1687,7 @@ func TestPRFilesMode_SurvivesRefreshMsg(t *testing.T) {
 			{Filename: "docs/guide.md", Status: "added"},
 		},
 	})
-	require.True(t, ft.prFilesMode)
+	require.True(t, ft.filter.prFilesMode)
 	// Tree structure: docs/ > guide.md, src/ > app.go = 4 nodes.
 	require.Equal(t, 4, len(ft.visible))
 
@@ -1695,7 +1695,7 @@ func TestPRFilesMode_SurvivesRefreshMsg(t *testing.T) {
 	ft.Update(RefreshMsg{})
 
 	// PR-files mode must survive.
-	assert.True(t, ft.prFilesMode, "prFilesMode should survive RefreshMsg")
+	assert.True(t, ft.filter.prFilesMode, "prFilesMode should survive RefreshMsg")
 	assert.Equal(t, 4, len(ft.visible), "visible list should still contain only PR files after RefreshMsg")
 }
 
@@ -1718,7 +1718,7 @@ func TestCommitFilesMode_TreeStructure(t *testing.T) {
 		label: "abc1234 Fix auth bug",
 	})
 
-	require.True(t, ft.commitFilesMode)
+	require.True(t, ft.filter.commitFilesMode)
 
 	// Expected tree structure (with SortDirectoriesFirst):
 	//   cmd/         (dir, depth 0, expanded)
@@ -1771,7 +1771,7 @@ func TestFolderSelectedMsg_EmittedFromDir(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, dirIdx, 0, "should have at least one dir in visible")
 
-	ft.cursor = dirIdx
+	ft.viewport.cursor = dirIdx
 	cmd := ft.emitCursorFileSelected()
 	require.NotNil(t, cmd, "expected a command for directory selection")
 
@@ -1795,7 +1795,7 @@ func TestFileSelectedMsg_EmittedFromFile(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, fileIdx, 0, "should have at least one file in visible")
 
-	ft.cursor = fileIdx
+	ft.viewport.cursor = fileIdx
 	cmd := ft.emitCursorFileSelected()
 	require.NotNil(t, cmd)
 
@@ -1826,7 +1826,7 @@ func TestMouseClick_OnFile(t *testing.T) {
 	// Simulate click on that row.
 	result, cmd := ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
 	panel := result.(*FileTree)
-	assert.Equal(t, fileIdx, panel.cursor)
+	assert.Equal(t, fileIdx, panel.viewport.cursor)
 	assert.NotNil(t, cmd, "clicking a file should emit FileSelectedMsg")
 }
 
@@ -1857,11 +1857,11 @@ func TestMouseClick_OutOfBounds(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
 
-	originalCursor := ft.cursor
+	originalCursor := ft.viewport.cursor
 
 	// Click on out-of-bounds row.
 	ft.Update(panels.PanelMouseClickMsg{ContentRow: 100, ContentCol: 5})
-	assert.Equal(t, originalCursor, ft.cursor, "out-of-bounds click should not change cursor")
+	assert.Equal(t, originalCursor, ft.viewport.cursor, "out-of-bounds click should not change cursor")
 }
 
 func TestMouseClick_NegativeRow(t *testing.T) {
@@ -1870,19 +1870,19 @@ func TestMouseClick_NegativeRow(t *testing.T) {
 	ft.focused = true
 
 	ft.Update(panels.PanelMouseClickMsg{ContentRow: -1, ContentCol: 5})
-	assert.Equal(t, 0, ft.cursor)
+	assert.Equal(t, 0, ft.viewport.cursor)
 }
 
 func TestMouseClick_WithOffset(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 2
-	ft.offset = 1
+	ft.viewport.height = 2
+	ft.viewport.offset = 1
 
 	// Click on ContentRow 0 with offset 1 should select visible[1].
 	ft.Update(panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: 5})
-	assert.Equal(t, 1, ft.cursor)
+	assert.Equal(t, 1, ft.viewport.cursor)
 }
 
 // ---------------------------------------------------------------------------
@@ -1893,34 +1893,34 @@ func TestMouseWheel_Down(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 2
+	ft.viewport.height = 2
 
-	assert.Equal(t, 0, ft.offset)
+	assert.Equal(t, 0, ft.viewport.offset)
 
 	ft.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	assert.Greater(t, ft.offset, 0, "wheel down should increase offset")
+	assert.Greater(t, ft.viewport.offset, 0, "wheel down should increase offset")
 }
 
 func TestMouseWheel_Up(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 2
+	ft.viewport.height = 2
 
-	ft.offset = 3
+	ft.viewport.offset = 3
 	ft.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
-	assert.Equal(t, 0, ft.offset, "wheel up should decrease offset")
+	assert.Equal(t, 0, ft.viewport.offset, "wheel up should decrease offset")
 }
 
 func TestMouseWheel_UpAtTop(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 2
+	ft.viewport.height = 2
 
-	ft.offset = 0
+	ft.viewport.offset = 0
 	ft.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
-	assert.Equal(t, 0, ft.offset, "offset should not go below 0")
+	assert.Equal(t, 0, ft.viewport.offset, "offset should not go below 0")
 }
 
 func TestMouseWheel_CursorFollowsViewport(t *testing.T) {
@@ -1935,17 +1935,17 @@ func TestMouseWheel_CursorFollowsViewport(t *testing.T) {
 
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 5
+	ft.viewport.height = 5
 
-	assert.Equal(t, 0, ft.cursor, "cursor starts at 0")
-	assert.Equal(t, 0, ft.offset, "offset starts at 0")
+	assert.Equal(t, 0, ft.viewport.cursor, "cursor starts at 0")
+	assert.Equal(t, 0, ft.viewport.offset, "offset starts at 0")
 
 	// Scroll down — cursor should follow the viewport.
 	ft.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	assert.Greater(t, ft.offset, 0, "offset should increase")
-	assert.GreaterOrEqual(t, ft.cursor, ft.offset,
+	assert.Greater(t, ft.viewport.offset, 0, "offset should increase")
+	assert.GreaterOrEqual(t, ft.viewport.cursor, ft.viewport.offset,
 		"cursor must be >= offset after scroll down")
-	assert.Less(t, ft.cursor, ft.offset+ft.height,
+	assert.Less(t, ft.viewport.cursor, ft.viewport.offset+ft.viewport.height,
 		"cursor must be within viewport after scroll down")
 }
 
@@ -1963,17 +1963,17 @@ func TestMouseWheel_RebuildDoesNotSnapBack(t *testing.T) {
 
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 5
+	ft.viewport.height = 5
 
 	// Scroll down.
 	ft.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	scrolledOffset := ft.offset
+	scrolledOffset := ft.viewport.offset
 	assert.Greater(t, scrolledOffset, 0)
 
 	// Simulate a background refresh triggering rebuildVisible.
 	ft.rebuildVisible()
 
-	assert.Equal(t, scrolledOffset, ft.offset,
+	assert.Equal(t, scrolledOffset, ft.viewport.offset,
 		"rebuildVisible must not snap offset back to top after scroll")
 }
 
@@ -2000,11 +2000,11 @@ func TestMouseDoubleClick_OnFile(t *testing.T) {
 
 	// Simulate the first click (sets cursor), then the double-click.
 	ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
-	assert.Equal(t, fileIdx, ft.cursor)
+	assert.Equal(t, fileIdx, ft.viewport.cursor)
 
 	result, cmd := ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: fileIdx, ContentCol: 5})
 	panel := result.(*FileTree)
-	assert.Equal(t, fileIdx, panel.cursor)
+	assert.Equal(t, fileIdx, panel.viewport.cursor)
 
 	// Double-click on a file should open it in the editor, not emit
 	// FileSelectedMsg. The returned command produces a toast.
@@ -2078,9 +2078,9 @@ func TestMouseDoubleClick_OutOfBounds(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
 
-	originalCursor := ft.cursor
+	originalCursor := ft.viewport.cursor
 	ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 100, ContentCol: 5})
-	assert.Equal(t, originalCursor, ft.cursor, "out-of-bounds double-click should not change cursor")
+	assert.Equal(t, originalCursor, ft.viewport.cursor, "out-of-bounds double-click should not change cursor")
 }
 
 // ---------------------------------------------------------------------------
@@ -2094,10 +2094,10 @@ func TestToggleGitFilter_NoClient(t *testing.T) {
 
 	// Without git client, toggle should be a no-op.
 	assert.Nil(t, ft.gitClient)
-	beforeFilter := ft.gitFilter
+	beforeFilter := ft.filter.gitFilter
 
 	ft.Update(keyMsg('f'))
-	assert.Equal(t, beforeFilter, ft.gitFilter, "toggle without git client should be no-op")
+	assert.Equal(t, beforeFilter, ft.filter.gitFilter, "toggle without git client should be no-op")
 }
 
 func TestToggleGitFilter_EnableDisable(t *testing.T) {
@@ -2106,16 +2106,16 @@ func TestToggleGitFilter_EnableDisable(t *testing.T) {
 	ft.focused = true
 	ft.gitClient = &mockGitClient{}
 
-	assert.False(t, ft.gitFilter)
+	assert.False(t, ft.filter.gitFilter)
 
 	// Enable git filter.
 	_, cmd := ft.Update(keyMsg('f'))
-	assert.True(t, ft.gitFilter)
+	assert.True(t, ft.filter.gitFilter)
 	assert.NotNil(t, cmd, "enabling git filter should return commands")
 
 	// Disable git filter.
 	ft.Update(keyMsg('f'))
-	assert.False(t, ft.gitFilter)
+	assert.False(t, ft.filter.gitFilter)
 	assert.Nil(t, ft.gitChanged, "disabling should clear gitChanged")
 	// gitChanged nil covers both paths and dirs
 }
@@ -2127,13 +2127,13 @@ func TestToggleGitFilter_PreservesCursorPath(t *testing.T) {
 	ft.gitClient = &mockGitClient{}
 
 	// Move cursor to a known file.
-	ft.cursor = 2 // main.go in default sort
+	ft.viewport.cursor = 2 // main.go in default sort
 	originalPath := ft.CursorPath()
 	assert.NotEmpty(t, originalPath)
 
 	// Toggle on.
 	ft.Update(keyMsg('f'))
-	assert.True(t, ft.gitFilter)
+	assert.True(t, ft.filter.gitFilter)
 	assert.Equal(t, originalPath, ft.savedCursorPath, "should save cursor path for async restore")
 }
 
@@ -2167,10 +2167,10 @@ func TestHandleTabActivated_GitTab(t *testing.T) {
 	ft.focused = true
 	ft.gitClient = &mockGitClient{}
 
-	assert.False(t, ft.gitFilter)
+	assert.False(t, ft.filter.gitFilter)
 
 	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "git"})
-	assert.True(t, ft.gitFilter, "switching to git tab should enable git filter")
+	assert.True(t, ft.filter.gitFilter, "switching to git tab should enable git filter")
 	assert.NotNil(t, cmd, "should return commands for git filter setup")
 }
 
@@ -2181,11 +2181,11 @@ func TestHandleTabActivated_ExplorerTab(t *testing.T) {
 	ft.gitClient = &mockGitClient{}
 
 	// Enable git filter first.
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 	ft.gitChanged = &changedFiles{paths: map[string]bool{"dummy": true}, dirs: map[string]bool{"dummy": true}}
 
 	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "explorer"})
-	assert.False(t, ft.gitFilter, "switching to explorer tab should disable git filter")
+	assert.False(t, ft.filter.gitFilter, "switching to explorer tab should disable git filter")
 	assert.Nil(t, ft.gitChanged)
 	// gitChanged nil covers dirs
 	assert.NotNil(t, cmd)
@@ -2196,11 +2196,11 @@ func TestHandleTabActivated_AlreadyInGitMode(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
 	ft.gitClient = &mockGitClient{}
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 
 	// Already in git mode, receiving git tab activation should be no-op.
 	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "git"})
-	assert.True(t, ft.gitFilter)
+	assert.True(t, ft.filter.gitFilter)
 	assert.Nil(t, cmd, "already in git mode should be no-op")
 }
 
@@ -2213,7 +2213,7 @@ func TestGitChangedFilesMsg_Handling(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
 	ft.gitClient = &mockGitClient{}
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 
 	changedPaths := map[string]bool{
 		filepath.Join(dir, "main.go"):       true,
@@ -2255,12 +2255,12 @@ func TestGoToTop(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 20
+	ft.viewport.height = 20
 
 	// Move cursor down a few times first.
-	ft.cursor = 3
+	ft.viewport.cursor = 3
 	ft.goToTop()
-	assert.Equal(t, 0, ft.cursor)
+	assert.Equal(t, 0, ft.viewport.cursor)
 }
 
 // ---------------------------------------------------------------------------
@@ -2405,7 +2405,7 @@ func TestNormalizeVolume(t *testing.T) {
 func TestView_EmptyTree(t *testing.T) {
 	dir := t.TempDir() // empty directory
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.height = 10
+	ft.viewport.height = 10
 
 	view := ft.View(40, 10)
 	assert.Contains(t, view, "Empty")
@@ -2424,7 +2424,7 @@ func TestView_NormalRendering(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 20
+	ft.viewport.height = 20
 
 	view := ft.View(60, 20)
 	assert.NotEmpty(t, view)
@@ -2437,35 +2437,35 @@ func TestRestoreCursorToPath_Empty(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	cursor := ft.cursor
+	cursor := ft.viewport.cursor
 	ft.restoreCursorToPath("")
-	assert.Equal(t, cursor, ft.cursor, "empty path should not change cursor")
+	assert.Equal(t, cursor, ft.viewport.cursor, "empty path should not change cursor")
 }
 
 func TestRestoreCursorToPath_Found(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.height = 20
+	ft.viewport.height = 20
 
 	// Move cursor to 0, then restore to main.go.
-	ft.cursor = 0
+	ft.viewport.cursor = 0
 	mainGoPath := filepath.Join(dir, "main.go")
 	ft.restoreCursorToPath(mainGoPath)
 	// cursor should now be at the main.go entry.
-	if ft.cursor >= 0 && ft.cursor < len(ft.visible) {
-		assert.Equal(t, mainGoPath, ft.visible[ft.cursor].path)
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		assert.Equal(t, mainGoPath, ft.visible[ft.viewport.cursor].path)
 	}
 }
 
 func TestRestoreCursorToPath_NotFound(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.height = 20
+	ft.viewport.height = 20
 
-	ft.cursor = 100 // intentionally out of range
+	ft.viewport.cursor = 100 // intentionally out of range
 	ft.restoreCursorToPath(filepath.Join(dir, "nonexistent.go"))
 	// cursor should be clamped to valid range.
-	assert.True(t, ft.cursor >= 0 && ft.cursor < len(ft.visible))
+	assert.True(t, ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible))
 }
 
 func TestRenderLine_WithGitStatus(t *testing.T) {
@@ -2608,10 +2608,10 @@ func TestHandleKey_CommitFilesMode_Escape(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.commitFilesMode = true
+	ft.filter.commitFilesMode = true
 
 	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	assert.False(t, ft.commitFilesMode, "escape should exit commit files mode")
+	assert.False(t, ft.filter.commitFilesMode, "escape should exit commit files mode")
 }
 
 func TestHandleKey_Unfocused_Ignored(t *testing.T) {
@@ -2619,9 +2619,9 @@ func TestHandleKey_Unfocused_Ignored(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = false
 
-	cursor := ft.cursor
+	cursor := ft.viewport.cursor
 	ft.Update(tea.KeyPressMsg{Code: 'j'})
-	assert.Equal(t, cursor, ft.cursor, "unfocused should ignore keys")
+	assert.Equal(t, cursor, ft.viewport.cursor, "unfocused should ignore keys")
 }
 
 // ---------------------------------------------------------------------------
@@ -2690,17 +2690,17 @@ func TestHandleKey_GoToBottom(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 20
+	ft.viewport.height = 20
 
 	ft.Update(tea.KeyPressMsg{Code: 'G'})
-	assert.Equal(t, len(ft.visible)-1, ft.cursor)
+	assert.Equal(t, len(ft.visible)-1, ft.viewport.cursor)
 }
 
 func TestHandleKey_ToggleHidden(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 20
+	ft.viewport.height = 20
 
 	beforeCount := ft.visibleCount()
 	ft.Update(tea.KeyPressMsg{Code: '.'})
@@ -2711,10 +2711,10 @@ func TestHandleKey_ToggleHidden(t *testing.T) {
 func TestCommitDeselectedMsg(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.commitFilesMode = true
+	ft.filter.commitFilesMode = true
 
 	ft.Update(panels.CommitDeselectedMsg{})
-	assert.False(t, ft.commitFilesMode, "should exit commit files mode")
+	assert.False(t, ft.filter.commitFilesMode, "should exit commit files mode")
 }
 
 // ---------------------------------------------------------------------------
@@ -2813,8 +2813,8 @@ func TestLoadGitIgnored_ProducesMsg(t *testing.T) {
 func TestRenderLine_IgnoredFileDimmed(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.width = 60
-	ft.height = 20
+	ft.viewport.width = 60
+	ft.viewport.height = 20
 	ft.focused = true
 
 	// Set ignored paths.
@@ -2842,8 +2842,8 @@ func TestRenderLine_IgnoredFileDimmed(t *testing.T) {
 func TestRenderLine_IgnoredDirDimmed(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.width = 60
-	ft.height = 20
+	ft.viewport.width = 60
+	ft.viewport.height = 20
 	ft.focused = true
 
 	// Set ignored paths.
@@ -2973,7 +2973,7 @@ func TestTitle_NilStatusIsClean(t *testing.T) {
 func TestTitle_GitFilterTakesPrecedenceOverDirty(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.gitFilter = true
+	ft.filter.gitFilter = true
 	ft.gitFileStatus = map[string]string{filepath.Join(dir, "file.go"): "M"}
 
 	assert.Equal(t, "Files (git changed)", ft.Title())
@@ -2982,8 +2982,8 @@ func TestTitle_GitFilterTakesPrecedenceOverDirty(t *testing.T) {
 func TestTitle_CommitModeTakesPrecedenceOverDirty(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.commitFilesMode = true
-	ft.commitLabel = "abc1234"
+	ft.filter.commitFilesMode = true
+	ft.filter.commitLabel = "abc1234"
 	ft.gitFileStatus = map[string]string{filepath.Join(dir, "file.go"): "M"}
 
 	assert.Equal(t, "Files: abc1234", ft.Title())
@@ -2992,8 +2992,8 @@ func TestTitle_CommitModeTakesPrecedenceOverDirty(t *testing.T) {
 func TestTitle_PRModeTakesPrecedenceOverDirty(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.prFilesMode = true
-	ft.prLabel = "PR #42"
+	ft.filter.prFilesMode = true
+	ft.filter.prLabel = "PR #42"
 	ft.gitFileStatus = map[string]string{filepath.Join(dir, "file.go"): "M"}
 
 	assert.Equal(t, "Files: PR #42", ft.Title())
@@ -3079,23 +3079,23 @@ func TestPageDown(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 3 // small viewport to make page size meaningful
+	ft.viewport.height = 3 // small viewport to make page size meaningful
 
-	assert.Equal(t, 0, ft.cursor)
+	assert.Equal(t, 0, ft.viewport.cursor)
 
 	// Press PgDn to page down.
 	ft.Update(specialKeyMsg(tea.KeyPgDown))
-	assert.Equal(t, 3, ft.cursor, "cursor should move down by viewport height")
+	assert.Equal(t, 3, ft.viewport.cursor, "cursor should move down by viewport height")
 }
 
 func TestPageUp(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 3
+	ft.viewport.height = 3
 
 	// Move cursor to the bottom first.
-	ft.cursor = ft.visibleCount() - 1
+	ft.viewport.cursor = ft.visibleCount() - 1
 
 	// Press PgUp to page up.
 	ft.Update(specialKeyMsg(tea.KeyPgUp))
@@ -3103,17 +3103,17 @@ func TestPageUp(t *testing.T) {
 	if expected < 0 {
 		expected = 0
 	}
-	assert.Equal(t, expected, ft.cursor, "cursor should move up by viewport height")
+	assert.Equal(t, expected, ft.viewport.cursor, "cursor should move up by viewport height")
 }
 
 func TestPageDown_ClampsAtEnd(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 100 // larger than total items
+	ft.viewport.height = 100 // larger than total items
 
 	ft.Update(specialKeyMsg(tea.KeyPgDown))
-	assert.Equal(t, ft.visibleCount()-1, ft.cursor,
+	assert.Equal(t, ft.visibleCount()-1, ft.viewport.cursor,
 		"page down beyond end should clamp to last item")
 }
 
@@ -3121,11 +3121,11 @@ func TestPageUp_ClampsAtZero(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 	ft.focused = true
-	ft.height = 3
+	ft.viewport.height = 3
 
-	ft.cursor = 1 // near the top
+	ft.viewport.cursor = 1 // near the top
 	ft.Update(specialKeyMsg(tea.KeyPgUp))
-	assert.Equal(t, 0, ft.cursor, "page up past beginning should clamp to 0")
+	assert.Equal(t, 0, ft.viewport.cursor, "page up past beginning should clamp to 0")
 }
 
 // ---------------------------------------------------------------------------
@@ -3144,8 +3144,8 @@ func TestBranchFilesMode_EnterAndExit(t *testing.T) {
 		branch: "feature/auth",
 	})
 
-	assert.True(t, ft.branchFilesMode)
-	assert.Equal(t, "branch: feature/auth", ft.branchLabel)
+	assert.True(t, ft.filter.branchFilesMode)
+	assert.Equal(t, "branch: feature/auth", ft.filter.branchLabel)
 	// Tree structure: docs/ (dir) > guide.md, main.go = 3 visible nodes.
 	assert.Equal(t, 3, len(ft.visible))
 	assert.Equal(t, "Files: branch: feature/auth", ft.Title())
@@ -3174,8 +3174,8 @@ func TestBranchFilesMode_EnterAndExit(t *testing.T) {
 	// Press Escape to exit.
 	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
-	assert.False(t, ft.branchFilesMode)
-	assert.Empty(t, ft.branchLabel)
+	assert.False(t, ft.filter.branchFilesMode)
+	assert.Empty(t, ft.filter.branchLabel)
 	assert.Equal(t, "Files", ft.Title())
 	// Visible should be rebuilt from normal tree.
 	assert.Greater(t, len(ft.visible), 0)
@@ -3189,7 +3189,7 @@ func TestBranchFilesMode_Error(t *testing.T) {
 		err: assert.AnError,
 	})
 
-	assert.False(t, ft.branchFilesMode, "should not enter branch-files mode on error")
+	assert.False(t, ft.filter.branchFilesMode, "should not enter branch-files mode on error")
 	require.NotNil(t, cmd)
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
@@ -3209,7 +3209,7 @@ func TestBranchFilesMode_SurvivesRefreshMsg(t *testing.T) {
 		files:  []string{"main.go", "docs/guide.md"},
 		branch: "feature/auth",
 	})
-	require.True(t, ft.branchFilesMode)
+	require.True(t, ft.filter.branchFilesMode)
 	// Tree structure: docs/ > guide.md, main.go = 3 nodes.
 	require.Equal(t, 3, len(ft.visible))
 
@@ -3217,7 +3217,7 @@ func TestBranchFilesMode_SurvivesRefreshMsg(t *testing.T) {
 	ft.Update(RefreshMsg{})
 
 	// Branch-files mode must survive: flag still set, visible list unchanged.
-	assert.True(t, ft.branchFilesMode, "branchFilesMode should survive RefreshMsg")
+	assert.True(t, ft.filter.branchFilesMode, "branchFilesMode should survive RefreshMsg")
 	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only branch files after RefreshMsg")
 }
 
@@ -3228,18 +3228,18 @@ func TestBranchFilesMode_SameBranchTogglesOff(t *testing.T) {
 	ft.SetGitClient(&mockGitClient{})
 
 	// Manually enter branch-files mode.
-	ft.branchFilesMode = true
-	ft.branchName = "feature/auth"
-	ft.branchLabel = "branch: feature/auth"
-	ft.branchChanged = &changedFiles{paths: map[string]bool{
+	ft.filter.branchFilesMode = true
+	ft.filter.branchName = "feature/auth"
+	ft.filter.branchLabel = "branch: feature/auth"
+	ft.filter.branchChanged = &changedFiles{paths: map[string]bool{
 		filepath.Join(dir, "main.go"): true,
 	}}
 
 	// Send BranchSelectedMsg with the same branch name — should toggle off.
 	ft.Update(panels.BranchSelectedMsg{Name: "feature/auth"})
 
-	assert.False(t, ft.branchFilesMode, "selecting same branch should toggle off")
-	assert.Empty(t, ft.branchName)
+	assert.False(t, ft.filter.branchFilesMode, "selecting same branch should toggle off")
+	assert.Empty(t, ft.filter.branchName)
 }
 
 func TestBranchFilesMode_EmptyNameExits(t *testing.T) {
@@ -3248,25 +3248,25 @@ func TestBranchFilesMode_EmptyNameExits(t *testing.T) {
 	ft.focused = true
 
 	// Manually enter branch-files mode.
-	ft.branchFilesMode = true
-	ft.branchName = "feature/auth"
-	ft.branchLabel = "branch: feature/auth"
+	ft.filter.branchFilesMode = true
+	ft.filter.branchName = "feature/auth"
+	ft.filter.branchLabel = "branch: feature/auth"
 
 	// Send BranchSelectedMsg with empty name — should exit.
 	ft.Update(panels.BranchSelectedMsg{Name: ""})
 
-	assert.False(t, ft.branchFilesMode, "empty branch name should exit branch-files mode")
+	assert.False(t, ft.filter.branchFilesMode, "empty branch name should exit branch-files mode")
 }
 
 func TestBranchDeselectedMsg(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
-	ft.branchFilesMode = true
-	ft.branchName = "feature/auth"
+	ft.filter.branchFilesMode = true
+	ft.filter.branchName = "feature/auth"
 
 	ft.Update(panels.BranchDeselectedMsg{})
-	assert.False(t, ft.branchFilesMode, "should exit branch-files mode")
-	assert.Empty(t, ft.branchName)
+	assert.False(t, ft.filter.branchFilesMode, "should exit branch-files mode")
+	assert.Empty(t, ft.filter.branchName)
 }
 
 func TestBranchFilesMode_ExitsCommitAndPRModes(t *testing.T) {
@@ -3280,16 +3280,16 @@ func TestBranchFilesMode_ExitsCommitAndPRModes(t *testing.T) {
 		hash:  "abc1234",
 		label: "abc1234 Fix bug",
 	})
-	require.True(t, ft.commitFilesMode)
+	require.True(t, ft.filter.commitFilesMode)
 
 	// Now enter branch-files mode — should exit commit-files mode.
 	ft.Update(branchFilesLoadedMsg{
 		files:  []string{"main.go", "docs/guide.md"},
 		branch: "feature/auth",
 	})
-	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
-	assert.False(t, ft.commitFilesMode, "commit-files mode should be exited")
-	assert.Nil(t, ft.commitChanged, "commit changed should be cleared")
+	assert.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
+	assert.False(t, ft.filter.commitFilesMode, "commit-files mode should be exited")
+	assert.Nil(t, ft.filter.commitChanged, "commit changed should be cleared")
 }
 
 func TestBranchFilesMode_ExitsPRMode(t *testing.T) {
@@ -3304,16 +3304,16 @@ func TestBranchFilesMode_ExitsPRMode(t *testing.T) {
 			{Filename: "src/app.go", Status: "modified"},
 		},
 	})
-	require.True(t, ft.prFilesMode)
+	require.True(t, ft.filter.prFilesMode)
 
 	// Now enter branch-files mode — should exit PR-files mode.
 	ft.Update(branchFilesLoadedMsg{
 		files:  []string{"main.go"},
 		branch: "feature/auth",
 	})
-	assert.True(t, ft.branchFilesMode, "should enter branch-files mode")
-	assert.False(t, ft.prFilesMode, "PR-files mode should be exited")
-	assert.Nil(t, ft.prChanged, "PR changed should be cleared")
+	assert.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
+	assert.False(t, ft.filter.prFilesMode, "PR-files mode should be exited")
+	assert.Nil(t, ft.filter.prChanged, "PR changed should be cleared")
 }
 
 func TestBranchFilesMode_Title(t *testing.T) {
@@ -3324,13 +3324,13 @@ func TestBranchFilesMode_Title(t *testing.T) {
 	assert.Equal(t, "Files", ft.Title())
 
 	// Enter branch-files mode.
-	ft.branchFilesMode = true
-	ft.branchLabel = "branch: develop"
+	ft.filter.branchFilesMode = true
+	ft.filter.branchLabel = "branch: develop"
 	assert.Equal(t, "Files: branch: develop", ft.Title())
 
 	// Branch-files title takes priority over commit-files.
-	ft.commitFilesMode = true
-	ft.commitLabel = "abc1234 Fix bug"
+	ft.filter.commitFilesMode = true
+	ft.filter.commitLabel = "abc1234 Fix bug"
 	assert.Equal(t, "Files: branch: develop", ft.Title(), "branch label should take priority")
 }
 
@@ -3344,15 +3344,15 @@ func TestBranchFilesMode_EscExit(t *testing.T) {
 		files:  []string{"main.go"},
 		branch: "hotfix/urgent",
 	})
-	require.True(t, ft.branchFilesMode)
+	require.True(t, ft.filter.branchFilesMode)
 
 	// Press Escape.
 	ft.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
-	assert.False(t, ft.branchFilesMode)
-	assert.Empty(t, ft.branchName)
-	assert.Empty(t, ft.branchLabel)
-	assert.Nil(t, ft.branchChanged)
+	assert.False(t, ft.filter.branchFilesMode)
+	assert.Empty(t, ft.filter.branchName)
+	assert.Empty(t, ft.filter.branchLabel)
+	assert.Nil(t, ft.filter.branchChanged)
 	// branchChanged nil covers both paths and dirs
 }
 
@@ -3363,7 +3363,7 @@ func TestBranchSelectedMsg_NilGitClient(t *testing.T) {
 
 	_, cmd := ft.Update(panels.BranchSelectedMsg{Name: "feature/auth"})
 	assert.Nil(t, cmd, "should return nil cmd when gitClient is nil")
-	assert.False(t, ft.branchFilesMode)
+	assert.False(t, ft.filter.branchFilesMode)
 }
 
 func TestBranchFilesMode_HandleBranchSelected_ReturnsCmd(t *testing.T) {
@@ -3391,7 +3391,7 @@ func TestBranchFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
 		files:  []string{"main.go", "docs/guide.md"},
 		branch: "feature/auth",
 	})
-	require.True(t, ft.branchFilesMode)
+	require.True(t, ft.filter.branchFilesMode)
 	require.Equal(t, 3, len(ft.visible))
 
 	// Send GitChangedFilesMsg (simulates git status refresh).
@@ -3404,7 +3404,7 @@ func TestBranchFilesMode_SurvivesGitChangedFilesMsg(t *testing.T) {
 
 	// Branch-files mode must survive: flag still set, visible list unchanged
 	// because branch filter takes priority over git filter.
-	assert.True(t, ft.branchFilesMode, "branchFilesMode should survive GitChangedFilesMsg")
+	assert.True(t, ft.filter.branchFilesMode, "branchFilesMode should survive GitChangedFilesMsg")
 	assert.Equal(t, 3, len(ft.visible), "visible list should still contain only branch files after GitChangedFilesMsg")
 }
 
@@ -3418,8 +3418,8 @@ func TestCommitFilesMode_ExitsBranchMode(t *testing.T) {
 		files:  []string{"main.go", "docs/guide.md"},
 		branch: "feature/auth",
 	})
-	require.True(t, ft.branchFilesMode)
-	require.Equal(t, "feature/auth", ft.branchName)
+	require.True(t, ft.filter.branchFilesMode)
+	require.Equal(t, "feature/auth", ft.filter.branchName)
 
 	// Now enter commit-files mode — should exit branch-files mode.
 	ft.Update(commitFilesLoadedMsg{
@@ -3428,10 +3428,10 @@ func TestCommitFilesMode_ExitsBranchMode(t *testing.T) {
 		label: "abc1234 Fix bug",
 	})
 
-	assert.True(t, ft.commitFilesMode, "should enter commit-files mode")
-	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
-	assert.Empty(t, ft.branchName, "branchName should be cleared")
-	assert.Nil(t, ft.branchChanged, "branchChanged should be cleared")
+	assert.True(t, ft.filter.commitFilesMode, "should enter commit-files mode")
+	assert.False(t, ft.filter.branchFilesMode, "branch-files mode should be exited")
+	assert.Empty(t, ft.filter.branchName, "branchName should be cleared")
+	assert.Nil(t, ft.filter.branchChanged, "branchChanged should be cleared")
 }
 
 func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
@@ -3444,7 +3444,7 @@ func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
 		files:  []string{"main.go"},
 		branch: "feature/auth",
 	})
-	require.True(t, ft.branchFilesMode)
+	require.True(t, ft.filter.branchFilesMode)
 
 	// Now enter PR-files mode — should exit branch-files mode.
 	ft.Update(panels.PRFilesLoadedMsg{
@@ -3454,10 +3454,10 @@ func TestPRFilesMode_ExitsBranchMode(t *testing.T) {
 		},
 	})
 
-	assert.True(t, ft.prFilesMode, "should enter PR-files mode")
-	assert.False(t, ft.branchFilesMode, "branch-files mode should be exited")
-	assert.Empty(t, ft.branchName, "branchName should be cleared")
-	assert.Nil(t, ft.branchChanged, "branchChanged should be cleared")
+	assert.True(t, ft.filter.prFilesMode, "should enter PR-files mode")
+	assert.False(t, ft.filter.branchFilesMode, "branch-files mode should be exited")
+	assert.Empty(t, ft.filter.branchName, "branchName should be cleared")
+	assert.Nil(t, ft.filter.branchChanged, "branchChanged should be cleared")
 }
 
 // ---------------------------------------------------------------------------
@@ -3488,13 +3488,13 @@ func TestBranchFilesMode_PathTraversalInOutput(t *testing.T) {
 		branch: "evil/traversal",
 	})
 
-	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
+	require.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
 
 	// Verify that traversal paths are in branchChanged.paths as absolute paths
 	// outside the tree root - they were resolved by filepath.Clean(filepath.Join(...)).
 	for _, trav := range []string{"../../../etc/passwd", "../../.ssh/id_rsa"} {
 		abs := filepath.Clean(filepath.Join(dir, trav))
-		assert.True(t, ft.branchChanged.hasPath(abs),
+		assert.True(t, ft.filter.branchChanged.hasPath(abs),
 			"traversal path %q should be in branchChanged.paths as %q", trav, abs)
 		// But verify the absolute path is outside the tree root.
 		assert.False(t, strings.HasPrefix(abs, dir+string(filepath.Separator)),
@@ -3536,9 +3536,9 @@ func TestBranchFilesMode_LargeFileList(t *testing.T) {
 		branch: "feature/massive-diff",
 	})
 
-	require.True(t, ft.branchFilesMode, "should enter branch-files mode")
+	require.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
 	// branchChanged.paths should have all 5001 entries.
-	assert.Equal(t, 5001, len(ft.branchChanged.paths),
+	assert.Equal(t, 5001, len(ft.filter.branchChanged.paths),
 		"all file paths should be in branchChanged.paths")
 	// Only main.go is a real file in the tree, so visible should contain just it.
 	var visibleFiles []string

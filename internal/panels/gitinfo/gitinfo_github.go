@@ -324,12 +324,12 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 		)
 	}
 	issuesCount := fmt.Sprintf("%d", len(p.tabItems[tabIssues]))
-	if p.issueFilter != issueFilterAll {
-		issuesCount = p.issueFilter.String()
+	if p.gh.issueFilter != issueFilterAll {
+		issuesCount = p.gh.issueFilter.String()
 	}
 	prsCount := fmt.Sprintf("%d", len(p.tabItems[tabPRs]))
-	if p.prFilter != prFilterAll {
-		prsCount = p.prFilter.String()
+	if p.gh.prFilter != prFilterAll {
+		prsCount = p.gh.prFilter.String()
 	}
 	tabs = append(
 		tabs,
@@ -388,8 +388,8 @@ func tabRowUseShort(tabs []struct{ name, short, count string }, width int) bool 
 // from the GitHub API asynchronously.
 
 func (p *Panel) loadGitHubData() tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		var result ghDataLoadedMsg
@@ -567,13 +567,13 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 
 func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
-		p.ghErr = msg.err
+		p.gh.err = msg.err
 		return p, nil
 	}
 	if msg.user != "" {
-		p.ghUser = msg.user
+		p.gh.user = msg.user
 	}
-	p.repoPrivate = msg.repoPrivate
+	p.gh.repoPrivate = msg.repoPrivate
 	p.buildGitHubItems(msg.issues, msg.prs, msg.actions, msg.workflows, msg.releases)
 	// Determine if any workflow run is still in progress or queued.
 	wasWatching := p.actionsWatching
@@ -594,8 +594,8 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 
 // buildGitHubItems constructs listItem slices for the GitHub tabs.
 func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRuns []ghActionItem, workflows []ghWorkflowItem, releases []ghReleaseItem) {
-	p.allIssues = issues
-	p.allPRs = prs
+	p.gh.allIssues = issues
+	p.gh.allPRs = prs
 	p.applyIssueFilter()
 	p.applyPRFilter()
 	p.tabItems[tabActions] = nil
@@ -633,8 +633,8 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 
 // loadGitHubMeta fetches repo info and current user asynchronously.
 func (p *Panel) loadGitHubMeta() tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		var result ghMetaLoadedMsg
@@ -656,10 +656,10 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 
 // loadIssuesPage fetches a single page of issues.
 func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	pageSize := p.ghPageSize
+	pageSize := p.gh.pageSize
 	return func() tea.Msg {
 		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
 			State:       prStateOpen,
@@ -705,10 +705,10 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 
 // loadPRsPage fetches a single page of pull requests with mergeable state enrichment.
 func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	pageSize := p.ghPageSize
+	pageSize := p.gh.pageSize
 	return func() tea.Msg {
 		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
 			State:       prStateOpen,
@@ -780,10 +780,10 @@ func enrichPRsMergeableState(ctx context.Context, client ghclient.Client, owner,
 
 // loadActionsPage fetches a single page of workflow runs.
 func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	pageSize := p.ghPageSize
+	pageSize := p.gh.pageSize
 	return func() tea.Msg {
 		runs, pr, err := client.ListWorkflowRunsPage(ctx, owner, repo, &gh.ListWorkflowRunsOptions{
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
@@ -811,10 +811,10 @@ func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 
 // loadWorkflowsPage fetches a single page of workflow definitions.
 func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	pageSize := p.ghPageSize
+	pageSize := p.gh.pageSize
 	return func() tea.Msg {
 		workflows, pr, err := client.ListWorkflowsPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
@@ -837,10 +837,10 @@ func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 
 // loadReleasesPage fetches a single page of releases.
 func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	pageSize := p.ghPageSize
+	pageSize := p.gh.pageSize
 	return func() tea.Msg {
 		releases, pr, err := client.ListReleasesPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
@@ -886,9 +886,9 @@ func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 
 func (p *Panel) handleMetaLoaded(msg ghMetaLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.user != "" {
-		p.ghUser = msg.user
+		p.gh.user = msg.user
 	}
-	p.repoPrivate = msg.repoPrivate
+	p.gh.repoPrivate = msg.repoPrivate
 	return p, nil
 }
 
@@ -902,12 +902,12 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 	savedCursor := p.tabCursor[tabIssues]
 	savedOffset := p.tabOffset[tabIssues]
 	if msg.replace {
-		p.allIssues = msg.issues
+		p.gh.allIssues = msg.issues
 	} else {
-		p.allIssues = append(p.allIssues, msg.issues...)
+		p.gh.allIssues = append(p.gh.allIssues, msg.issues...)
 	}
-	if len(p.allIssues) > ghclient.MaxPaginationItems {
-		p.allIssues = p.allIssues[:ghclient.MaxPaginationItems]
+	if len(p.gh.allIssues) > ghclient.MaxPaginationItems {
+		p.gh.allIssues = p.gh.allIssues[:ghclient.MaxPaginationItems]
 		p.tabPaging[tabIssues].allLoaded = true
 	}
 	p.applyIssueFilter()
@@ -928,12 +928,12 @@ func (p *Panel) handlePRsPage(msg ghPRsPageMsg) (panels.Panel, tea.Cmd) {
 	savedCursor := p.tabCursor[tabPRs]
 	savedOffset := p.tabOffset[tabPRs]
 	if msg.replace {
-		p.allPRs = msg.prs
+		p.gh.allPRs = msg.prs
 	} else {
-		p.allPRs = append(p.allPRs, msg.prs...)
+		p.gh.allPRs = append(p.gh.allPRs, msg.prs...)
 	}
-	if len(p.allPRs) > ghclient.MaxPaginationItems {
-		p.allPRs = p.allPRs[:ghclient.MaxPaginationItems]
+	if len(p.gh.allPRs) > ghclient.MaxPaginationItems {
+		p.gh.allPRs = p.gh.allPRs[:ghclient.MaxPaginationItems]
 		p.tabPaging[tabPRs].allLoaded = true
 	}
 	p.crossRefPRsActions()
@@ -1041,7 +1041,7 @@ func (p *Panel) handleReleasesPage(msg ghReleasesPageMsg) (panels.Panel, tea.Cmd
 
 // crossRefPRsActions matches action run statuses to PRs by head branch.
 func (p *Panel) crossRefPRsActions() {
-	if len(p.allPRs) == 0 || len(p.tabItems[tabActions]) == 0 {
+	if len(p.gh.allPRs) == 0 || len(p.tabItems[tabActions]) == 0 {
 		return
 	}
 	actionByBranch := make(map[string]ghActionItem, len(p.tabItems[tabActions]))
@@ -1053,10 +1053,10 @@ func (p *Panel) crossRefPRsActions() {
 			actionByBranch[item.actionRun.Branch] = item.actionRun
 		}
 	}
-	for i, pr := range p.allPRs {
+	for i, pr := range p.gh.allPRs {
 		if action, ok := actionByBranch[pr.HeadBranch]; ok {
-			p.allPRs[i].ActionStatus = action.Status
-			p.allPRs[i].ActionConclusion = action.Conclusion
+			p.gh.allPRs[i].ActionStatus = action.Status
+			p.gh.allPRs[i].ActionConclusion = action.Conclusion
 		}
 	}
 }
@@ -1123,9 +1123,9 @@ func (p *Panel) ghTabCountStr(tab tabID) string {
 // Quick filter cycling
 // ---------------------------------------------------------------------------
 func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
-	p.issueFilter = (p.issueFilter + 1) % 4
+	p.gh.issueFilter = (p.gh.issueFilter + 1) % 4
 	p.applyIssueFilter()
-	filter := p.issueFilter.String()
+	filter := p.gh.issueFilter.String()
 	return p, func() tea.Msg {
 		return panels.GitHubFilterChangedMsg{
 			Tab:    sectionIssues,
@@ -1135,9 +1135,9 @@ func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
 }
 
 func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
-	p.prFilter = (p.prFilter + 1) % 4
+	p.gh.prFilter = (p.gh.prFilter + 1) % 4
 	p.applyPRFilter()
-	filter := p.prFilter.String()
+	filter := p.gh.prFilter.String()
 	return p, func() tea.Msg {
 		return panels.GitHubFilterChangedMsg{
 			Tab:    sectionPRs,
@@ -1148,7 +1148,7 @@ func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
 
 func (p *Panel) applyIssueFilter() {
 	p.tabItems[tabIssues] = nil
-	for _, iss := range p.allIssues {
+	for _, iss := range p.gh.allIssues {
 		if p.matchesIssueFilter(iss) {
 			p.tabItems[tabIssues] = append(p.tabItems[tabIssues], listItem{
 				kind:  kindIssue,
@@ -1161,14 +1161,14 @@ func (p *Panel) applyIssueFilter() {
 }
 
 func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
-	switch p.issueFilter {
+	switch p.gh.issueFilter {
 	case issueFilterAssigned:
-		return iss.Assignee == p.ghUser
+		return iss.Assignee == p.gh.user
 	case issueFilterMentioned:
 		// GitHub list API doesn't expose "mentioned" — show all for now.
 		return true
 	case issueFilterCreated:
-		return iss.Author == p.ghUser
+		return iss.Author == p.gh.user
 	default:
 		return true
 	}
@@ -1176,7 +1176,7 @@ func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
 
 func (p *Panel) applyPRFilter() {
 	p.tabItems[tabPRs] = nil
-	for _, pr := range p.allPRs {
+	for _, pr := range p.gh.allPRs {
 		if p.matchesPRFilter(pr) {
 			p.tabItems[tabPRs] = append(p.tabItems[tabPRs], listItem{
 				kind: kindPR,
@@ -1189,11 +1189,11 @@ func (p *Panel) applyPRFilter() {
 }
 
 func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
-	switch p.prFilter {
+	switch p.gh.prFilter {
 	case prFilterNeedsReview:
-		return pr.Author != p.ghUser && pr.State == prStateOpen
+		return pr.Author != p.gh.user && pr.State == prStateOpen
 	case prFilterMine:
-		return pr.Author == p.ghUser
+		return pr.Author == p.gh.user
 	case prFilterDraft:
 		return pr.State == stateDraft
 	default:
@@ -1254,7 +1254,7 @@ func (p *Panel) prSelectedCmd() tea.Cmd {
 		},
 	}
 	// Only load PR details if we have a GitHub client.
-	if p.ghClient != nil {
+	if p.gh.client != nil {
 		cmds = append(cmds, p.loadPRDetails(number))
 	}
 	return tea.Batch(cmds...)
@@ -1262,8 +1262,8 @@ func (p *Panel) prSelectedCmd() tea.Cmd {
 
 // loadPRDetails returns a Cmd that fetches PR files and commits from GitHub.
 func (p *Panel) loadPRDetails(number int) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		var result prDetailsLoadedMsg
@@ -1358,7 +1358,7 @@ func (p *Panel) actionRunSelectedCmd() tea.Cmd {
 		},
 	}
 	// Only load job details if we have a GitHub client.
-	if p.ghClient != nil {
+	if p.gh.client != nil {
 		cmds = append(cmds, p.loadActionJobs(runID))
 	}
 	return tea.Batch(cmds...)
@@ -1388,8 +1388,8 @@ func (p *Panel) workflowSelectedCmd() tea.Cmd {
 
 // loadActionJobs returns a Cmd that fetches jobs (with steps) for a workflow run.
 func (p *Panel) loadActionJobs(runID int64) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		var result actionJobsLoadedMsg
@@ -1443,7 +1443,7 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 		},
 	}
 	// Auto-fetch logs for the first failed job.
-	if p.ghClient != nil {
+	if p.gh.client != nil {
 		for _, j := range jobs {
 			if j.Conclusion == conclusionFailure {
 				cmds = append(cmds, p.loadActionLog(runID, j.ID))
@@ -1456,8 +1456,8 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 
 // loadActionLog returns a Cmd that fetches logs for a specific job.
 func (p *Panel) loadActionLog(runID, jobID int64) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		log, err := client.GetJobLogs(ctx, owner, repo, jobID)
@@ -1487,8 +1487,8 @@ func (p *Panel) handleActionLogLoaded(msg actionLogLoadedMsg) (panels.Panel, tea
 // rerunFailedJobsCmd returns a Cmd that reruns failed jobs for a workflow run.
 
 func (p *Panel) rerunFailedJobsCmd(runID int64) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		err := client.RerunFailedJobs(ctx, owner, repo, runID)
@@ -1514,8 +1514,8 @@ func (p *Panel) handleActionRerunResult(msg actionRerunResultMsg) (panels.Panel,
 
 // cancelWorkflowRunCmd returns a Cmd that cancels a workflow run.
 func (p *Panel) cancelWorkflowRunCmd(runID int64) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		err := client.CancelWorkflowRun(ctx, owner, repo, runID)
@@ -1662,7 +1662,7 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 		}
 	}
 
-	if p.ghClient == nil {
+	if p.gh.client == nil {
 		return p, nil
 	}
 
@@ -1684,8 +1684,8 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 
 // mergePRCmd returns a tea.Cmd that executes the merge asynchronously.
 func (p *Panel) mergePRCmd(number int, strategy string, headBranch string) tea.Cmd {
-	client := p.ghClient
-	owner, repo := p.ghOwner, p.ghRepo
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
 		opts := &gh.PullRequestOptions{MergeMethod: strategy}
@@ -1715,9 +1715,9 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 	}
 
 	// Update local PR state to "merged".
-	for i := range p.allPRs {
-		if p.allPRs[i].Number == msg.number {
-			p.allPRs[i].State = prStateMerged
+	for i := range p.gh.allPRs {
+		if p.gh.allPRs[i].Number == msg.number {
+			p.gh.allPRs[i].State = prStateMerged
 			break
 		}
 	}

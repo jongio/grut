@@ -8,11 +8,11 @@ package gitinfo
 func (p *Panel) InjectDemoGitHubData() {
 	// Clear any authentication error so the tab renders data instead of
 	// "GitHub unavailable".
-	p.ghErr = nil
-	p.ghUser = "demo-user"
-	p.ghOwner = "jongio"
-	p.ghRepo = "grut"
-	p.repoPrivate = true
+	p.gh.err = nil
+	p.gh.user = "demo-user"
+	p.gh.owner = "jongio"
+	p.gh.repo = "grut"
+	p.gh.repoPrivate = true
 
 	issues := []ghIssueItem{
 		{

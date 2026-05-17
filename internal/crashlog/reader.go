@@ -73,10 +73,12 @@ func Read(id string) (*CrashReport, error) {
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
+			slog.Warn("skipping unreadable crash report", "file", e.Name(), "error", err)
 			continue
 		}
 		var r CrashReport
 		if err := json.Unmarshal(data, &r); err != nil {
+			slog.Warn("skipping malformed crash report", "file", e.Name(), "error", err)
 			continue
 		}
 		if r.ID == id {

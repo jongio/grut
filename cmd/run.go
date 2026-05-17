@@ -121,7 +121,13 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 				for i, step := range steps {
 					fmt.Fprintf(w, "  %d. %s %s\n", i+1, step.Op, formatParams(step.Params))
 				}
-				_, _ = fmt.Fprintln(w, "\nSkipping confirmation (use --no-confirm to silence this).")
+				_, _ = fmt.Fprint(w, "\nProceed? [y/N] ")
+				var answer string
+				fmt.Fscanln(os.Stdin, &answer) //nolint:errcheck // scan failure = empty answer = abort
+				if answer != "y" && answer != "Y" {
+					_, _ = fmt.Fprintln(w, "Aborted.")
+					return nil
+				}
 			}
 
 			// Execute.

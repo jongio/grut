@@ -6,8 +6,6 @@ package gitinfo
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -282,56 +280,65 @@ func initColors(th *theme.Theme) panelColors {
 // helper functions (prColor, prActionIcon) that are called from tests.
 var defaultColors = initColors(nil)
 
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
-// Panel is the gitinfo panel. It implements [panels.Panel].
-type Panel struct {
-	actionsCfg config.ActionsConfig
-	git        gitOps
-	ctx        context.Context
-	// GitHub integration fields.
-	ghClient    ghclient.Client // may be nil if auth fails
-	ghErr       error           // non-nil if GitHub init failed
-	iconMode    string          // "nerd" or "ascii"
-	repoRoot    string
-	pendingName string // name for pending operation
-	pendingPath string // path captured at double-click time (survives async modal delay)
-	ghOwner     string
-	ghRepo      string
-	ghUser      string               // authenticated user login
-	tabItems    [tabCount][]listItem // items per tab
-	// Cached data for rebuild.
+// gitState holds cached git data used to rebuild tab items without
+// re-fetching from the repository.
+type gitState struct {
 	lastBranches  []git.Branch
 	lastWorktrees []git.Worktree
 	lastRemotes   []git.Remote
 	lastStashes   []git.StashEntry
 	lastTags      []git.Tag
 	lastReflog    []git.ReflogEntry
-	allIssues     []ghIssueItem // unfiltered issue list
-	allPRs        []ghPRItem    // unfiltered PR list
-	ghCfg         config.GitHubConfig
+}
+
+// githubState holds all GitHub-related integration state: API client,
+// repository metadata, and cached issue / PR data.
+type githubState struct {
+	client      ghclient.Client
+	err         error
+	owner       string
+	repo        string
+	user        string
+	allIssues   []ghIssueItem
+	allPRs      []ghPRItem
+	cfg         config.GitHubConfig
+	issueFilter IssueFilterKind
+	prFilter    PRFilterKind
+	repoPrivate bool
+	pageSize    int
+}
+
+// ---------------------------------------------------------------------------
+// Panel
+// ---------------------------------------------------------------------------
+// Panel is the gitinfo panel. It implements [panels.Panel].
+type Panel struct {
+	actionsCfg  config.ActionsConfig
+	git         gitOps
+	ctx         context.Context
+	iconMode    string // "nerd" or "ascii"
+	repoRoot    string
+	pendingName string               // name for pending operation
+	pendingPath string               // path captured at double-click time (survives async modal delay)
+	tabItems    [tabCount][]listItem // items per tab
+	gitData     gitState
+	gh          githubState
 	panels.BasePanel
 	cfg               config.GitConfig
 	colors            panelColors
 	theme             *theme.Theme
-	tabCursor         [tabCount]int   // cursor per tab
-	tabOffset         [tabCount]int   // viewport offset per tab
-	mode              PanelMode       // which tab subset to display
-	activeTab         tabID           // currently active tab
-	remoteCount       int             // actual number of remotes (distinct from tabItems len which includes sub-rows)
-	pending           pendingOp       // operation awaiting modal result
-	issueFilter       IssueFilterKind // current issue quick-filter
-	prFilter          PRFilterKind    // current PR quick-filter
-	actionsWatchFrame int             // current animation frame index into watchFrames
-	lastWidth         int             // last rendered width, used for click zone calculation
-	// Repo visibility — true when the GitHub repo is private.
-	repoPrivate bool
+	tabCursor         [tabCount]int // cursor per tab
+	tabOffset         [tabCount]int // viewport offset per tab
+	mode              PanelMode     // which tab subset to display
+	activeTab         tabID         // currently active tab
+	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
+	pending           pendingOp     // operation awaiting modal result
+	actionsWatchFrame int           // current animation frame index into watchFrames
+	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
 	// Per-tab pagination state for lazy-loading GitHub tabs.
-	tabPaging  [tabCount]tabPagination
-	ghPageSize int // effective page size from config or default
+	tabPaging [tabCount]tabPagination
 }
 
 // Compile-time interface check.
@@ -373,7 +380,7 @@ func (p *Panel) tabBarHeight() int {
 	case ModeGitHub:
 		return 1 // GitHub row only
 	default: // ModeAll
-		if p.ghClient != nil {
+		if p.gh.client != nil {
 			return 2 // git row + GitHub row
 		}
 		return 1 // git row only (GitHub unavailable)
@@ -417,7 +424,7 @@ func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actions
 		mode:       ModeGit,
 		git:        gitOps,
 		cfg:        cfg,
-		ghCfg:      ghCfg,
+		gh:         githubState{cfg: ghCfg},
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
@@ -435,7 +442,7 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 		activeTab:  tabIssues,
 		git:        gitOps,
 		cfg:        cfg,
-		ghCfg:      ghCfg,
+		gh:         githubState{cfg: ghCfg},
 		actionsCfg: actionsCfg,
 		iconMode:   iconMode,
 		repoRoot:   repoRoot,
@@ -451,20 +458,20 @@ func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, a
 func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
 	// Resolve GitHub owner/repo from config or git remote.
-	p.ghOwner, p.ghRepo = p.ghCfg.ResolveGitHubRepo(ctx, p.repoRoot)
+	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
 	// Only create GitHub client when we have a valid owner/repo.
-	if p.ghOwner != "" && p.ghRepo != "" {
+	if p.gh.owner != "" && p.gh.repo != "" {
 		client, err := ghclient.NewClient(ctx)
 		if err != nil {
-			p.ghErr = fmt.Errorf("GitHub auth unavailable: %w", err)
+			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", err)
 		} else {
-			p.ghClient = client
+			p.gh.client = client
 		}
 	}
 	// Load git data + GitHub data in parallel.
 	cmds := []tea.Cmd{p.loadData()}
-	if p.ghClient != nil {
-		p.ghPageSize = p.ghCfg.EffectivePageSize()
+	if p.gh.client != nil {
+		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
@@ -493,28 +500,28 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	}
 	p.repoRoot = msg.Path
 	// Clear all cached git data.
-	p.lastBranches = nil
-	p.lastWorktrees = nil
-	p.lastRemotes = nil
-	p.lastStashes = nil
-	p.lastTags = nil
-	p.lastReflog = nil
+	p.gitData.lastBranches = nil
+	p.gitData.lastWorktrees = nil
+	p.gitData.lastRemotes = nil
+	p.gitData.lastStashes = nil
+	p.gitData.lastTags = nil
+	p.gitData.lastReflog = nil
 	for i := range p.tabItems {
 		p.tabItems[i] = nil
 		p.tabCursor[i] = 0
 		p.tabOffset[i] = 0
 	}
 	// Reset GitHub client — the new directory may be a different repo.
-	p.ghClient = nil
-	p.ghOwner = ""
-	p.ghRepo = ""
-	p.ghUser = ""
-	p.ghErr = nil
-	p.allIssues = nil
-	p.allPRs = nil
+	p.gh.client = nil
+	p.gh.owner = ""
+	p.gh.repo = ""
+	p.gh.user = ""
+	p.gh.err = nil
+	p.gh.allIssues = nil
+	p.gh.allPRs = nil
 	p.actionsWatching = false
 	p.actionsWatchFrame = 0
-	p.repoPrivate = false
+	p.gh.repoPrivate = false
 	// Reset pagination state.
 	for i := range p.tabPaging {
 		p.tabPaging[i] = tabPagination{}
@@ -524,21 +531,21 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	p.ghOwner, p.ghRepo = p.ghCfg.ResolveGitHubRepo(ctx, p.repoRoot)
-	if p.ghOwner != "" && p.ghRepo != "" {
+	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
+	if p.gh.owner != "" && p.gh.repo != "" {
 		ghc, ghErr := ghclient.NewClient(ctx)
 		if ghErr != nil {
-			p.ghErr = fmt.Errorf("GitHub auth unavailable: %w", ghErr)
+			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", ghErr)
 		} else {
-			p.ghClient = ghc
+			p.gh.client = ghc
 		}
 	}
 	if p.git == nil {
 		return p, nil
 	}
 	cmds := []tea.Cmd{p.loadData()}
-	if p.ghClient != nil {
-		p.ghPageSize = p.ghCfg.EffectivePageSize()
+	if p.gh.client != nil {
+		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
@@ -599,10 +606,10 @@ func (p *Panel) loadData() tea.Cmd {
 // The tick is wrapped in a TargetedPanelMsg so only the gitinfo panel receives
 // it, avoiding a full broadcast to all panels.
 func (p *Panel) githubPollTickCmd() tea.Cmd {
-	if p.ghClient == nil || p.ghCfg.PollInterval <= 0 {
+	if p.gh.client == nil || p.gh.cfg.PollInterval <= 0 {
 		return nil
 	}
-	d := time.Duration(p.ghCfg.PollInterval) * time.Second
+	d := time.Duration(p.gh.cfg.PollInterval) * time.Second
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return panels.TargetedPanelMsg{
 			Target: panelGitinfo,
@@ -760,7 +767,7 @@ func (p *Panel) View(width, height int) string {
 	items := p.tabItems[p.activeTab]
 	if len(items) == 0 {
 		label := "No items"
-		if p.activeTab >= tabIssues && p.ghErr != nil {
+		if p.activeTab >= tabIssues && p.gh.err != nil {
 			label = "GitHub unavailable"
 		}
 		empty := lipgloss.NewStyle().
@@ -799,7 +806,7 @@ func (p *Panel) View(width, height int) string {
 // Title implements panels.Panel, overriding BasePanel.
 func (p *Panel) Title() string {
 	if p.mode == ModeGitHub {
-		if p.repoPrivate {
+		if p.gh.repoPrivate {
 			if p.iconMode == "nerd" {
 				return "GitHub \uf023"
 			}
@@ -835,7 +842,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "P", Description: "Push tag", Action: "push_tag"},
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}
-	if p.ghClient != nil {
+	if p.gh.client != nil {
 		bindings = append(
 			bindings,
 			panels.KeyBinding{Key: "i", Description: "Issues tab", Action: "tab_issues"},
@@ -1044,7 +1051,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.activeTab = tabWorktrees
 		return p, p.activeTabSelectionCmd()
 	case "r":
-		if p.activeTab == tabActions && p.ghClient != nil {
+		if p.activeTab == tabActions && p.gh.client != nil {
 			return p.doActionsRerun()
 		}
 		if p.mode != ModeGitHub {
@@ -1052,7 +1059,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p, p.activeTabSelectionCmd()
 		}
 	case "x":
-		if p.activeTab == tabActions && p.ghClient != nil {
+		if p.activeTab == tabActions && p.gh.client != nil {
 			return p.doActionsCancel()
 		}
 		return p.doDelete()
@@ -1072,26 +1079,26 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.activeTab = tabReflog
 		return p, p.activeTabSelectionCmd()
 	case "i":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabIssues
 			return p, p.activeTabSelectionCmd()
 		}
 	case "p":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabPRs
 			return p, p.activeTabSelectionCmd()
 		}
 	case "a":
-		if p.mode != ModeGit && p.ghClient != nil {
+		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabActions
 			return p, p.activeTabSelectionCmd()
 		}
 	case "D":
-		if p.activeTab == tabWorkflows && p.ghClient != nil {
+		if p.activeTab == tabWorkflows && p.gh.client != nil {
 			return p.doWorkflowDispatch()
 		}
 	case "m":
-		if p.activeTab == tabPRs && p.ghClient != nil {
+		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.doMergePR()
 		}
 	case "pgdown":
@@ -1845,11 +1852,11 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 // openRepoInBrowser opens the repository's GitHub page in the default browser.
 // Returns nil cmd when owner/repo are unavailable (e.g. pure git mode).
 func (p *Panel) openRepoInBrowser() (panels.Panel, tea.Cmd) {
-	if p.ghOwner == "" || p.ghRepo == "" {
+	if p.gh.owner == "" || p.gh.repo == "" {
 		return p, nil
 	}
-	url := fmt.Sprintf("https://github.com/%s/%s", p.ghOwner, p.ghRepo)
-	return p.openURLAndToast(url, p.ghOwner+"/"+p.ghRepo)
+	url := fmt.Sprintf("https://github.com/%s/%s", p.gh.owner, p.gh.repo)
+	return p.openURLAndToast(url, p.gh.owner+"/"+p.gh.repo)
 }
 
 // openURLAndToast opens a URL in the browser and shows a toast notification.
@@ -1881,8 +1888,8 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 		p.pending = opTagCreate
 		return p, notify.ShowInput("Tag Name", "tag-name")
 	case tabIssues:
-		if p.ghOwner != "" && p.ghRepo != "" {
-			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.ghOwner, p.ghRepo)
+		if p.gh.owner != "" && p.gh.repo != "" {
+			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.gh.owner, p.gh.repo)
 			return p, func() tea.Msg {
 				if err := panels.OpenInBrowser(p.ctx, url); err != nil {
 					return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
@@ -2028,316 +2035,60 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	if !msg.Accept {
 		return p, nil
 	}
-	g := p.git
-	ctx := p.ctx
+	a := modalArgs{
+		msg:         msg,
+		name:        name,
+		pendingPath: pendingPath,
+		git:         p.git,
+		ctx:         p.ctx,
+	}
 	switch op { //nolint:exhaustive // only relevant cases handled
 	case opBranchCreate:
-		newName := strings.TrimSpace(msg.Value)
-		if newName == "" {
-			return p, nil
-		}
-		return p, func() tea.Msg {
-			err := g.BranchCreate(ctx, newName, "")
-			return opResultMsg{op: eventBranchCreated, name: newName, err: err}
-		}
+		return p.handleBranchCreate(a)
 	case opBranchDelete:
-		return p, func() tea.Msg {
-			err := g.BranchDelete(ctx, name, false)
-			return opResultMsg{op: eventBranchDeleted, name: name, err: err}
-		}
+		return p.handleBranchDelete(a)
 	case opBranchRename:
-		newName := strings.TrimSpace(msg.Value)
-		if newName == "" || newName == name {
-			return p, nil
-		}
-		return p, func() tea.Msg {
-			err := g.BranchRename(ctx, name, newName)
-			return opResultMsg{op: eventBranchRenamed, name: newName, err: err}
-		}
+		return p.handleBranchRename(a)
 	case opWorktreeCreate:
-		branch := strings.TrimSpace(msg.Value)
-		if branch == "" {
-			return p, nil
-		}
-		path := worktreePath(p.repoRoot, branch)
-		return p, func() tea.Msg {
-			err := g.WorktreeAdd(ctx, path, branch)
-			return opResultMsg{op: eventWorktreeAdded, name: branch, err: err}
-		}
+		return p.handleWorktreeCreate(a)
 	case opWorktreeDelete:
-		return p, func() tea.Msg {
-			err := g.WorktreeRemove(ctx, name, false)
-			return opResultMsg{op: eventWorktreeRemoved, name: name, err: err}
-		}
+		return p.handleWorktreeDelete(a)
 	case opRemoteAdd:
-		remoteName := strings.TrimSpace(msg.Value)
-		if remoteName == "" {
-			return p, nil
-		}
-		// Two-step: first get name, then URL.
-		p.pending = opRemoteAddURL
-		p.pendingName = remoteName
-		return p, notify.ShowInput("Remote URL", "https://github.com/user/repo")
+		return p.handleRemoteAdd(a)
 	case opRemoteAddURL:
-		url := strings.TrimSpace(msg.Value)
-		if url == "" {
-			return p, nil
-		}
-		remoteName := name
-		return p, func() tea.Msg {
-			err := g.RemoteAdd(ctx, remoteName, url)
-			return opResultMsg{op: eventRemoteAdded, name: remoteName, err: err}
-		}
+		return p.handleRemoteAddURL(a)
 	case opRemoteDelete:
-		return p, func() tea.Msg {
-			err := g.RemoteRemove(ctx, name)
-			return opResultMsg{op: eventRemoteRemoved, name: name, err: err}
-		}
+		return p.handleRemoteDelete(a)
 	case opBranchCheckout:
-		ref := name
-		return p, func() tea.Msg {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("panic during branch checkout", "ref", ref, "panic", r)
-				}
-			}()
-			files, err := g.Status(ctx)
-			if err != nil {
-				return checkoutDirtyMsg{ref: ref, err: err}
-			}
-			return checkoutDirtyMsg{ref: ref, dirty: len(files) > 0}
-		}
+		return p.handleBranchCheckout(a)
 	case opBranchCheckoutStash:
-		ref := name
-		return p, func() tea.Msg {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("panic during stash checkout", "ref", ref, "panic", r)
-				}
-			}()
-			err := g.StashPush(ctx, git.StashOpts{Message: "grut: auto-stash before switching to " + ref})
-			if err != nil {
-				return opResultMsg{op: opCheckout, name: ref, err: fmt.Errorf("stash failed: %w", err)}
-			}
-			err = g.Checkout(ctx, ref)
-			if err != nil {
-				_ = g.StashPop(ctx, 0) // restore stash on checkout failure
-				return opResultMsg{op: opCheckout, name: ref, err: err}
-			}
-			return opResultMsg{op: "checkout_stashed", name: ref}
-		}
+		return p.handleBranchCheckoutStash(a)
 	case opStashAction:
-		action := strings.TrimSpace(strings.ToLower(msg.Value))
-		idx, err := strconv.Atoi(name)
-		if err != nil {
-			return p, nil
-		}
-		switch action {
-		case actionApply, "a":
-			return p, func() tea.Msg {
-				err := g.StashApply(ctx, idx)
-				return opResultMsg{op: eventStashApplied, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		case actionPop, "p":
-			return p, func() tea.Msg {
-				err := g.StashPop(ctx, idx)
-				return opResultMsg{op: eventStashPopped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		case actionDrop, "d":
-			return p, func() tea.Msg {
-				err := g.StashDrop(ctx, idx)
-				return opResultMsg{op: eventStashDropped, name: fmt.Sprintf("stash@{%d}", idx), err: err}
-			}
-		default:
-			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: "Unknown stash action: " + action, Level: notify.Warn}
-			}
-		}
+		return p.handleStashAction(a)
 	case opFirstUseConfirm:
-		if msg.Remember {
-			config.SaveDoubleClickChoice(&p.actionsCfg, name, msg.Value)
-		}
-		p.pendingPath = pendingPath // restore for executeRightClickAction
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.handleFirstUseConfirm(a)
 	case opRightClickPick:
-		p.pendingPath = pendingPath // restore for executeRightClickAction
-		return p.executeRightClickAction(actions.ActionID(msg.Value))
+		return p.handleRightClickPick(a)
 	case opTagCreate:
-		tagName := strings.TrimSpace(msg.Value)
-		if tagName == "" {
-			return p, nil
-		}
-		p.pending = opTagMessage
-		p.pendingName = tagName
-		return p, notify.ShowInput("Tag Message", "(leave empty for lightweight)")
+		return p.handleTagCreate(a)
 	case opTagMessage:
-		tagName := name
-		message := strings.TrimSpace(msg.Value)
-		return p, func() tea.Msg {
-			err := g.TagCreate(ctx, tagName, "", message)
-			return opResultMsg{op: eventTagCreated, name: tagName, err: err}
-		}
+		return p.handleTagMessage(a)
 	case opTagDelete:
-		return p, func() tea.Msg {
-			err := g.TagDelete(ctx, name)
-			return opResultMsg{op: eventTagDeleted, name: name, err: err}
-		}
+		return p.handleTagDelete(a)
 	case opTagPush:
-		tagName := name
-		return p, func() tea.Msg {
-			err := g.TagPush(ctx, "origin", tagName)
-			return opResultMsg{op: eventTagPushed, name: tagName, err: err}
-		}
+		return p.handleTagPush(a)
 	case opTagCheckout:
-		return p, func() tea.Msg {
-			err := g.Checkout(ctx, name)
-			return opResultMsg{op: eventTagCheckout, name: name, err: err}
-		}
+		return p.handleTagCheckout(a)
 	case opWorkflowDispatch:
-		// Step 1 complete: got the ref. Fetch workflow inputs before
-		// showing the inputs dialog so we can pre-populate fields.
-		ref := strings.TrimSpace(msg.Value)
-		if ref == "" {
-			ref = p.currentBranch()
-		}
-		// Parse workflow ID and name from pendingName ("id:name").
-		var workflowID int64
-		var workflowName string
-		if parts := strings.SplitN(name, ":", 2); len(parts) == 2 {
-			workflowID, _ = strconv.ParseInt(parts[0], 10, 64)
-			workflowName = parts[1]
-		}
-		if workflowID == 0 {
-			return p, nil
-		}
-		// Look up the workflow path from the cached items.
-		var workflowPath string
-		for _, item := range p.tabItems[tabWorkflows] {
-			if item.kind == kindWorkflow && item.workflow.ID == workflowID {
-				workflowPath = item.workflow.Path
-				break
-			}
-		}
-		// Fetch workflow_dispatch inputs asynchronously.
-		owner, repo := p.ghOwner, p.ghRepo
-		ghClient := p.ghClient
-		return p, func() tea.Msg {
-			var wfInputs []ghclient.WorkflowInput
-			if ghClient != nil && workflowPath != "" {
-				fetched, err := ghClient.GetWorkflowInputs(ctx, owner, repo, workflowPath, ref)
-				if err != nil {
-					// Non-fatal: fall back to generic dialog.
-					_ = err
-				} else {
-					wfInputs = fetched
-				}
-			}
-			return workflowInputsFetchedMsg{
-				workflowID:   workflowID,
-				workflowName: workflowName,
-				ref:          ref,
-				inputs:       wfInputs,
-			}
-		}
+		return p.handleWorkflowDispatch(a)
 	case opWorkflowDispatchInputs:
-		// Step 2 complete: got the inputs. Parse and dispatch.
-		// pendingName format: "id:name:ref"
-		var workflowID int64
-		var workflowName, ref string
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) == 3 {
-			workflowID, _ = strconv.ParseInt(parts[0], 10, 64)
-			workflowName = parts[1]
-			ref = parts[2]
-		}
-		if workflowID == 0 || ref == "" {
-			return p, nil
-		}
-		// Parse inputs from "key=value" lines.
-		var inputs map[string]any
-		inputText := strings.TrimSpace(msg.Value)
-		if inputText != "" {
-			inputs = make(map[string]any)
-			for _, line := range strings.Split(inputText, "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
-					inputs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-				}
-			}
-			if len(inputs) == 0 {
-				inputs = nil
-			}
-		}
-		owner, repo := p.ghOwner, p.ghRepo
-		ghClient := p.ghClient
-		return p, func() tea.Msg {
-			err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
-			return workflowDispatchResultMsg{workflowName: workflowName, err: err}
-		}
-
+		return p.handleWorkflowDispatchInputs(a)
 	case opPRMergeStrategy:
-		// User selected a merge strategy from the picker.
-		// pendingName format: "number:headBranch:title"
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) < 3 {
-			return p, nil
-		}
-		prNumber, _ := strconv.Atoi(parts[0])
-		headBranch := parts[1]
-		prTitle := parts[2]
-		if prNumber == 0 {
-			return p, nil
-		}
-
-		strategy := msg.Value // "merge", "squash", or "rebase"
-
-		// Store merge details for the confirmation step.
-		p.pending = opPRMergeConfirm
-		p.pendingName = fmt.Sprintf("%d:%s:%s", prNumber, strategy, headBranch)
-
-		label := mergeStrategyLabel(strategy)
-		confirmMsg := fmt.Sprintf("Merge PR #%d %q using %s?", prNumber, prTitle, label)
-		return p, notify.ShowConfirm("Confirm Merge", confirmMsg)
-
+		return p.handlePRMergeStrategy(a)
 	case opPRMergeConfirm:
-		// User confirmed the merge. Execute it.
-		// pendingName format: "number:strategy:headBranch"
-		parts := strings.SplitN(name, ":", 3)
-		if len(parts) < 3 {
-			return p, nil
-		}
-		prNumber, _ := strconv.Atoi(parts[0])
-		strategy := parts[1]
-		headBranch := parts[2]
-		if prNumber == 0 {
-			return p, nil
-		}
-		return p, p.mergePRCmd(prNumber, strategy, headBranch)
-
+		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
-		// User confirmed post-merge branch deletion.
-		branch := name
-		if branch == "" {
-			return p, nil
-		}
-		client := p.ghClient
-		owner, repo := p.ghOwner, p.ghRepo
-		g := p.git
-		return p, func() tea.Msg {
-			remoteErr := client.DeleteBranch(ctx, owner, repo, branch)
-			var localErr error
-			if g != nil {
-				localErr = g.BranchDelete(ctx, branch, false)
-			}
-			return prBranchDeleteResultMsg{
-				branch:    branch,
-				remoteErr: remoteErr,
-				localErr:  localErr,
-			}
-		}
+		return p.handlePRDeleteBranchAfterMerge(a)
 	}
 	return p, nil
 }
@@ -2348,23 +2099,23 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 // buildItems constructs the per-tab item lists and positions cursors.
 func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remotes []git.Remote, stashes []git.StashEntry, tags []git.Tag, reflog []git.ReflogEntry) {
 	// Store data for rebuilds.
-	p.lastBranches = branches
-	p.lastWorktrees = worktrees
-	p.lastRemotes = remotes
-	p.lastStashes = stashes
-	p.lastTags = tags
-	p.lastReflog = reflog
+	p.gitData.lastBranches = branches
+	p.gitData.lastWorktrees = worktrees
+	p.gitData.lastRemotes = remotes
+	p.gitData.lastStashes = stashes
+	p.gitData.lastTags = tags
+	p.gitData.lastReflog = reflog
 	p.doBuildItems()
 }
 
 // doBuildItems constructs items from cached data into per-tab lists.
 func (p *Panel) doBuildItems() {
-	branches := p.lastBranches
-	worktrees := p.lastWorktrees
-	remotes := p.lastRemotes
-	stashes := p.lastStashes
-	tags := p.lastTags
-	reflog := p.lastReflog
+	branches := p.gitData.lastBranches
+	worktrees := p.gitData.lastWorktrees
+	remotes := p.gitData.lastRemotes
+	stashes := p.gitData.lastStashes
+	tags := p.gitData.lastTags
+	reflog := p.gitData.lastReflog
 	var local, remote []git.Branch
 	for _, b := range branches {
 		if b.IsRemote {
@@ -2583,12 +2334,12 @@ func (p *Panel) renderTabBar(width int) string {
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()
 	issuesCount := p.ghTabCountStr(tabIssues)
-	if p.issueFilter != issueFilterAll {
-		issuesCount = p.issueFilter.String()
+	if p.gh.issueFilter != issueFilterAll {
+		issuesCount = p.gh.issueFilter.String()
 	}
 	prsCount := p.ghTabCountStr(tabPRs)
-	if p.prFilter != prFilterAll {
-		prsCount = p.prFilter.String()
+	if p.gh.prFilter != prFilterAll {
+		prsCount = p.gh.prFilter.String()
 	}
 	ghTabs := []tabDef{
 		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
@@ -2611,7 +2362,7 @@ func (p *Panel) renderTabBar(width int) string {
 		return renderRow(ghTabs, isGitHubTab(p.activeTab))
 	default: // ModeAll
 		gitRow := renderRow(gitTabs, isGitTab(p.activeTab))
-		if p.ghClient == nil {
+		if p.gh.client == nil {
 			return gitRow
 		}
 		ghRow := renderRow(ghTabs, !isGitTab(p.activeTab))

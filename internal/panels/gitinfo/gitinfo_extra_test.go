@@ -298,7 +298,7 @@ func TestGuessBranchRemoteURL_WithRemotes(t *testing.T) {
 	t.Parallel()
 
 	p := newTestPanel(defaultMock())
-	p.lastRemotes = []git.Remote{
+	p.gitData.lastRemotes = []git.Remote{
 		{Name: "origin", FetchURL: "https://github.com/owner/repo.git"},
 		{Name: "upstream", FetchURL: "https://github.com/other/repo.git"},
 	}
@@ -311,7 +311,7 @@ func TestGuessBranchRemoteURL_NoRemotes(t *testing.T) {
 	t.Parallel()
 
 	p := newTestPanel(defaultMock())
-	p.lastRemotes = nil
+	p.gitData.lastRemotes = nil
 
 	url := p.guessBranchRemoteURL(git.Branch{Name: "main"})
 	assert.Equal(t, "", url)
@@ -1181,7 +1181,7 @@ func TestActionMergePR_IsValid(t *testing.T) {
 func TestExecuteRightClickAction_PR_MergePR_Open(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"}},
 	}
@@ -1195,7 +1195,7 @@ func TestExecuteRightClickAction_PR_MergePR_Open(t *testing.T) {
 func TestExecuteRightClickAction_PR_MergePR_Draft(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "WIP", State: "draft", HeadBranch: "wip"}},
 	}
@@ -1208,7 +1208,7 @@ func TestExecuteRightClickAction_PR_MergePR_Draft(t *testing.T) {
 func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Done", State: prStateMerged}},
 	}
@@ -1221,7 +1221,7 @@ func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
 func TestExecuteRightClickAction_PR_MergePR_Closed(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 5, Title: "Closed", State: "closed"}},
 	}
@@ -1250,7 +1250,7 @@ func TestExecuteRightClickAction_PR_MergePR_NoGHClient(t *testing.T) {
 func TestDoMergePR_WrongTab(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabBranches
 	p.tabItems[tabBranches] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}},
@@ -1263,7 +1263,7 @@ func TestDoMergePR_WrongTab(t *testing.T) {
 func TestDoMergePR_EmptyCursor(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{} // empty
 	_, cmd := p.doMergePR()
@@ -1301,7 +1301,7 @@ func TestMergeStrategyLabel(t *testing.T) {
 func TestHandleModalResult_PRMergeStrategy_Accept(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.pending = opPRMergeStrategy
 	p.pendingName = "42:feature-auth:Add authentication"
 
@@ -1320,7 +1320,7 @@ func TestHandleModalResult_PRMergeStrategy_AllStrategies(t *testing.T) {
 		t.Run(strategy, func(t *testing.T) {
 			t.Parallel()
 			p := newTestPanel(defaultMock())
-			p.ghClient = &mockGHClientFull{}
+			p.gh.client = &mockGHClientFull{}
 			p.pending = opPRMergeStrategy
 			p.pendingName = "42:feature-auth:Add authentication"
 
@@ -1363,9 +1363,9 @@ func TestHandleModalResult_PRMergeStrategy_BadPendingName(t *testing.T) {
 func TestHandleModalResult_PRMergeConfirm_Accept(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.ctx = context.Background()
 	p.pending = opPRMergeConfirm
 	p.pendingName = "42:squash:feature-auth"
@@ -1403,11 +1403,11 @@ func TestHandleModalResult_PRMergeConfirm_BadPendingName(t *testing.T) {
 func TestHandlePRMergeResult_Success(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.allPRs = []ghPRItem{
+	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"},
 	}
 	p.tabItems[tabPRs] = []listItem{
-		{kind: kindPR, pr: p.allPRs[0]},
+		{kind: kindPR, pr: p.gh.allPRs[0]},
 	}
 
 	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
@@ -1416,7 +1416,7 @@ func TestHandlePRMergeResult_Success(t *testing.T) {
 	})
 	assert.NotNil(t, cmd)
 	// Verify local state was updated.
-	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.gh.allPRs[0].State)
 	assert.Equal(t, prStateMerged, p.tabItems[tabPRs][0].pr.State)
 }
 
@@ -1435,11 +1435,11 @@ func TestHandlePRMergeResult_Error(t *testing.T) {
 func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.allPRs = []ghPRItem{
+	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Test", State: "open", HeadBranch: "feature-x"},
 	}
 	p.tabItems[tabPRs] = []listItem{
-		{kind: kindPR, pr: p.allPRs[0]},
+		{kind: kindPR, pr: p.gh.allPRs[0]},
 	}
 
 	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
@@ -1448,7 +1448,7 @@ func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 		headBranch: "feature-x",
 	})
 	assert.NotNil(t, cmd)
-	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.gh.allPRs[0].State)
 	// After successful merge with headBranch, the panel should prompt for deletion.
 	assert.Equal(t, opPRDeleteBranchAfterMerge, p.pending)
 	assert.Equal(t, "feature-x", p.pendingName)
@@ -1457,11 +1457,11 @@ func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.allPRs = []ghPRItem{
+	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Test", State: "open"},
 	}
 	p.tabItems[tabPRs] = []listItem{
-		{kind: kindPR, pr: p.allPRs[0]},
+		{kind: kindPR, pr: p.gh.allPRs[0]},
 	}
 
 	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
@@ -1469,7 +1469,7 @@ func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
 		strategy: "squash",
 	})
 	assert.NotNil(t, cmd)
-	assert.Equal(t, prStateMerged, p.allPRs[0].State)
+	assert.Equal(t, prStateMerged, p.gh.allPRs[0].State)
 	// No headBranch means no deletion prompt — pending should NOT be set.
 	assert.NotEqual(t, opPRDeleteBranchAfterMerge, p.pending)
 }
@@ -1481,9 +1481,9 @@ func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
 func TestHandleModalResult_PRDeleteBranchAfterMerge_Confirm(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
-	p.ghOwner = "owner"
-	p.ghRepo = "repo"
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
 	p.ctx = context.Background()
 	p.pending = opPRDeleteBranchAfterMerge
 	p.pendingName = "feature-auth"
@@ -1507,7 +1507,7 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_Cancel(t *testing.T) {
 func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.ctx = context.Background()
 	p.pending = opPRDeleteBranchAfterMerge
 	p.pendingName = ""
@@ -1572,7 +1572,7 @@ func TestHandleKey_M_PRsTab(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(defaultMock())
 	p.Focused = true
-	p.ghClient = &mockGHClientFull{}
+	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Test", State: "open", HeadBranch: "test-branch"}},
