@@ -50,6 +50,9 @@ func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
 	// cpuProfileFile is scoped to this function, not package-level,
 	// eliminating shared mutable state (CR-008).
 	var cpuProfileFile *os.File
+	// memstatsDone is closed by cleanup to stop the background memstats
+	// goroutine, preventing a goroutine leak when --pprof is used.
+	memstatsDone := make(chan struct{})
 
 	rootCmd = &cobra.Command{
 		Use:   "grut",
@@ -291,17 +294,22 @@ Environment:
 				go func() {
 					ticker := time.NewTicker(30 * time.Second)
 					defer ticker.Stop()
-					for range ticker.C {
-						var ms runtime.MemStats
-						runtime.ReadMemStats(&ms)
-						slog.Info(
-							"memstats",
-							"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
-							"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
-							"heap_objects", ms.HeapObjects,
-							"goroutines", runtime.NumGoroutine(),
-							"gc_cycles", ms.NumGC,
-						)
+					for {
+						select {
+						case <-memstatsDone:
+							return
+						case <-ticker.C:
+							var ms runtime.MemStats
+							runtime.ReadMemStats(&ms)
+							slog.Info(
+								"memstats",
+								"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
+								"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
+								"heap_objects", ms.HeapObjects,
+								"goroutines", runtime.NumGoroutine(),
+								"gc_cycles", ms.NumGC,
+							)
+						}
 					}
 				}()
 			}
@@ -338,6 +346,9 @@ Environment:
 			return
 		}
 		cleanupDone = true
+
+		// Stop the memstats goroutine if it was started.
+		close(memstatsDone)
 
 		if cpuProfileFile != nil {
 			pprof.StopCPUProfile()
