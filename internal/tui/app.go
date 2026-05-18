@@ -336,17 +336,18 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "zoom_toggle":
 		m.engine.ToggleZoom()
 		return m, nil
-	case "resize_left":
-		m.engine.ResizeShrink()
-		return m, nil
-	case "resize_right":
-		m.engine.ResizeGrow()
-		return m, nil
-	case "resize_up":
-		m.engine.ResizeShrink()
-		return m, nil
-	case "resize_down":
-		m.engine.ResizeGrow()
+	case "resize_left", "resize_right", "resize_up", "resize_down":
+		// In edit mode, ctrl+left/right are word navigation keys — route to panel.
+		if m.previewEditing {
+			cmd := m.engine.Update(msg)
+			return m, cmd
+		}
+		switch action {
+		case "resize_left", "resize_up":
+			m.engine.ResizeShrink()
+		default:
+			m.engine.ResizeGrow()
+		}
 		return m, nil
 	case "exit_input":
 		if m.keys != nil {

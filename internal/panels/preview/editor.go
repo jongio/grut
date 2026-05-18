@@ -6,6 +6,7 @@ package preview
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -380,7 +381,17 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 				text = p.editBuf.Line(p.cursorLine) + "\n"
 			}
 			if text != "" {
-				_ = panels.CopyToClipboard(context.Background(), text)
+				if err := panels.CopyToClipboard(context.Background(), text); err == nil {
+					lines := strings.Count(text, "\n")
+					if lines <= 1 {
+						return p, func() tea.Msg {
+							return notify.ShowToastMsg{Message: fmt.Sprintf("Copied %d chars", len(text)), Level: notify.Info}
+						}
+					}
+					return p, func() tea.Msg {
+						return notify.ShowToastMsg{Message: fmt.Sprintf("Copied %d lines", lines), Level: notify.Info}
+					}
+				}
 			}
 		}
 
@@ -409,7 +420,12 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	case "ctrl+v":
 		if p.editBuf != nil {
 			text, err := panels.PasteFromClipboard(context.Background())
-			if err == nil && text != "" {
+			if err != nil {
+				return p, func() tea.Msg {
+					return notify.ShowToastMsg{Message: "Paste failed: " + err.Error(), Level: notify.Error}
+				}
+			}
+			if text != "" {
 				// Replace selection if any.
 				if hasEditSelection(p) {
 					start, end := editSelRange(p)

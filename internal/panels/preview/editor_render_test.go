@@ -78,8 +78,8 @@ func TestRenderCursorOnLine_AtEnd(t *testing.T) {
 
 	result := renderCursorOnLine(highlighted, raw, 5, cursorStyle)
 	stripped := ansi.Strip(result)
-	// Cursor past end of line — should append a thin block cursor "▏".
-	assert.Contains(t, stripped, "▏")
+	// Cursor past end of line — should append a block cursor space.
+	assert.True(t, strings.HasSuffix(stripped, " "))
 	assert.True(t, strings.HasPrefix(stripped, "hello"))
 }
 
@@ -90,7 +90,7 @@ func TestRenderCursorOnLine_EmptyLine(t *testing.T) {
 
 	result := renderCursorOnLine(highlighted, raw, 0, cursorStyle)
 	stripped := ansi.Strip(result)
-	assert.Contains(t, stripped, "▏")
+	assert.Equal(t, " ", stripped)
 }
 
 func TestRenderCursorOnLine_WithANSI(t *testing.T) {

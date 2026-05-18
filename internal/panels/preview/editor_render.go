@@ -19,11 +19,11 @@ import (
 // avoid per-frame lipgloss.NewStyle allocations in the render loop.
 var (
 	editorDimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	editorCursorStyle     = lipgloss.NewStyle().Reverse(true)
+	editorCursorStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#FFFFFF")).Foreground(lipgloss.Color("#000000"))
 	editorCurLineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
 	editorCurLineBg       = lipgloss.Color("#1A1A1A")
 	editorCurLineStyle    = lipgloss.NewStyle().Background(editorCurLineBg)
-	editorSelectionStyle = lipgloss.NewStyle().Background(lipgloss.Color("#264F78"))
+	editorSelectionStyle = lipgloss.NewStyle().Background(lipgloss.Color("#3A6EA5")).Foreground(lipgloss.Color("#FFFFFF"))
 	editorStatusStyle    = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888")).
 				Background(lipgloss.Color("#1A1A1A"))
@@ -164,8 +164,8 @@ func highlightLine(line, filename, theme string) string {
 func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle lipgloss.Style) string {
 	runes := []rune(rawLine)
 	if cursorCol >= len(runes) {
-		// Cursor at end of line — render a thin block cursor.
-		return highlighted + cursorStyle.Render("▏")
+		// Cursor at end of line — render a block cursor.
+		return highlighted + cursorStyle.Render(" ")
 	}
 
 	// Walk through the highlighted string, counting visible runes
@@ -215,7 +215,7 @@ func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle 
 	}
 
 	if cursor.Len() == 0 {
-		return highlighted + cursorStyle.Render("▏")
+		return highlighted + cursorStyle.Render(" ")
 	}
 
 	// Strip ANSI from cursor char to get a clean character, then
