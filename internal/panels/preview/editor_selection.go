@@ -72,8 +72,8 @@ func editSelectedText(p *Preview) string {
 	// Single-line selection.
 	if s.Line == e.Line {
 		runes := []rune(buf.Line(s.Line))
-		sc := clampInt(s.Col, 0, len(runes))
-		ec := clampInt(e.Col, 0, len(runes))
+		sc := clampInt(s.Col, len(runes))
+		ec := clampInt(e.Col, len(runes))
 		return string(runes[sc:ec])
 	}
 
@@ -85,10 +85,10 @@ func editSelectedText(p *Preview) string {
 		startCol := 0
 		endCol := len(runes)
 		if lineIdx == s.Line {
-			startCol = clampInt(s.Col, 0, len(runes))
+			startCol = clampInt(s.Col, len(runes))
 		}
 		if lineIdx == e.Line {
-			endCol = clampInt(e.Col, 0, len(runes))
+			endCol = clampInt(e.Col, len(runes))
 		}
 
 		sb.WriteString(string(runes[startCol:endCol]))
@@ -99,10 +99,10 @@ func editSelectedText(p *Preview) string {
 	return sb.String()
 }
 
-// clampInt returns v clamped to [lo, hi].
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
+// clampInt returns v clamped to [0, hi].
+func clampInt(v, hi int) int {
+	if v < 0 {
+		return 0
 	}
 	if v > hi {
 		return hi

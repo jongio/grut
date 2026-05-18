@@ -223,11 +223,9 @@ func (p *Preview) mouseToBufferPos(contentRow, contentCol int) (line, col int) {
 	// Walk runes, tracking display column to find the rune offset
 	// that corresponds to the clicked display column.
 	displayCol := 0
-	runeOffset := 0
 	for i, r := range runes {
 		if displayCol >= col {
-			runeOffset = i
-			return line, runeOffset
+			return line, i
 		}
 		if r == '\t' {
 			displayCol += tabSize
@@ -236,8 +234,7 @@ func (p *Preview) mouseToBufferPos(contentRow, contentCol int) (line, col int) {
 		}
 	}
 	// Clicked past end of line — clamp to end.
-	runeOffset = len(runes)
-	return line, runeOffset
+	return line, len(runes)
 }
 
 // handleEditMouseClick positions the cursor and starts a potential drag selection.
