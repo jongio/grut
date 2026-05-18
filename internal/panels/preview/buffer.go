@@ -249,6 +249,119 @@ func (b *TextBuffer) Redo(cursorLine, cursorCol int) (newLine, newCol int, ok bo
 	return snap.cursorLine, snap.cursorCol, true
 }
 
+// DeleteRange deletes text from (startLine, startCol) to (endLine, endCol).
+// The range is [startCol, endCol) on the respective lines. If start == end,
+// this is a no-op. Always forces an undo break. Returns the cursor position
+// after deletion.
+func (b *TextBuffer) DeleteRange(startLine, startCol, endLine, endCol int) (newLine, newCol int) {
+	startLine = b.clampLine(startLine)
+	startCol = b.clampCol(startLine, startCol)
+	endLine = b.clampLine(endLine)
+	endCol = b.clampCol(endLine, endCol)
+
+	// Normalize: ensure start <= end.
+	if startLine > endLine || (startLine == endLine && startCol > endCol) {
+		startLine, endLine = endLine, startLine
+		startCol, endCol = endCol, startCol
+	}
+
+	// No-op if positions are identical.
+	if startLine == endLine && startCol == endCol {
+		return startLine, startCol
+	}
+
+	b.saveSnapshotForce(startLine, startCol)
+
+	if startLine == endLine {
+		// Single-line range: remove runes [startCol, endCol).
+		runes := []rune(b.lines[startLine])
+		runes = slices.Delete(runes, startCol, endCol)
+		b.lines[startLine] = string(runes)
+	} else {
+		// Multi-line range: keep [0, startCol) of startLine + [endCol, end) of endLine.
+		startRunes := []rune(b.lines[startLine])
+		endRunes := []rune(b.lines[endLine])
+		b.lines[startLine] = string(startRunes[:startCol]) + string(endRunes[endCol:])
+		b.lines = slices.Delete(b.lines, startLine+1, endLine+1)
+	}
+
+	b.dirty = true
+	return startLine, startCol
+}
+
+// InsertText inserts a (possibly multi-line) text string at (line, col).
+// Used for paste operations. Always forces an undo break. Returns the cursor
+// position at the end of the inserted text. Empty text is a no-op.
+func (b *TextBuffer) InsertText(line, col int, text string) (newLine, newCol int) {
+	line = b.clampLine(line)
+	col = b.clampCol(line, col)
+
+	if text == "" {
+		return line, col
+	}
+
+	b.saveSnapshotForce(line, col)
+
+	runes := []rune(b.lines[line])
+	before := string(runes[:col])
+	after := string(runes[col:])
+
+	// Split the inserted text on newlines.
+	parts := splitLines(text)
+
+	if len(parts) == 1 {
+		// Single-line insert.
+		b.lines[line] = before + parts[0] + after
+		b.dirty = true
+		return line, col + len([]rune(parts[0]))
+	}
+
+	// Multi-line insert: first part joins with before, last part joins with after.
+	b.lines[line] = before + parts[0]
+	// Insert middle and last lines.
+	newLines := make([]string, len(parts)-1)
+	for i := 1; i < len(parts)-1; i++ {
+		newLines[i-1] = parts[i]
+	}
+	newLines[len(newLines)-1] = parts[len(parts)-1] + after
+	b.lines = slices.Insert(b.lines, line+1, newLines...)
+
+	b.dirty = true
+	lastPart := []rune(parts[len(parts)-1])
+	return line + len(parts) - 1, len(lastPart)
+}
+
+// DeleteLine deletes the entire line at the given index. If it is the last
+// remaining line, the line is cleared to "" instead of being removed (the
+// buffer must always contain at least one line). Always forces an undo break.
+func (b *TextBuffer) DeleteLine(line int) {
+	line = b.clampLine(line)
+	b.saveSnapshotForce(line, 0)
+
+	if len(b.lines) == 1 {
+		b.lines[0] = ""
+	} else {
+		b.lines = slices.Delete(b.lines, line, line+1)
+	}
+	b.dirty = true
+}
+
+// MoveLine moves the line at the given index by delta positions (e.g. -1 for
+// up, +1 for down). Returns true if the move happened, false if the line is
+// already at the boundary. Always forces an undo break when a move occurs.
+func (b *TextBuffer) MoveLine(line, delta int) bool {
+	line = b.clampLine(line)
+	target := line + delta
+	if target < 0 || target >= len(b.lines) {
+		return false
+	}
+
+	b.saveSnapshotForce(line, 0)
+	b.lines[line], b.lines[target] = b.lines[target], b.lines[line]
+	b.dirty = true
+	return true
+}
+
 // ---------------------------------------------------------------------------
 // internal helpers
 // ---------------------------------------------------------------------------
@@ -317,6 +430,21 @@ func (b *TextBuffer) clampCol(line, col int) int {
 		return n
 	}
 	return col
+}
+
+// splitLines splits text on "\n" boundaries. A trailing newline produces an
+// extra empty element (matching strings.Split semantics).
+func splitLines(text string) []string {
+	result := []string{}
+	start := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\n' {
+			result = append(result, text[start:i])
+			start = i + 1
+		}
+	}
+	result = append(result, text[start:])
+	return result
 }
 
 // leadingWhitespace returns the leading spaces and tabs from s.

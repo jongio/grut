@@ -23,7 +23,8 @@ var (
 	editorCurLineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
 	editorCurLineBg       = lipgloss.Color("#1A1A1A")
 	editorCurLineStyle    = lipgloss.NewStyle().Background(editorCurLineBg)
-	editorStatusStyle     = lipgloss.NewStyle().
+	editorSelectionStyle = lipgloss.NewStyle().Background(lipgloss.Color("#264F78"))
+	editorStatusStyle    = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888")).
 				Background(lipgloss.Color("#1A1A1A"))
 )
@@ -77,6 +78,12 @@ func renderEditContent(p *Preview, width, height int) string {
 
 		// Apply syntax highlighting to this single line.
 		highlighted := highlightLine(displayLine, p.filePath, p.cfg.GetTheme())
+
+		// Apply selection highlighting if this line intersects the selection.
+		selStart, selEnd := editSelRange(p)
+		if selStart != nil && selEnd != nil && i >= selStart.Line && i <= selEnd.Line {
+			highlighted = renderSelectionOnLine(highlighted, displayLine, i, selStart, selEnd, editorSelectionStyle)
+		}
 
 		isCursorLine := i == p.cursorLine
 
@@ -215,6 +222,86 @@ func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle 
 	// apply the inverse-video cursor style.
 	cursorChar := ansi.Strip(cursor.String())
 	return before.String() + cursorStyle.Render(cursorChar) + after.String()
+}
+
+// renderSelectionOnLine applies selection highlight to the specified range
+// of a syntax-highlighted line. It walks the ANSI string, finds the selected
+// rune range for this line, and wraps selected characters with selStyle.
+func renderSelectionOnLine(highlighted, rawLine string, lineIdx int, selStart, selEnd *selPoint, selStyle lipgloss.Style) string {
+	runes := []rune(rawLine)
+	lineLen := len(runes)
+
+	startCol := 0
+	endCol := lineLen
+
+	if lineIdx == selStart.Line {
+		startCol = selStart.Col
+	}
+	if lineIdx == selEnd.Line {
+		endCol = selEnd.Col
+	}
+
+	if startCol >= endCol {
+		return highlighted
+	}
+	if startCol >= lineLen {
+		return highlighted
+	}
+	if endCol > lineLen {
+		endCol = lineLen
+	}
+
+	// Walk the highlighted string splitting into before/selected/after segments.
+	// This is the same ANSI-aware walk pattern as renderCursorOnLine.
+	runeIdx := 0
+	i := 0
+	var before, selected, after strings.Builder
+	for i < len(highlighted) {
+		if highlighted[i] == '\x1b' {
+			// ANSI escape — copy verbatim to the current segment.
+			seqEnd := i + 1
+			if seqEnd < len(highlighted) && highlighted[seqEnd] == '[' {
+				seqEnd++
+				for seqEnd < len(highlighted) && !isCSITerminator(highlighted[seqEnd]) {
+					seqEnd++
+				}
+				if seqEnd < len(highlighted) {
+					seqEnd++
+				}
+			}
+			seq := highlighted[i:seqEnd]
+			switch {
+			case runeIdx < startCol:
+				before.WriteString(seq)
+			case runeIdx >= startCol && runeIdx < endCol:
+				selected.WriteString(seq)
+			default:
+				after.WriteString(seq)
+			}
+			i = seqEnd
+			continue
+		}
+
+		// Normal rune.
+		_, size := utf8.DecodeRuneInString(highlighted[i:])
+		ch := highlighted[i : i+size]
+		switch {
+		case runeIdx < startCol:
+			before.WriteString(ch)
+		case runeIdx >= startCol && runeIdx < endCol:
+			selected.WriteString(ch)
+		default:
+			after.WriteString(ch)
+		}
+		runeIdx++
+		i += size
+	}
+
+	if selected.Len() == 0 {
+		return highlighted
+	}
+
+	return before.String() + selStyle.Render(ansi.Strip(selected.String())) + after.String()
 }
 
 // renderEditStatusBar renders the bottom status bar showing cursor

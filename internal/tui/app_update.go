@@ -487,12 +487,15 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "R" {
 		return m.handleGlobalRefresh()
 	}
-	// Undo/redo (global key bindings).
-	if msg.String() == "ctrl+z" {
-		return m.handleUndo()
-	}
-	if msg.String() == "ctrl+y" {
-		return m.handleRedo()
+	// Undo/redo (global key bindings) — skip when preview is in edit mode
+	// because edit mode has its own buffer-level undo/redo.
+	if !m.previewEditing {
+		if msg.String() == "ctrl+z" {
+			return m.handleUndo()
+		}
+		if msg.String() == "ctrl+y" {
+			return m.handleRedo()
+		}
 	}
 	// Route unhandled keys to focused panel.
 	cmd := m.engine.Update(msg)
