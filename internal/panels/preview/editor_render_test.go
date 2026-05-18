@@ -337,3 +337,151 @@ func TestKeyBindings_EditMode(t *testing.T) {
 	assert.True(t, keys["Ctrl+Z"], "edit mode should have undo binding")
 	assert.False(t, keys["j/↓"], "edit mode should not have read-mode scroll bindings")
 }
+
+// ---------------------------------------------------------------------------
+// renderSelectionOnLine
+// ---------------------------------------------------------------------------
+
+func TestRenderSelectionOnLine_FullLine(t *testing.T) {
+	raw := "hello"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 0}
+	end := &selPoint{Line: 0, Col: 5}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "hello", stripped)
+	// Should contain styling (result differs from plain highlighted).
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_PartialMiddle(t *testing.T) {
+	raw := "hello world"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 2}
+	end := &selPoint{Line: 0, Col: 7}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "hello world", stripped)
+	// Before = "he", selected = "llo w", after = "orld"
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_StartColEqualsEnd_NoChange(t *testing.T) {
+	raw := "abc"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF0000"))
+	start := &selPoint{Line: 0, Col: 2}
+	end := &selPoint{Line: 0, Col: 2}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	assert.Equal(t, highlighted, result, "no selection when start==end")
+}
+
+func TestRenderSelectionOnLine_StartBeyondLineLen(t *testing.T) {
+	raw := "abc"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF0000"))
+	start := &selPoint{Line: 0, Col: 10}
+	end := &selPoint{Line: 0, Col: 12}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	assert.Equal(t, highlighted, result, "selection beyond line returns unchanged")
+}
+
+func TestRenderSelectionOnLine_MultiLineFirstLine(t *testing.T) {
+	// Selection spans lines 0-2; on line 0 it should select from col 3 to end.
+	raw := "hello world"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 3}
+	end := &selPoint{Line: 2, Col: 5}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "hello world", stripped)
+	// startCol=3, endCol=lineLen (since lineIdx != selEnd.Line)
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_MultiLineMiddleLine(t *testing.T) {
+	// Middle line: entire line selected (startCol=0, endCol=lineLen).
+	raw := "middle line"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 3}
+	end := &selPoint{Line: 2, Col: 5}
+
+	result := renderSelectionOnLine(highlighted, raw, 1, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "middle line", stripped)
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_MultiLineLastLine(t *testing.T) {
+	// Last line: from col 0 to selEnd.Col.
+	raw := "last line"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 3}
+	end := &selPoint{Line: 2, Col: 4}
+
+	result := renderSelectionOnLine(highlighted, raw, 2, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "last line", stripped)
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_WithANSIEscapes(t *testing.T) {
+	raw := "hello"
+	// Simulate syntax-highlighted text with ANSI codes.
+	highlighted := "\x1b[32mhel\x1b[0mlo"
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 1}
+	end := &selPoint{Line: 0, Col: 4}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "hello", stripped)
+	// ANSI before selection "h" = before segment, selected "ell" rendered through selStyle.
+	assert.NotEqual(t, highlighted, result)
+}
+
+func TestRenderSelectionOnLine_EmptyLine(t *testing.T) {
+	raw := ""
+	highlighted := ""
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#FF0000"))
+	start := &selPoint{Line: 0, Col: 0}
+	end := &selPoint{Line: 0, Col: 0}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	assert.Equal(t, "", result)
+}
+
+func TestRenderSelectionOnLine_EndExceedsLineClamped(t *testing.T) {
+	raw := "abc"
+	highlighted := raw
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#0000FF"))
+	start := &selPoint{Line: 0, Col: 1}
+	end := &selPoint{Line: 0, Col: 99}
+
+	result := renderSelectionOnLine(highlighted, raw, 0, start, end, selStyle)
+
+	stripped := ansi.Strip(result)
+	assert.Equal(t, "abc", stripped)
+	// Should select from col 1 to end (clamped to 3).
+	assert.NotEqual(t, highlighted, result)
+	assert.True(t, strings.Contains(result, "a"), "before segment has 'a'")
+}

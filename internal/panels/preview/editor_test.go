@@ -1020,6 +1020,236 @@ func TestHome_StillGoesToCol0(t *testing.T) {
 	assert.Nil(t, p.selAnchor, "home should not create selection")
 }
 
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+d (duplicate line)
+// ---------------------------------------------------------------------------
+
+func TestCtrlD_DuplicatesLine(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb\nccc")
+	enterEditMode(p)
+	p.cursorLine = 1
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+
+	assert.Equal(t, 4, p.editBuf.LineCount())
+	assert.Equal(t, "bbb", p.editBuf.Line(1))
+	assert.Equal(t, "bbb", p.editBuf.Line(2))
+	assert.Equal(t, 2, p.cursorLine, "cursor moves to duplicated line")
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+shift+k (delete line)
+// ---------------------------------------------------------------------------
+
+func TestCtrlShiftK_DeletesLine(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb\nccc")
+	enterEditMode(p)
+	p.cursorLine = 1
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl | tea.ModShift})
+
+	assert.Equal(t, 2, p.editBuf.LineCount())
+	assert.Equal(t, "aaa", p.editBuf.Line(0))
+	assert.Equal(t, "ccc", p.editBuf.Line(1))
+}
+
+func TestCtrlShiftK_LastLine(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb")
+	enterEditMode(p)
+	p.cursorLine = 1
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl | tea.ModShift})
+
+	assert.Equal(t, 1, p.editBuf.LineCount())
+	assert.Equal(t, "aaa", p.editBuf.Line(0))
+	assert.Equal(t, 0, p.cursorLine)
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — alt+up/down (move line)
+// ---------------------------------------------------------------------------
+
+func TestAltUp_MovesLineUp(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb\nccc")
+	enterEditMode(p)
+	p.cursorLine = 1
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
+
+	assert.Equal(t, "bbb", p.editBuf.Line(0))
+	assert.Equal(t, "aaa", p.editBuf.Line(1))
+	assert.Equal(t, 0, p.cursorLine)
+}
+
+func TestAltDown_MovesLineDown(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb\nccc")
+	enterEditMode(p)
+	p.cursorLine = 0
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModAlt})
+
+	assert.Equal(t, "bbb", p.editBuf.Line(0))
+	assert.Equal(t, "aaa", p.editBuf.Line(1))
+	assert.Equal(t, 1, p.cursorLine)
+}
+
+func TestAltUp_AtTopNoOp(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb")
+	enterEditMode(p)
+	p.cursorLine = 0
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
+
+	assert.Equal(t, "aaa", p.editBuf.Line(0))
+	assert.Equal(t, 0, p.cursorLine)
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+backspace (delete word left)
+// ---------------------------------------------------------------------------
+
+func TestCtrlBackspace_DeletesWordLeft(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 11 // end of "hello world"
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModCtrl})
+
+	assert.Equal(t, "hello ", p.editBuf.Line(0))
+	assert.Equal(t, 6, p.cursorCol)
+}
+
+func TestCtrlBackspace_AtLineStart_JoinsWithPrevious(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb")
+	enterEditMode(p)
+	p.cursorLine = 1
+	p.cursorCol = 0
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModCtrl})
+
+	assert.Equal(t, 1, p.editBuf.LineCount())
+	assert.Equal(t, "aaabbb", p.editBuf.Line(0))
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+delete (delete word right)
+// ---------------------------------------------------------------------------
+
+func TestCtrlDelete_DeletesWordRight(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 0
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModCtrl})
+
+	// findWordBoundaryRight skips word + non-word: "hello " deleted.
+	assert.Equal(t, "world", p.editBuf.Line(0))
+	assert.Equal(t, 0, p.cursorCol)
+}
+
+func TestCtrlDelete_AtLineEnd_JoinsWithNext(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "aaa\nbbb")
+	enterEditMode(p)
+	p.cursorCol = 3 // end of "aaa"
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModCtrl})
+
+	assert.Equal(t, 1, p.editBuf.LineCount())
+	assert.Equal(t, "aaabbb", p.editBuf.Line(0))
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — shift+home/end
+// ---------------------------------------------------------------------------
+
+func TestShiftHome_SelectsToLineStart(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 5
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModShift})
+
+	require.NotNil(t, p.selAnchor)
+	assert.Equal(t, 5, p.selAnchor.Col)
+	assert.Equal(t, 0, p.selEnd.Col)
+	assert.Equal(t, 0, p.cursorCol)
+}
+
+func TestShiftEnd_SelectsToLineEnd(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 5
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModShift})
+
+	require.NotNil(t, p.selAnchor)
+	assert.Equal(t, 5, p.selAnchor.Col)
+	assert.Equal(t, 11, p.selEnd.Col)
+	assert.Equal(t, 11, p.cursorCol)
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+shift+left/right (word select)
+// ---------------------------------------------------------------------------
+
+func TestCtrlShiftLeft_SelectsWordLeft(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 11
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl | tea.ModShift})
+
+	require.NotNil(t, p.selAnchor)
+	assert.Equal(t, 11, p.selAnchor.Col)
+	assert.Equal(t, 6, p.selEnd.Col)
+}
+
+func TestCtrlShiftRight_SelectsWordRight(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "hello world")
+	enterEditMode(p)
+	p.cursorCol = 0
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModShift})
+
+	require.NotNil(t, p.selAnchor)
+	assert.Equal(t, 0, p.selAnchor.Col)
+	// findWordBoundaryRight: skips word "hello" + non-word " " = col 6.
+	assert.Equal(t, 6, p.selEnd.Col)
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — ctrl+a (select all)
+// ---------------------------------------------------------------------------
+
+func TestCtrlA_SelectsAll(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "abc\ndef\nghi")
+	enterEditMode(p)
+
+	handleEditKeyPress(p, tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+
+	require.NotNil(t, p.selAnchor)
+	assert.Equal(t, 0, p.selAnchor.Line)
+	assert.Equal(t, 0, p.selAnchor.Col)
+	assert.Equal(t, 2, p.cursorLine)
+	assert.Equal(t, 3, p.cursorCol) // len("ghi")
+}
+
+// ---------------------------------------------------------------------------
+// handleEditKeyPress — escape with dirty buffer
+// ---------------------------------------------------------------------------
+
+func TestEscape_DirtyBuffer_TriggersGuard(t *testing.T) {
+	p, _ := testPreviewWithFile(t, "original")
+	enterEditMode(p)
+	// Make buffer dirty.
+	p.editBuf.InsertRune(0, 0, 'X')
+
+	_, cmd := handleEditKeyPress(p, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	assert.NotNil(t, cmd, "dirty escape should produce dirtyGuard cmd")
+	assert.True(t, p.editMode, "should still be in edit mode")
+}
+
 func TestPasteMsg_CRLFNormalized(t *testing.T) {
 	p := testPreview()
 	p.editBuf = NewTextBuffer([]string{"hello"})
