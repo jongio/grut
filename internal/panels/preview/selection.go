@@ -133,6 +133,9 @@ func (p *Preview) selectionDisabled() bool {
 
 // handleMouseClick starts a new selection at the clicked position.
 func (p *Preview) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
+	if p.editMode && p.editBuf != nil {
+		return p.handleEditMouseClick(msg)
+	}
 	if p.selectionDisabled() {
 		return p, nil
 	}
@@ -145,6 +148,9 @@ func (p *Preview) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel,
 
 // handleMouseMotion extends the selection while dragging.
 func (p *Preview) handleMouseMotion(msg panels.PanelMouseMotionMsg) (panels.Panel, tea.Cmd) {
+	if p.editMode && p.editBuf != nil {
+		return p.handleEditMouseMotion(msg)
+	}
 	if !p.selecting || p.selAnchor == nil {
 		return p, nil
 	}
@@ -164,13 +170,161 @@ func (p *Preview) handleMouseMotion(msg panels.PanelMouseMotionMsg) (panels.Pane
 }
 
 // handleMouseRelease finalizes the selection.
-func (p *Preview) handleMouseRelease(_ panels.PanelMouseReleaseMsg) (panels.Panel, tea.Cmd) {
+func (p *Preview) handleMouseRelease(msg panels.PanelMouseReleaseMsg) (panels.Panel, tea.Cmd) {
+	if p.editMode && p.editBuf != nil {
+		return p.handleEditMouseRelease(msg)
+	}
+	p.selecting = false
+	return p, nil
+}
+
+// ---------------------------------------------------------------------------
+// Edit-mode mouse handlers
+// ---------------------------------------------------------------------------
+
+// editGutterWidth computes the gutter width for edit mode rendering.
+// This must match editor_render.go's gutter calculation.
+func (p *Preview) editGutterWidth() int {
+	totalLines := p.editBuf.LineCount()
+	numWidth := len(strconv.Itoa(totalLines))
+	if numWidth < 3 {
+		numWidth = 3
+	}
+	return numWidth + 3 // digits + " │ "
+}
+
+// mouseToBufferPos converts mouse content-area coordinates to buffer
+// line and column. Returns clamped values safe to use as cursor position.
+func (p *Preview) mouseToBufferPos(contentRow, contentCol int) (line, col int) {
+	line = p.scrollY + contentRow
+	if line < 0 {
+		line = 0
+	}
+	if line >= p.editBuf.LineCount() {
+		line = p.editBuf.LineCount() - 1
+	}
+	if line < 0 {
+		return 0, 0
+	}
+
+	col = contentCol - p.editGutterWidth()
+	if col < 0 {
+		col = 0
+	}
+
+	// Account for tab expansion: the displayed column may be wider
+	// than the rune offset because tabs are expanded to spaces.
+	tabSize := p.editCfg.TabSize
+	if tabSize < 1 {
+		tabSize = 4
+	}
+	runes := []rune(p.editBuf.Line(line))
+
+	// Walk runes, tracking display column to find the rune offset
+	// that corresponds to the clicked display column.
+	displayCol := 0
+	runeOffset := 0
+	for i, r := range runes {
+		if displayCol >= col {
+			runeOffset = i
+			return line, runeOffset
+		}
+		if r == '\t' {
+			displayCol += tabSize
+		} else {
+			displayCol++
+		}
+	}
+	// Clicked past end of line — clamp to end.
+	runeOffset = len(runes)
+	return line, runeOffset
+}
+
+// handleEditMouseClick positions the cursor and starts a potential drag selection.
+func (p *Preview) handleEditMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, tea.Cmd) {
+	line, col := p.mouseToBufferPos(msg.ContentRow, msg.ContentCol)
+	p.cursorLine = line
+	p.cursorCol = col
+	clearEditSelection(p)
+	// Set anchor for potential drag.
+	pt := selPoint{Line: line, Col: col}
+	p.selAnchor = &pt
+	p.selEnd = &pt
+	p.selecting = true
+	return p, nil
+}
+
+// handleEditMouseMotion extends the selection while dragging in edit mode.
+func (p *Preview) handleEditMouseMotion(msg panels.PanelMouseMotionMsg) (panels.Panel, tea.Cmd) {
+	if !p.selecting || p.selAnchor == nil {
+		return p, nil
+	}
+
+	// Auto-scroll when dragging past viewport edges.
+	vh := p.viewportHeight()
+	if msg.ContentRow < 0 {
+		p.scrollUp(1)
+	} else if msg.ContentRow >= vh-1 {
+		p.scrollDown(1)
+	}
+
+	line, col := p.mouseToBufferPos(msg.ContentRow, msg.ContentCol)
+	p.cursorLine = line
+	p.cursorCol = col
+	p.selEnd = &selPoint{Line: line, Col: col}
+	return p, nil
+}
+
+// handleEditMouseRelease finalizes mouse selection in edit mode.
+func (p *Preview) handleEditMouseRelease(_ panels.PanelMouseReleaseMsg) (panels.Panel, tea.Cmd) {
+	p.selecting = false
+	// If anchor == end, it was just a click (no drag) — clear selection.
+	if p.selAnchor != nil && p.selEnd != nil &&
+		p.selAnchor.Line == p.selEnd.Line && p.selAnchor.Col == p.selEnd.Col {
+		clearEditSelection(p)
+	}
+	return p, nil
+}
+
+// handleEditDoubleClick selects the word under the cursor in edit mode.
+func (p *Preview) handleEditDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
+	line, col := p.mouseToBufferPos(msg.ContentRow, msg.ContentCol)
+	p.cursorLine = line
+	p.cursorCol = col
+
+	runes := []rune(p.editBuf.Line(line))
+	if col >= len(runes) {
+		return p, nil
+	}
+
+	if !isWordRune(runes[col]) {
+		// Non-word char: select just that character.
+		p.selAnchor = &selPoint{Line: line, Col: col}
+		p.selEnd = &selPoint{Line: line, Col: col + 1}
+		p.cursorCol = col + 1
+		p.selecting = false
+		return p, nil
+	}
+
+	start, end := col, col
+	for start > 0 && isWordRune(runes[start-1]) {
+		start--
+	}
+	for end < len(runes)-1 && isWordRune(runes[end+1]) {
+		end++
+	}
+	p.selAnchor = &selPoint{Line: line, Col: start}
+	p.selEnd = &selPoint{Line: line, Col: end + 1}
+	p.cursorCol = end + 1
 	p.selecting = false
 	return p, nil
 }
 
 // handleDoubleClick selects the word under the cursor.
 func (p *Preview) handleDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
+	if p.editMode && p.editBuf != nil {
+		return p.handleEditDoubleClick(msg)
+	}
 	if p.selectionDisabled() {
 		return p, nil
 	}

@@ -3,6 +3,7 @@ package preview
 import (
 	"testing"
 
+	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -345,4 +346,110 @@ func TestIsWordRune(t *testing.T) {
 	assert.False(t, isWordRune('!'))
 	assert.False(t, isWordRune('\t'))
 	assert.False(t, isWordRune('\n'))
+}
+
+// ---------------------------------------------------------------------------
+// Edit-mode mouse handlers
+// ---------------------------------------------------------------------------
+
+func TestHandleEditMouseClick_PositionsCursor(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello world", "foo bar baz"})
+	p.editMode = true
+	p.lineNumbers = true
+
+	// Click on row 0, col = gutterWidth + 5 → cursorCol should be 5.
+	gw := p.editGutterWidth()
+	msg := panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: gw + 5}
+	p.handleEditMouseClick(msg)
+
+	assert.Equal(t, 0, p.cursorLine)
+	assert.Equal(t, 5, p.cursorCol)
+	// Selection anchor is set (for potential drag).
+	assert.NotNil(t, p.selAnchor)
+	assert.True(t, p.selecting)
+}
+
+func TestHandleEditMouseClick_SecondLine(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello", "world", "test"})
+	p.editMode = true
+	p.lineNumbers = true
+
+	gw := p.editGutterWidth()
+	msg := panels.PanelMouseClickMsg{ContentRow: 1, ContentCol: gw + 3}
+	p.handleEditMouseClick(msg)
+
+	assert.Equal(t, 1, p.cursorLine)
+	assert.Equal(t, 3, p.cursorCol)
+}
+
+func TestHandleEditMouseDrag_CreatesSelection(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello world", "foo bar baz"})
+	p.editMode = true
+	p.lineNumbers = true
+	p.height = 20
+
+	gw := p.editGutterWidth()
+
+	// Click at (0, 2).
+	clickMsg := panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: gw + 2}
+	p.handleEditMouseClick(clickMsg)
+
+	// Drag to (0, 7).
+	motionMsg := panels.PanelMouseMotionMsg{ContentRow: 0, ContentCol: gw + 7}
+	p.handleEditMouseMotion(motionMsg)
+
+	assert.Equal(t, 0, p.cursorLine)
+	assert.Equal(t, 7, p.cursorCol)
+	assert.Equal(t, 0, p.selAnchor.Line)
+	assert.Equal(t, 2, p.selAnchor.Col)
+	assert.Equal(t, 0, p.selEnd.Line)
+	assert.Equal(t, 7, p.selEnd.Col)
+
+	// Release — selection stays because anchor != end.
+	releaseMsg := panels.PanelMouseReleaseMsg{ContentRow: 0, ContentCol: gw + 7}
+	p.handleEditMouseRelease(releaseMsg)
+	assert.False(t, p.selecting)
+	assert.NotNil(t, p.selAnchor) // selection persists
+}
+
+func TestHandleEditMouseRelease_ClearsOnClick(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello world"})
+	p.editMode = true
+	p.lineNumbers = true
+
+	gw := p.editGutterWidth()
+
+	// Click without drag.
+	clickMsg := panels.PanelMouseClickMsg{ContentRow: 0, ContentCol: gw + 3}
+	p.handleEditMouseClick(clickMsg)
+
+	// Release at same position — should clear selection.
+	releaseMsg := panels.PanelMouseReleaseMsg{ContentRow: 0, ContentCol: gw + 3}
+	p.handleEditMouseRelease(releaseMsg)
+
+	assert.Nil(t, p.selAnchor)
+	assert.Nil(t, p.selEnd)
+}
+
+func TestHandleEditDoubleClick_SelectsWord(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello world"})
+	p.editMode = true
+	p.lineNumbers = true
+
+	gw := p.editGutterWidth()
+
+	// Double-click on "world" (col 6).
+	msg := panels.PanelMouseDoubleClickMsg{ContentRow: 0, ContentCol: gw + 6}
+	p.handleEditDoubleClick(msg)
+
+	assert.Equal(t, 0, p.selAnchor.Line)
+	assert.Equal(t, 6, p.selAnchor.Col) // start of "world"
+	assert.Equal(t, 0, p.selEnd.Line)
+	assert.Equal(t, 11, p.selEnd.Col) // end of "world"
+	assert.Equal(t, 11, p.cursorCol)
 }
