@@ -6,7 +6,6 @@ package preview
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +26,19 @@ const (
 // the diff, and showing a toast.
 type fileSavedMsg struct {
 	path string
+}
+
+// clipboardCopiedMsg is produced by the async copy command when it completes.
+type clipboardCopiedMsg struct {
+	text string
+	err  error
+}
+
+// clipboardPastedMsg is produced by the async paste command after reading
+// the OS clipboard.
+type clipboardPastedMsg struct {
+	text string
+	err  error
 }
 
 // ---------------------------------------------------------------------------
@@ -381,33 +393,25 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 				text = p.editBuf.Line(p.cursorLine) + "\n"
 			}
 			if text != "" {
-				if err := panels.CopyToClipboard(context.Background(), text); err == nil {
-					lines := strings.Count(text, "\n")
-					if lines <= 1 {
-						return p, func() tea.Msg {
-							return notify.ShowToastMsg{Message: fmt.Sprintf("Copied %d chars", len(text)), Level: notify.Info}
-						}
-					}
-					return p, func() tea.Msg {
-						return notify.ShowToastMsg{Message: fmt.Sprintf("Copied %d lines", lines), Level: notify.Info}
-					}
+				return p, func() tea.Msg {
+					err := panels.CopyToClipboard(context.Background(), text)
+					return clipboardCopiedMsg{text: text, err: err}
 				}
 			}
 		}
 
 	case "ctrl+x":
 		if p.editBuf != nil {
+			var text string
 			if hasEditSelection(p) {
-				text := editSelectedText(p)
-				_ = panels.CopyToClipboard(context.Background(), text)
+				text = editSelectedText(p)
 				start, end := editSelRange(p)
 				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
 				clearEditSelection(p)
 				ensureCursorVisible(p)
 			} else {
 				// No selection: cut entire current line (VS Code behavior).
-				text := p.editBuf.Line(p.cursorLine) + "\n"
-				_ = panels.CopyToClipboard(context.Background(), text)
+				text = p.editBuf.Line(p.cursorLine) + "\n"
 				p.editBuf.DeleteLine(p.cursorLine)
 				if p.cursorLine >= p.editBuf.LineCount() {
 					p.cursorLine = p.editBuf.LineCount() - 1
@@ -415,25 +419,19 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 				clampCursorCol(p)
 				ensureCursorVisible(p)
 			}
+			if text != "" {
+				return p, func() tea.Msg {
+					err := panels.CopyToClipboard(context.Background(), text)
+					return clipboardCopiedMsg{text: text, err: err}
+				}
+			}
 		}
 
 	case "ctrl+v":
 		if p.editBuf != nil {
-			text, err := panels.PasteFromClipboard(context.Background())
-			if err != nil {
-				return p, func() tea.Msg {
-					return notify.ShowToastMsg{Message: "Paste failed: " + err.Error(), Level: notify.Error}
-				}
-			}
-			if text != "" {
-				// Replace selection if any.
-				if hasEditSelection(p) {
-					start, end := editSelRange(p)
-					p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
-					clearEditSelection(p)
-				}
-				p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, text)
-				ensureCursorVisible(p)
+			return p, func() tea.Msg {
+				text, err := panels.PasteFromClipboard(context.Background())
+				return clipboardPastedMsg{text: text, err: err}
 			}
 		}
 

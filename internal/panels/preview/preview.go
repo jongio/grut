@@ -190,6 +190,35 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, tea.Batch(cmds...)
 		}
 
+	case clipboardCopiedMsg:
+		if msg.err == nil {
+			lines := strings.Count(msg.text, "\n")
+			label := fmt.Sprintf("Copied %d chars", len(msg.text))
+			if lines > 1 {
+				label = fmt.Sprintf("Copied %d lines", lines)
+			}
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: label, Level: notify.Info}
+			}
+		}
+
+	case clipboardPastedMsg:
+		if msg.err != nil {
+			errMsg := msg.err.Error()
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Paste failed: " + errMsg, Level: notify.Error}
+			}
+		}
+		if msg.text != "" && p.editBuf != nil {
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			}
+			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, msg.text)
+			ensureCursorVisible(p)
+		}
+
 	case panels.FileSelectedMsg:
 		if p.editMode && p.editBuf != nil && p.editBuf.Dirty() {
 			return p, dirtyGuardCmd(p, "switch")
@@ -397,6 +426,18 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.blameLines = nil
 		} else {
 			p.blameLines = msg.Lines
+		}
+		return p, nil
+	case tea.PasteMsg:
+		// Bracketed paste: terminal delivers clipboard content directly.
+		if p.editMode && p.editBuf != nil && msg.Content != "" {
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			}
+			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, msg.Content)
+			ensureCursorVisible(p)
 		}
 		return p, nil
 	case tea.KeyPressMsg:
