@@ -23,8 +23,8 @@ var (
 	editorCurLineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
 	editorCurLineBg       = lipgloss.Color("#1A1A1A")
 	editorCurLineStyle    = lipgloss.NewStyle().Background(editorCurLineBg)
-	editorSelectionStyle = lipgloss.NewStyle().Background(lipgloss.Color("#3A6EA5")).Foreground(lipgloss.Color("#FFFFFF"))
-	editorStatusStyle    = lipgloss.NewStyle().
+	editorSelectionStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#3A6EA5")).Foreground(lipgloss.Color("#FFFFFF"))
+	editorStatusStyle     = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888")).
 				Background(lipgloss.Color("#1A1A1A"))
 )
