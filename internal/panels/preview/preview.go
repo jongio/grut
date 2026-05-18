@@ -77,6 +77,12 @@ type Preview struct {
 	cursorLine int                 // cursor line (0-based, in buffer)
 	cursorCol  int                 // cursor column (rune offset, 0-based)
 	editCfg    config.EditorConfig // editor configuration
+	// Cached syntax highlighting state (avoids re-lookup every frame)
+	hlLexer     chroma.Lexer
+	hlStyle     *chroma.Style
+	hlFormatter chroma.Formatter
+	hlFile      string // filePath when cache was populated
+	hlTheme     string // theme name when cache was populated
 }
 
 // fileLoadedMsg is the result of an async file load operation (F01).

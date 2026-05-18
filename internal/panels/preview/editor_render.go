@@ -64,6 +64,9 @@ func renderEditContent(p *Preview, width, height int) string {
 		contentWidth = 1
 	}
 
+	// Ensure highlight cache is populated (avoids per-line lookups).
+	ensureHighlightCache(p)
+
 	rendered := make([]string, 0, contentHeight)
 	for i := start; i < end; i++ {
 		lineNum := i + 1
@@ -77,7 +80,7 @@ func renderEditContent(p *Preview, width, height int) string {
 		displayLine := strings.ReplaceAll(rawLine, "\t", strings.Repeat(" ", tabSize))
 
 		// Apply syntax highlighting to this single line.
-		highlighted := highlightLine(displayLine, p.filePath, p.cfg.GetTheme())
+		highlighted := highlightLineCached(p, displayLine)
 
 		// Apply selection highlighting if this line intersects the selection.
 		selStart, selEnd := editSelRange(p)
@@ -126,8 +129,54 @@ func renderEditContent(p *Preview, width, height int) string {
 	return content
 }
 
+// ensureHighlightCache populates the cached lexer/style/formatter on p if
+// the file or theme has changed since the last call. This avoids repeated
+// lookups (lexers.Match, styles.Get, formatters.Get) on every render frame.
+func ensureHighlightCache(p *Preview) {
+	file := p.filePath
+	th := p.cfg.GetTheme()
+	if p.hlFile == file && p.hlTheme == th && p.hlLexer != nil {
+		return
+	}
+	p.hlFile = file
+	p.hlTheme = th
+	p.hlLexer = nil
+	p.hlStyle = nil
+	p.hlFormatter = nil
+
+	lexer := lexers.Match(file)
+	if lexer == nil {
+		return
+	}
+	p.hlLexer = chroma.Coalesce(lexer)
+	p.hlStyle = styles.Get(th)
+	if p.hlStyle == nil {
+		p.hlStyle = styles.Fallback
+	}
+	p.hlFormatter = formatters.Get("terminal16m")
+}
+
+// highlightLineCached applies syntax highlighting using the pre-resolved
+// lexer/style/formatter cached on p. Much faster than highlightLine which
+// performs full lookups on every call.
+func highlightLineCached(p *Preview, line string) string {
+	if line == "" || p.hlLexer == nil || p.hlFormatter == nil {
+		return line
+	}
+	iterator, err := p.hlLexer.Tokenise(nil, line)
+	if err != nil {
+		return line
+	}
+	var buf strings.Builder
+	if err := p.hlFormatter.Format(&buf, p.hlStyle, iterator); err != nil {
+		return line
+	}
+	return strings.TrimRight(buf.String(), "\n")
+}
+
 // highlightLine applies Chroma syntax highlighting to a single line of
 // text, using the filename for lexer matching and the given theme name.
+// Used by tests and non-cached paths.
 func highlightLine(line, filename, theme string) string {
 	if line == "" {
 		return ""
@@ -153,7 +202,6 @@ func highlightLine(line, filename, theme string) string {
 	if err := formatter.Format(&buf, style, iterator); err != nil {
 		return line
 	}
-	// Remove any trailing newline added by Chroma.
 	return strings.TrimRight(buf.String(), "\n")
 }
 
