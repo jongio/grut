@@ -436,7 +436,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
 				clearEditSelection(p)
 			}
-			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, msg.Content)
+			// Normalize line endings: Windows clipboard uses \r\n.
+			content := strings.ReplaceAll(msg.Content, "\r\n", "\n")
+			content = strings.ReplaceAll(content, "\r", "\n")
+			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, content)
 			ensureCursorVisible(p)
 		}
 		return p, nil

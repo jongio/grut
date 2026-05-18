@@ -1019,3 +1019,38 @@ func TestHome_StillGoesToCol0(t *testing.T) {
 	assert.Equal(t, 0, p.cursorCol)
 	assert.Nil(t, p.selAnchor, "home should not create selection")
 }
+
+func TestPasteMsg_CRLFNormalized(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"hello"})
+	p.editMode = true
+	p.cursorLine = 0
+	p.cursorCol = 5
+
+	// Simulate PasteMsg with Windows-style \r\n line endings.
+	msg := tea.PasteMsg{Content: "line1\r\nline2\r\nline3"}
+	p.Update(msg)
+
+	assert.Equal(t, 3, p.editBuf.LineCount())
+	assert.Equal(t, "helloline1", p.editBuf.Line(0))
+	assert.Equal(t, "line2", p.editBuf.Line(1))
+	assert.Equal(t, "line3", p.editBuf.Line(2))
+	assert.Equal(t, 2, p.cursorLine)
+	assert.Equal(t, 5, p.cursorCol)
+}
+
+func TestPasteMsg_MultiLineUnix(t *testing.T) {
+	p := testPreview()
+	p.editBuf = NewTextBuffer([]string{"ab"})
+	p.editMode = true
+	p.cursorLine = 0
+	p.cursorCol = 1
+
+	msg := tea.PasteMsg{Content: "x\ny\nz"}
+	p.Update(msg)
+
+	assert.Equal(t, 3, p.editBuf.LineCount())
+	assert.Equal(t, "ax", p.editBuf.Line(0))
+	assert.Equal(t, "y", p.editBuf.Line(1))
+	assert.Equal(t, "zb", p.editBuf.Line(2))
+}
