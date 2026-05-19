@@ -142,9 +142,9 @@ func TestSectionString(t *testing.T) {
 
 func TestExecuteRightClickAction_CopyPath(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	// cursor 0 is the section header, 1 is the file
 	p.cursor = 1
 
@@ -154,9 +154,9 @@ func TestExecuteRightClickAction_CopyPath(t *testing.T) {
 
 func TestExecuteRightClickAction_ExpandDiff(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	p.cursor = 1
 
 	_, cmd := p.executeRightClickAction(actions.ActionExpandDiff)
@@ -166,9 +166,9 @@ func TestExecuteRightClickAction_ExpandDiff(t *testing.T) {
 
 func TestExecuteRightClickAction_StageUnstage_Unstaged(t *testing.T) {
 	file := git.FileStatus{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	// Rows: unstaged header (0), file (1)
 	p.cursor = 1
 
@@ -178,9 +178,9 @@ func TestExecuteRightClickAction_StageUnstage_Unstaged(t *testing.T) {
 
 func TestExecuteRightClickAction_StageUnstage_Staged(t *testing.T) {
 	file := git.FileStatus{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	// Rows: staged header (0), file (1)
 	p.cursor = 1
 
@@ -209,9 +209,9 @@ func TestHandleModalResult_Rejected(t *testing.T) {
 
 func TestHandleModalResult_RightClickPick(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	p.pendingOp = opRightClickPick
 	p.cursor = 1
 
@@ -225,9 +225,9 @@ func TestHandleModalResult_RightClickPick(t *testing.T) {
 
 func TestHandleModalResult_FirstUseConfirm(t *testing.T) {
 	file := git.FileStatus{Path: "test.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	p.pendingOp = opFirstUseConfirm
 	p.pendingName = string(actions.ItemStatusFile)
 	p.cursor = 1

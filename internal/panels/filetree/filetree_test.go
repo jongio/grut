@@ -14,6 +14,7 @@ import (
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
@@ -25,27 +26,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // mockGitClient implements git.StatusReader for testing.
-type mockGitClient struct{}
-
-func (m *mockGitClient) Log(_ context.Context, _ git.LogOpts) ([]git.Commit, error) { return nil, nil }
-
-func (m *mockGitClient) Status(_ context.Context) ([]git.FileStatus, error) { return nil, nil }
-
-func (m *mockGitClient) Diff(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Blame(_ context.Context, _ string) ([]git.BlameLine, error) { return nil, nil }
-
-func (m *mockGitClient) RepoRoot(_ context.Context) (string, error) { return "/repo", nil }
-
-func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) { return true, nil }
-
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) { return nil, nil }
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
-}
+type mockGitClient = gittest.MockClient
 
 // mockGitClientWithIgnore implements both git.StatusReader and git.IgnoreChecker.
 type mockGitClientWithIgnore struct {

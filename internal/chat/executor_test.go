@@ -12,17 +12,18 @@ import (
 
 	"github.com/jongio/grut/internal/ai"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
-// Test-specific mock that embeds the shared stubGitClient
+// Test-specific mock that embeds the shared git test mock
 // ---------------------------------------------------------------------------
 
 type executorMockGitClient struct {
-	stubGitClient
+	gittest.MockClient
 	statusResult  []git.FileStatus
 	statusErr     error
 	diffResult    []git.FileDiff
