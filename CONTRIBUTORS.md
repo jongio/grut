@@ -7,8 +7,8 @@ auto-generated from git history during each release.
 
 | Name | Contributions |
 |------|---------------|
-| **Copilot** | 137 |
-| **Jon Gallant** | 51 |
+| **Copilot** | 140 |
+| **Jon Gallant** | 54 |
 | **jongio** | 4 |
 
 ---
