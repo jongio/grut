@@ -15,20 +15,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// RunUpdate — additional error paths
-// ---------------------------------------------------------------------------
-
-func TestRunUpdate_DevPrefix(t *testing.T) {
-	err := RunUpdate(context.Background(), "dev-abc123")
-	if err == nil {
-		t.Fatal("expected error for dev-prefixed version")
-	}
-	if !errors.Is(err, ErrDevBuild) {
-		t.Errorf("error should wrap ErrDevBuild, got: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // downloadAsset — redirect handling edge cases
 // ---------------------------------------------------------------------------
 

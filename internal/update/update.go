@@ -60,7 +60,6 @@ var (
 	downloadBaseURL = "https://github.com/jongio/grut/releases/download"
 
 	// Sentinel errors for testable error checking via errors.Is().
-	ErrDevBuild           = errors.New("cannot update a development build")
 	ErrTooManyRedirects   = errors.New("too many redirects")
 	ErrPayloadTooLarge    = errors.New("payload exceeds size limit")
 	ErrUnsafeArchivePath  = errors.New("unsafe archive entry path")
@@ -135,10 +134,6 @@ func matchArchiveTarget(name, target string) (bool, error) {
 // RunUpdate downloads and installs the latest version of grut. It
 // prints progress to stderr and returns an error on failure.
 func RunUpdate(ctx context.Context, currentVersion string) error {
-	if isDevVersion(currentVersion) {
-		return fmt.Errorf("%w — install a release build first", ErrDevBuild)
-	}
-
 	// Acquire an exclusive lock to prevent concurrent updates.
 	configDir, err := os.UserConfigDir()
 	if err != nil {
