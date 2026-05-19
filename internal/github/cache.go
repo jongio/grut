@@ -1,6 +1,7 @@
 package github
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -85,8 +86,10 @@ func clonePtr[T any](p *T) *T {
 	return &v
 }
 
-// cloneCacheValue returns a shallow clone of known pointer types stored in the
-// cache. Non-pointer values and unrecognized types are returned as-is.
+// cloneCacheValue returns a shallow clone of pointer types stored in the
+// cache. Known GitHub types use the generic clonePtr fast path; unknown
+// pointer types fall back to reflect-based cloning. Non-pointer values
+// are returned as-is.
 func cloneCacheValue(value any) any {
 	switch v := value.(type) {
 	case *gh.Issue:
@@ -102,6 +105,13 @@ func cloneCacheValue(value any) any {
 	case *gh.Notification:
 		return clonePtr(v)
 	default:
+		// Fallback: clone unknown pointer types via reflect.
+		rv := reflect.ValueOf(value)
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+			clone := reflect.New(rv.Elem().Type())
+			clone.Elem().Set(rv.Elem())
+			return clone.Interface()
+		}
 		return value
 	}
 }
