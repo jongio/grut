@@ -19,10 +19,11 @@ import (
 // avoid per-frame lipgloss.NewStyle allocations in the render loop.
 var (
 	editorDimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	editorCursorStyle     = lipgloss.NewStyle().Reverse(true)
+	editorCursorStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#FFFFFF")).Foreground(lipgloss.Color("#000000"))
 	editorCurLineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A027"))
 	editorCurLineBg       = lipgloss.Color("#1A1A1A")
 	editorCurLineStyle    = lipgloss.NewStyle().Background(editorCurLineBg)
+	editorSelectionStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#3A6EA5")).Foreground(lipgloss.Color("#FFFFFF"))
 	editorStatusStyle     = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888")).
 				Background(lipgloss.Color("#1A1A1A"))
@@ -63,6 +64,9 @@ func renderEditContent(p *Preview, width, height int) string {
 		contentWidth = 1
 	}
 
+	// Ensure highlight cache is populated (avoids per-line lookups).
+	ensureHighlightCache(p)
+
 	rendered := make([]string, 0, contentHeight)
 	for i := start; i < end; i++ {
 		lineNum := i + 1
@@ -76,7 +80,13 @@ func renderEditContent(p *Preview, width, height int) string {
 		displayLine := strings.ReplaceAll(rawLine, "\t", strings.Repeat(" ", tabSize))
 
 		// Apply syntax highlighting to this single line.
-		highlighted := highlightLine(displayLine, p.filePath, p.cfg.GetTheme())
+		highlighted := highlightLineCached(p, displayLine)
+
+		// Apply selection highlighting if this line intersects the selection.
+		selStart, selEnd := editSelRange(p)
+		if selStart != nil && selEnd != nil && i >= selStart.Line && i <= selEnd.Line {
+			highlighted = renderSelectionOnLine(highlighted, displayLine, i, selStart, selEnd, editorSelectionStyle)
+		}
 
 		isCursorLine := i == p.cursorLine
 
@@ -119,8 +129,54 @@ func renderEditContent(p *Preview, width, height int) string {
 	return content
 }
 
+// ensureHighlightCache populates the cached lexer/style/formatter on p if
+// the file or theme has changed since the last call. This avoids repeated
+// lookups (lexers.Match, styles.Get, formatters.Get) on every render frame.
+func ensureHighlightCache(p *Preview) {
+	file := p.filePath
+	th := p.cfg.GetTheme()
+	if p.hlFile == file && p.hlTheme == th && p.hlLexer != nil {
+		return
+	}
+	p.hlFile = file
+	p.hlTheme = th
+	p.hlLexer = nil
+	p.hlStyle = nil
+	p.hlFormatter = nil
+
+	lexer := lexers.Match(file)
+	if lexer == nil {
+		return
+	}
+	p.hlLexer = chroma.Coalesce(lexer)
+	p.hlStyle = styles.Get(th)
+	if p.hlStyle == nil {
+		p.hlStyle = styles.Fallback
+	}
+	p.hlFormatter = formatters.Get("terminal16m")
+}
+
+// highlightLineCached applies syntax highlighting using the pre-resolved
+// lexer/style/formatter cached on p. Much faster than highlightLine which
+// performs full lookups on every call.
+func highlightLineCached(p *Preview, line string) string {
+	if line == "" || p.hlLexer == nil || p.hlFormatter == nil {
+		return line
+	}
+	iterator, err := p.hlLexer.Tokenise(nil, line)
+	if err != nil {
+		return line
+	}
+	var buf strings.Builder
+	if err := p.hlFormatter.Format(&buf, p.hlStyle, iterator); err != nil {
+		return line
+	}
+	return strings.TrimRight(buf.String(), "\n")
+}
+
 // highlightLine applies Chroma syntax highlighting to a single line of
 // text, using the filename for lexer matching and the given theme name.
+// Used by tests and non-cached paths.
 func highlightLine(line, filename, theme string) string {
 	if line == "" {
 		return ""
@@ -146,7 +202,6 @@ func highlightLine(line, filename, theme string) string {
 	if err := formatter.Format(&buf, style, iterator); err != nil {
 		return line
 	}
-	// Remove any trailing newline added by Chroma.
 	return strings.TrimRight(buf.String(), "\n")
 }
 
@@ -157,8 +212,8 @@ func highlightLine(line, filename, theme string) string {
 func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle lipgloss.Style) string {
 	runes := []rune(rawLine)
 	if cursorCol >= len(runes) {
-		// Cursor at end of line — render a thin block cursor.
-		return highlighted + cursorStyle.Render("▏")
+		// Cursor at end of line — render a block cursor.
+		return highlighted + cursorStyle.Render(" ")
 	}
 
 	// Walk through the highlighted string, counting visible runes
@@ -208,13 +263,93 @@ func renderCursorOnLine(highlighted, rawLine string, cursorCol int, cursorStyle 
 	}
 
 	if cursor.Len() == 0 {
-		return highlighted + cursorStyle.Render("▏")
+		return highlighted + cursorStyle.Render(" ")
 	}
 
 	// Strip ANSI from cursor char to get a clean character, then
 	// apply the inverse-video cursor style.
 	cursorChar := ansi.Strip(cursor.String())
 	return before.String() + cursorStyle.Render(cursorChar) + after.String()
+}
+
+// renderSelectionOnLine applies selection highlight to the specified range
+// of a syntax-highlighted line. It walks the ANSI string, finds the selected
+// rune range for this line, and wraps selected characters with selStyle.
+func renderSelectionOnLine(highlighted, rawLine string, lineIdx int, selStart, selEnd *selPoint, selStyle lipgloss.Style) string {
+	runes := []rune(rawLine)
+	lineLen := len(runes)
+
+	startCol := 0
+	endCol := lineLen
+
+	if lineIdx == selStart.Line {
+		startCol = selStart.Col
+	}
+	if lineIdx == selEnd.Line {
+		endCol = selEnd.Col
+	}
+
+	if startCol >= endCol {
+		return highlighted
+	}
+	if startCol >= lineLen {
+		return highlighted
+	}
+	if endCol > lineLen {
+		endCol = lineLen
+	}
+
+	// Walk the highlighted string splitting into before/selected/after segments.
+	// This is the same ANSI-aware walk pattern as renderCursorOnLine.
+	runeIdx := 0
+	i := 0
+	var before, selected, after strings.Builder
+	for i < len(highlighted) {
+		if highlighted[i] == '\x1b' {
+			// ANSI escape — copy verbatim to the current segment.
+			seqEnd := i + 1
+			if seqEnd < len(highlighted) && highlighted[seqEnd] == '[' {
+				seqEnd++
+				for seqEnd < len(highlighted) && !isCSITerminator(highlighted[seqEnd]) {
+					seqEnd++
+				}
+				if seqEnd < len(highlighted) {
+					seqEnd++
+				}
+			}
+			seq := highlighted[i:seqEnd]
+			switch {
+			case runeIdx < startCol:
+				before.WriteString(seq)
+			case runeIdx >= startCol && runeIdx < endCol:
+				selected.WriteString(seq)
+			default:
+				after.WriteString(seq)
+			}
+			i = seqEnd
+			continue
+		}
+
+		// Normal rune.
+		_, size := utf8.DecodeRuneInString(highlighted[i:])
+		ch := highlighted[i : i+size]
+		switch {
+		case runeIdx < startCol:
+			before.WriteString(ch)
+		case runeIdx >= startCol && runeIdx < endCol:
+			selected.WriteString(ch)
+		default:
+			after.WriteString(ch)
+		}
+		runeIdx++
+		i += size
+	}
+
+	if selected.Len() == 0 {
+		return highlighted
+	}
+
+	return before.String() + selStyle.Render(ansi.Strip(selected.String())) + after.String()
 }
 
 // renderEditStatusBar renders the bottom status bar showing cursor

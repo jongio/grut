@@ -79,6 +79,7 @@ type Model struct {
 	gitDirty           bool   // true when working tree has uncommitted changes
 	ready              bool   // true after first WindowSizeMsg
 	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
+	previewEditing     bool   // true when preview panel is in edit mode
 }
 
 // New creates a new TUI model with the given panel manager, theme, keymap,
@@ -274,6 +275,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		panels.ClosePanelMsg, panels.GitStatusChangedMsg:
 		return m.handlePanelLayoutMsg(msg)
 
+	// Edit mode tracking — the preview panel broadcasts these when entering
+	// or leaving inline edit mode so we can skip global key bindings.
+	case panels.EditModeEnteredMsg:
+		m.previewEditing = true
+		return m.handleDefaultMsg(msg)
+	case panels.EditModeExitedMsg:
+		m.previewEditing = false
+		return m.handleDefaultMsg(msg)
+
 	// Mouse events — may fall through to default broadcast.
 	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
 		if mdl, cmd, handled := m.handleMouseMsg(msg); handled {
@@ -295,6 +305,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch action {
 	case "quit":
+		// In edit mode, ctrl+c should be handled by the editor (copy),
+		// not quit the application.
+		if m.previewEditing {
+			cmd := m.engine.Update(msg)
+			return m, cmd
+		}
 		// If the focused panel has an active text selection, Ctrl+C copies
 		// the selection instead of quitting (standard OS copy behavior).
 		if sc, ok := m.engine.FocusedPanel().(panels.SelectionCopier); ok && sc.HasSelection() {
@@ -320,17 +336,18 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "zoom_toggle":
 		m.engine.ToggleZoom()
 		return m, nil
-	case "resize_left":
-		m.engine.ResizeShrink()
-		return m, nil
-	case "resize_right":
-		m.engine.ResizeGrow()
-		return m, nil
-	case "resize_up":
-		m.engine.ResizeShrink()
-		return m, nil
-	case "resize_down":
-		m.engine.ResizeGrow()
+	case "resize_left", "resize_right", "resize_up", "resize_down":
+		// In edit mode, ctrl+left/right are word navigation keys — route to panel.
+		if m.previewEditing {
+			cmd := m.engine.Update(msg)
+			return m, cmd
+		}
+		switch action {
+		case "resize_left", "resize_up":
+			m.engine.ResizeShrink()
+		default:
+			m.engine.ResizeGrow()
+		}
 		return m, nil
 	case "exit_input":
 		if m.keys != nil {

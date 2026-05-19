@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -77,6 +78,12 @@ type Preview struct {
 	cursorLine int                 // cursor line (0-based, in buffer)
 	cursorCol  int                 // cursor column (rune offset, 0-based)
 	editCfg    config.EditorConfig // editor configuration
+	// Cached syntax highlighting state (avoids re-lookup every frame)
+	hlLexer     chroma.Lexer
+	hlStyle     *chroma.Style
+	hlFormatter chroma.Formatter
+	hlFile      string // filePath when cache was populated
+	hlTheme     string // theme name when cache was populated
 }
 
 // fileLoadedMsg is the result of an async file load operation (F01).
@@ -188,6 +195,39 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 				cmds = append(cmds, p.loadContextDiffCmd(p.filePath, p.diffContext))
 			}
 			return p, tea.Batch(cmds...)
+		}
+
+	case clipboardCopiedMsg:
+		if msg.err != nil {
+			errMsg := msg.err.Error()
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Copy failed: " + errMsg, Level: notify.Error}
+			}
+		}
+		lines := strings.Count(msg.text, "\n") + 1
+		label := fmt.Sprintf("Copied %d chars", utf8.RuneCountInString(msg.text))
+		if lines > 1 {
+			label = fmt.Sprintf("Copied %d lines", lines)
+		}
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: label, Level: notify.Info}
+		}
+
+	case clipboardPastedMsg:
+		if msg.err != nil {
+			errMsg := msg.err.Error()
+			return p, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Paste failed: " + errMsg, Level: notify.Error}
+			}
+		}
+		if msg.text != "" && p.editBuf != nil {
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			}
+			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, msg.text)
+			ensureCursorVisible(p)
 		}
 
 	case panels.FileSelectedMsg:
@@ -399,6 +439,21 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.blameLines = msg.Lines
 		}
 		return p, nil
+	case tea.PasteMsg:
+		// Bracketed paste: terminal delivers clipboard content directly.
+		if p.editMode && p.editBuf != nil && msg.Content != "" {
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			}
+			// Normalize line endings: Windows clipboard uses \r\n.
+			content := strings.ReplaceAll(msg.Content, "\r\n", "\n")
+			content = strings.ReplaceAll(content, "\r", "\n")
+			p.cursorLine, p.cursorCol = p.editBuf.InsertText(p.cursorLine, p.cursorCol, content)
+			ensureCursorVisible(p)
+		}
+		return p, nil
 	case tea.KeyPressMsg:
 		if !p.focused {
 			return p, nil
@@ -550,7 +605,15 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 			{Key: "Ctrl+S", Description: "Save file", Action: "save"},
 			{Key: "Ctrl+Z", Description: "Undo", Action: "undo"},
 			{Key: "Ctrl+Y", Description: "Redo", Action: "redo"},
+			{Key: "Ctrl+C", Description: "Copy", Action: "copy"},
+			{Key: "Ctrl+X", Description: "Cut", Action: "cut"},
+			{Key: "Ctrl+V", Description: "Paste", Action: "paste"},
+			{Key: "Ctrl+A", Description: "Select all", Action: "select_all"},
+			{Key: "Shift+Arrows", Description: "Select text", Action: "select"},
 			{Key: "Ctrl+D", Description: "Duplicate line", Action: "duplicate_line"},
+			{Key: "Ctrl+Shift+K", Description: "Delete line", Action: "delete_line"},
+			{Key: "Alt+\u2191/\u2193", Description: "Move line", Action: "move_line"},
+			{Key: "Ctrl+\u2190/\u2192", Description: "Word jump", Action: "word_nav"},
 			{Key: "Tab", Description: "Insert indent", Action: "indent"},
 			{Key: "Shift+Tab", Description: "Remove indent", Action: "dedent"},
 		}

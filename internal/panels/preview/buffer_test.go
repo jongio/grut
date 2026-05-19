@@ -556,6 +556,284 @@ func TestSetLines_EmptyProducesSingleLine(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// DeleteRange
+// ---------------------------------------------------------------------------
+
+func TestDeleteRange_SingleLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello world"})
+	nl, nc := buf.DeleteRange(0, 5, 0, 11)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 5, nc)
+	assert.Equal(t, "hello", buf.Line(0))
+}
+
+func TestDeleteRange_MultiLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"aaa", "bbb", "ccc"})
+	nl, nc := buf.DeleteRange(0, 1, 2, 2)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 1, nc)
+	assert.Equal(t, 1, buf.LineCount())
+	assert.Equal(t, "ac", buf.Line(0))
+}
+
+func TestDeleteRange_FullLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"first", "second", "third"})
+	// Delete the entirety of lines 0-1.
+	nl, nc := buf.DeleteRange(0, 0, 1, 6)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 0, nc)
+	assert.Equal(t, 2, buf.LineCount())
+	assert.Equal(t, "", buf.Line(0))
+	assert.Equal(t, "third", buf.Line(1))
+}
+
+func TestDeleteRange_EmptyRange_Noop(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	nl, nc := buf.DeleteRange(0, 2, 0, 2)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 2, nc)
+	assert.Equal(t, "hello", buf.Line(0))
+	assert.False(t, buf.Dirty(), "empty range should not set dirty")
+}
+
+func TestDeleteRange_ClampedInputs(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	nl, nc := buf.DeleteRange(0, 0, 99, 99)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 0, nc)
+	assert.Equal(t, "", buf.Line(0))
+}
+
+func TestDeleteRange_CursorPosition(t *testing.T) {
+	buf := NewTextBuffer([]string{"abcdef"})
+	nl, nc := buf.DeleteRange(0, 2, 0, 4)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 2, nc)
+	assert.Equal(t, "abef", buf.Line(0))
+}
+
+func TestDeleteRange_MarksDirty(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	buf.DeleteRange(0, 0, 0, 3)
+	assert.True(t, buf.Dirty())
+}
+
+func TestDeleteRange_Undo(t *testing.T) {
+	buf := NewTextBuffer([]string{"aaa", "bbb", "ccc"})
+	buf.DeleteRange(0, 1, 2, 2)
+	assert.Equal(t, 1, buf.LineCount())
+	assert.Equal(t, "ac", buf.Line(0))
+
+	nl, nc, ok := buf.Undo(0, 1)
+	require.True(t, ok)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 1, nc)
+	assert.Equal(t, 3, buf.LineCount())
+	assert.Equal(t, []string{"aaa", "bbb", "ccc"}, buf.Lines())
+}
+
+func TestDeleteRange_ReversedInputs(t *testing.T) {
+	// If start > end, they should be swapped.
+	buf := NewTextBuffer([]string{"hello world"})
+	nl, nc := buf.DeleteRange(0, 11, 0, 5)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 5, nc)
+	assert.Equal(t, "hello", buf.Line(0))
+}
+
+// ---------------------------------------------------------------------------
+// InsertText
+// ---------------------------------------------------------------------------
+
+func TestInsertText_SingleLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"hd"})
+	nl, nc := buf.InsertText(0, 1, "ello worl")
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 10, nc)
+	assert.Equal(t, "hello world", buf.Line(0))
+}
+
+func TestInsertText_MultiLine_TwoLines(t *testing.T) {
+	buf := NewTextBuffer([]string{"ac"})
+	nl, nc := buf.InsertText(0, 1, "b\nd")
+	assert.Equal(t, 1, nl)
+	assert.Equal(t, 1, nc)
+	assert.Equal(t, 2, buf.LineCount())
+	assert.Equal(t, "ab", buf.Line(0))
+	assert.Equal(t, "dc", buf.Line(1))
+}
+
+func TestInsertText_MultiLine_ThreeLines(t *testing.T) {
+	buf := NewTextBuffer([]string{"XY"})
+	nl, nc := buf.InsertText(0, 1, "a\nb\nc")
+	assert.Equal(t, 2, nl)
+	assert.Equal(t, 1, nc)
+	assert.Equal(t, 3, buf.LineCount())
+	assert.Equal(t, "Xa", buf.Line(0))
+	assert.Equal(t, "b", buf.Line(1))
+	assert.Equal(t, "cY", buf.Line(2))
+}
+
+func TestInsertText_EmptyString_Noop(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	nl, nc := buf.InsertText(0, 2, "")
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 2, nc)
+	assert.Equal(t, "hello", buf.Line(0))
+	assert.False(t, buf.Dirty(), "empty text should not set dirty")
+}
+
+func TestInsertText_AtLineStart(t *testing.T) {
+	buf := NewTextBuffer([]string{"world"})
+	nl, nc := buf.InsertText(0, 0, "hello ")
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 6, nc)
+	assert.Equal(t, "hello world", buf.Line(0))
+}
+
+func TestInsertText_AtLineEnd(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	nl, nc := buf.InsertText(0, 5, " world")
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 11, nc)
+	assert.Equal(t, "hello world", buf.Line(0))
+}
+
+func TestInsertText_AtMiddle(t *testing.T) {
+	buf := NewTextBuffer([]string{"hd"})
+	nl, nc := buf.InsertText(0, 1, "ello worl")
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 10, nc)
+	assert.Equal(t, "hello world", buf.Line(0))
+}
+
+func TestInsertText_CursorPosition_MultiLine(t *testing.T) {
+	buf := NewTextBuffer([]string{""})
+	nl, nc := buf.InsertText(0, 0, "line1\nline2\nline3")
+	assert.Equal(t, 2, nl)
+	assert.Equal(t, 5, nc)
+	assert.Equal(t, 3, buf.LineCount())
+}
+
+func TestInsertText_MarksDirty(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	buf.InsertText(0, 0, "x")
+	assert.True(t, buf.Dirty())
+}
+
+func TestInsertText_Undo(t *testing.T) {
+	buf := NewTextBuffer([]string{"ac"})
+	buf.InsertText(0, 1, "b\nd")
+	assert.Equal(t, 2, buf.LineCount())
+
+	nl, nc, ok := buf.Undo(1, 1)
+	require.True(t, ok)
+	assert.Equal(t, 0, nl)
+	assert.Equal(t, 1, nc)
+	assert.Equal(t, 1, buf.LineCount())
+	assert.Equal(t, "ac", buf.Line(0))
+}
+
+// ---------------------------------------------------------------------------
+// DeleteLine
+// ---------------------------------------------------------------------------
+
+func TestDeleteLine_MiddleLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	buf.DeleteLine(1)
+	assert.Equal(t, 2, buf.LineCount())
+	assert.Equal(t, []string{"a", "c"}, buf.Lines())
+}
+
+func TestDeleteLine_FirstLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	buf.DeleteLine(0)
+	assert.Equal(t, 2, buf.LineCount())
+	assert.Equal(t, []string{"b", "c"}, buf.Lines())
+}
+
+func TestDeleteLine_LastLine(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	buf.DeleteLine(2)
+	assert.Equal(t, 2, buf.LineCount())
+	assert.Equal(t, []string{"a", "b"}, buf.Lines())
+}
+
+func TestDeleteLine_OnlyLine_ClearsToEmpty(t *testing.T) {
+	buf := NewTextBuffer([]string{"hello"})
+	buf.DeleteLine(0)
+	assert.Equal(t, 1, buf.LineCount())
+	assert.Equal(t, "", buf.Line(0))
+}
+
+func TestDeleteLine_MarksDirty(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b"})
+	buf.DeleteLine(0)
+	assert.True(t, buf.Dirty())
+}
+
+func TestDeleteLine_Undo(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	buf.DeleteLine(1)
+	assert.Equal(t, []string{"a", "c"}, buf.Lines())
+
+	_, _, ok := buf.Undo(1, 0)
+	require.True(t, ok)
+	assert.Equal(t, 3, buf.LineCount())
+	assert.Equal(t, []string{"a", "b", "c"}, buf.Lines())
+}
+
+// ---------------------------------------------------------------------------
+// MoveLine
+// ---------------------------------------------------------------------------
+
+func TestMoveLine_Down(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	ok := buf.MoveLine(0, 1)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"b", "a", "c"}, buf.Lines())
+}
+
+func TestMoveLine_Up(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	ok := buf.MoveLine(2, -1)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "c", "b"}, buf.Lines())
+}
+
+func TestMoveLine_TopBoundary_Noop(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	ok := buf.MoveLine(0, -1)
+	assert.False(t, ok)
+	assert.Equal(t, []string{"a", "b", "c"}, buf.Lines())
+	assert.False(t, buf.Dirty(), "no-op move should not set dirty")
+}
+
+func TestMoveLine_BottomBoundary_Noop(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	ok := buf.MoveLine(2, 1)
+	assert.False(t, ok)
+	assert.Equal(t, []string{"a", "b", "c"}, buf.Lines())
+	assert.False(t, buf.Dirty(), "no-op move should not set dirty")
+}
+
+func TestMoveLine_MarksDirty(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b"})
+	buf.MoveLine(0, 1)
+	assert.True(t, buf.Dirty())
+}
+
+func TestMoveLine_Undo(t *testing.T) {
+	buf := NewTextBuffer([]string{"a", "b", "c"})
+	buf.MoveLine(0, 1)
+	assert.Equal(t, []string{"b", "a", "c"}, buf.Lines())
+
+	_, _, ok := buf.Undo(1, 0)
+	require.True(t, ok)
+	assert.Equal(t, []string{"a", "b", "c"}, buf.Lines())
+}
+
+// ---------------------------------------------------------------------------
 // Edge cases: empty buffer
 // ---------------------------------------------------------------------------
 

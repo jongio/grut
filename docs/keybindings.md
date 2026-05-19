@@ -176,3 +176,35 @@ Preview panel (panel 5).
 
 Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.
 
+---
+
+## Edit Mode
+
+Active when editing a file inline (press e in Preview to enter).
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+S` | Save file |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
+| `Ctrl+C` | Copy selection (or line) |
+| `Ctrl+X` | Cut selection (or line) |
+| `Ctrl+V` | Paste from clipboard |
+| `Ctrl+A` | Select all |
+| `Ctrl+D` | Duplicate line |
+| `Ctrl+Shift+K` | Delete line |
+| `Alt+Up/Down` | Move line up/down |
+| `Ctrl+Left/Right` | Word navigation |
+| `Ctrl+Backspace` | Delete word left |
+| `Ctrl+Delete` | Delete word right |
+| `Ctrl+Home/End` | Jump to file start/end |
+| `Home/End` | Jump to line start/end |
+| `Shift+Arrows` | Extend selection |
+| `Shift+Home/End` | Select to line start/end |
+| `Ctrl+Shift+Left/Right` | Select word |
+| `Tab` | Indent |
+| `Shift+Tab` | Dedent |
+| `Esc` | Exit edit mode |
+
+Mouse: click to position cursor, drag to select, double-click to select word. Paste also works via terminal bracketed paste (Ctrl+V in most terminals).
+

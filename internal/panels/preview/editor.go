@@ -5,6 +5,7 @@
 package preview
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,19 @@ const (
 // the diff, and showing a toast.
 type fileSavedMsg struct {
 	path string
+}
+
+// clipboardCopiedMsg is produced by the async copy command when it completes.
+type clipboardCopiedMsg struct {
+	text string
+	err  error
+}
+
+// clipboardPastedMsg is produced by the async paste command after reading
+// the OS clipboard.
+type clipboardPastedMsg struct {
+	text string
+	err  error
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +249,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	// --- Undo / redo ---
 	case "ctrl+z":
 		if p.editBuf != nil {
+			clearEditSelection(p)
 			newLine, newCol, ok := p.editBuf.Undo(p.cursorLine, p.cursorCol)
 			if ok {
 				p.cursorLine = newLine
@@ -245,6 +260,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 
 	case "ctrl+y":
 		if p.editBuf != nil {
+			clearEditSelection(p)
 			newLine, newCol, ok := p.editBuf.Redo(p.cursorLine, p.cursorCol)
 			if ok {
 				p.cursorLine = newLine
@@ -276,15 +292,27 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 
 	case "backspace":
 		if p.editBuf != nil {
-			newLine, newCol := p.editBuf.DeleteRune(p.cursorLine, p.cursorCol)
-			p.cursorLine = newLine
-			p.cursorCol = newCol
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			} else {
+				newLine, newCol := p.editBuf.DeleteRune(p.cursorLine, p.cursorCol)
+				p.cursorLine = newLine
+				p.cursorCol = newCol
+			}
 			ensureCursorVisible(p)
 		}
 
 	case "delete":
 		if p.editBuf != nil {
-			p.editBuf.DeleteForward(p.cursorLine, p.cursorCol)
+			if hasEditSelection(p) {
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+			} else {
+				p.editBuf.DeleteForward(p.cursorLine, p.cursorCol)
+			}
 		}
 
 	// --- Indentation ---
@@ -304,34 +332,228 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 			}
 		}
 
+	// --- Selection (shift+arrow) ---
+	case "shift+left":
+		extendEditSelection(p, p.cursorLine, p.cursorCol)
+		moveCursorLeft(p)
+		p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+
+	case "shift+right":
+		extendEditSelection(p, p.cursorLine, p.cursorCol)
+		moveCursorRight(p)
+		p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+
+	case "shift+up":
+		extendEditSelection(p, p.cursorLine, p.cursorCol)
+		moveCursorUp(p)
+		p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+
+	case "shift+down":
+		extendEditSelection(p, p.cursorLine, p.cursorCol)
+		moveCursorDown(p)
+		p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+
+	case "shift+home":
+		extendEditSelection(p, p.cursorLine, p.cursorCol)
+		p.cursorCol = 0
+		p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+
+	case "shift+end":
+		if p.editBuf != nil {
+			extendEditSelection(p, p.cursorLine, p.cursorCol)
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = len([]rune(line))
+			p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+		}
+
+	case "ctrl+shift+left":
+		if p.editBuf != nil {
+			extendEditSelection(p, p.cursorLine, p.cursorCol)
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = findWordBoundaryLeft(line, p.cursorCol)
+			p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+		}
+
+	case "ctrl+shift+right":
+		if p.editBuf != nil {
+			extendEditSelection(p, p.cursorLine, p.cursorCol)
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = findWordBoundaryRight(line, p.cursorCol)
+			p.selEnd = &selPoint{Line: p.cursorLine, Col: p.cursorCol}
+		}
+
+	// --- Clipboard ---
+	case "ctrl+c":
+		if p.editBuf != nil {
+			var text string
+			if hasEditSelection(p) {
+				text = editSelectedText(p)
+			} else {
+				// No selection: copy current line (VS Code behavior).
+				text = p.editBuf.Line(p.cursorLine) + "\n"
+			}
+			if text != "" {
+				return p, func() tea.Msg {
+					err := panels.CopyToClipboard(context.Background(), text)
+					return clipboardCopiedMsg{text: text, err: err}
+				}
+			}
+		}
+
+	case "ctrl+x":
+		if p.editBuf != nil {
+			var text string
+			if hasEditSelection(p) {
+				text = editSelectedText(p)
+				start, end := editSelRange(p)
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+				clearEditSelection(p)
+				ensureCursorVisible(p)
+			} else {
+				// No selection: cut entire current line (VS Code behavior).
+				text = p.editBuf.Line(p.cursorLine) + "\n"
+				p.editBuf.DeleteLine(p.cursorLine)
+				if p.cursorLine >= p.editBuf.LineCount() {
+					p.cursorLine = p.editBuf.LineCount() - 1
+				}
+				clampCursorCol(p)
+				ensureCursorVisible(p)
+			}
+			if text != "" {
+				return p, func() tea.Msg {
+					err := panels.CopyToClipboard(context.Background(), text)
+					return clipboardCopiedMsg{text: text, err: err}
+				}
+			}
+		}
+
+	case "ctrl+v":
+		if p.editBuf != nil {
+			return p, func() tea.Msg {
+				text, err := panels.PasteFromClipboard(context.Background())
+				return clipboardPastedMsg{text: text, err: err}
+			}
+		}
+
+	// --- Word navigation & deletion ---
+	case "ctrl+left":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = findWordBoundaryLeft(line, p.cursorCol)
+		}
+
+	case "ctrl+right":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = findWordBoundaryRight(line, p.cursorCol)
+		}
+
+	case "ctrl+backspace":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			line := p.editBuf.Line(p.cursorLine)
+			newCol := findWordBoundaryLeft(line, p.cursorCol)
+			if newCol < p.cursorCol {
+				p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(p.cursorLine, newCol, p.cursorLine, p.cursorCol)
+			} else if p.cursorCol == 0 && p.cursorLine > 0 {
+				// At start of line, join with previous (same as backspace).
+				newLine, newCol := p.editBuf.DeleteRune(p.cursorLine, p.cursorCol)
+				p.cursorLine = newLine
+				p.cursorCol = newCol
+			}
+			ensureCursorVisible(p)
+		}
+
+	case "ctrl+delete":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			line := p.editBuf.Line(p.cursorLine)
+			endCol := findWordBoundaryRight(line, p.cursorCol)
+			if endCol > p.cursorCol {
+				p.editBuf.DeleteRange(p.cursorLine, p.cursorCol, p.cursorLine, endCol)
+			} else if p.cursorCol >= len([]rune(line)) && p.cursorLine < p.editBuf.LineCount()-1 {
+				// At end of line, join with next.
+				p.editBuf.DeleteForward(p.cursorLine, p.cursorCol)
+			}
+		}
+
+	// --- Line operations ---
+	case "ctrl+shift+k":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			p.editBuf.DeleteLine(p.cursorLine)
+			if p.cursorLine >= p.editBuf.LineCount() {
+				p.cursorLine = p.editBuf.LineCount() - 1
+			}
+			clampCursorCol(p)
+			ensureCursorVisible(p)
+		}
+
+	case "alt+up":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			if p.editBuf.MoveLine(p.cursorLine, -1) {
+				p.cursorLine--
+				ensureCursorVisible(p)
+			}
+		}
+
+	case "alt+down":
+		if p.editBuf != nil {
+			clearEditSelection(p)
+			if p.editBuf.MoveLine(p.cursorLine, 1) {
+				p.cursorLine++
+				ensureCursorVisible(p)
+			}
+		}
+
 	// --- Cursor movement ---
 	case "left":
+		clearEditSelection(p)
 		moveCursorLeft(p)
 
 	case "right":
+		clearEditSelection(p)
 		moveCursorRight(p)
 
 	case "up":
+		clearEditSelection(p)
 		moveCursorUp(p)
 
 	case keyDown:
+		clearEditSelection(p)
 		moveCursorDown(p)
 
-	case "home", "ctrl+a":
+	case "ctrl+a":
+		if p.editBuf != nil {
+			selectAll(p)
+			p.cursorLine = p.editBuf.LineCount() - 1
+			line := p.editBuf.Line(p.cursorLine)
+			p.cursorCol = len([]rune(line))
+			ensureCursorVisible(p)
+		}
+
+	case "home":
+		clearEditSelection(p)
 		p.cursorCol = 0
 
 	case "end", "ctrl+e":
+		clearEditSelection(p)
 		if p.editBuf != nil {
 			line := p.editBuf.Line(p.cursorLine)
 			p.cursorCol = len([]rune(line))
 		}
 
 	case "ctrl+home":
+		clearEditSelection(p)
 		p.cursorLine = 0
 		p.cursorCol = 0
 		ensureCursorVisible(p)
 
 	case "ctrl+end":
+		clearEditSelection(p)
 		if p.editBuf != nil {
 			p.cursorLine = p.editBuf.LineCount() - 1
 			if p.cursorLine < 0 {
@@ -343,15 +565,21 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 		}
 
 	default:
-		// Character input — insert each rune from the text payload.
+		// Character input - insert each rune from the text payload.
 		if msg.Text != "" {
-			for _, r := range msg.Text {
-				if p.editBuf != nil {
+			if p.editBuf != nil {
+				// Replace selection with typed text.
+				if hasEditSelection(p) {
+					start, end := editSelRange(p)
+					p.cursorLine, p.cursorCol = p.editBuf.DeleteRange(start.Line, start.Col, end.Line, end.Col)
+					clearEditSelection(p)
+				}
+				for _, r := range msg.Text {
 					p.editBuf.InsertRune(p.cursorLine, p.cursorCol, r)
 					p.cursorCol++
 				}
+				ensureCursorVisible(p)
 			}
-			ensureCursorVisible(p)
 		}
 	}
 	return p, nil

@@ -1355,3 +1355,67 @@ func TestUpdateUnknownMsgRoutesToEngineAndChat(t *testing.T) {
 	_ = updated.(Model)
 	// Should not panic — routes to engine.Update() and chat.Update().
 }
+
+// ---------------------------------------------------------------------------
+// 45. Edit mode flag tracking and key routing
+// ---------------------------------------------------------------------------
+
+func TestEditModeEnteredSetsFlag(t *testing.T) {
+	m := newTestModelReady(t)
+	assert.False(t, m.previewEditing)
+
+	updated, _ := m.Update(panels.EditModeEnteredMsg{Path: "test.go"})
+	m = updated.(Model)
+
+	assert.True(t, m.previewEditing, "EditModeEnteredMsg should set previewEditing")
+}
+
+func TestEditModeExitedClearsFlag(t *testing.T) {
+	m := newTestModelReady(t)
+	// Enter first.
+	updated, _ := m.Update(panels.EditModeEnteredMsg{Path: "test.go"})
+	m = updated.(Model)
+	require.True(t, m.previewEditing)
+
+	// Exit.
+	updated, _ = m.Update(panels.EditModeExitedMsg{Path: "test.go"})
+	m = updated.(Model)
+
+	assert.False(t, m.previewEditing, "EditModeExitedMsg should clear previewEditing")
+}
+
+func TestCtrlZRoutesToPanelInEditMode(t *testing.T) {
+	m := newTestModelReady(t)
+	// Simulate being in edit mode.
+	m.previewEditing = true
+
+	// ctrl+z should NOT invoke handleUndo (which would show "Nothing to undo"
+	// toast when undoMgr is nil). Instead it should route to the panel.
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	_ = updated.(Model)
+
+	// With nil undoMgr, handleUndo would produce a ShowToastMsg with
+	// "Nothing to undo". If the key was correctly routed to the panel
+	// instead, we should NOT get that toast.
+	if cmd != nil {
+		msg := cmd()
+		if toast, ok := msg.(notify.ShowToastMsg); ok {
+			assert.NotContains(t, toast.Message, "Nothing to undo",
+				"ctrl+z in edit mode should not trigger global undo")
+		}
+	}
+}
+
+func TestCtrlCDoesNotQuitInEditMode(t *testing.T) {
+	m := newTestModelReady(t)
+	m.previewEditing = true
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+
+	// In edit mode, ctrl+c must NOT produce tea.Quit.
+	if cmd != nil {
+		msg := cmd()
+		_, isQuit := msg.(tea.QuitMsg)
+		assert.False(t, isQuit, "ctrl+c in edit mode should not quit")
+	}
+}

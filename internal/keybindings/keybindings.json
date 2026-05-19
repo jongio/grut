@@ -151,6 +151,35 @@
         { "key": "Esc", "action": "Clear selection" }
       ],
       "note": "Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word."
+    },
+    {
+      "id": "edit_mode",
+      "title": "Edit Mode",
+      "description": "Active when editing a file inline (press e in Preview to enter).",
+      "bindings": [
+        { "key": "Ctrl+S", "action": "Save file" },
+        { "key": "Ctrl+Z", "action": "Undo" },
+        { "key": "Ctrl+Y", "action": "Redo" },
+        { "key": "Ctrl+C", "action": "Copy selection (or line)" },
+        { "key": "Ctrl+X", "action": "Cut selection (or line)" },
+        { "key": "Ctrl+V", "action": "Paste from clipboard" },
+        { "key": "Ctrl+A", "action": "Select all" },
+        { "key": "Ctrl+D", "action": "Duplicate line" },
+        { "key": "Ctrl+Shift+K", "action": "Delete line" },
+        { "key": "Alt+Up/Down", "action": "Move line up/down" },
+        { "key": "Ctrl+Left/Right", "action": "Word navigation" },
+        { "key": "Ctrl+Backspace", "action": "Delete word left" },
+        { "key": "Ctrl+Delete", "action": "Delete word right" },
+        { "key": "Ctrl+Home/End", "action": "Jump to file start/end" },
+        { "key": "Home/End", "action": "Jump to line start/end" },
+        { "key": "Shift+Arrows", "action": "Extend selection" },
+        { "key": "Shift+Home/End", "action": "Select to line start/end" },
+        { "key": "Ctrl+Shift+Left/Right", "action": "Select word" },
+        { "key": "Tab", "action": "Indent" },
+        { "key": "Shift+Tab", "action": "Dedent" },
+        { "key": "Esc", "action": "Exit edit mode" }
+      ],
+      "note": "Mouse: click to position cursor, drag to select, double-click to select word. Paste also works via terminal bracketed paste (Ctrl+V in most terminals)."
     }
   ]
 }

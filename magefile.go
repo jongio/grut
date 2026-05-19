@@ -47,6 +47,9 @@ var deadcodeAllowlist = []string{
 	// config — test-only accessor (used in app_test.go, engine_test.go)
 	"LoadDefaults",
 
+	// preview — test-only helper (used in editor_render_test.go)
+	"highlightLine",
+
 	// cmd — test-only accessor (returns root command + cleanup for tests)
 	"newRootCommand",
 
