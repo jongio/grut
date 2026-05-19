@@ -151,10 +151,11 @@ func (p *Panel) View(width, height int) string {
 			}
 			// Right-pad key to 12 chars for alignment.
 			var padded string
-			if len(key) >= 12 {
+			keyWidth := lipgloss.Width(key)
+			if keyWidth >= 12 {
 				padded = key + " "
 			} else {
-				padded = key + strings.Repeat(" ", 12-len(key))
+				padded = key + strings.Repeat(" ", 12-keyWidth)
 			}
 			styled = "  " + keyStyle.Render(padded) + descStyle.Render(desc)
 		case strings.HasPrefix(line, "footer:"):

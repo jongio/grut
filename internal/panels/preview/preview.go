@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -197,15 +198,19 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 
 	case clipboardCopiedMsg:
-		if msg.err == nil {
-			lines := strings.Count(msg.text, "\n")
-			label := fmt.Sprintf("Copied %d chars", len(msg.text))
-			if lines > 1 {
-				label = fmt.Sprintf("Copied %d lines", lines)
-			}
+		if msg.err != nil {
+			errMsg := msg.err.Error()
 			return p, func() tea.Msg {
-				return notify.ShowToastMsg{Message: label, Level: notify.Info}
+				return notify.ShowToastMsg{Message: "Copy failed: " + errMsg, Level: notify.Error}
 			}
+		}
+		lines := strings.Count(msg.text, "\n") + 1
+		label := fmt.Sprintf("Copied %d chars", utf8.RuneCountInString(msg.text))
+		if lines > 1 {
+			label = fmt.Sprintf("Copied %d lines", lines)
+		}
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: label, Level: notify.Info}
 		}
 
 	case clipboardPastedMsg:
