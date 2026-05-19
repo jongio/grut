@@ -2,6 +2,7 @@ package preview
 
 import (
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -307,7 +308,7 @@ func (b *TextBuffer) InsertText(line, col int, text string) (newLine, newCol int
 	after := string(runes[col:])
 
 	// Split the inserted text on newlines.
-	parts := splitLines(text)
+	parts := strings.Split(text, "\n")
 
 	if len(parts) == 1 {
 		// Single-line insert.
@@ -430,21 +431,6 @@ func (b *TextBuffer) clampCol(line, col int) int {
 		return n
 	}
 	return col
-}
-
-// splitLines splits text on "\n" boundaries. A trailing newline produces an
-// extra empty element (matching strings.Split semantics).
-func splitLines(text string) []string {
-	result := []string{}
-	start := 0
-	for i := 0; i < len(text); i++ {
-		if text[i] == '\n' {
-			result = append(result, text[start:i])
-			start = i + 1
-		}
-	}
-	result = append(result, text[start:])
-	return result
 }
 
 // leadingWhitespace returns the leading spaces and tabs from s.
