@@ -349,7 +349,6 @@ func TestClaudeCompleteStream_ServerError(t *testing.T) {
 	ctx := context.Background()
 
 	ch, err := p.CompleteStream(ctx, CompletionRequest{UserPrompt: "Hi"})
-
 	// The SDK may return either: error from CompleteStream, or send error via channel.
 	if err != nil {
 		// Error at call site.

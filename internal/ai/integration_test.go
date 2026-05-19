@@ -147,6 +147,7 @@ func (m *mockGitClient) Commit(ctx context.Context, msg string, opts git.CommitO
 func (m *mockGitClient) BranchList(_ context.Context) ([]git.Branch, error) {
 	return m.branches, nil
 }
+
 func (m *mockGitClient) CurrentBranch(_ context.Context) (git.Branch, error) {
 	for _, b := range m.branches {
 		if b.IsCurrent {
