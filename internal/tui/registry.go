@@ -21,4 +21,3 @@ type OverlayCreator interface {
 	NewSettingsPanel(currentPos layout.PreviewPosition, currentTheme string, themeNames []string, actionsCfg config.ActionsConfig) panels.Panel
 	NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.Panel
 }
-

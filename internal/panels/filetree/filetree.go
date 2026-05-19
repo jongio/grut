@@ -184,10 +184,10 @@ type FileTree struct {
 	colors          panelColors
 	theme           *theme.Theme
 	// File operation state.
-	clip             clipboard // cut/copy clipboard
-	focused          bool
-	showHidden       bool
-	listMode         bool // true = flat list with relative paths, false = tree view
+	clip              clipboard // cut/copy clipboard
+	focused           bool
+	showHidden        bool
+	listMode          bool // true = flat list with relative paths, false = tree view
 	statusLoadPending bool // prevents redundant loadGitFileStatus dispatches
 }
 
