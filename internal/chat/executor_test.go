@@ -128,6 +128,15 @@ func (m *executorMockGitClient) BranchList(context.Context) ([]git.Branch, error
 	return m.branchListRes, m.branchListErr
 }
 
+func (m *executorMockGitClient) CurrentBranch(context.Context) (git.Branch, error) {
+	for _, b := range m.branchListRes {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
+}
+
 func (m *executorMockGitClient) BranchCreate(_ context.Context, name, base string) error {
 	m.branchCreateN = name
 	m.branchCreateB = base

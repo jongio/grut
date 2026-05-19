@@ -184,10 +184,11 @@ type FileTree struct {
 	colors          panelColors
 	theme           *theme.Theme
 	// File operation state.
-	clip       clipboard // cut/copy clipboard
-	focused    bool
-	showHidden bool
-	listMode   bool // true = flat list with relative paths, false = tree view
+	clip             clipboard // cut/copy clipboard
+	focused          bool
+	showHidden       bool
+	listMode         bool // true = flat list with relative paths, false = tree view
+	statusLoadPending bool // prevents redundant loadGitFileStatus dispatches
 }
 
 // Compile-time interface check.
@@ -324,6 +325,7 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return ft, nil
 	case gitFileStatusMsg:
 		ft.gitFileStatus = msg.status
+		ft.statusLoadPending = false
 		return ft, nil
 	case gitIgnoredMsg:
 		ft.gitIgnoredPaths = msg.paths
@@ -408,6 +410,7 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		// Refresh per-file status indicators after stage/unstage so the
 		// title dirty indicator (*) stays in sync.
 		cmds := []tea.Cmd{ft.loadGitFileStatus()}
+		ft.statusLoadPending = true
 		// If in git filter mode, also reload the changed-files list so
 		// discarded/unstaged files disappear from the filtered view.
 		if ft.filter.gitFilter && ft.gitClient != nil {
@@ -432,7 +435,14 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			ft.restoreCursorToPath(ft.savedCursorPath)
 			ft.savedCursorPath = ""
 		}
-		return ft, tea.Batch(ft.loadGitFileStatus(), ft.loadGitIgnored(), ft.emitCursorFileSelected())
+		// Skip redundant loadGitFileStatus if already dispatched by the
+		// GitStatusChangedMsg handler in the same cascade.
+		cmds := []tea.Cmd{ft.loadGitIgnored(), ft.emitCursorFileSelected()}
+		if !ft.statusLoadPending {
+			cmds = append(cmds, ft.loadGitFileStatus())
+		}
+		ft.statusLoadPending = false
+		return ft, tea.Batch(cmds...)
 	case panels.RevealFileMsg:
 		ft.revealFile(msg.Path)
 		return ft, ft.emitCursorFileSelected()

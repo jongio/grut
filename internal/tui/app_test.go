@@ -1891,6 +1891,18 @@ func (m *mockFullGitOps) BranchList(_ context.Context) ([]git.Branch, error) {
 	return m.branches, m.branchErr
 }
 
+func (m *mockFullGitOps) CurrentBranch(_ context.Context) (git.Branch, error) {
+	if m.branchErr != nil {
+		return git.Branch{}, m.branchErr
+	}
+	for _, b := range m.branches {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
+}
+
 func newTestModelWithFullGit(t *testing.T, mock *mockFullGitOps) Model {
 	t.Helper()
 	m := newTestModel(t)

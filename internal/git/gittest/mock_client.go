@@ -27,6 +27,7 @@ type MockClient struct {
 	UnstageLineFunc    func(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error
 	CommitFunc         func(ctx context.Context, msg string, opts git.CommitOpts) (string, error)
 	BranchListFunc     func(ctx context.Context) ([]git.Branch, error)
+	CurrentBranchFunc  func(ctx context.Context) (git.Branch, error)
 	BranchCreateFunc   func(ctx context.Context, name, base string) error
 	BranchDeleteFunc   func(ctx context.Context, name string, force bool) error
 	BranchRenameFunc   func(ctx context.Context, oldName, newName string) error
@@ -190,6 +191,13 @@ func (m *MockClient) BranchList(ctx context.Context) ([]git.Branch, error) {
 		return m.BranchListFunc(ctx)
 	}
 	return nil, nil
+}
+
+func (m *MockClient) CurrentBranch(ctx context.Context) (git.Branch, error) {
+	if m.CurrentBranchFunc != nil {
+		return m.CurrentBranchFunc(ctx)
+	}
+	return git.Branch{}, nil
 }
 
 func (m *MockClient) BranchCreate(ctx context.Context, name, base string) error {

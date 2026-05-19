@@ -33,6 +33,7 @@ type IndexMutator interface {
 // BranchManager provides branch and checkout operations.
 type BranchManager interface {
 	BranchList(ctx context.Context) ([]Branch, error)
+	CurrentBranch(ctx context.Context) (Branch, error)
 	BranchCreate(ctx context.Context, name string, base string) error
 	BranchDelete(ctx context.Context, name string, force bool) error
 	BranchRename(ctx context.Context, oldName, newName string) error
