@@ -43,6 +43,11 @@ type MCPRuntime struct {
 // indefinitely (CWE-400).
 const mcpSubprocessTimeout = 30 * time.Minute
 
+// mcpCloseTimeout bounds how long Close waits for the subprocess to
+// exit after being killed. Prevents hangs when cmd.Wait blocks on
+// orphaned I/O goroutines (e.g. stderr copy on Windows).
+const mcpCloseTimeout = 5 * time.Second
+
 // ringBuffer is a simple bounded buffer that keeps the last N lines
 // of output for diagnostics.
 type ringBuffer struct {
@@ -217,8 +222,14 @@ func (m *MCPRuntime) Close() {
 	_ = m.cmd.Process.Kill()
 	m.mu.Unlock()
 	// Wait for the monitor goroutine to finish (outside lock to
-	// avoid blocking other callers like Running).
-	<-m.done
+	// avoid blocking other callers like Running). Use a bounded
+	// timeout to prevent hangs when cmd.Wait blocks on orphaned
+	// I/O goroutines (e.g. stderr copy on Windows).
+	select {
+	case <-m.done:
+	case <-time.After(mcpCloseTimeout):
+		slog.Warn("mcp runtime: Close timed out waiting for process exit")
+	}
 }
 
 // Running reports whether the subprocess is still alive.

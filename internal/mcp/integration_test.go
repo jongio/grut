@@ -34,7 +34,9 @@ func initGitRepo(t *testing.T) string {
 
 	run := func(args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = dir
 		cmd.Env = append(
 			os.Environ(),
@@ -42,6 +44,9 @@ func initGitRepo(t *testing.T) string {
 			"GIT_AUTHOR_EMAIL=test@test.com",
 			"GIT_COMMITTER_NAME=Test",
 			"GIT_COMMITTER_EMAIL=test@test.com",
+			"GIT_TERMINAL_PROMPT=0",
+			"GIT_CONFIG_NOSYSTEM=1",
+			"GIT_CONFIG_GLOBAL=",
 		)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v failed: %s", args, string(out))
@@ -182,7 +187,9 @@ func textFromResult(t *testing.T, result *mcplib.CallToolResult) string {
 // gitExec runs a git command in the given directory and returns stdout.
 func gitExec(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(
 		os.Environ(),
@@ -190,6 +197,9 @@ func gitExec(t *testing.T, dir string, args ...string) string {
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=Test",
 		"GIT_COMMITTER_EMAIL=test@test.com",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=",
 	)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(out))

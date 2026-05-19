@@ -16,6 +16,9 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestMCPRuntime_LoadDeniedWithoutProcessPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	manifest := &extension.Manifest{
 		Name:        "no-perms",
 		Version:     "1.0.0",
@@ -40,6 +43,9 @@ func TestMCPRuntime_LoadDeniedWithoutProcessPermission(t *testing.T) {
 }
 
 func TestMCPRuntime_LoadAllowedWithProcessPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	manifest := &extension.Manifest{
 		Name:        "has-process",
 		Version:     "1.0.0",

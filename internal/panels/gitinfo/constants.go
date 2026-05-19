@@ -99,6 +99,12 @@ const (
 	actionPop   = "pop"
 )
 
+// Navigation action names (keybinding actions).
+const (
+	actionFirst = "first"
+	actionLast  = "last"
+)
+
 // Default branch fallback.
 const branchMain = "main"
 

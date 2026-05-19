@@ -8,10 +8,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// updateCmdName is the name of the update subcommand.
+const updateCmdName = "update"
+
 // newUpdateCmd creates the update command.
 func newUpdateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "update",
+		Use:   updateCmdName,
 		Short: "Update grut to the latest release",
 		Long: `Downloads and installs the latest release of grut from GitHub.
 

@@ -837,8 +837,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
-		{Key: "g", Description: "Go to first item", Action: "first"},
-		{Key: "G", Description: "Go to last item", Action: "last"},
+		{Key: "g", Description: "Go to first item", Action: actionFirst},
+		{Key: "G", Description: "Go to last item", Action: actionLast},
 		{Key: "P", Description: "Push tag", Action: "push_tag"},
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}
