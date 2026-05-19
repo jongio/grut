@@ -130,6 +130,14 @@ func (m *mockGitClient) BranchList(ctx context.Context) ([]git.Branch, error) {
 	}
 	return m.branches, nil
 }
+func (m *mockGitClient) CurrentBranch(_ context.Context) (git.Branch, error) {
+	for _, b := range m.branches {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
+}
 func (m *mockGitClient) BranchCreate(_ context.Context, _, _ string) error      { return nil }
 func (m *mockGitClient) BranchDelete(_ context.Context, _ string, _ bool) error { return nil }
 func (m *mockGitClient) BranchRename(_ context.Context, _, _ string) error      { return nil }

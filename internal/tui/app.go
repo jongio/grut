@@ -199,16 +199,11 @@ func (m Model) loadBranchInfo() tea.Cmd {
 	ctx := m.ctx
 	generation := m.branchInfoGen
 	return func() tea.Msg {
-		branches, err := gc.BranchList(ctx)
+		b, err := gc.CurrentBranch(ctx)
 		if err != nil {
 			return branchLoadedMsg{generation: generation}
 		}
-		for _, b := range branches {
-			if b.IsCurrent {
-				return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind, generation: generation}
-			}
-		}
-		return branchLoadedMsg{generation: generation}
+		return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind, generation: generation}
 	}
 }
 

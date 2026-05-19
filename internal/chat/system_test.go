@@ -81,6 +81,10 @@ func (stubGitClient) BranchList(context.Context) ([]git.Branch, error) {
 	panic("stub: BranchList not implemented")
 }
 
+func (stubGitClient) CurrentBranch(context.Context) (git.Branch, error) {
+	panic("stub: CurrentBranch not implemented")
+}
+
 func (stubGitClient) BranchCreate(context.Context, string, string) error {
 	panic("stub: BranchCreate not implemented")
 }
@@ -265,6 +269,15 @@ func (m *mockGitClient) Status(context.Context) ([]git.FileStatus, error) {
 
 func (m *mockGitClient) BranchList(context.Context) ([]git.Branch, error) {
 	return m.branches, m.branchErr
+}
+
+func (m *mockGitClient) CurrentBranch(context.Context) (git.Branch, error) {
+	for _, b := range m.branches {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
 }
 
 // --- Tests ---
