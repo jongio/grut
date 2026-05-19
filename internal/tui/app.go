@@ -48,7 +48,7 @@ type Model struct {
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	overlays           *OverlayFactory               // factory for overlay panels
+	overlays           OverlayCreator                // factory for overlay panels
 	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
 	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
 	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
@@ -85,7 +85,7 @@ type Model struct {
 // New creates a new TUI model with the given panel manager, theme, keymap,
 // and bookmark manager. The panel manager is typically a *layout.Engine but
 // can be any implementation of layout.PanelManager.
-func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
+func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager, overlays OverlayCreator) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
 		engine:      engine,
@@ -93,7 +93,7 @@ func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *
 		keys:        km,
 		notify:      notify.NewManager(),
 		bookmarkMgr: bmMgr,
-		overlays:    NewOverlayFactory(th, bmMgr),
+		overlays:    overlays,
 		ctx:         ctx,
 		cancel:      cancel,
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/mcp"
+	"github.com/jongio/grut/internal/overlayreg"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/jongio/grut/internal/tui"
@@ -228,7 +229,7 @@ Environment:
 			}
 
 			// Create and run the TUI
-			model := tui.New(engine, th, km, bmMgr).
+			model := tui.New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr)).
 				WithUndoManager(undoMgr).
 				WithGitClient(gitClient).
 				WithConfig(cfg).

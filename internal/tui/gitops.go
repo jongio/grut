@@ -12,9 +12,21 @@ import (
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
-	"github.com/jongio/grut/internal/panels/filetree"
-	"github.com/jongio/grut/internal/panels/preview"
 )
+
+// cursorPathProvider is satisfied by panels that expose a file cursor
+// (e.g. the filetree panel). Defined here so gitops.go can interact with
+// cursor-based panels without importing concrete panel packages.
+type cursorPathProvider interface {
+	CursorPath() string
+	CursorIsDir() bool
+}
+
+// filePathProvider is satisfied by panels that expose their current file
+// path (e.g. the preview panel).
+type filePathProvider interface {
+	FilePath() string
+}
 
 // asyncOpPushing is the status label shown during git push operations.
 const asyncOpPushing = "pushing..."
@@ -292,14 +304,14 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 func (m Model) currentFilePath() (string, error) {
 	var absPath string
 	allPanels := m.engine.Panels()
-	if ft, ok := allPanels["filetree"].(*filetree.FileTree); ok {
+	if ft, ok := allPanels["filetree"].(cursorPathProvider); ok {
 		if ft.CursorIsDir() {
 			return "", nil // directories are not valid targets for file ops
 		}
 		absPath = ft.CursorPath()
 	}
 	if absPath == "" {
-		if pv, ok := allPanels["preview"].(*preview.Preview); ok {
+		if pv, ok := allPanels["preview"].(filePathProvider); ok {
 			absPath = pv.FilePath()
 		}
 	}

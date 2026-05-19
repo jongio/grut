@@ -18,6 +18,7 @@ import (
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
+	"github.com/jongio/grut/internal/overlayreg"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
@@ -40,7 +41,7 @@ func newTestModel(t *testing.T) Model {
 	require.NoError(t, err)
 	bmMgr := bm.NewManager(cfg.Bookmarks)
 	bmMgr.SetConfigDir(t.TempDir())
-	return New(engine, th, km, bmMgr)
+	return New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr))
 }
 
 func TestNewModel(t *testing.T) {

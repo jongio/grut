@@ -1,7 +1,3 @@
-// Package git wraps the git CLI to provide typed, safe access to git
-// operations. All index-mutating operations are serialised through an
-// OpQueue to prevent concurrent writes from corrupting repository state.
-// Read operations run concurrently against the same queue.
 package git
 
 import (
