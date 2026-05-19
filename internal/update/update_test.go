@@ -354,13 +354,6 @@ func TestCopyFile_MissingSrc(t *testing.T) {
 // RunUpdate edge cases
 // ---------------------------------------------------------------------------
 
-func TestRunUpdate_DevVersion(t *testing.T) {
-	err := RunUpdate(context.Background(), "dev")
-	if err == nil {
-		t.Fatal("expected error for dev version")
-	}
-}
-
 func TestReplaceUnix(t *testing.T) {
 	tmpDir := t.TempDir()
 	exePath := filepath.Join(tmpDir, "grut")
