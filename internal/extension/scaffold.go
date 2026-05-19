@@ -2,7 +2,9 @@ package extension
 
 import (
 	"embed"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,7 +127,7 @@ func Scaffold(dir, name, templateName string) error {
 	// an attacker could place a symlink at `target` between the two calls.
 	// os.Mkdir fails if the path already exists — no separate check needed.
 	if err := os.Mkdir(target, 0o755); err != nil {
-		if os.IsExist(err) {
+		if errors.Is(err, fs.ErrExist) {
 			return fmt.Errorf("scaffold: directory %s already exists", target)
 		}
 		return fmt.Errorf("scaffold: create directory: %w", err)

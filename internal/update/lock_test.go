@@ -2,6 +2,8 @@ package update
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +26,7 @@ func TestAcquireUpdateLockReleaseAndReacquire(t *testing.T) {
 	}
 
 	releaseUpdateLock(lock)
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(lockPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("lock file should be removed on release, stat err = %v", err)
 	}
 

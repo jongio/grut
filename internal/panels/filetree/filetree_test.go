@@ -2,7 +2,9 @@ package filetree
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1033,7 +1035,7 @@ func TestDeleteKey_ConfirmActuallyDeletes(t *testing.T) {
 
 	// File should be gone.
 	_, err := os.Stat(filepath.Join(dir, "main.go"))
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestDeleteKey_CancelDoesNotDelete(t *testing.T) {
@@ -1092,7 +1094,7 @@ func TestRenameKey_ConfirmRenames(t *testing.T) {
 	_, err := os.Stat(filepath.Join(dir, "app.go"))
 	assert.NoError(t, err)
 	_, err = os.Stat(filepath.Join(dir, "main.go"))
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestCopyKey_CopiesToClipboard(t *testing.T) {
@@ -1189,7 +1191,7 @@ func TestPasteKey_CutMovesFile(t *testing.T) {
 	_, err := os.Stat(filepath.Join(dir, "docs", "main.go"))
 	assert.NoError(t, err)
 	_, err = os.Stat(filepath.Join(dir, "main.go"))
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestPasteKey_EmptyClipboard(t *testing.T) {

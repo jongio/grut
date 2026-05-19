@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,7 +43,7 @@ func saveSettingValue(key string, value any) error {
 		if err := toml.Unmarshal(raw, &data); err != nil {
 			return fmt.Errorf("parsing existing config %s: %w", cfgPath, err)
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("reading config %s: %w", cfgPath, err)
 	}
 

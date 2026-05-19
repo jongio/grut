@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -364,7 +366,7 @@ func TestFileDelete(t *testing.T) {
 	assert.Contains(t, result.Content, "deleted")
 
 	_, err := os.Stat(testFile)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +392,7 @@ func TestFileRename(t *testing.T) {
 	assert.Contains(t, result.Content, "renamed")
 
 	_, err := os.Stat(oldFile)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 
 	data, err := os.ReadFile(filepath.Join(tmpDir, "new.txt"))
 	require.NoError(t, err)

@@ -10,8 +10,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -661,7 +663,7 @@ func BenchCompare() error {
 	dir := projectDir()
 	platform := benchPlatform()
 	baseline := filepath.Join(dir, "perf", "baselines", platform, "main.txt")
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("no baseline for %s at %s — run 'mage benchbaseline' first", platform, baseline)
 	}
 	fmt.Printf("   Platform: %s\n   Baseline: %s\n", platform, baseline)
@@ -719,7 +721,7 @@ func BenchWSL() error {
 
 	baseline := filepath.Join(baselineDir, "main.txt")
 	wslBaseline := escapedPath + "/perf/baselines/linux-amd64/main.txt"
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("\n   No linux-amd64 baseline yet — saving current run as baseline.\n")
 		saveCmd := fmt.Sprintf("cp %s %s", currentTxt, wslBaseline)
 		save := exec.Command("wsl", "bash", "-lc", saveCmd)

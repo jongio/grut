@@ -1,7 +1,9 @@
 package session
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -378,7 +380,7 @@ func TestDelete_AfterSave_ReloadReturnsNil(t *testing.T) {
 
 	// Verify file is gone.
 	_, err := os.Stat(m.SessionPath(workDir))
-	assert.True(t, os.IsNotExist(err), "session file should not exist after delete")
+	assert.True(t, errors.Is(err, fs.ErrNotExist), "session file should not exist after delete")
 
 	loaded, err := m.Load(workDir)
 	assert.NoError(t, err)
