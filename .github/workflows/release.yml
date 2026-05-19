@@ -185,6 +185,7 @@ jobs:
             "perf/baselines/$PLATFORM/main.txt"
           git diff --cached --quiet || \
             git commit -m "perf: add ${VERSION} $PLATFORM baseline and release notes [skip ci]"
+          git pull --rebase origin main
           git push
 
       - name: Clean intermediate files
