@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -19,6 +20,9 @@ import (
 // Key name constants for KeyPressMsg.String() comparisons.
 const (
 	keyDown = "down"
+
+	// clipboardTimeout bounds how long clipboard subprocess calls may block.
+	clipboardTimeout = 2 * time.Second
 )
 
 // fileSavedMsg is sent after a successful file save from edit mode.
@@ -394,7 +398,9 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 			}
 			if text != "" {
 				return p, func() tea.Msg {
-					err := panels.CopyToClipboard(context.Background(), text)
+					ctx, cancel := context.WithTimeout(context.Background(), clipboardTimeout)
+					defer cancel()
+					err := panels.CopyToClipboard(ctx, text)
 					return clipboardCopiedMsg{text: text, err: err}
 				}
 			}
@@ -421,7 +427,9 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 			}
 			if text != "" {
 				return p, func() tea.Msg {
-					err := panels.CopyToClipboard(context.Background(), text)
+					ctx, cancel := context.WithTimeout(context.Background(), clipboardTimeout)
+					defer cancel()
+					err := panels.CopyToClipboard(ctx, text)
 					return clipboardCopiedMsg{text: text, err: err}
 				}
 			}
@@ -430,7 +438,9 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	case "ctrl+v":
 		if p.editBuf != nil {
 			return p, func() tea.Msg {
-				text, err := panels.PasteFromClipboard(context.Background())
+				ctx, cancel := context.WithTimeout(context.Background(), clipboardTimeout)
+				defer cancel()
+				text, err := panels.PasteFromClipboard(ctx)
 				return clipboardPastedMsg{text: text, err: err}
 			}
 		}
