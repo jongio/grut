@@ -569,10 +569,10 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 // overlayDims computes clamped overlay dimensions using percentage-based
 // sizing with minimum bounds. It applies the standard pattern:
 //
-//	raw = terminal * num / den
+//	raw = terminal * 3 / den
 //	clamped to [min, terminal-4, terminal]
-func (m Model) overlayDims(wNum, wDen, minW, hNum, hDen, minH int) (int, int) {
-	w := m.width * wNum / wDen
+func (m Model) overlayDims(wDen, minW, hNum, hDen, minH int) (int, int) {
+	w := m.width * 3 / wDen
 	if w < minW {
 		w = minW
 	}
@@ -597,7 +597,7 @@ func (m Model) overlayDims(wNum, wDen, minW, hNum, hDen, minH int) (int, int) {
 
 // helpOverlayDims returns the content dimensions for the help overlay.
 func (m Model) helpOverlayDims() (int, int) {
-	return m.overlayDims(3, 5, 40, 3, 4, 10)
+	return m.overlayDims(5, 40, 3, 4, 10)
 }
 
 // toggleWelcome shows or hides the welcome overlay panel.
@@ -636,7 +636,7 @@ func (m Model) dismissWelcome(_ panels.WelcomeDismissMsg) (tea.Model, tea.Cmd) {
 
 // welcomeOverlayDims returns the content dimensions for the welcome overlay.
 func (m Model) welcomeOverlayDims() (int, int) {
-	return m.overlayDims(3, 5, 44, 4, 5, 20)
+	return m.overlayDims(5, 44, 4, 5, 20)
 }
 
 // toggleSettings shows or hides the settings overlay panel.
@@ -952,7 +952,7 @@ func (m Model) handleClosePanel() (tea.Model, tea.Cmd) {
 
 // bookmarkOverlayDims returns the width and height for the bookmarks overlay.
 func (m Model) bookmarkOverlayDims() (int, int) {
-	return m.overlayDims(3, 4, 40, 1, 2, 10)
+	return m.overlayDims(4, 40, 1, 2, 10)
 }
 
 // openFuzzyFinder creates and shows the fuzzy finder overlay with the
@@ -972,7 +972,7 @@ func (m Model) openFuzzyFinder(mode string) Model {
 
 // fuzzyFinderDims returns the content dimensions for the fuzzy finder overlay.
 func (m Model) fuzzyFinderDims() (int, int) {
-	return m.overlayDims(3, 5, 40, 3, 5, 10)
+	return m.overlayDims(5, 40, 3, 5, 10)
 }
 
 // View implements tea.Model. Composes all panels and the status bar

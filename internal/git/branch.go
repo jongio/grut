@@ -53,7 +53,7 @@ func (c *Client) CurrentBranch(ctx context.Context) (Branch, error) {
 	statusOut, err := c.run(ctx, "status", "--porcelain=v2", "--branch")
 	if err != nil {
 		// Return name without tracking info on error.
-		return b, nil
+		return b, nil //nolint:nilerr // intentional: degrade gracefully to name-only branch
 	}
 
 	for _, line := range strings.Split(statusOut, "\n") {
