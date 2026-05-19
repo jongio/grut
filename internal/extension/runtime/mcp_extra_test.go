@@ -164,6 +164,9 @@ func main() {
 // TestMCPRuntime_SendRequest_EchoSuccess verifies the full SendRequest
 // round-trip: marshal request → write to stdin → read response → unmarshal.
 func TestMCPRuntime_SendRequest_EchoSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildJSONRPCEchoHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)
@@ -181,6 +184,9 @@ func TestMCPRuntime_SendRequest_EchoSuccess(t *testing.T) {
 // TestMCPRuntime_SendRequest_WithParams verifies that request parameters are
 // serialised and the server receives them (method still returned in result).
 func TestMCPRuntime_SendRequest_WithParams(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildJSONRPCEchoHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)
@@ -199,6 +205,9 @@ func TestMCPRuntime_SendRequest_WithParams(t *testing.T) {
 // TestMCPRuntime_SendRequest_ServerError verifies that a JSON-RPC error
 // response is surfaced as a Go error rather than panicking or returning nil.
 func TestMCPRuntime_SendRequest_ServerError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildJSONRPCErrorHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)
@@ -214,6 +223,9 @@ func TestMCPRuntime_SendRequest_ServerError(t *testing.T) {
 // TestMCPRuntime_SendRequest_MultipleSequential verifies that multiple
 // sequential requests are correctly serialised and ID-incremented.
 func TestMCPRuntime_SendRequest_MultipleSequential(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildJSONRPCEchoHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)

@@ -628,6 +628,7 @@ func TestAmendRequestMsgWithGitClient(t *testing.T) {
 }
 
 func TestRewordRequestMsgWithGitClient(t *testing.T) {
+	t.Parallel()
 	mock := &mockFullGitOps{mockGitOps: mockGitOps{commitHash: "abc"}}
 	m := newTestModelWithFullGit(t, mock)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})

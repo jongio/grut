@@ -61,7 +61,9 @@ func initTestRepo(t *testing.T) string {
 
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = dir
 		cmd.Env = testGitEnv()
 		out, err := cmd.CombinedOutput()
@@ -346,6 +348,7 @@ func TestClient_Checkout(t *testing.T) {
 }
 
 func TestClient_TagOperations(t *testing.T) {
+	t.Parallel()
 	dir := initTestRepo(t)
 	ctx := context.Background()
 
