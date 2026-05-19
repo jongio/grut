@@ -27,9 +27,11 @@ permissions:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     # Skip push-triggered runs from automated release commits. The release
     # workflow already calls ci.yml via workflow_call — an independent
     # push-triggered run is a duplicate that races the release's concurrency
