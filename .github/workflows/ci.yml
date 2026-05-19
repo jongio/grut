@@ -28,7 +28,7 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     # Skip push-triggered runs from automated release commits. The release
     # workflow already calls ci.yml via workflow_call — an independent
@@ -102,12 +102,23 @@ jobs:
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Test
-        if: runner.os == 'Windows'
+        if: runner.os != 'Linux'
         run: go test ./...
 
       - name: Coverage summary
         if: runner.os == 'Linux'
         run: go tool cover -func=coverage.out | tail -1
+
+      - name: Coverage threshold check
+        if: runner.os == 'Linux'
+        run: |
+          coverage=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage: ${coverage}%"
+          threshold=75
+          if [ "$(echo "$coverage < $threshold" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${coverage}% is below minimum threshold ${threshold}%"
+            exit 1
+          fi
 
       - name: Upload coverage artifact
         if: runner.os == 'Linux'
