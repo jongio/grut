@@ -71,7 +71,7 @@ func TestCache_SetAndGet(t *testing.T) {
 func TestCache_Expiry(t *testing.T) {
 	c := &cache{
 		entries: make(map[string]cacheEntry),
-		ttl:     1 * time.Millisecond,
+		ttl:     50 * time.Millisecond,
 	}
 	c.Set("expires", "soon")
 
@@ -81,7 +81,7 @@ func TestCache_Expiry(t *testing.T) {
 	assert.Equal(t, "soon", v)
 
 	// After sleeping past TTL, should be a miss.
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	v, ok = c.Get("expires")
 	assert.False(t, ok)
 	assert.Nil(t, v)
