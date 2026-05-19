@@ -167,54 +167,54 @@ func (u *UndoManager) Redo(ctx context.Context) (string, error) {
 
 // executeUndo performs the inverse operation for the given action.
 func (u *UndoManager) executeUndo(ctx context.Context, action UndoAction) (string, error) {
-	switch action.Type {
-	case objCommit:
-		return u.undoCommit(ctx)
-	case actionStage:
-		return u.undoStage(ctx, action)
-	case actionUnstage:
-		return u.undoUnstage(ctx, action)
-	case "branch_delete":
-		return u.undoBranchDelete(ctx, action)
-	case cmdCheckout:
-		return u.undoCheckout(ctx, action)
-	case "discard": //nolint:goconst // inline string is more readable here
-		return u.undoDiscard(ctx, action)
-	case cmdRevert:
-		return u.undoRevert(ctx, action)
-	case cmdReset:
-		return u.undoReset(ctx, action)
-	case actionAmend:
-		return u.undoAmend(ctx)
-	default:
-		return "", fmt.Errorf("unknown undo action type: %s", action.Type)
-	}
+	return u.dispatch(ctx, action, u.undoHandlers)
 }
 
 // executeRedo re-applies the given action.
 func (u *UndoManager) executeRedo(ctx context.Context, action UndoAction) (string, error) {
-	switch action.Type {
-	case objCommit:
-		return u.redoCommit(ctx, action)
-	case actionStage:
-		return u.redoStage(ctx, action)
-	case actionUnstage:
-		return u.redoUnstage(ctx, action)
-	case "branch_delete":
-		return u.redoBranchDelete(ctx, action)
-	case cmdCheckout:
-		return u.redoCheckout(ctx, action)
-	case "discard":
-		return u.redoDiscard(ctx, action)
-	case cmdRevert:
-		return u.redoRevert(ctx, action)
-	case cmdReset:
-		return u.redoReset(ctx, action)
-	case actionAmend:
-		return u.redoAmend(ctx, action)
-	default:
-		return "", fmt.Errorf("unknown redo action type: %s", action.Type)
+	return u.dispatch(ctx, action, u.redoHandlers)
+}
+
+// actionHandler is a function that executes an undo or redo operation.
+type actionHandler func(ctx context.Context, action UndoAction) (string, error)
+
+// undoHandlers maps action types to their undo implementations.
+func (u *UndoManager) undoHandlers() map[string]actionHandler {
+	return map[string]actionHandler{
+		objCommit:      func(ctx context.Context, _ UndoAction) (string, error) { return u.undoCommit(ctx) },
+		actionStage:    func(ctx context.Context, a UndoAction) (string, error) { return u.undoStage(ctx, a) },
+		actionUnstage:  func(ctx context.Context, a UndoAction) (string, error) { return u.undoUnstage(ctx, a) },
+		"branch_delete": func(ctx context.Context, a UndoAction) (string, error) { return u.undoBranchDelete(ctx, a) },
+		cmdCheckout:    func(ctx context.Context, a UndoAction) (string, error) { return u.undoCheckout(ctx, a) },
+		"discard":      func(ctx context.Context, a UndoAction) (string, error) { return u.undoDiscard(ctx, a) },
+		cmdRevert:      func(ctx context.Context, a UndoAction) (string, error) { return u.undoRevert(ctx, a) },
+		cmdReset:       func(ctx context.Context, a UndoAction) (string, error) { return u.undoReset(ctx, a) },
+		actionAmend:    func(ctx context.Context, _ UndoAction) (string, error) { return u.undoAmend(ctx) },
 	}
+}
+
+// redoHandlers maps action types to their redo implementations.
+func (u *UndoManager) redoHandlers() map[string]actionHandler {
+	return map[string]actionHandler{
+		objCommit:      func(ctx context.Context, a UndoAction) (string, error) { return u.redoCommit(ctx, a) },
+		actionStage:    func(ctx context.Context, a UndoAction) (string, error) { return u.redoStage(ctx, a) },
+		actionUnstage:  func(ctx context.Context, a UndoAction) (string, error) { return u.redoUnstage(ctx, a) },
+		"branch_delete": func(ctx context.Context, a UndoAction) (string, error) { return u.redoBranchDelete(ctx, a) },
+		cmdCheckout:    func(ctx context.Context, a UndoAction) (string, error) { return u.redoCheckout(ctx, a) },
+		"discard":      func(ctx context.Context, a UndoAction) (string, error) { return u.redoDiscard(ctx, a) },
+		cmdRevert:      func(ctx context.Context, a UndoAction) (string, error) { return u.redoRevert(ctx, a) },
+		cmdReset:       func(ctx context.Context, a UndoAction) (string, error) { return u.redoReset(ctx, a) },
+		actionAmend:    func(ctx context.Context, a UndoAction) (string, error) { return u.redoAmend(ctx, a) },
+	}
+}
+
+// dispatch looks up the handler for the action type and executes it.
+func (u *UndoManager) dispatch(ctx context.Context, action UndoAction, handlers func() map[string]actionHandler) (string, error) {
+	h, ok := handlers()[action.Type]
+	if !ok {
+		return "", fmt.Errorf("unknown action type: %s", action.Type)
+	}
+	return h(ctx, action)
 }
 
 // undoCommit reverses a commit via git reset --soft HEAD~1.
