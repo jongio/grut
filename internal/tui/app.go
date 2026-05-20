@@ -48,7 +48,7 @@ type Model struct {
 	keys               *keymap.Keymap
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	overlays           *OverlayFactory               // factory for overlay panels
+	overlays           OverlayCreator                // factory for overlay panels
 	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
 	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
 	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
@@ -85,7 +85,7 @@ type Model struct {
 // New creates a new TUI model with the given panel manager, theme, keymap,
 // and bookmark manager. The panel manager is typically a *layout.Engine but
 // can be any implementation of layout.PanelManager.
-func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager) Model {
+func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *bm.Manager, overlays OverlayCreator) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
 		engine:      engine,
@@ -93,7 +93,7 @@ func New(engine layout.PanelManager, th *theme.Theme, km *keymap.Keymap, bmMgr *
 		keys:        km,
 		notify:      notify.NewManager(),
 		bookmarkMgr: bmMgr,
-		overlays:    NewOverlayFactory(th, bmMgr),
+		overlays:    overlays,
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -199,16 +199,11 @@ func (m Model) loadBranchInfo() tea.Cmd {
 	ctx := m.ctx
 	generation := m.branchInfoGen
 	return func() tea.Msg {
-		branches, err := gc.BranchList(ctx)
+		b, err := gc.CurrentBranch(ctx)
 		if err != nil {
 			return branchLoadedMsg{generation: generation}
 		}
-		for _, b := range branches {
-			if b.IsCurrent {
-				return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind, generation: generation}
-			}
-		}
-		return branchLoadedMsg{generation: generation}
+		return branchLoadedMsg{Name: b.Name, Ahead: b.Ahead, Behind: b.Behind, generation: generation}
 	}
 }
 
@@ -571,30 +566,38 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// helpOverlayDims returns the content dimensions for the help overlay.
-func (m Model) helpOverlayDims() (int, int) {
-	w := m.width * 3 / 5
-	if w < 40 {
-		w = 40
+// overlayDims computes clamped overlay dimensions using percentage-based
+// sizing with minimum bounds. It applies the standard pattern:
+//
+//	raw = terminal * 3 / den
+//	clamped to [min, terminal-4, terminal]
+func (m Model) overlayDims(wDen, minW, hNum, hDen, minH int) (int, int) {
+	w := m.width * 3 / wDen
+	if w < minW {
+		w = minW
 	}
 	if w > m.width-4 {
 		w = m.width - 4
 	}
-	h := m.height * 3 / 4
-	if h < 10 {
-		h = 10
+	if w > m.width {
+		w = m.width
+	}
+	h := m.height * hNum / hDen
+	if h < minH {
+		h = minH
 	}
 	if h > m.height-4 {
 		h = m.height - 4
-	}
-	// Clamp to terminal bounds for tiny terminals.
-	if w > m.width {
-		w = m.width
 	}
 	if h > m.height {
 		h = m.height
 	}
 	return w, h
+}
+
+// helpOverlayDims returns the content dimensions for the help overlay.
+func (m Model) helpOverlayDims() (int, int) {
+	return m.overlayDims(5, 40, 3, 4, 10)
 }
 
 // toggleWelcome shows or hides the welcome overlay panel.
@@ -633,30 +636,7 @@ func (m Model) dismissWelcome(_ panels.WelcomeDismissMsg) (tea.Model, tea.Cmd) {
 
 // welcomeOverlayDims returns the content dimensions for the welcome overlay.
 func (m Model) welcomeOverlayDims() (int, int) {
-	w := m.width * 3 / 5
-	if w < 44 {
-		w = 44
-	}
-	if w > m.width-4 {
-		w = m.width - 4
-	}
-
-	h := m.height * 4 / 5
-	if h < 20 {
-		h = 20
-	}
-	if h > m.height-4 {
-		h = m.height - 4
-	}
-
-	if w > m.width {
-		w = m.width
-	}
-	if h > m.height {
-		h = m.height
-	}
-
-	return w, h
+	return m.overlayDims(5, 44, 4, 5, 20)
 }
 
 // toggleSettings shows or hides the settings overlay panel.
@@ -773,6 +753,40 @@ func injectBorderTitle(rendered, title, titleColor, borderColor string, border l
 		label +
 		bStyle.Render(strings.Repeat(border.Top, trailingDashes)+border.TopRight)
 	return strings.Join(lines, "\n")
+}
+
+// overlayViewer is the minimal interface for overlay panels that can be
+// sized and rendered.
+type overlayViewer interface {
+	SetSize(width, height int)
+	View(width, height int) string
+}
+
+// renderOverlayBox renders an overlay panel centered in the terminal with the
+// given dimensions, border style, and optional title. If title is empty,
+// injectBorderTitle is skipped.
+func (m Model) renderOverlayBox(panel overlayViewer, w, h int, border lipgloss.Border, title string) string {
+	contentW := w - 4 // subtract border + padding
+	contentH := h - 2 // subtract border
+	if contentW < 1 {
+		contentW = 1
+	}
+	if contentH < 1 {
+		contentH = 1
+	}
+	panel.SetSize(contentW, contentH)
+	panelContent := panel.View(contentW, contentH)
+	style := lipgloss.NewStyle().
+		Border(border).
+		BorderForeground(lipgloss.Color(m.overlayBorderCol())).
+		Padding(0, 1).
+		Width(contentW).
+		Height(contentH)
+	rendered := style.Render(panelContent)
+	if title != "" {
+		rendered = injectBorderTitle(rendered, title, m.overlayTitleCol(), m.overlayBorderCol(), border)
+	}
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rendered)
 }
 
 // addBookmark adds a directory to bookmarks and shows a toast.
@@ -938,28 +952,7 @@ func (m Model) handleClosePanel() (tea.Model, tea.Cmd) {
 
 // bookmarkOverlayDims returns the width and height for the bookmarks overlay.
 func (m Model) bookmarkOverlayDims() (int, int) {
-	w := m.width * 3 / 4
-	if w < 40 {
-		w = 40
-	}
-	if w > m.width-4 {
-		w = m.width - 4
-	}
-	h := m.height / 2
-	if h < 10 {
-		h = 10
-	}
-	if h > m.height-4 {
-		h = m.height - 4
-	}
-	// Clamp to terminal bounds for tiny terminals.
-	if w > m.width {
-		w = m.width
-	}
-	if h > m.height {
-		h = m.height
-	}
-	return w, h
+	return m.overlayDims(4, 40, 1, 2, 10)
 }
 
 // openFuzzyFinder creates and shows the fuzzy finder overlay with the
@@ -979,28 +972,7 @@ func (m Model) openFuzzyFinder(mode string) Model {
 
 // fuzzyFinderDims returns the content dimensions for the fuzzy finder overlay.
 func (m Model) fuzzyFinderDims() (int, int) {
-	w := m.width * 3 / 5
-	if w < 40 {
-		w = 40
-	}
-	if w > m.width-4 {
-		w = m.width - 4
-	}
-	h := m.height * 3 / 5
-	if h < 10 {
-		h = 10
-	}
-	if h > m.height-4 {
-		h = m.height - 4
-	}
-	// Clamp to terminal bounds for tiny terminals.
-	if w > m.width {
-		w = m.width
-	}
-	if h > m.height {
-		h = m.height
-	}
-	return w, h
+	return m.overlayDims(5, 40, 3, 5, 10)
 }
 
 // View implements tea.Model. Composes all panels and the status bar
@@ -1027,71 +999,17 @@ func (m Model) View() tea.View {
 	// Fuzzy finder overlay.
 	if m.fuzzyFinder != nil {
 		w, h := m.fuzzyFinderDims()
-		contentW := w - 4 // subtract border + padding
-		contentH := h - 2 // subtract border
-		if contentW < 1 {
-			contentW = 1
-		}
-		if contentH < 1 {
-			contentH = 1
-		}
-		m.fuzzyFinder.SetSize(contentW, contentH)
-		ffContent := m.fuzzyFinder.View(contentW, contentH)
-		ffOverlayStyle := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
-			Padding(0, 1).
-			Width(contentW).
-			Height(contentH)
-		ffRendered := ffOverlayStyle.Render(ffContent)
-		ffRendered = injectBorderTitle(ffRendered, m.fuzzyFinder.Title(), m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.NormalBorder())
-		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ffRendered)
+		content = m.renderOverlayBox(m.fuzzyFinder, w, h, lipgloss.NormalBorder(), m.fuzzyFinder.Title())
 	}
 	// Bookmarks overlay.
 	if m.bookmarksShown && m.bookmarkPanel != nil {
 		w, h := m.bookmarkOverlayDims()
-		contentW := w - 4 // subtract border + padding
-		contentH := h - 2 // subtract border
-		if contentW < 1 {
-			contentW = 1
-		}
-		if contentH < 1 {
-			contentH = 1
-		}
-		m.bookmarkPanel.SetSize(contentW, contentH)
-		panelContent := m.bookmarkPanel.View(contentW, contentH)
-		bmOverlayStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
-			Padding(0, 1).
-			Width(contentW).
-			Height(contentH)
-		bmRendered := bmOverlayStyle.Render(panelContent)
-		bmRendered = injectBorderTitle(bmRendered, "Bookmarks", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, bmRendered)
+		content = m.renderOverlayBox(m.bookmarkPanel, w, h, lipgloss.RoundedBorder(), "Bookmarks")
 	}
 	// Settings overlay.
 	if m.settingsShown && m.settingsPanel != nil {
 		w, h := m.settingsOverlayDims()
-		contentW := w - 4 // subtract border + padding
-		contentH := h - 2 // subtract border
-		if contentW < 1 {
-			contentW = 1
-		}
-		if contentH < 1 {
-			contentH = 1
-		}
-		m.settingsPanel.SetSize(contentW, contentH)
-		settingsContent := m.settingsPanel.View(contentW, contentH)
-		settingsOverlayStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
-			Padding(0, 1).
-			Width(contentW).
-			Height(contentH)
-		settingsRendered := settingsOverlayStyle.Render(settingsContent)
-		settingsRendered = injectBorderTitle(settingsRendered, "Settings", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, settingsRendered)
+		content = m.renderOverlayBox(m.settingsPanel, w, h, lipgloss.RoundedBorder(), "Settings")
 	}
 
 	// Welcome overlay.
@@ -1123,25 +1041,7 @@ func (m Model) View() tea.View {
 	// Help overlay.
 	if m.helpShown && m.helpPanel != nil {
 		w, h := m.helpOverlayDims()
-		contentW := w - 4 // subtract border + padding
-		contentH := h - 2 // subtract border
-		if contentW < 1 {
-			contentW = 1
-		}
-		if contentH < 1 {
-			contentH = 1
-		}
-		m.helpPanel.SetSize(contentW, contentH)
-		helpContent := m.helpPanel.View(contentW, contentH)
-		helpOverlayStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(m.overlayBorderCol())).
-			Padding(0, 1).
-			Width(contentW).
-			Height(contentH)
-		helpRendered := helpOverlayStyle.Render(helpContent)
-		helpRendered = injectBorderTitle(helpRendered, "grut — Terminal File Explorer", m.overlayTitleCol(), m.overlayBorderCol(), lipgloss.RoundedBorder())
-		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, helpRendered)
+		content = m.renderOverlayBox(m.helpPanel, w, h, lipgloss.RoundedBorder(), "grut \u2014 Terminal File Explorer")
 	}
 	v.SetContent(content)
 	return v

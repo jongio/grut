@@ -10,6 +10,7 @@ import (
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
+	"github.com/jongio/grut/internal/overlayreg"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/jongio/grut/internal/tui"
@@ -493,7 +494,7 @@ func TestInitChainSucceeds(t *testing.T) {
 	km, err := keymap.NewKeymap(cfg.General.KeybindingScheme)
 	require.NoError(t, err, "keymap.NewKeymap(%q)", cfg.General.KeybindingScheme)
 
-	model := tui.New(engine, th, km, nil).
+	model := tui.New(engine, th, km, nil, overlayreg.New(th, nil)).
 		WithConfig(cfg)
 	assert.NotNil(t, model, "tui.New must produce a non-nil model")
 }

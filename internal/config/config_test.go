@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1222,7 +1224,7 @@ func TestSaveSettingValue_CreatesFile(t *testing.T) {
 	// File should not exist yet.
 	cfgPath := filepath.Join(tmpDir, AppName, "config.toml")
 	_, err := os.Stat(cfgPath)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, fs.ErrNotExist))
 
 	// Save creates both the directory and the file.
 	require.NoError(t, SaveUserSetting("logging.level", "debug"))

@@ -3,8 +3,10 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -82,7 +84,7 @@ func (j *PathJail) Validate(path string) (string, error) {
 	// Resolve symlinks to get canonical path.
 	resolved, err := filepath.EvalSymlinks(absPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			// For writes, the file (and intermediate dirs) may not exist yet.
 			// Walk up the directory tree to find the first existing ancestor.
 			resolved, err = resolveNewPath(absPath)
@@ -151,7 +153,7 @@ func resolveNewPath(absPath string) (string, error) {
 			}
 			return resolved, nil
 		}
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			return "", err
 		}
 		tail = append(tail, filepath.Base(current))

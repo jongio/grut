@@ -11,15 +11,18 @@ import (
 	"github.com/jongio/grut/internal/ai/ops"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
-// Mock git client — implements git.GitClient
+// Mock git client — wraps gittest.MockClient with middleware test state.
 // ---------------------------------------------------------------------------
 
 type mockGitClient struct {
+	gittest.MockClient
+
 	// Capture calls for assertion.
 	commitMsg  string
 	commitOpts git.CommitOpts
@@ -55,287 +58,230 @@ type mockGitClient struct {
 }
 
 func newMockGitClient() *mockGitClient {
-	return &mockGitClient{
+	m := &mockGitClient{
 		commitHash: "abc1234",
 		calls:      make(map[string]int),
 	}
+
+	m.StatusFunc = func(_ context.Context) ([]git.FileStatus, error) {
+		m.record("Status")
+		return m.statusResult, m.statusErr
+	}
+	m.DiffFunc = func(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
+		m.record("Diff")
+		return m.diffResult, m.diffErr
+	}
+	m.LogFunc = func(_ context.Context, _ git.LogOpts) ([]git.Commit, error) {
+		m.record("Log")
+		return m.logResult, m.logErr
+	}
+	m.BlameFunc = func(_ context.Context, _ string) ([]git.BlameLine, error) {
+		m.record("Blame")
+		return m.blameResult, m.blameErr
+	}
+	m.RepoRootFunc = func(_ context.Context) (string, error) {
+		m.record("RepoRoot")
+		return m.repoRootResult, m.repoRootErr
+	}
+	m.IsRepoFunc = func(_ context.Context) (bool, error) {
+		m.record("IsRepo")
+		return m.isRepoResult, m.isRepoErr
+	}
+	m.StageFunc = func(_ context.Context, _ []string) error {
+		m.record("Stage")
+		return nil
+	}
+	m.UnstageFunc = func(_ context.Context, _ []string) error {
+		m.record("Unstage")
+		return nil
+	}
+	m.StageHunkFunc = func(_ context.Context, _ string, _ git.Hunk) error {
+		m.record("StageHunk")
+		return nil
+	}
+	m.UnstageHunkFunc = func(_ context.Context, _ string, _ git.Hunk) error {
+		m.record("UnstageHunk")
+		return nil
+	}
+	m.StageLineFunc = func(_ context.Context, _ string, _ git.Hunk, _ int) error {
+		m.record("StageLine")
+		return nil
+	}
+	m.UnstageLineFunc = func(_ context.Context, _ string, _ git.Hunk, _ int) error {
+		m.record("UnstageLine")
+		return nil
+	}
+	m.CommitFunc = func(_ context.Context, msg string, opts git.CommitOpts) (string, error) {
+		m.record("Commit")
+		m.commitMsg = msg
+		m.commitOpts = opts
+		return m.commitHash, m.commitErr
+	}
+	m.BranchListFunc = func(_ context.Context) ([]git.Branch, error) {
+		m.record("BranchList")
+		return m.branchListResult, m.branchListErr
+	}
+	m.BranchCreateFunc = func(_ context.Context, _, _ string) error {
+		m.record("BranchCreate")
+		return nil
+	}
+	m.BranchDeleteFunc = func(_ context.Context, _ string, _ bool) error {
+		m.record("BranchDelete")
+		return nil
+	}
+	m.BranchRenameFunc = func(_ context.Context, _, _ string) error {
+		m.record("BranchRename")
+		return nil
+	}
+	m.CheckoutFunc = func(_ context.Context, _ string) error {
+		m.record("Checkout")
+		return nil
+	}
+	m.PushFunc = func(_ context.Context, _ git.PushOpts) error {
+		m.record("Push")
+		return nil
+	}
+	m.PullFunc = func(_ context.Context, _ git.PullOpts) error {
+		m.record("Pull")
+		return nil
+	}
+	m.FetchFunc = func(_ context.Context, _ git.FetchOpts) error {
+		m.record("Fetch")
+		return nil
+	}
+	m.WorktreeListFunc = func(_ context.Context) ([]git.Worktree, error) {
+		m.record("WorktreeList")
+		return nil, nil
+	}
+	m.WorktreeAddFunc = func(_ context.Context, _, _ string) error {
+		m.record("WorktreeAdd")
+		return nil
+	}
+	m.WorktreeRemoveFunc = func(_ context.Context, _ string, _ bool) error {
+		m.record("WorktreeRemove")
+		return nil
+	}
+	m.StashListFunc = func(_ context.Context) ([]git.StashEntry, error) {
+		m.record("StashList")
+		return nil, nil
+	}
+	m.StashShowFunc = func(_ context.Context, _ int) (string, error) {
+		m.record("StashShow")
+		return "", nil
+	}
+	m.StashPushFunc = func(_ context.Context, _ git.StashOpts) error {
+		m.record("StashPush")
+		return nil
+	}
+	m.StashPopFunc = func(_ context.Context, _ int) error {
+		m.record("StashPop")
+		return nil
+	}
+	m.StashApplyFunc = func(_ context.Context, _ int) error {
+		m.record("StashApply")
+		return nil
+	}
+	m.StashDropFunc = func(_ context.Context, _ int) error {
+		m.record("StashDrop")
+		return nil
+	}
+	m.TagListFunc = func(_ context.Context) ([]git.Tag, error) {
+		m.record("TagList")
+		return nil, nil
+	}
+	m.TagCreateFunc = func(_ context.Context, _, _, _ string) error {
+		m.record("TagCreate")
+		return nil
+	}
+	m.TagDeleteFunc = func(_ context.Context, _ string) error {
+		m.record("TagDelete")
+		return nil
+	}
+	m.TagListRemoteFunc = func(_ context.Context, _ string) ([]git.Tag, error) {
+		m.record("TagListRemote")
+		return nil, nil
+	}
+	m.TagPushFunc = func(_ context.Context, _, _ string) error {
+		m.record("TagPush")
+		return nil
+	}
+	m.TagPushAllFunc = func(_ context.Context, _ string) error {
+		m.record("TagPushAll")
+		return nil
+	}
+	m.MergeFunc = func(_ context.Context, _ string, _ git.MergeOpts) error {
+		m.record("Merge")
+		return m.mergeErr
+	}
+	m.MergeAbortFunc = func(_ context.Context) error {
+		m.record("MergeAbort")
+		return nil
+	}
+	m.RebaseFunc = func(_ context.Context, _ string, _ git.RebaseOpts) error {
+		m.record("Rebase")
+		return m.rebaseErr
+	}
+	m.RebaseContinueFunc = func(_ context.Context) error {
+		m.record("RebaseContinue")
+		return nil
+	}
+	m.RebaseAbortFunc = func(_ context.Context) error {
+		m.record("RebaseAbort")
+		return nil
+	}
+	m.CherryPickFunc = func(_ context.Context, _ string) error {
+		m.record("CherryPick")
+		return nil
+	}
+	m.BisectStartFunc = func(_ context.Context, _, _ string) error {
+		m.record("BisectStart")
+		return nil
+	}
+	m.BisectGoodFunc = func(_ context.Context) (string, error) {
+		m.record("BisectGood")
+		return "", nil
+	}
+	m.BisectBadFunc = func(_ context.Context) (string, error) {
+		m.record("BisectBad")
+		return "", nil
+	}
+	m.BisectResetFunc = func(_ context.Context) error {
+		m.record("BisectReset")
+		return nil
+	}
+	m.ReflogFunc = func(_ context.Context, _ string, _ int) ([]git.ReflogEntry, error) {
+		m.record("Reflog")
+		return nil, nil
+	}
+	m.RemoteListFunc = func(_ context.Context) ([]git.Remote, error) {
+		m.record("RemoteList")
+		return nil, nil
+	}
+	m.RemoteAddFunc = func(_ context.Context, _, _ string) error {
+		m.record("RemoteAdd")
+		return nil
+	}
+	m.RemoteRemoveFunc = func(_ context.Context, _ string) error {
+		m.record("RemoteRemove")
+		return nil
+	}
+	m.DiscardFileFunc = func(_ context.Context, _ string) error { return nil }
+	m.DiscardAllFunc = func(_ context.Context) error { return nil }
+	m.RevertFunc = func(_ context.Context, _ string) error { return nil }
+	m.RevertContinueFunc = func(_ context.Context) error { return nil }
+	m.RevertAbortFunc = func(_ context.Context) error { return nil }
+	m.ResetFunc = func(_ context.Context, _ string, _ git.ResetMode) error { return nil }
+
+	return m
 }
 
 func (m *mockGitClient) record(method string) {
 	m.calls[method]++
 }
 
-func (m *mockGitClient) Status(ctx context.Context) ([]git.FileStatus, error) {
-	m.record("Status")
-	return m.statusResult, m.statusErr
-}
-
-func (m *mockGitClient) Diff(ctx context.Context, opts git.DiffOpts) ([]git.FileDiff, error) {
-	m.record("Diff")
-	return m.diffResult, m.diffErr
-}
-
-func (m *mockGitClient) Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error) {
-	m.record("Log")
-	return m.logResult, m.logErr
-}
-
-func (m *mockGitClient) Blame(ctx context.Context, path string) ([]git.BlameLine, error) {
-	m.record("Blame")
-	return m.blameResult, m.blameErr
-}
-
-func (m *mockGitClient) RepoRoot(ctx context.Context) (string, error) {
-	m.record("RepoRoot")
-	return m.repoRootResult, m.repoRootErr
-}
-
-func (m *mockGitClient) IsRepo(ctx context.Context) (bool, error) {
-	m.record("IsRepo")
-	return m.isRepoResult, m.isRepoErr
-}
-
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Stage(ctx context.Context, paths []string) error {
-	m.record("Stage")
-	return nil
-}
-
-func (m *mockGitClient) Unstage(ctx context.Context, paths []string) error {
-	m.record("Unstage")
-	return nil
-}
-
-func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error {
-	m.record("StageHunk")
-	return nil
-}
-
-func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error {
-	m.record("UnstageHunk")
-	return nil
-}
-
-func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error {
-	m.record("StageLine")
-	return nil
-}
-
-func (m *mockGitClient) UnstageLine(_ context.Context, _ string, _ git.Hunk, _ int) error {
-	m.record("UnstageLine")
-	return nil
-}
-
-func (m *mockGitClient) Commit(ctx context.Context, msg string, opts git.CommitOpts) (string, error) {
-	m.record("Commit")
-	m.commitMsg = msg
-	m.commitOpts = opts
-	return m.commitHash, m.commitErr
-}
-
-func (m *mockGitClient) BranchList(ctx context.Context) ([]git.Branch, error) {
-	m.record("BranchList")
-	return m.branchListResult, m.branchListErr
-}
-
-func (m *mockGitClient) BranchCreate(ctx context.Context, name string, base string) error {
-	m.record("BranchCreate")
-	return nil
-}
-
-func (m *mockGitClient) BranchDelete(ctx context.Context, name string, force bool) error {
-	m.record("BranchDelete")
-	return nil
-}
-
-func (m *mockGitClient) BranchRename(ctx context.Context, oldName, newName string) error {
-	m.record("BranchRename")
-	return nil
-}
-
-func (m *mockGitClient) Checkout(ctx context.Context, ref string) error {
-	m.record("Checkout")
-	return nil
-}
-
-func (m *mockGitClient) Push(ctx context.Context, opts git.PushOpts) error {
-	m.record("Push")
-	return nil
-}
-
-func (m *mockGitClient) Pull(ctx context.Context, opts git.PullOpts) error {
-	m.record("Pull")
-	return nil
-}
-
-func (m *mockGitClient) Fetch(ctx context.Context, opts git.FetchOpts) error {
-	m.record("Fetch")
-	return nil
-}
-
-func (m *mockGitClient) WorktreeList(ctx context.Context) ([]git.Worktree, error) {
-	m.record("WorktreeList")
-	return nil, nil
-}
-
-func (m *mockGitClient) WorktreeAdd(ctx context.Context, path, branch string) error {
-	m.record("WorktreeAdd")
-	return nil
-}
-
-func (m *mockGitClient) WorktreeRemove(ctx context.Context, path string, force bool) error {
-	m.record("WorktreeRemove")
-	return nil
-}
-
-func (m *mockGitClient) StashList(ctx context.Context) ([]git.StashEntry, error) {
-	m.record("StashList")
-	return nil, nil
-}
-
-func (m *mockGitClient) StashShow(ctx context.Context, index int) (string, error) {
-	m.record("StashShow")
-	return "", nil
-}
-
-func (m *mockGitClient) StashPush(ctx context.Context, opts git.StashOpts) error {
-	m.record("StashPush")
-	return nil
-}
-
-func (m *mockGitClient) StashPop(ctx context.Context, index int) error {
-	m.record("StashPop")
-	return nil
-}
-
-func (m *mockGitClient) StashApply(ctx context.Context, index int) error {
-	m.record("StashApply")
-	return nil
-}
-
-func (m *mockGitClient) StashDrop(ctx context.Context, index int) error {
-	m.record("StashDrop")
-	return nil
-}
-
-func (m *mockGitClient) TagList(ctx context.Context) ([]git.Tag, error) {
-	m.record("TagList")
-	return nil, nil
-}
-
-func (m *mockGitClient) TagCreate(ctx context.Context, name, ref, message string) error {
-	m.record("TagCreate")
-	return nil
-}
-
-func (m *mockGitClient) TagDelete(ctx context.Context, name string) error {
-	m.record("TagDelete")
-	return nil
-}
-
-func (m *mockGitClient) TagListRemote(ctx context.Context, remote string) ([]git.Tag, error) {
-	m.record("TagListRemote")
-	return nil, nil
-}
-
-func (m *mockGitClient) TagPush(ctx context.Context, remote, name string) error {
-	m.record("TagPush")
-	return nil
-}
-
-func (m *mockGitClient) TagPushAll(ctx context.Context, remote string) error {
-	m.record("TagPushAll")
-	return nil
-}
-
-func (m *mockGitClient) Merge(ctx context.Context, branch string, opts git.MergeOpts) error {
-	m.record("Merge")
-	return m.mergeErr
-}
-
-func (m *mockGitClient) MergeAbort(ctx context.Context) error {
-	m.record("MergeAbort")
-	return nil
-}
-
-func (m *mockGitClient) Rebase(ctx context.Context, onto string, opts git.RebaseOpts) error {
-	m.record("Rebase")
-	return m.rebaseErr
-}
-
-func (m *mockGitClient) RebaseContinue(ctx context.Context) error {
-	m.record("RebaseContinue")
-	return nil
-}
-
-func (m *mockGitClient) RebaseAbort(ctx context.Context) error {
-	m.record("RebaseAbort")
-	return nil
-}
-
-func (m *mockGitClient) CherryPick(ctx context.Context, commitHash string) error {
-	m.record("CherryPick")
-	return nil
-}
-
-func (m *mockGitClient) BisectStart(ctx context.Context, bad, good string) error {
-	m.record("BisectStart")
-	return nil
-}
-
-func (m *mockGitClient) BisectGood(ctx context.Context) (string, error) {
-	m.record("BisectGood")
-	return "", nil
-}
-
-func (m *mockGitClient) BisectBad(ctx context.Context) (string, error) {
-	m.record("BisectBad")
-	return "", nil
-}
-
-func (m *mockGitClient) BisectReset(ctx context.Context) error {
-	m.record("BisectReset")
-	return nil
-}
-
-func (m *mockGitClient) Reflog(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error) {
-	m.record("Reflog")
-	return nil, nil
-}
-
-func (m *mockGitClient) RemoteList(ctx context.Context) ([]git.Remote, error) {
-	m.record("RemoteList")
-	return nil, nil
-}
-
-func (m *mockGitClient) RemoteAdd(ctx context.Context, name, url string) error {
-	m.record("RemoteAdd")
-	return nil
-}
-
-func (m *mockGitClient) RemoteRemove(ctx context.Context, name string) error {
-	m.record("RemoteRemove")
-	return nil
-}
-
-func (m *mockGitClient) DiscardFile(ctx context.Context, path string) error           { return nil }
-func (m *mockGitClient) DiscardAllUnstaged(ctx context.Context) error                 { return nil }
-func (m *mockGitClient) Revert(ctx context.Context, hash string) error                { return nil }
-func (m *mockGitClient) RevertContinue(ctx context.Context) error                     { return nil }
-func (m *mockGitClient) RevertAbort(ctx context.Context) error                        { return nil }
-func (m *mockGitClient) Reset(ctx context.Context, ref string, _ git.ResetMode) error { return nil }
-
 // ---------------------------------------------------------------------------
 // Mock AI provider for middleware tests
 // ---------------------------------------------------------------------------
-
 type mockAIProvider struct {
 	name        string
 	available   bool

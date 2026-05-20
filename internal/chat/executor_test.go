@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,17 +12,18 @@ import (
 
 	"github.com/jongio/grut/internal/ai"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
-// Test-specific mock that embeds the shared stubGitClient
+// Test-specific mock that embeds the shared git test mock
 // ---------------------------------------------------------------------------
 
 type executorMockGitClient struct {
-	stubGitClient
+	gittest.MockClient
 	statusResult  []git.FileStatus
 	statusErr     error
 	diffResult    []git.FileDiff
@@ -123,6 +126,15 @@ func (m *executorMockGitClient) Checkout(_ context.Context, ref string) error {
 
 func (m *executorMockGitClient) BranchList(context.Context) ([]git.Branch, error) {
 	return m.branchListRes, m.branchListErr
+}
+
+func (m *executorMockGitClient) CurrentBranch(context.Context) (git.Branch, error) {
+	for _, b := range m.branchListRes {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
 }
 
 func (m *executorMockGitClient) BranchCreate(_ context.Context, name, base string) error {
@@ -364,7 +376,7 @@ func TestFileDelete(t *testing.T) {
 	assert.Contains(t, result.Content, "deleted")
 
 	_, err := os.Stat(testFile)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +402,7 @@ func TestFileRename(t *testing.T) {
 	assert.Contains(t, result.Content, "renamed")
 
 	_, err := os.Stat(oldFile)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 
 	data, err := os.ReadFile(filepath.Join(tmpDir, "new.txt"))
 	require.NoError(t, err)

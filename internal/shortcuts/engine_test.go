@@ -8,210 +8,153 @@ import (
 	"testing"
 
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 )
 
-// mockGitClient implements git.GitClient for testing. It records calls and
-// can be configured to fail on specific operations.
-type mockGitClient struct {
+type mockGitClient = gittest.MockClient
+
+type mockGitClientState struct {
 	calls    []string
 	failOps  map[string]error
 	branches []git.Branch
 }
 
+var mockGitClientStates = map[*mockGitClient]*mockGitClientState{}
+
 func newMockGitClient() *mockGitClient {
-	return &mockGitClient{
+	mock := &mockGitClient{}
+	state := &mockGitClientState{
 		failOps: make(map[string]error),
 		branches: []git.Branch{
 			{Name: "main", IsCurrent: true},
 			{Name: "feature-a", IsCurrent: false},
 		},
 	}
+	mockGitClientStates[mock] = state
+
+	mock.StatusFunc = func(context.Context) ([]git.FileStatus, error) {
+		return nil, recordMockGitCall(mock, "status")
+	}
+	mock.DiffFunc = func(context.Context, git.DiffOpts) ([]git.FileDiff, error) {
+		return nil, recordMockGitCall(mock, "diff")
+	}
+	mock.LogFunc = func(context.Context, git.LogOpts) ([]git.Commit, error) {
+		return nil, recordMockGitCall(mock, "log")
+	}
+	mock.BlameFunc = func(context.Context, string) ([]git.BlameLine, error) {
+		return nil, recordMockGitCall(mock, "blame")
+	}
+	mock.RepoRootFunc = func(context.Context) (string, error) {
+		return "/repo", recordMockGitCall(mock, "repo_root")
+	}
+	mock.IsRepoFunc = func(context.Context) (bool, error) {
+		return true, recordMockGitCall(mock, "is_repo")
+	}
+	mock.DiffTreeFilesFunc = func(context.Context, string) ([]string, error) {
+		return nil, recordMockGitCall(mock, "diff_tree_files")
+	}
+	mock.DiffFileNamesFunc = func(context.Context, string, string) ([]string, error) {
+		return nil, recordMockGitCall(mock, "diff_file_names")
+	}
+	mock.StageFunc = func(context.Context, []string) error { return recordMockGitCall(mock, "stage") }
+	mock.UnstageFunc = func(context.Context, []string) error { return recordMockGitCall(mock, "unstage") }
+	mock.StageHunkFunc = func(context.Context, string, git.Hunk) error { return recordMockGitCall(mock, "stage_hunk") }
+	mock.UnstageHunkFunc = func(context.Context, string, git.Hunk) error { return recordMockGitCall(mock, "unstage_hunk") }
+	mock.StageLineFunc = func(context.Context, string, git.Hunk, int) error { return recordMockGitCall(mock, "stage_line") }
+	mock.UnstageLineFunc = func(context.Context, string, git.Hunk, int) error { return recordMockGitCall(mock, "unstage_line") }
+	mock.CommitFunc = func(context.Context, string, git.CommitOpts) (string, error) {
+		return "abc1234", recordMockGitCall(mock, "commit")
+	}
+	mock.BranchListFunc = func(context.Context) ([]git.Branch, error) {
+		return mockGitState(mock).branches, recordMockGitCall(mock, "branch_list")
+	}
+	mock.BranchCreateFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "branch_create") }
+	mock.BranchDeleteFunc = func(context.Context, string, bool) error { return recordMockGitCall(mock, "branch_delete") }
+	mock.BranchRenameFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "branch_rename") }
+	mock.CheckoutFunc = func(context.Context, string) error { return recordMockGitCall(mock, "checkout") }
+	mock.PushFunc = func(context.Context, git.PushOpts) error { return recordMockGitCall(mock, "push") }
+	mock.PullFunc = func(context.Context, git.PullOpts) error { return recordMockGitCall(mock, "pull") }
+	mock.FetchFunc = func(context.Context, git.FetchOpts) error { return recordMockGitCall(mock, "fetch") }
+	mock.WorktreeListFunc = func(context.Context) ([]git.Worktree, error) {
+		return nil, recordMockGitCall(mock, "worktree_list")
+	}
+	mock.WorktreeAddFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "worktree_add") }
+	mock.WorktreeRemoveFunc = func(context.Context, string, bool) error { return recordMockGitCall(mock, "worktree_remove") }
+	mock.StashListFunc = func(context.Context) ([]git.StashEntry, error) {
+		return nil, recordMockGitCall(mock, "stash_list")
+	}
+	mock.StashShowFunc = func(context.Context, int) (string, error) {
+		return "", recordMockGitCall(mock, "stash_show")
+	}
+	mock.StashPushFunc = func(context.Context, git.StashOpts) error { return recordMockGitCall(mock, "stash_push") }
+	mock.StashPopFunc = func(context.Context, int) error { return recordMockGitCall(mock, "stash_pop") }
+	mock.StashApplyFunc = func(context.Context, int) error { return recordMockGitCall(mock, "stash_apply") }
+	mock.StashDropFunc = func(context.Context, int) error { return recordMockGitCall(mock, "stash_drop") }
+	mock.TagListFunc = func(context.Context) ([]git.Tag, error) {
+		return nil, recordMockGitCall(mock, "tag_list")
+	}
+	mock.TagCreateFunc = func(context.Context, string, string, string) error { return recordMockGitCall(mock, "tag_create") }
+	mock.TagDeleteFunc = func(context.Context, string) error { return recordMockGitCall(mock, "tag_delete") }
+	mock.TagListRemoteFunc = func(context.Context, string) ([]git.Tag, error) {
+		return nil, recordMockGitCall(mock, "tag_list_remote")
+	}
+	mock.TagPushFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "tag_push") }
+	mock.TagPushAllFunc = func(context.Context, string) error { return recordMockGitCall(mock, "tag_push_all") }
+	mock.MergeFunc = func(context.Context, string, git.MergeOpts) error { return recordMockGitCall(mock, "merge") }
+	mock.MergeAbortFunc = func(context.Context) error { return recordMockGitCall(mock, "merge_abort") }
+	mock.RebaseFunc = func(context.Context, string, git.RebaseOpts) error { return recordMockGitCall(mock, "rebase") }
+	mock.RebaseContinueFunc = func(context.Context) error { return recordMockGitCall(mock, "rebase_continue") }
+	mock.RebaseAbortFunc = func(context.Context) error { return recordMockGitCall(mock, "rebase_abort") }
+	mock.CherryPickFunc = func(context.Context, string) error { return recordMockGitCall(mock, "cherry_pick") }
+	mock.BisectStartFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "bisect_start") }
+	mock.BisectGoodFunc = func(context.Context) (string, error) { return "", recordMockGitCall(mock, "bisect_good") }
+	mock.BisectBadFunc = func(context.Context) (string, error) { return "", recordMockGitCall(mock, "bisect_bad") }
+	mock.BisectResetFunc = func(context.Context) error { return recordMockGitCall(mock, "bisect_reset") }
+	mock.ReflogFunc = func(context.Context, string, int) ([]git.ReflogEntry, error) {
+		return nil, recordMockGitCall(mock, "reflog")
+	}
+	mock.RemoteListFunc = func(context.Context) ([]git.Remote, error) {
+		return nil, recordMockGitCall(mock, "remote_list")
+	}
+	mock.RemoteAddFunc = func(context.Context, string, string) error { return recordMockGitCall(mock, "remote_add") }
+	mock.RemoteRemoveFunc = func(context.Context, string) error { return recordMockGitCall(mock, "remote_remove") }
+	mock.DiscardFileFunc = func(context.Context, string) error { return recordMockGitCall(mock, "discard_file") }
+	mock.DiscardAllFunc = func(context.Context) error { return recordMockGitCall(mock, "discard_all_unstaged") }
+	mock.RevertFunc = func(context.Context, string) error { return recordMockGitCall(mock, "revert") }
+	mock.RevertContinueFunc = func(context.Context) error { return recordMockGitCall(mock, "revert_continue") }
+	mock.RevertAbortFunc = func(context.Context) error { return recordMockGitCall(mock, "revert_abort") }
+	mock.ResetFunc = func(context.Context, string, git.ResetMode) error { return recordMockGitCall(mock, "reset") }
+
+	return mock
 }
 
-func (m *mockGitClient) record(op string) error {
-	m.calls = append(m.calls, op)
-	if err, ok := m.failOps[op]; ok {
+func mockGitState(mock *mockGitClient) *mockGitClientState {
+	state, ok := mockGitClientStates[mock]
+	if !ok {
+		panic("mock git client state not initialized")
+	}
+	return state
+}
+
+func recordMockGitCall(mock *mockGitClient, op string) error {
+	state := mockGitState(mock)
+	state.calls = append(state.calls, op)
+	if err, ok := state.failOps[op]; ok {
 		return err
 	}
 	return nil
 }
 
-func (m *mockGitClient) Status(_ context.Context) ([]git.FileStatus, error) {
-	return nil, m.record("status")
+func mockGitCalls(mock *mockGitClient) []string {
+	return mockGitState(mock).calls
 }
 
-func (m *mockGitClient) Diff(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
-	return nil, m.record("diff")
+func mockGitFailOps(mock *mockGitClient) map[string]error {
+	return mockGitState(mock).failOps
 }
 
-func (m *mockGitClient) Log(_ context.Context, _ git.LogOpts) ([]git.Commit, error) {
-	return nil, m.record("log")
-}
-
-func (m *mockGitClient) Blame(_ context.Context, _ string) ([]git.BlameLine, error) {
-	return nil, m.record("blame")
-}
-
-func (m *mockGitClient) RepoRoot(_ context.Context) (string, error) {
-	return "/repo", m.record("repo_root")
-}
-func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) { return true, m.record("is_repo") }
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, m.record("diff_tree_files")
-}
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, m.record("diff_file_names")
-}
-
-func (m *mockGitClient) Stage(_ context.Context, _ []string) error   { return m.record("stage") }
-func (m *mockGitClient) Unstage(_ context.Context, _ []string) error { return m.record("unstage") }
-func (m *mockGitClient) StageHunk(_ context.Context, _ string, _ git.Hunk) error {
-	return m.record("stage_hunk")
-}
-
-func (m *mockGitClient) UnstageHunk(_ context.Context, _ string, _ git.Hunk) error {
-	return m.record("unstage_hunk")
-}
-
-func (m *mockGitClient) StageLine(_ context.Context, _ string, _ git.Hunk, _ int) error {
-	return m.record("stage_line")
-}
-
-func (m *mockGitClient) UnstageLine(_ context.Context, _ string, _ git.Hunk, _ int) error {
-	return m.record("unstage_line")
-}
-
-func (m *mockGitClient) Commit(_ context.Context, _ string, _ git.CommitOpts) (string, error) {
-	return "abc1234", m.record("commit")
-}
-
-func (m *mockGitClient) BranchList(_ context.Context) ([]git.Branch, error) {
-	return m.branches, m.record("branch_list")
-}
-
-func (m *mockGitClient) BranchCreate(_ context.Context, _, _ string) error {
-	return m.record("branch_create")
-}
-
-func (m *mockGitClient) BranchDelete(_ context.Context, _ string, _ bool) error {
-	return m.record("branch_delete")
-}
-
-func (m *mockGitClient) BranchRename(_ context.Context, _, _ string) error {
-	return m.record("branch_rename")
-}
-func (m *mockGitClient) Checkout(_ context.Context, _ string) error { return m.record("checkout") }
-
-func (m *mockGitClient) Push(_ context.Context, _ git.PushOpts) error   { return m.record("push") }
-func (m *mockGitClient) Pull(_ context.Context, _ git.PullOpts) error   { return m.record("pull") }
-func (m *mockGitClient) Fetch(_ context.Context, _ git.FetchOpts) error { return m.record("fetch") }
-
-func (m *mockGitClient) WorktreeList(_ context.Context) ([]git.Worktree, error) {
-	return nil, m.record("worktree_list")
-}
-
-func (m *mockGitClient) WorktreeAdd(_ context.Context, _, _ string) error {
-	return m.record("worktree_add")
-}
-
-func (m *mockGitClient) WorktreeRemove(_ context.Context, _ string, _ bool) error {
-	return m.record("worktree_remove")
-}
-
-func (m *mockGitClient) StashList(_ context.Context) ([]git.StashEntry, error) {
-	return nil, m.record("stash_list")
-}
-
-func (m *mockGitClient) StashShow(_ context.Context, _ int) (string, error) {
-	return "", m.record("stash_show")
-}
-
-func (m *mockGitClient) StashPush(_ context.Context, _ git.StashOpts) error {
-	return m.record("stash_push")
-}
-func (m *mockGitClient) StashPop(_ context.Context, _ int) error   { return m.record("stash_pop") }
-func (m *mockGitClient) StashApply(_ context.Context, _ int) error { return m.record("stash_apply") }
-func (m *mockGitClient) StashDrop(_ context.Context, _ int) error  { return m.record("stash_drop") }
-
-func (m *mockGitClient) TagList(_ context.Context) ([]git.Tag, error) {
-	return nil, m.record("tag_list")
-}
-
-func (m *mockGitClient) TagCreate(_ context.Context, _, _, _ string) error {
-	return m.record("tag_create")
-}
-
-func (m *mockGitClient) TagDelete(_ context.Context, _ string) error { return m.record("tag_delete") }
-
-func (m *mockGitClient) TagListRemote(_ context.Context, _ string) ([]git.Tag, error) {
-	return nil, m.record("tag_list_remote")
-}
-
-func (m *mockGitClient) TagPush(_ context.Context, _, _ string) error { return m.record("tag_push") }
-
-func (m *mockGitClient) TagPushAll(_ context.Context, _ string) error {
-	return m.record("tag_push_all")
-}
-
-func (m *mockGitClient) Merge(_ context.Context, _ string, _ git.MergeOpts) error {
-	return m.record("merge")
-}
-func (m *mockGitClient) MergeAbort(_ context.Context) error { return m.record("merge_abort") }
-func (m *mockGitClient) Rebase(_ context.Context, _ string, _ git.RebaseOpts) error {
-	return m.record("rebase")
-}
-
-func (m *mockGitClient) RebaseContinue(_ context.Context) error { return m.record("rebase_continue") }
-
-func (m *mockGitClient) RebaseAbort(_ context.Context) error { return m.record("rebase_abort") }
-
-func (m *mockGitClient) CherryPick(_ context.Context, _ string) error { return m.record("cherry_pick") }
-
-func (m *mockGitClient) BisectStart(_ context.Context, _, _ string) error {
-	return m.record("bisect_start")
-}
-
-func (m *mockGitClient) BisectGood(_ context.Context) (string, error) {
-	return "", m.record("bisect_good")
-}
-
-func (m *mockGitClient) BisectBad(_ context.Context) (string, error) {
-	return "", m.record("bisect_bad")
-}
-func (m *mockGitClient) BisectReset(_ context.Context) error { return m.record("bisect_reset") }
-
-func (m *mockGitClient) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEntry, error) {
-	return nil, m.record("reflog")
-}
-
-func (m *mockGitClient) RemoteList(_ context.Context) ([]git.Remote, error) {
-	return nil, m.record("remote_list")
-}
-
-func (m *mockGitClient) RemoteAdd(_ context.Context, _, _ string) error {
-	return m.record("remote_add")
-}
-
-func (m *mockGitClient) RemoteRemove(_ context.Context, _ string) error {
-	return m.record("remote_remove")
-}
-
-func (m *mockGitClient) DiscardFile(_ context.Context, _ string) error {
-	return m.record("discard_file")
-}
-
-func (m *mockGitClient) DiscardAllUnstaged(_ context.Context) error {
-	return m.record("discard_all_unstaged")
-}
-
-func (m *mockGitClient) Revert(_ context.Context, _ string) error { return m.record("revert") }
-func (m *mockGitClient) RevertContinue(_ context.Context) error   { return m.record("revert_continue") }
-
-func (m *mockGitClient) RevertAbort(_ context.Context) error { return m.record("revert_abort") }
-
-func (m *mockGitClient) Reset(_ context.Context, _ string, _ git.ResetMode) error {
-	return m.record("reset")
+func setMockGitBranches(mock *mockGitClient, branches []git.Branch) {
+	mockGitState(mock).branches = branches
 }
 
 // --- Engine tests ---
@@ -296,20 +239,20 @@ func TestExecuteSC(t *testing.T) {
 	}
 
 	// Verify operations were called in order.
-	if len(mock.calls) < 2 {
-		t.Fatalf("expected at least 2 calls, got %d", len(mock.calls))
+	if len(mockGitCalls(mock)) < 2 {
+		t.Fatalf("expected at least 2 calls, got %d", len(mockGitCalls(mock)))
 	}
-	if mock.calls[0] != "stage" {
-		t.Errorf("first call should be 'stage', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "stage" {
+		t.Errorf("first call should be 'stage', got %q", mockGitCalls(mock)[0])
 	}
-	if mock.calls[1] != "commit" {
-		t.Errorf("second call should be 'commit', got %q", mock.calls[1])
+	if mockGitCalls(mock)[1] != "commit" {
+		t.Errorf("second call should be 'commit', got %q", mockGitCalls(mock)[1])
 	}
 }
 
 func TestExecuteStopOnFailure(t *testing.T) {
 	mock := newMockGitClient()
-	mock.failOps["commit"] = fmt.Errorf("commit failed")
+	mockGitFailOps(mock)["commit"] = fmt.Errorf("commit failed")
 	engine := NewEngine(mock)
 
 	result, err := engine.Execute(context.Background(), "scp", nil)
@@ -327,7 +270,7 @@ func TestExecuteStopOnFailure(t *testing.T) {
 
 func TestExecuteContinueOnFailure(t *testing.T) {
 	mock := newMockGitClient()
-	mock.failOps["fetch"] = fmt.Errorf("network error")
+	mockGitFailOps(mock)["fetch"] = fmt.Errorf("network error")
 	engine := NewEngine(mock)
 
 	// cleanup has on_fail=continue for both steps.
@@ -471,8 +414,8 @@ func TestExecuteStepUnstage(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "unstage" {
-		t.Errorf("expected 'unstage', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "unstage" {
+		t.Errorf("expected 'unstage', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -485,8 +428,8 @@ func TestExecuteStepPush(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "push" {
-		t.Errorf("expected 'push', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "push" {
+		t.Errorf("expected 'push', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -499,8 +442,8 @@ func TestExecuteStepPull(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "pull" {
-		t.Errorf("expected 'pull', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "pull" {
+		t.Errorf("expected 'pull', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -511,8 +454,8 @@ func TestExecuteStepRebase(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "rebase" {
-		t.Errorf("expected 'rebase', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "rebase" {
+		t.Errorf("expected 'rebase', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -525,8 +468,8 @@ func TestExecuteStepMerge(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "merge" {
-		t.Errorf("expected 'merge', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "merge" {
+		t.Errorf("expected 'merge', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -537,8 +480,8 @@ func TestExecuteStepCheckout(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "checkout" {
-		t.Errorf("expected 'checkout', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "checkout" {
+		t.Errorf("expected 'checkout', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -549,8 +492,8 @@ func TestExecuteStepBranch(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "branch_create" {
-		t.Errorf("expected 'branch_create', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "branch_create" {
+		t.Errorf("expected 'branch_create', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -561,8 +504,8 @@ func TestExecuteStepResetSoft(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "checkout" {
-		t.Errorf("expected 'checkout' for soft reset, got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "checkout" {
+		t.Errorf("expected 'checkout' for soft reset, got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -573,8 +516,8 @@ func TestExecuteStepResetHard(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if len(mock.calls) != 2 || mock.calls[0] != "checkout" || mock.calls[1] != "unstage" {
-		t.Errorf("expected [checkout, unstage], got %v", mock.calls)
+	if len(mockGitCalls(mock)) != 2 || mockGitCalls(mock)[0] != "checkout" || mockGitCalls(mock)[1] != "unstage" {
+		t.Errorf("expected [checkout, unstage], got %v", mockGitCalls(mock))
 	}
 }
 
@@ -585,8 +528,8 @@ func TestExecuteStepResetMixed(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "unstage" {
-		t.Errorf("expected 'unstage' for mixed reset, got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "unstage" {
+		t.Errorf("expected 'unstage' for mixed reset, got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -597,8 +540,8 @@ func TestExecuteStepResetEmptyMode(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "unstage" {
-		t.Errorf("expected 'unstage' for empty mode reset, got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "unstage" {
+		t.Errorf("expected 'unstage' for empty mode reset, got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -621,41 +564,41 @@ func TestExecuteStepDeleteBranch(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "branch_delete" {
-		t.Errorf("expected 'branch_delete', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "branch_delete" {
+		t.Errorf("expected 'branch_delete', got %q", mockGitCalls(mock)[0])
 	}
 }
 
 func TestExecuteStepDeleteMerged(t *testing.T) {
 	mock := newMockGitClient()
-	mock.branches = []git.Branch{
+	setMockGitBranches(mock, []git.Branch{
 		{Name: "main", IsCurrent: false},
 		{Name: "master", IsCurrent: false},
 		{Name: "develop", IsCurrent: false},
 		{Name: "current", IsCurrent: true},
 		{Name: "remote-only", IsRemote: true},
 		{Name: "feature-done", IsCurrent: false, IsRemote: false},
-	}
+	})
 	engine := NewEngine(mock)
 	sr := engine.executeStep(context.Background(), Step{Op: OpDelete, Params: map[string]string{"merged": "true"}})
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
 	// Should have called branch_list + branch_delete only for "feature-done".
-	if len(mock.calls) != 2 {
-		t.Fatalf("expected 2 calls (list + delete), got %v", mock.calls)
+	if len(mockGitCalls(mock)) != 2 {
+		t.Fatalf("expected 2 calls (list + delete), got %v", mockGitCalls(mock))
 	}
-	if mock.calls[0] != "branch_list" {
-		t.Errorf("expected 'branch_list' first, got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "branch_list" {
+		t.Errorf("expected 'branch_list' first, got %q", mockGitCalls(mock)[0])
 	}
-	if mock.calls[1] != "branch_delete" {
-		t.Errorf("expected 'branch_delete' second, got %q", mock.calls[1])
+	if mockGitCalls(mock)[1] != "branch_delete" {
+		t.Errorf("expected 'branch_delete' second, got %q", mockGitCalls(mock)[1])
 	}
 }
 
 func TestDeleteMergedBranchesListError(t *testing.T) {
 	mock := newMockGitClient()
-	mock.failOps["branch_list"] = fmt.Errorf("list failed")
+	mockGitFailOps(mock)["branch_list"] = fmt.Errorf("list failed")
 	engine := NewEngine(mock)
 	sr := engine.executeStep(context.Background(), Step{Op: OpDelete, Params: map[string]string{"merged": "true"}})
 	if sr.Err == nil {
@@ -668,12 +611,12 @@ func TestDeleteMergedBranchesListError(t *testing.T) {
 
 func TestDeleteMergedBranchesPartialFailure(t *testing.T) {
 	mock := newMockGitClient()
-	mock.branches = []git.Branch{
+	setMockGitBranches(mock, []git.Branch{
 		{Name: "main", IsCurrent: true},
 		{Name: "feat-a"},
 		{Name: "feat-b"},
-	}
-	mock.failOps["branch_delete"] = fmt.Errorf("delete failed")
+	})
+	mockGitFailOps(mock)["branch_delete"] = fmt.Errorf("delete failed")
 	engine := NewEngine(mock)
 	sr := engine.executeStep(context.Background(), Step{Op: OpDelete, Params: map[string]string{"merged": "true"}})
 	if sr.Err == nil {
@@ -691,8 +634,8 @@ func TestExecuteStepStash(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "stash_push" {
-		t.Errorf("expected 'stash_push', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "stash_push" {
+		t.Errorf("expected 'stash_push', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -703,8 +646,8 @@ func TestExecuteStepStashPop(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "stash_pop" {
-		t.Errorf("expected 'stash_pop', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "stash_pop" {
+		t.Errorf("expected 'stash_pop', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -715,8 +658,8 @@ func TestExecuteStepBranchRename(t *testing.T) {
 	if sr.Err != nil {
 		t.Fatalf("unexpected error: %v", sr.Err)
 	}
-	if mock.calls[0] != "branch_rename" {
-		t.Errorf("expected 'branch_rename', got %q", mock.calls[0])
+	if mockGitCalls(mock)[0] != "branch_rename" {
+		t.Errorf("expected 'branch_rename', got %q", mockGitCalls(mock)[0])
 	}
 }
 
@@ -736,7 +679,7 @@ func TestExecuteStepUnknownOp(t *testing.T) {
 
 func TestExecuteOnFailAsk(t *testing.T) {
 	mock := newMockGitClient()
-	mock.failOps["push"] = fmt.Errorf("push rejected")
+	mockGitFailOps(mock)["push"] = fmt.Errorf("push rejected")
 	engine := NewEngine(mock)
 	engine.RegisterCustom(Shortcut{
 		Name: "ask-test",
@@ -800,14 +743,14 @@ func TestSubstituteStepMissingPlaceholder(t *testing.T) {
 
 func TestExecuteStepResetHardCheckoutFails(t *testing.T) {
 	mock := newMockGitClient()
-	mock.failOps["checkout"] = fmt.Errorf("checkout failed")
+	mockGitFailOps(mock)["checkout"] = fmt.Errorf("checkout failed")
 	engine := NewEngine(mock)
 	sr := engine.executeStep(context.Background(), Step{Op: OpReset, Params: map[string]string{"mode": "hard", "ref": "HEAD~1"}})
 	if sr.Err == nil {
 		t.Fatal("expected error when checkout fails in hard reset")
 	}
 	// Should NOT have called unstage since checkout failed first.
-	for _, call := range mock.calls {
+	for _, call := range mockGitCalls(mock) {
 		if call == "unstage" {
 			t.Error("unstage should not be called when checkout fails in hard reset")
 		}

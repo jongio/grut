@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	gh "github.com/google/go-github/v68/github"
 )
 
 const (
@@ -75,17 +77,43 @@ func (c *cache) Set(key string, value any) {
 	c.entries[key] = cacheEntry{value: cloneCacheValue(value), expiresAt: time.Now().Add(c.ttl)}
 }
 
-func cloneCacheValue(value any) any {
-	if value == nil {
+// clonePtr returns a shallow copy of the pointed-to value.
+func clonePtr[T any](p *T) *T {
+	if p == nil {
 		return nil
 	}
-	rv := reflect.ValueOf(value)
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+	v := *p
+	return &v
+}
+
+// cloneCacheValue returns a shallow clone of pointer types stored in the
+// cache. Known GitHub types use the generic clonePtr fast path; unknown
+// pointer types fall back to reflect-based cloning. Non-pointer values
+// are returned as-is.
+func cloneCacheValue(value any) any {
+	switch v := value.(type) {
+	case *gh.Issue:
+		return clonePtr(v)
+	case *gh.PullRequest:
+		return clonePtr(v)
+	case *gh.Repository:
+		return clonePtr(v)
+	case *gh.RepositoryRelease:
+		return clonePtr(v)
+	case *gh.WorkflowRun:
+		return clonePtr(v)
+	case *gh.Notification:
+		return clonePtr(v)
+	default:
+		// Fallback: clone unknown pointer types via reflect.
+		rv := reflect.ValueOf(value)
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+			clone := reflect.New(rv.Elem().Type())
+			clone.Elem().Set(rv.Elem())
+			return clone.Interface()
+		}
 		return value
 	}
-	clone := reflect.New(rv.Elem().Type())
-	clone.Elem().Set(rv.Elem())
-	return clone.Interface()
 }
 
 // Invalidate removes a single key from the cache.

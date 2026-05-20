@@ -692,7 +692,6 @@ func TestIssueFilterKind_String(t *testing.T) {
 	}{
 		{issueFilterAll, "All"},
 		{issueFilterAssigned, "Assigned"},
-		{issueFilterMentioned, "Mentioned"},
 		{issueFilterCreated, "Created"},
 		{IssueFilterKind(99), "All"}, // default
 	}
@@ -1635,10 +1634,7 @@ func TestCycleIssueFilter(t *testing.T) {
 	p.cycleIssueFilter() // All -> Assigned
 	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 
-	p.cycleIssueFilter() // Assigned -> Mentioned
-	assert.Equal(t, issueFilterMentioned, p.gh.issueFilter)
-
-	p.cycleIssueFilter() // Mentioned -> Created
+	p.cycleIssueFilter() // Assigned -> Created
 	assert.Equal(t, issueFilterCreated, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // Created -> All
@@ -1676,12 +1672,9 @@ func TestCycleIssueFilter_FiltersItems(t *testing.T) {
 	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 	assert.Equal(t, 1, len(p.tabItems[tabIssues]))
 
-	// Mentioned: all issues.
-	p.cycleIssueFilter()
-	assert.Equal(t, 3, len(p.tabItems[tabIssues]))
-
 	// Created: issues by testuser (1 and 3).
 	p.cycleIssueFilter()
+	assert.Equal(t, issueFilterCreated, p.gh.issueFilter)
 	assert.Equal(t, 2, len(p.tabItems[tabIssues]))
 }
 
@@ -1726,9 +1719,6 @@ func TestMatchesIssueFilter_AllCases(t *testing.T) {
 
 	p.gh.issueFilter = issueFilterAssigned
 	assert.False(t, p.matchesIssueFilter(ghIssueItem{Assignee: "other"}))
-
-	p.gh.issueFilter = issueFilterMentioned
-	assert.True(t, p.matchesIssueFilter(iss))
 
 	p.gh.issueFilter = issueFilterCreated
 	assert.True(t, p.matchesIssueFilter(iss))

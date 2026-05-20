@@ -20,6 +20,7 @@ import (
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
+	"github.com/jongio/grut/internal/overlayreg"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -533,7 +534,7 @@ func newScreenshotModel(width, height int, preset layout.Preset, th *theme.Theme
 
 	bmMgr := bm.NewManager(cfg.Bookmarks)
 
-	m := New(engine, th, km, bmMgr)
+	m := New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr))
 	m.width = width
 	m.height = height
 	m.ready = true

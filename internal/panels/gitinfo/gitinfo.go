@@ -416,38 +416,60 @@ func (p *Panel) SetActiveTab(name string) {
 	}
 }
 
+// PanelConfig holds the configuration parameters for creating a gitinfo panel.
+// It reduces the parameter count of New and NewGitHub constructors.
+type PanelConfig struct {
+	GitOps     gitOps
+	GitCfg     config.GitConfig
+	GitHubCfg  config.GitHubConfig
+	ActionsCfg config.ActionsConfig
+	RepoRoot   string
+	IconMode   string
+	Theme      *theme.Theme
+}
+
 // New creates a new gitinfo panel showing only git tabs (branches,
 // worktrees, remotes, stash, tags, reflog).
 func New(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string, th *theme.Theme) *Panel {
-	return &Panel{
-		BasePanel:  panels.BasePanel{PanelTitle: panelGitinfo},
-		mode:       ModeGit,
-		git:        gitOps,
-		cfg:        cfg,
-		gh:         githubState{cfg: ghCfg},
-		actionsCfg: actionsCfg,
-		iconMode:   iconMode,
-		repoRoot:   repoRoot,
-		colors:     initColors(th),
-		theme:      th,
-	}
+	return NewFromConfig(PanelConfig{
+		GitOps:     gitOps,
+		GitCfg:     cfg,
+		GitHubCfg:  ghCfg,
+		ActionsCfg: actionsCfg,
+		RepoRoot:   repoRoot,
+		IconMode:   iconMode,
+		Theme:      th,
+	}, ModeGit, panelGitinfo, tabBranches)
 }
 
 // NewGitHub creates a gitinfo panel showing only GitHub tabs (issues,
 // PRs, actions, workflows, releases).
 func NewGitHub(gitOps gitOps, cfg config.GitConfig, ghCfg config.GitHubConfig, actionsCfg config.ActionsConfig, repoRoot, iconMode string, th *theme.Theme) *Panel {
+	return NewFromConfig(PanelConfig{
+		GitOps:     gitOps,
+		GitCfg:     cfg,
+		GitHubCfg:  ghCfg,
+		ActionsCfg: actionsCfg,
+		RepoRoot:   repoRoot,
+		IconMode:   iconMode,
+		Theme:      th,
+	}, ModeGitHub, "github", tabIssues)
+}
+
+// NewFromConfig creates a gitinfo panel from the given configuration.
+func NewFromConfig(cfg PanelConfig, mode PanelMode, title string, defaultTab tabID) *Panel {
 	return &Panel{
-		BasePanel:  panels.BasePanel{PanelTitle: "github"},
-		mode:       ModeGitHub,
-		activeTab:  tabIssues,
-		git:        gitOps,
-		cfg:        cfg,
-		gh:         githubState{cfg: ghCfg},
-		actionsCfg: actionsCfg,
-		iconMode:   iconMode,
-		repoRoot:   repoRoot,
-		colors:     initColors(th),
-		theme:      th,
+		BasePanel:  panels.BasePanel{PanelTitle: title},
+		mode:       mode,
+		activeTab:  defaultTab,
+		git:        cfg.GitOps,
+		cfg:        cfg.GitCfg,
+		gh:         githubState{cfg: cfg.GitHubCfg},
+		actionsCfg: cfg.ActionsCfg,
+		iconMode:   cfg.IconMode,
+		repoRoot:   cfg.RepoRoot,
+		colors:     initColors(cfg.Theme),
+		theme:      cfg.Theme,
 	}
 }
 
@@ -460,15 +482,27 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	// Resolve GitHub owner/repo from config or git remote.
 	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
 	// Only create GitHub client when we have a valid owner/repo.
-	if p.gh.owner != "" && p.gh.repo != "" {
-		client, err := ghclient.NewClient(ctx)
-		if err != nil {
-			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", err)
-		} else {
-			p.gh.client = client
-		}
-	}
+	p.initGitHubClient(ctx)
 	// Load git data + GitHub data in parallel.
+	return p.startGitHubLoad()
+}
+
+// initGitHubClient creates the GitHub API client if owner/repo are configured.
+func (p *Panel) initGitHubClient(ctx context.Context) {
+	if p.gh.owner == "" || p.gh.repo == "" {
+		return
+	}
+	client, err := ghclient.NewClient(ctx)
+	if err != nil {
+		p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", err)
+	} else {
+		p.gh.client = client
+	}
+}
+
+// startGitHubLoad returns commands to load git data and, when the GitHub
+// client is available, all GitHub tab data in parallel.
+func (p *Panel) startGitHubLoad() tea.Cmd {
 	cmds := []tea.Cmd{p.loadData()}
 	if p.gh.client != nil {
 		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
@@ -532,35 +566,11 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 		ctx = context.Background()
 	}
 	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
-	if p.gh.owner != "" && p.gh.repo != "" {
-		ghc, ghErr := ghclient.NewClient(ctx)
-		if ghErr != nil {
-			p.gh.err = fmt.Errorf("GitHub auth unavailable: %w", ghErr)
-		} else {
-			p.gh.client = ghc
-		}
-	}
+	p.initGitHubClient(ctx)
 	if p.git == nil {
 		return p, nil
 	}
-	cmds := []tea.Cmd{p.loadData()}
-	if p.gh.client != nil {
-		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
-		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
-			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
-		}
-		cmds = append(
-			cmds,
-			p.loadGitHubMeta(),
-			p.loadIssuesPage(1, true),
-			p.loadPRsPage(1, true),
-			p.loadActionsPage(1, true),
-			p.loadWorkflowsPage(1, true),
-			p.loadReleasesPage(1, true),
-			p.githubPollTickCmd(),
-		)
-	}
-	return p, tea.Batch(cmds...)
+	return p, p.startGitHubLoad()
 }
 
 func (p *Panel) loadData() tea.Cmd {
@@ -837,8 +847,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
-		{Key: "g", Description: "Go to first item", Action: "first"},
-		{Key: "G", Description: "Go to last item", Action: "last"},
+		{Key: "g", Description: "Go to first item", Action: actionFirst},
+		{Key: "G", Description: "Go to last item", Action: actionLast},
 		{Key: "P", Description: "Push tag", Action: "push_tag"},
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}

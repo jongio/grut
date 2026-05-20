@@ -10,8 +10,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -265,6 +267,71 @@ var deadcodeAllowlist = []string{
 	// gitinfo — test-only color/icon helpers (used in gitinfo_test.go)
 	"prColor",
 	"prActionIcon",
+
+	// gitstatus — test-only accessor (used in gitstatus_extra_test.go)
+	"GitStatus.fileColor",
+
+	// git/gittest — shared mock implementing full GitClient interface;
+	// many methods are interface stubs not yet exercised by tests
+	"MockClient.Status",
+	"MockClient.Diff",
+	"MockClient.Log",
+	"MockClient.Blame",
+	"MockClient.RepoRoot",
+	"MockClient.IsRepo",
+	"MockClient.DiffTreeFiles",
+	"MockClient.DiffFileNames",
+	"MockClient.Stage",
+	"MockClient.Unstage",
+	"MockClient.StageHunk",
+	"MockClient.UnstageHunk",
+	"MockClient.StageLine",
+	"MockClient.UnstageLine",
+	"MockClient.Commit",
+	"MockClient.BranchList",
+	"MockClient.CurrentBranch",
+	"MockClient.BranchCreate",
+	"MockClient.BranchDelete",
+	"MockClient.BranchRename",
+	"MockClient.Checkout",
+	"MockClient.Push",
+	"MockClient.Pull",
+	"MockClient.Fetch",
+	"MockClient.RemoteList",
+	"MockClient.RemoteAdd",
+	"MockClient.RemoteRemove",
+	"MockClient.WorktreeList",
+	"MockClient.WorktreeAdd",
+	"MockClient.WorktreeRemove",
+	"MockClient.StashList",
+	"MockClient.StashShow",
+	"MockClient.StashPush",
+	"MockClient.StashPop",
+	"MockClient.StashApply",
+	"MockClient.StashDrop",
+	"MockClient.TagList",
+	"MockClient.TagCreate",
+	"MockClient.TagDelete",
+	"MockClient.TagListRemote",
+	"MockClient.TagPush",
+	"MockClient.TagPushAll",
+	"MockClient.Merge",
+	"MockClient.MergeAbort",
+	"MockClient.Rebase",
+	"MockClient.RebaseContinue",
+	"MockClient.RebaseAbort",
+	"MockClient.CherryPick",
+	"MockClient.BisectStart",
+	"MockClient.BisectGood",
+	"MockClient.BisectBad",
+	"MockClient.BisectReset",
+	"MockClient.Reflog",
+	"MockClient.DiscardFile",
+	"MockClient.DiscardAllUnstaged",
+	"MockClient.Revert",
+	"MockClient.RevertContinue",
+	"MockClient.RevertAbort",
+	"MockClient.Reset",
 }
 
 // Default target when running `mage` with no args.
@@ -661,7 +728,7 @@ func BenchCompare() error {
 	dir := projectDir()
 	platform := benchPlatform()
 	baseline := filepath.Join(dir, "perf", "baselines", platform, "main.txt")
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("no baseline for %s at %s — run 'mage benchbaseline' first", platform, baseline)
 	}
 	fmt.Printf("   Platform: %s\n   Baseline: %s\n", platform, baseline)
@@ -719,7 +786,7 @@ func BenchWSL() error {
 
 	baseline := filepath.Join(baselineDir, "main.txt")
 	wslBaseline := escapedPath + "/perf/baselines/linux-amd64/main.txt"
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("\n   No linux-amd64 baseline yet — saving current run as baseline.\n")
 		saveCmd := fmt.Sprintf("cp %s %s", currentTxt, wslBaseline)
 		save := exec.Command("wsl", "bash", "-lc", saveCmd)

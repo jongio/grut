@@ -2,7 +2,9 @@ package update
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"time"
 )
@@ -45,7 +47,7 @@ func acquireUpdateLock(path string) (*updateLock, error) {
 			}
 			return &updateLock{path: path}, nil
 		}
-		if !os.IsExist(err) {
+		if !errors.Is(err, fs.ErrExist) {
 			return nil, fmt.Errorf("creating lock file: %w", err)
 		}
 		stale, staleErr := isStaleLock(path)
@@ -55,7 +57,7 @@ func acquireUpdateLock(path string) (*updateLock, error) {
 		if !stale {
 			return nil, fmt.Errorf("lock file exists at %s", path)
 		}
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("removing stale lock file: %w", err)
 		}
 	}
@@ -73,7 +75,7 @@ func releaseUpdateLock(lock *updateLock) {
 func isStaleLock(path string) (bool, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("reading lock file: %w", err)
@@ -84,7 +86,7 @@ func isStaleLock(path string) (bool, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("stating lock file: %w", err)

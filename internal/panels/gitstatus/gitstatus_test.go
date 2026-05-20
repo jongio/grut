@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
@@ -18,13 +19,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockGitClient struct {
-	statusResult     []git.FileStatus
-	statusErr        error
-	diffResult       []git.FileDiff
-	diffErr          error
-	stageErr         error
-	unstageErr       error
-	discardErr       error
+	gittest.MockClient
 	stagedPaths      []string
 	unstagePaths     []string
 	discardedPaths   []string
@@ -32,6 +27,16 @@ type mockGitClient struct {
 	unstageHunkCalls []stageHunkCall
 	stageLineCalls   []stageLineCall
 	unstageLineCalls []stageLineCall
+}
+
+type mockGitClientOptions struct {
+	statusResult []git.FileStatus
+	statusErr    error
+	diffResult   []git.FileDiff
+	diffErr      error
+	stageErr     error
+	unstageErr   error
+	discardErr   error
 }
 
 type stageHunkCall struct {
@@ -45,73 +50,122 @@ type stageLineCall struct {
 	lineIdx int
 }
 
+func newMockGitClient(opts mockGitClientOptions) *mockGitClient {
+	m := &mockGitClient{}
+	m.StatusFunc = func(_ context.Context) ([]git.FileStatus, error) {
+		return opts.statusResult, opts.statusErr
+	}
+	m.DiffFunc = func(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
+		return opts.diffResult, opts.diffErr
+	}
+	m.StageFunc = func(_ context.Context, _ []string) error {
+		return opts.stageErr
+	}
+	m.UnstageFunc = func(_ context.Context, _ []string) error {
+		return opts.unstageErr
+	}
+	m.StageHunkFunc = func(_ context.Context, _ string, _ git.Hunk) error {
+		return opts.stageErr
+	}
+	m.UnstageHunkFunc = func(_ context.Context, _ string, _ git.Hunk) error {
+		return opts.unstageErr
+	}
+	m.StageLineFunc = func(_ context.Context, _ string, _ git.Hunk, _ int) error {
+		return opts.stageErr
+	}
+	m.UnstageLineFunc = func(_ context.Context, _ string, _ git.Hunk, _ int) error {
+		return opts.unstageErr
+	}
+	m.DiscardFileFunc = func(_ context.Context, _ string) error {
+		return opts.discardErr
+	}
+	return m
+}
+
 var _ GitClient = (*mockGitClient)(nil)
 
-func (m *mockGitClient) Status(_ context.Context) ([]git.FileStatus, error) {
-	return m.statusResult, m.statusErr
-}
-
-func (m *mockGitClient) Diff(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
-	return m.diffResult, m.diffErr
-}
-
-func (m *mockGitClient) Log(_ context.Context, _ git.LogOpts) ([]git.Commit, error) {
+func (m *mockGitClient) Status(ctx context.Context) ([]git.FileStatus, error) {
+	if m.StatusFunc != nil {
+		return m.StatusFunc(ctx)
+	}
 	return nil, nil
 }
 
-func (m *mockGitClient) Blame(_ context.Context, _ string) ([]git.BlameLine, error) {
+func (m *mockGitClient) Diff(ctx context.Context, opts git.DiffOpts) ([]git.FileDiff, error) {
+	if m.DiffFunc != nil {
+		return m.DiffFunc(ctx, opts)
+	}
 	return nil, nil
 }
 
-func (m *mockGitClient) RepoRoot(_ context.Context) (string, error) {
+func (m *mockGitClient) RepoRoot(ctx context.Context) (string, error) {
+	if m.RepoRootFunc != nil {
+		return m.RepoRootFunc(ctx)
+	}
 	return "/repo", nil
 }
 
-func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) {
+func (m *mockGitClient) IsRepo(ctx context.Context) (bool, error) {
+	if m.IsRepoFunc != nil {
+		return m.IsRepoFunc(ctx)
+	}
 	return true, nil
 }
 
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Stage(_ context.Context, paths []string) error {
+func (m *mockGitClient) Stage(ctx context.Context, paths []string) error {
 	m.stagedPaths = append(m.stagedPaths, paths...)
-	return m.stageErr
+	if m.StageFunc != nil {
+		return m.StageFunc(ctx, paths)
+	}
+	return nil
 }
 
-func (m *mockGitClient) Unstage(_ context.Context, paths []string) error {
+func (m *mockGitClient) Unstage(ctx context.Context, paths []string) error {
 	m.unstagePaths = append(m.unstagePaths, paths...)
-	return m.unstageErr
+	if m.UnstageFunc != nil {
+		return m.UnstageFunc(ctx, paths)
+	}
+	return nil
 }
 
-func (m *mockGitClient) StageHunk(_ context.Context, path string, hunk git.Hunk) error {
+func (m *mockGitClient) StageHunk(ctx context.Context, path string, hunk git.Hunk) error {
 	m.stageHunkCalls = append(m.stageHunkCalls, stageHunkCall{path: path, hunk: hunk})
-	return m.stageErr
+	if m.StageHunkFunc != nil {
+		return m.StageHunkFunc(ctx, path, hunk)
+	}
+	return nil
 }
 
-func (m *mockGitClient) UnstageHunk(_ context.Context, path string, hunk git.Hunk) error {
+func (m *mockGitClient) UnstageHunk(ctx context.Context, path string, hunk git.Hunk) error {
 	m.unstageHunkCalls = append(m.unstageHunkCalls, stageHunkCall{path: path, hunk: hunk})
-	return m.unstageErr
+	if m.UnstageHunkFunc != nil {
+		return m.UnstageHunkFunc(ctx, path, hunk)
+	}
+	return nil
 }
 
-func (m *mockGitClient) StageLine(_ context.Context, path string, hunk git.Hunk, lineIdx int) error {
+func (m *mockGitClient) StageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error {
 	m.stageLineCalls = append(m.stageLineCalls, stageLineCall{path: path, hunk: hunk, lineIdx: lineIdx})
-	return m.stageErr
+	if m.StageLineFunc != nil {
+		return m.StageLineFunc(ctx, path, hunk, lineIdx)
+	}
+	return nil
 }
 
-func (m *mockGitClient) UnstageLine(_ context.Context, path string, hunk git.Hunk, lineIdx int) error {
+func (m *mockGitClient) UnstageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error {
 	m.unstageLineCalls = append(m.unstageLineCalls, stageLineCall{path: path, hunk: hunk, lineIdx: lineIdx})
-	return m.unstageErr
+	if m.UnstageLineFunc != nil {
+		return m.UnstageLineFunc(ctx, path, hunk, lineIdx)
+	}
+	return nil
 }
 
-func (m *mockGitClient) DiscardFile(_ context.Context, path string) error {
+func (m *mockGitClient) DiscardFile(ctx context.Context, path string) error {
 	m.discardedPaths = append(m.discardedPaths, path)
-	return m.discardErr
+	if m.DiscardFileFunc != nil {
+		return m.DiscardFileFunc(ctx, path)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -150,11 +204,11 @@ func TestNew(t *testing.T) {
 }
 
 func TestInit_ReturnsLoadCmd(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "file.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
@@ -162,14 +216,14 @@ func TestInit_ReturnsLoadCmd(t *testing.T) {
 }
 
 func TestStatusLoaded_GroupsFiles(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 			{Path: "untracked.go", StagedStatus: git.StatusUntracked, WorktreeStatus: git.StatusUntracked},
 			{Path: "both.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 
 	// Verify sections are present in correct order.
@@ -192,9 +246,9 @@ func TestStatusLoaded_GroupsFiles(t *testing.T) {
 }
 
 func TestStatusLoaded_EmptyRepo(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{},
-	}
+	})
 	p := newTestPanel(t, mock)
 
 	assert.Empty(t, p.rows)
@@ -203,9 +257,9 @@ func TestStatusLoaded_EmptyRepo(t *testing.T) {
 }
 
 func TestStatusLoaded_Error(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusErr: assert.AnError,
-	}
+	})
 	p := newTestPanel(t, mock)
 
 	view := p.View(80, 24)
@@ -229,13 +283,13 @@ func TestView_ZeroDimensions(t *testing.T) {
 }
 
 func TestNavigation_JK(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "b.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "c.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -260,12 +314,12 @@ func TestNavigation_JK(t *testing.T) {
 }
 
 func TestNavigation_GotoTopBottom(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "b.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -283,11 +337,11 @@ func TestNavigation_GotoTopBottom(t *testing.T) {
 }
 
 func TestStageFile_EmitsCommand(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -308,11 +362,11 @@ func TestStageFile_EmitsCommand(t *testing.T) {
 }
 
 func TestUnstageFile_EmitsCommand(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -330,12 +384,12 @@ func TestUnstageFile_EmitsCommand(t *testing.T) {
 }
 
 func TestStageAll(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 			{Path: "b.go", StagedStatus: git.StatusUntracked, WorktreeStatus: git.StatusUntracked},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -350,11 +404,11 @@ func TestStageAll(t *testing.T) {
 }
 
 func TestToggleSelection(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -372,11 +426,11 @@ func TestToggleSelection(t *testing.T) {
 }
 
 func TestRefresh(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -388,11 +442,11 @@ func TestRefresh(t *testing.T) {
 }
 
 func TestRefreshGitStatusMsg(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 
@@ -403,7 +457,7 @@ func TestRefreshGitStatusMsg(t *testing.T) {
 }
 
 func TestExpandFile(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
@@ -423,7 +477,7 @@ func TestExpandFile(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -461,11 +515,11 @@ func TestExpandFile(t *testing.T) {
 }
 
 func TestCollapseFile(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -488,11 +542,11 @@ func TestCollapseFile(t *testing.T) {
 }
 
 func TestHunkMode(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -581,11 +635,11 @@ func TestStatusIndicator(t *testing.T) {
 }
 
 func TestUnfocusedKeyIgnored(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	// Don't focus.
 	p.SetSize(80, 24)
@@ -596,11 +650,11 @@ func TestUnfocusedKeyIgnored(t *testing.T) {
 }
 
 func TestStageOnSectionHeader_StagesSection(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -612,11 +666,11 @@ func TestStageOnSectionHeader_StagesSection(t *testing.T) {
 }
 
 func TestExpandUntracked_NoOp(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "new.go", StagedStatus: git.StatusUntracked, WorktreeStatus: git.StatusUntracked},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -630,12 +684,12 @@ func TestExpandUntracked_NoOp(t *testing.T) {
 }
 
 func TestView_RendersContent(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "src/main.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "README.md", StagedStatus: git.StatusUntracked, WorktreeStatus: git.StatusUntracked},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -668,11 +722,11 @@ func TestStatusCodeLabel(t *testing.T) {
 }
 
 func TestGitStatusChangedMsg_Emitted(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := New(mock, nil)
 	cmd := p.Init(context.Background())
 	require.NotNil(t, cmd)
@@ -698,11 +752,11 @@ func TestGitStatusChangedMsg_Emitted(t *testing.T) {
 // diff cached, and rows rebuilt. The rows contain section + file + hunk + difflines.
 func setupExpandedPanel(t *testing.T) (*GitStatus, *mockGitClient) {
 	t.Helper()
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "src/main.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -783,11 +837,11 @@ func TestStageAtCursorOnDiffLineRow(t *testing.T) {
 }
 
 func TestUnstageAtCursorOnSectionHeader_UnstagesSection(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -819,11 +873,11 @@ func TestUnstageAtCursorOnHunkRow(t *testing.T) {
 }
 
 func TestExpandOrEnterOnSectionHeader(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -844,7 +898,7 @@ func TestViewportScrolling(t *testing.T) {
 			WorktreeStatus: git.StatusUnmodified,
 		})
 	}
-	mock := &mockGitClient{statusResult: files}
+	mock := newMockGitClient(mockGitClientOptions{statusResult: files})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 5) // Very small viewport — only 5 visible rows
@@ -876,11 +930,11 @@ func TestEnterLineModeFromHunkRow(t *testing.T) {
 }
 
 func TestDiffLoadedError(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -893,11 +947,11 @@ func TestDiffLoadedError(t *testing.T) {
 }
 
 func TestStageResultError(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -908,11 +962,11 @@ func TestStageResultError(t *testing.T) {
 }
 
 func TestFileKeyUnstagedSection(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "b.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -934,12 +988,12 @@ func TestFileKeyUnstagedSection(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMouseClick_SelectsFile(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -951,11 +1005,11 @@ func TestMouseClick_SelectsFile(t *testing.T) {
 }
 
 func TestMouseClick_SkipsHeader(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -967,11 +1021,11 @@ func TestMouseClick_SkipsHeader(t *testing.T) {
 }
 
 func TestMouseClick_OutOfBounds(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -981,11 +1035,11 @@ func TestMouseClick_OutOfBounds(t *testing.T) {
 }
 
 func TestMouseDoubleClick_StagesFile(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -998,11 +1052,11 @@ func TestMouseDoubleClick_StagesFile(t *testing.T) {
 }
 
 func TestMouseDoubleClick_SkipsHeader(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -1012,7 +1066,7 @@ func TestMouseDoubleClick_SkipsHeader(t *testing.T) {
 }
 
 func TestMouseWheel_Down(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "b.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
@@ -1020,7 +1074,7 @@ func TestMouseWheel_Down(t *testing.T) {
 			{Path: "d.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "e.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 3)
@@ -1031,13 +1085,13 @@ func TestMouseWheel_Down(t *testing.T) {
 }
 
 func TestMouseWheel_Up(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "b.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 			{Path: "c.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 3)
@@ -1048,11 +1102,11 @@ func TestMouseWheel_Up(t *testing.T) {
 }
 
 func TestMouseWheel_UpAtTop(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "a.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -1067,11 +1121,11 @@ func TestMouseWheel_UpAtTop(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRightClickShowsActionPicker(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -1087,11 +1141,11 @@ func TestRightClickShowsActionPicker(t *testing.T) {
 }
 
 func TestRightClickOutOfBounds(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -1108,11 +1162,11 @@ func TestRightClickOutOfBounds(t *testing.T) {
 // diff cached, and rows rebuilt. Tests can verify hunk/line staging calls.
 func setupExpandedUnstagedPanel(t *testing.T) (*GitStatus, *mockGitClient) {
 	t.Helper()
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "app.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := newTestPanel(t, mock)
 	p.Focus()
 	p.SetSize(80, 24)
@@ -1239,11 +1293,11 @@ func TestUnstageLineFromStagedSection(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRepoChangedMsg_NonGitDir(t *testing.T) {
-	mock := &mockGitClient{
+	mock := newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{
 			{Path: "file.go", WorktreeStatus: git.StatusModified},
 		},
-	}
+	})
 	p := New(mock, nil)
 	p.Init(context.Background())
 
@@ -1265,9 +1319,9 @@ func TestRepoChangedMsg_NonGitDir(t *testing.T) {
 
 func TestDiscardAtCursor_UnstagedFile_ShowsConfirm(t *testing.T) {
 	file := git.FileStatus{Path: "modified.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	p.Focus()
 	p.SetSize(80, 24)
 	// Rows: unstaged header (0), file (1)
@@ -1286,9 +1340,9 @@ func TestDiscardAtCursor_UnstagedFile_ShowsConfirm(t *testing.T) {
 
 func TestDiscardAtCursor_StagedFile_NoOp(t *testing.T) {
 	file := git.FileStatus{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified}
-	p := newTestPanel(t, &mockGitClient{
+	p := newTestPanel(t, newMockGitClient(mockGitClientOptions{
 		statusResult: []git.FileStatus{file},
-	})
+	}))
 	p.Focus()
 	p.SetSize(80, 24)
 	// Rows: staged header (0), file (1)

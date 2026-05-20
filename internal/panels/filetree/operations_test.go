@@ -2,6 +2,8 @@ package filetree
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,7 +95,7 @@ func TestMoveFile(t *testing.T) {
 
 	// Source should not exist.
 	_, err = os.Stat(src)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestMoveFile_Directory(t *testing.T) {
@@ -112,7 +114,7 @@ func TestMoveFile_Directory(t *testing.T) {
 	assert.Equal(t, []byte("f"), got)
 
 	_, err = os.Stat(srcDir)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +130,7 @@ func TestDeleteFile_RegularFile(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = os.Stat(path)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestDeleteFile_DirectoryRecursive(t *testing.T) {
@@ -142,7 +144,7 @@ func TestDeleteFile_DirectoryRecursive(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = os.Stat(dir)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestBulkDelete(t *testing.T) {
@@ -162,7 +164,7 @@ func TestBulkDelete(t *testing.T) {
 
 	for _, f := range files {
 		_, err := os.Stat(f)
-		assert.True(t, os.IsNotExist(err), "expected %q to be deleted", f)
+		assert.True(t, errors.Is(err, fs.ErrNotExist), "expected %q to be deleted", f)
 	}
 }
 
@@ -184,7 +186,7 @@ func TestRenameFile(t *testing.T) {
 	assert.Equal(t, []byte("data"), got)
 
 	_, err = os.Stat(oldPath)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestRenameFile_InvalidName(t *testing.T) {

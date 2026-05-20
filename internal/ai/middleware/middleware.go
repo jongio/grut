@@ -134,6 +134,10 @@ func (c *AIGitClient) BranchList(ctx context.Context) ([]git.Branch, error) {
 	return c.inner.BranchList(ctx)
 }
 
+func (c *AIGitClient) CurrentBranch(ctx context.Context) (git.Branch, error) {
+	return c.inner.CurrentBranch(ctx)
+}
+
 func (c *AIGitClient) BranchCreate(ctx context.Context, name string, base string) error {
 	return c.inner.BranchCreate(ctx, name, base)
 }

@@ -3,7 +3,9 @@ package ai
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,7 +312,7 @@ func TestAuditLoggerRotationMaxFiles(t *testing.T) {
 
 	// .4 should NOT exist (max 3 rotated files).
 	_, err = os.Stat(logPath + ".4")
-	assert.True(t, os.IsNotExist(err), ".4 should not exist (max 3 rotated)")
+	assert.True(t, errors.Is(err, fs.ErrNotExist), ".4 should not exist (max 3 rotated)")
 }
 
 // ---------------------------------------------------------------------------
@@ -438,7 +440,7 @@ func TestAuditLoggerConcurrentRotation(t *testing.T) {
 
 	// .4 must not exist.
 	_, err = os.Stat(logPath + ".4")
-	assert.True(t, os.IsNotExist(err), ".4 should not exist (max 3 rotated)")
+	assert.True(t, errors.Is(err, fs.ErrNotExist), ".4 should not exist (max 3 rotated)")
 }
 
 // ---------------------------------------------------------------------------

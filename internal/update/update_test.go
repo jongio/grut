@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -379,7 +380,7 @@ func TestReplaceUnix(t *testing.T) {
 		t.Errorf("replaced content = %q, want %q", string(got), "new binary")
 	}
 
-	if _, err := os.Stat(exePath + ".new"); !os.IsNotExist(err) {
+	if _, err := os.Stat(exePath + ".new"); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("expected .new temp file to be cleaned up")
 	}
 }

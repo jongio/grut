@@ -205,18 +205,15 @@ type tabPagination struct {
 type IssueFilterKind int
 
 const (
-	issueFilterAll       IssueFilterKind = iota
-	issueFilterAssigned                  // assignee == current user
-	issueFilterMentioned                 // placeholder — shows all
-	issueFilterCreated                   // author == current user
+	issueFilterAll      IssueFilterKind = iota
+	issueFilterAssigned                 // assignee == current user
+	issueFilterCreated                  // author == current user
 )
 
 func (f IssueFilterKind) String() string {
 	switch f {
 	case issueFilterAssigned:
 		return "Assigned"
-	case issueFilterMentioned:
-		return "Mentioned"
 	case issueFilterCreated:
 		return "Created"
 	default:
@@ -1123,7 +1120,7 @@ func (p *Panel) ghTabCountStr(tab tabID) string {
 // Quick filter cycling
 // ---------------------------------------------------------------------------
 func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
-	p.gh.issueFilter = (p.gh.issueFilter + 1) % 4
+	p.gh.issueFilter = (p.gh.issueFilter + 1) % 3
 	p.applyIssueFilter()
 	filter := p.gh.issueFilter.String()
 	return p, func() tea.Msg {
@@ -1164,9 +1161,6 @@ func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
 	switch p.gh.issueFilter {
 	case issueFilterAssigned:
 		return iss.Assignee == p.gh.user
-	case issueFilterMentioned:
-		// GitHub list API doesn't expose "mentioned" — show all for now.
-		return true
 	case issueFilterCreated:
 		return iss.Author == p.gh.user
 	default:

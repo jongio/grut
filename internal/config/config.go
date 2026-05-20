@@ -208,9 +208,12 @@ type MCPSecurityConfig struct {
 	MaxAgentProcesses   int      `toml:"max_agent_processes"`
 	AgentTimeout        int      `toml:"agent_timeout"`
 	RequireConfirmation bool     `toml:"require_confirmation"`
-	SocketAuth          bool     `toml:"socket_auth"`
-	FollowSymlinks      bool     `toml:"follow_symlinks"`
-	AuditLog            bool     `toml:"audit_log"`
+	// TODO(#174): socket_auth is declared but not enforced — no code in internal/mcp/
+	// reads this field. Users setting socket_auth=true get no authentication on the
+	// MCP socket. Wire up enforcement or remove this field in a future release.
+	SocketAuth     bool `toml:"socket_auth"`
+	FollowSymlinks bool `toml:"follow_symlinks"`
+	AuditLog       bool `toml:"audit_log"`
 }
 
 // ExtensionsConfig controls the extension/plugin system.

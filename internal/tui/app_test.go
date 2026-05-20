@@ -18,6 +18,7 @@ import (
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/notify"
+	"github.com/jongio/grut/internal/overlayreg"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/session"
 	"github.com/jongio/grut/internal/theme"
@@ -40,7 +41,7 @@ func newTestModel(t *testing.T) Model {
 	require.NoError(t, err)
 	bmMgr := bm.NewManager(cfg.Bookmarks)
 	bmMgr.SetConfigDir(t.TempDir())
-	return New(engine, th, km, bmMgr)
+	return New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr))
 }
 
 func TestNewModel(t *testing.T) {
@@ -1889,6 +1890,18 @@ func (m *mockFullGitOps) Status(_ context.Context) ([]git.FileStatus, error) {
 
 func (m *mockFullGitOps) BranchList(_ context.Context) ([]git.Branch, error) {
 	return m.branches, m.branchErr
+}
+
+func (m *mockFullGitOps) CurrentBranch(_ context.Context) (git.Branch, error) {
+	if m.branchErr != nil {
+		return git.Branch{}, m.branchErr
+	}
+	for _, b := range m.branches {
+		if b.IsCurrent {
+			return b, nil
+		}
+	}
+	return git.Branch{IsCurrent: true}, nil
 }
 
 func newTestModelWithFullGit(t *testing.T, mock *mockFullGitOps) Model {

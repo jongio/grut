@@ -549,7 +549,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 		clearEditSelection(p)
 		p.cursorCol = 0
 
-	case "end", "ctrl+e":
+	case "end", "ctrl+e": //nolint:goconst // key name, not a magic string
 		clearEditSelection(p)
 		if p.editBuf != nil {
 			line := p.editBuf.Line(p.cursorLine)
