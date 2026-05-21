@@ -2,6 +2,8 @@ package chat
 
 import "strings"
 
+const maxInputHistoryEntries = 200
+
 // InputHistory provides terminal-style input history with Up/Down navigation.
 type InputHistory struct {
 	draft   string   // in-progress text saved when user starts browsing
@@ -20,6 +22,12 @@ func (h *InputHistory) Push(entry string) {
 		return
 	}
 	h.entries = append(h.entries, entry)
+	if len(h.entries) > maxInputHistoryEntries {
+		start := len(h.entries) - maxInputHistoryEntries
+		entries := make([]string, maxInputHistoryEntries)
+		copy(entries, h.entries[start:])
+		h.entries = entries
+	}
 	h.index = -1
 }
 

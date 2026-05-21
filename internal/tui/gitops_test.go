@@ -3,6 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -25,21 +28,24 @@ import (
 type mockGitOps struct {
 	git.GitClient // embedded nil — panics on any unused method
 
-	commitHash   string
-	commitErr    error
-	pushErr      error
-	pullErr      error
-	fetchErr     error
-	discardErr   error
-	unstageErr   error
-	commitCalls  int
-	pushCalls    int
-	pullCalls    int
-	fetchCalls   int
-	discardCalls int
-	unstageCalls int
-	discardPath  string
-	unstagePaths []string
+	commitHash    string
+	commitErr     error
+	pushErr       error
+	pullErr       error
+	fetchErr      error
+	discardErr    error
+	unstageErr    error
+	repoRoot      string
+	repoRootErr   error
+	commitCalls   int
+	pushCalls     int
+	pullCalls     int
+	fetchCalls    int
+	discardCalls  int
+	unstageCalls  int
+	repoRootCalls int
+	discardPath   string
+	unstagePaths  []string
 }
 
 func (m *mockGitOps) Commit(_ context.Context, _ string, _ git.CommitOpts) (string, error) {
@@ -60,6 +66,14 @@ func (m *mockGitOps) Pull(_ context.Context, _ git.PullOpts) error {
 func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error {
 	m.fetchCalls++
 	return m.fetchErr
+}
+
+func (m *mockGitOps) RepoRoot(_ context.Context) (string, error) {
+	m.repoRootCalls++
+	if m.repoRoot != "" {
+		return m.repoRoot, m.repoRootErr
+	}
+	return "/repo", m.repoRootErr
 }
 
 func (m *mockGitOps) DiscardFile(_ context.Context, path string) error {
@@ -436,6 +450,17 @@ func executeBatchCmd(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	return msgs
 }
 
+func executeFirstBatchCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	require.True(t, ok, "expected batch command")
+	require.NotEmpty(t, batch)
+	require.NotNil(t, batch[0])
+	return batch[0]()
+}
+
 func TestBranchChangedMsgUpdatesStatusBar(t *testing.T) {
 	m := newTestModelReady(t)
 
@@ -571,6 +596,131 @@ func TestAutoFetchTickCmdReturnsCommandForPositiveInterval(t *testing.T) {
 	})
 	cmd := m.autoFetchTickCmd()
 	assert.NotNil(t, cmd, "should return a tick command for positive interval")
+}
+
+func TestAcquireAutoFetchPermitSerializesRepoFetch(t *testing.T) {
+	originalDir := autoFetchCoordinationDir
+	originalNow := autoFetchNow
+	t.Cleanup(func() {
+		autoFetchCoordinationDir = originalDir
+		autoFetchNow = originalNow
+	})
+
+	tempDir := t.TempDir()
+	now := time.Unix(1_700_000_000, 0)
+	autoFetchCoordinationDir = func() (string, error) { return tempDir, nil }
+	autoFetchNow = func() time.Time { return now }
+
+	release, acquired, err := acquireAutoFetchPermit("/repo", 5*time.Minute)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.NotNil(t, release)
+
+	secondRelease, acquired, err := acquireAutoFetchPermit("/repo", 5*time.Minute)
+	require.NoError(t, err)
+	require.False(t, acquired, "active lock should suppress concurrent auto-fetch")
+	require.Nil(t, secondRelease)
+
+	release(true)
+
+	secondRelease, acquired, err = acquireAutoFetchPermit("/repo", 5*time.Minute)
+	require.NoError(t, err)
+	require.False(t, acquired, "fresh successful fetch stamp should suppress redundant auto-fetch")
+	require.Nil(t, secondRelease)
+
+	now = now.Add(6 * time.Minute)
+	secondRelease, acquired, err = acquireAutoFetchPermit("/repo", 5*time.Minute)
+	require.NoError(t, err)
+	require.True(t, acquired, "expired stamp should allow the next auto-fetch")
+	require.NotNil(t, secondRelease)
+	secondRelease(false)
+}
+
+func TestCreateAutoFetchLockRecoversStaleLock(t *testing.T) {
+	tempDir := t.TempDir()
+	lockPath := filepath.Join(tempDir, autoFetchRepoKey("/repo")+".lock")
+	now := time.Unix(1_700_000_000, 0)
+	stale := now.Add(-autoFetchLockStaleAfter - time.Minute)
+
+	require.NoError(t, os.WriteFile(lockPath, []byte("stale\n"), 0o600))
+	require.NoError(t, os.Chtimes(lockPath, stale, stale))
+
+	lockFile, err := createAutoFetchLock(lockPath, now)
+	require.NoError(t, err)
+	require.NotNil(t, lockFile)
+	require.NoError(t, lockFile.Close())
+
+	info, err := os.Stat(lockPath)
+	require.NoError(t, err)
+	assert.False(t, info.ModTime().Equal(stale), "stale lock should be replaced")
+}
+
+func TestAutoFetchRepoKeyNormalizesWindowsPathCase(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path casing is only normalized on Windows")
+	}
+
+	assert.Equal(t, autoFetchRepoKey(`C:\Code\Grut`), autoFetchRepoKey(`c:\code\grut`))
+}
+
+func TestAutoFetchTickSkipsFetchWhenRepoHasFreshStamp(t *testing.T) {
+	originalDir := autoFetchCoordinationDir
+	originalNow := autoFetchNow
+	t.Cleanup(func() {
+		autoFetchCoordinationDir = originalDir
+		autoFetchNow = originalNow
+	})
+
+	tempDir := t.TempDir()
+	now := time.Unix(1_700_000_000, 0)
+	autoFetchCoordinationDir = func() (string, error) { return tempDir, nil }
+	autoFetchNow = func() time.Time { return now }
+
+	release, acquired, err := acquireAutoFetchPermit("/repo", 5*time.Minute)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	release(true)
+
+	mock := &mockGitOps{repoRoot: "/repo"}
+	m := newTestModelWithGit(t, mock)
+	m.cfg.Git.AutoFetchInterval = config.Duration{Duration: 5 * time.Minute}
+
+	_, cmd := m.handleAutoFetchTick()
+	msg := executeFirstBatchCmd(t, cmd)
+
+	assert.Nil(t, msg)
+	assert.Equal(t, 1, mock.repoRootCalls)
+	assert.Zero(t, mock.fetchCalls, "fresh repo stamp should skip redundant auto-fetch")
+}
+
+func TestAutoFetchTickFetchesAndStampsWhenPermitAvailable(t *testing.T) {
+	originalDir := autoFetchCoordinationDir
+	originalNow := autoFetchNow
+	t.Cleanup(func() {
+		autoFetchCoordinationDir = originalDir
+		autoFetchNow = originalNow
+	})
+
+	tempDir := t.TempDir()
+	now := time.Unix(1_700_000_000, 0)
+	autoFetchCoordinationDir = func() (string, error) { return tempDir, nil }
+	autoFetchNow = func() time.Time { return now }
+
+	mock := &mockGitOps{repoRoot: "/repo"}
+	m := newTestModelWithGit(t, mock)
+	m.cfg.Git.AutoFetchInterval = config.Duration{Duration: 5 * time.Minute}
+
+	_, cmd := m.handleAutoFetchTick()
+	msg := executeFirstBatchCmd(t, cmd)
+
+	_, ok := msg.(panels.RefreshGitStatusMsg)
+	require.True(t, ok)
+	assert.Equal(t, 1, mock.fetchCalls)
+
+	_, cmd = m.handleAutoFetchTick()
+	msg = executeFirstBatchCmd(t, cmd)
+	assert.Nil(t, msg)
+	assert.Equal(t, 1, mock.fetchCalls, "successful stamp should suppress the next same-repo fetch")
 }
 
 func TestAutoFetchTickSkipsWhenAsyncOpRunning(t *testing.T) {

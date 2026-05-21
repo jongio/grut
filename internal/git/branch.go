@@ -37,12 +37,12 @@ func (c *Client) BranchList(ctx context.Context) ([]Branch, error) {
 // without enumerating all branches. Uses `git rev-parse --abbrev-ref HEAD`
 // for the name and `git status --porcelain=v2 --branch` for tracking counts.
 func (c *Client) CurrentBranch(ctx context.Context) (Branch, error) {
-	nameOut, err := c.run(ctx, "rev-parse", "--abbrev-ref", "HEAD")
+	nameOut, err := c.run(ctx, "rev-parse", "--abbrev-ref", refHEAD)
 	if err != nil {
 		return Branch{}, fmt.Errorf("current branch: %w", err)
 	}
 	name := strings.TrimSpace(nameOut)
-	if name == "" || name == "HEAD" {
+	if name == "" || name == refHEAD {
 		// Detached HEAD state.
 		return Branch{Name: name, IsCurrent: true}, nil
 	}

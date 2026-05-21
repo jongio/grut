@@ -44,7 +44,7 @@ func TestHandleMetaLoaded(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.gh.user = "pre-existing"
 
 			result, cmd := p.handleMetaLoaded(tt.msg)
@@ -116,7 +116,7 @@ func TestHandleIssuesPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.gh.allIssues = tt.existing
 			p.tabPaging[tabIssues] = tabPagination{loading: true}
 
@@ -137,7 +137,7 @@ func TestHandleIssuesPage(t *testing.T) {
 
 func TestHandleIssuesPage_MaxCapEnforced(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	// Pre-populate with MaxPaginationItems-1 issues.
 	existing := make([]ghIssueItem, ghclient.MaxPaginationItems-1)
@@ -215,7 +215,7 @@ func TestHandlePRsPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.gh.allPRs = tt.existing
 			p.tabPaging[tabPRs] = tabPagination{loading: true}
 
@@ -233,7 +233,7 @@ func TestHandlePRsPage(t *testing.T) {
 
 func TestHandlePRsPage_MaxCapEnforced(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	existing := make([]ghPRItem, ghclient.MaxPaginationItems-1)
 	for i := range existing {
@@ -324,7 +324,7 @@ func TestHandleActionsPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.tabItems[tabActions] = tt.existingActions
 			p.tabPaging[tabActions] = tabPagination{loading: true}
 
@@ -391,7 +391,7 @@ func TestHandleWorkflowsPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.tabItems[tabWorkflows] = tt.existing
 			p.tabPaging[tabWorkflows] = tabPagination{loading: true}
 
@@ -457,7 +457,7 @@ func TestHandleReleasesPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.tabItems[tabReleases] = tt.existing
 			p.tabPaging[tabReleases] = tabPagination{loading: true}
 
@@ -478,7 +478,7 @@ func TestHandleReleasesPage(t *testing.T) {
 
 func TestHandleActionsPage_ResetsCursorOnReplace(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabActions] = 5
 	p.tabOffset[tabActions] = 3
 
@@ -495,7 +495,7 @@ func TestHandleActionsPage_ResetsCursorOnReplace(t *testing.T) {
 
 func TestHandleWorkflowsPage_ResetsCursorOnReplace(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabWorkflows] = 4
 	p.tabOffset[tabWorkflows] = 2
 
@@ -512,7 +512,7 @@ func TestHandleWorkflowsPage_ResetsCursorOnReplace(t *testing.T) {
 
 func TestHandleReleasesPage_ResetsCursorOnReplace(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabReleases] = 3
 	p.tabOffset[tabReleases] = 1
 
@@ -533,7 +533,7 @@ func TestHandleReleasesPage_ResetsCursorOnReplace(t *testing.T) {
 
 func TestHandleIssuesPage_PreservesCursorOnAppend(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allIssues = []ghIssueItem{{Number: 1, Title: "first"}}
 	p.tabCursor[tabIssues] = 0
 	p.tabOffset[tabIssues] = 0

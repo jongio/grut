@@ -179,6 +179,7 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 			Skip:     skip,
 			All:      showAll,
 			Ref:      ref,
+			OmitBody: true,
 		})
 		if err != nil {
 			return notify.ShowToastMsg{

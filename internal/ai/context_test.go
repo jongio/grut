@@ -1078,10 +1078,7 @@ func TestNewAuditLogger_MkdirAllError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCopilotProvider_EnsureStartedNoop(t *testing.T) {
-	// After once.Do has executed, ensureStarted returns the cached
-	// startErr without touching the client again.
-	p := &CopilotProvider{}
-	p.once.Do(func() {}) // simulate already-started (no error)
-	err := p.ensureStarted(context.Background())
+	p := &CopilotProvider{started: true}
+	err := p.ensureStarted(t.Context())
 	assert.NoError(t, err)
 }

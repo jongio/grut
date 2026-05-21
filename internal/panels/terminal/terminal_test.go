@@ -29,6 +29,13 @@ type mockRunner struct {
 	closed    bool
 }
 
+type windowMockRunner struct {
+	*mockRunner
+	windowCalls int
+	lastOffset  int
+	lastHeight  int
+}
+
 func newMockRunner(lines []string) *mockRunner {
 	return &mockRunner{
 		lines:    lines,
@@ -53,6 +60,26 @@ func (m *mockRunner) Lines() []string {
 	cp := make([]string, len(m.lines))
 	copy(cp, m.lines)
 	return cp
+}
+
+func (m *windowMockRunner) LinesWindow(offsetFromBottom, height int) ([]string, int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.windowCalls++
+	m.lastOffset = offsetFromBottom
+	m.lastHeight = height
+	total := len(m.lines)
+	end := total - offsetFromBottom
+	if end < 0 {
+		end = 0
+	}
+	start := end - height
+	if start < 0 {
+		start = 0
+	}
+	cp := make([]string, end-start)
+	copy(cp, m.lines[start:end])
+	return cp, total
 }
 
 func (m *mockRunner) Close() error {
@@ -588,6 +615,57 @@ func TestTickUpdatesLines(t *testing.T) {
 
 	// A new tick should be scheduled.
 	require.NotNil(t, cmd)
+}
+
+func TestTickUsesWindowedRunnerWhenAvailable(t *testing.T) {
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	runner := &windowMockRunner{mockRunner: newMockRunner(lines)}
+	p := New(defaultCfg(), runner, "test-shell", nil)
+	p.SetSize(80, 5)
+
+	_, cmd := p.Update(tickMsg{time: time.Now()})
+
+	assert.Equal(t, 1, runner.windowCalls)
+	assert.Equal(t, 0, runner.lastOffset)
+	assert.Equal(t, 4, runner.lastHeight)
+	assert.Equal(t, 100, p.lineCount)
+	assert.Len(t, p.lines, 4)
+	assert.Contains(t, p.lines, "output line 99")
+	assert.NotContains(t, p.lines, "output line 0")
+	require.NotNil(t, cmd)
+}
+
+func TestScrollWithWindowedRunner(t *testing.T) {
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	runner := &windowMockRunner{mockRunner: newMockRunner(lines)}
+	p := New(defaultCfg(), runner, "test-shell", nil)
+	p.SetSize(80, 5)
+
+	_, cmd := p.Update(tickMsg{time: time.Now()})
+	require.NotNil(t, cmd)
+
+	p.scrollUp()
+	assert.Equal(t, 1, p.offset)
+	assert.Equal(t, 1, runner.lastOffset)
+	assert.Contains(t, p.lines, "output line 98")
+	assert.NotContains(t, p.lines, "output line 99")
+
+	p.scrollToTop()
+	assert.Equal(t, 96, p.offset)
+	assert.Equal(t, 96, runner.lastOffset)
+	assert.Contains(t, p.lines, "output line 0")
+	assert.NotContains(t, p.lines, "output line 99")
+
+	p.scrollDown()
+	assert.Equal(t, 95, p.offset)
+	assert.Equal(t, 95, runner.lastOffset)
+	assert.Contains(t, p.lines, "output line 4")
 }
 
 func TestTickDetectsProcessExit(t *testing.T) {

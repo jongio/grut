@@ -26,13 +26,16 @@ import (
 // forwarded to the SDK. Callers relying on intermediate ToolCalls in the
 // CompletionResponse should be aware this provider does not produce them.
 type CopilotProvider struct {
-	startErr error // cached startup error
-	client   *copilot.Client
-	model    string
-	once     sync.Once  // ensures client.Start is called exactly once
-	startMu  sync.Mutex // protects Close while startup is in progress
-	started  bool       // true after ensureStarted has been called (regardless of outcome)
+	startErr  error // most recent startup error
+	client    *copilot.Client
+	model     string
+	startMu   sync.Mutex // protects startup state and Close while startup is in progress
+	starting  bool
+	startDone chan struct{}
+	started   bool // true after client.Start succeeds
 }
+
+const copilotStartTimeout = 30 * time.Second
 
 // NewCopilotProvider creates a CopilotProvider backed by the Copilot SDK.
 // If model is empty the SDK / server selects a default model.
@@ -201,32 +204,71 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 
 // Close stops the Copilot CLI client if it was started.
 func (p *CopilotProvider) Close() error {
-	p.startMu.Lock()
-	defer p.startMu.Unlock()
-	// Only stop if ensureStarted was called and succeeded.
-	if p.started && p.startErr == nil {
-		if err := p.client.Stop(); err != nil {
-			return fmt.Errorf("copilot: stop client: %w", err)
+	for {
+		p.startMu.Lock()
+		if p.starting {
+			done := p.startDone
+			p.startMu.Unlock()
+			<-done
+			continue
 		}
+		defer p.startMu.Unlock()
+		if p.started && p.startErr == nil {
+			if err := p.client.Stop(); err != nil {
+				return fmt.Errorf("copilot: stop client: %w", err)
+			}
+			p.started = false
+		}
+		return nil
 	}
-	return nil
 }
 
 // ---------------------------------------------------------------------------
 // Lazy startup
 // ---------------------------------------------------------------------------
 // ensureStarted lazily starts the Copilot CLI client on first use.
-// Uses sync.Once to avoid holding a mutex during the blocking Start
-// call (CWE-667).
+// Concurrent callers share one in-flight startup. Failed startup attempts are
+// retryable because sync.Once would permanently cache transient errors.
 func (p *CopilotProvider) ensureStarted(ctx context.Context) error {
-	p.once.Do(func() {
-		p.started = true
-		p.startErr = p.client.Start(ctx)
-		if p.startErr != nil {
-			p.startErr = fmt.Errorf("copilot: start client: %w", p.startErr)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		p.startMu.Lock()
+		if p.started && p.startErr == nil {
+			p.startMu.Unlock()
+			return nil
 		}
-	})
-	return p.startErr
+		if p.starting {
+			done := p.startDone
+			p.startMu.Unlock()
+			select {
+			case <-done:
+				continue
+			case <-ctx.Done():
+				return fmt.Errorf("copilot: start client: %w", ctx.Err())
+			}
+		}
+		p.starting = true
+		p.startDone = make(chan struct{})
+		done := p.startDone
+		p.startMu.Unlock()
+
+		startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), copilotStartTimeout)
+		err := p.client.Start(startCtx)
+		cancel()
+		if err != nil {
+			err = fmt.Errorf("copilot: start client: %w", err)
+		}
+
+		p.startMu.Lock()
+		p.startErr = err
+		p.started = err == nil
+		p.starting = false
+		close(done)
+		p.startMu.Unlock()
+		return err
+	}
 }
 
 // ---------------------------------------------------------------------------

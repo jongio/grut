@@ -131,6 +131,7 @@ type LogOpts struct {
 	Skip     int    // Number of commits to skip (for pagination)
 	All      bool   // Show all refs
 	Graph    bool   // Include graph data
+	OmitBody bool   // Skip commit body text for list-only views
 }
 
 // CommitOpts configures a git commit operation.

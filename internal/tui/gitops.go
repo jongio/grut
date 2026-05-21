@@ -2,10 +2,15 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -55,6 +60,23 @@ type unstageFileDoneMsg struct{ err error }
 
 // asyncOpFetching is the status label shown during fetch operations.
 const asyncOpFetching = "fetching..."
+
+const autoFetchLockStaleAfter = 10 * time.Minute
+
+const autoFetchTimeout = time.Minute
+
+const gitUserRemoteTimeout = 30 * time.Minute
+
+var (
+	autoFetchNow             = time.Now
+	autoFetchCoordinationDir = func() (string, error) {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(cacheDir, "grut", "autofetch"), nil
+	}
+)
 
 // ---------------------------------------------------------------------------
 // Commit
@@ -244,7 +266,7 @@ func (m Model) handlePush() (tea.Model, tea.Cmd) {
 	}
 
 	m.asyncOp = asyncOpPushing
-	ctx, cancel := context.WithCancel(m.ctx)
+	ctx, cancel := context.WithTimeout(m.ctx, gitUserRemoteTimeout)
 	m.asyncCancel = cancel
 	gc := m.gitClient
 
@@ -264,7 +286,7 @@ func (m Model) handlePull() (tea.Model, tea.Cmd) {
 	}
 
 	m.asyncOp = "pulling..."
-	ctx, cancel := context.WithCancel(m.ctx)
+	ctx, cancel := context.WithTimeout(m.ctx, gitUserRemoteTimeout)
 	m.asyncCancel = cancel
 	gc := m.gitClient
 
@@ -284,7 +306,7 @@ func (m Model) handleFetch() (tea.Model, tea.Cmd) {
 	}
 
 	m.asyncOp = asyncOpFetching
-	ctx, cancel := context.WithCancel(m.ctx)
+	ctx, cancel := context.WithTimeout(m.ctx, gitUserRemoteTimeout)
 	m.asyncCancel = cancel
 	gc := m.gitClient
 
@@ -519,10 +541,39 @@ func (m Model) handleAutoFetchTick() (tea.Model, tea.Cmd) {
 
 	gc := m.gitClient
 	ctx := m.ctx
+	if ctx == nil {
+		return m, nextTick
+	}
+	interval := time.Duration(0)
+	if m.cfg != nil {
+		interval = m.cfg.Git.AutoFetchInterval.Duration
+	}
 
 	return m, tea.Batch(
 		func() tea.Msg {
-			err := gc.Fetch(ctx, git.FetchOpts{All: true, Prune: true})
+			var release func(bool)
+			if interval > 0 {
+				if repoRoot, rootErr := gc.RepoRoot(ctx); rootErr == nil {
+					var acquired bool
+					var permitErr error
+					release, acquired, permitErr = acquireAutoFetchPermit(repoRoot, interval)
+					if permitErr != nil {
+						slog.Warn("auto-fetch coordination failed; fetching without cross-process suppression", "err", permitErr)
+					}
+					if permitErr == nil && !acquired {
+						return nil
+					}
+				} else {
+					slog.Warn("auto-fetch repo root resolution failed; fetching without cross-process suppression", "err", rootErr)
+				}
+			}
+
+			fetchCtx, cancel := context.WithTimeout(ctx, autoFetchTimeout)
+			defer cancel()
+			err := gc.Fetch(fetchCtx, git.FetchOpts{All: true, Prune: true})
+			if release != nil {
+				release(err == nil)
+			}
 			if err != nil {
 				// Auto-fetch shows toast only on error (silent success).
 				errMsg := err.Error()
@@ -535,6 +586,113 @@ func (m Model) handleAutoFetchTick() (tea.Model, tea.Cmd) {
 		},
 		nextTick,
 	)
+}
+
+func acquireAutoFetchPermit(repoRoot string, interval time.Duration) (func(bool), bool, error) {
+	if repoRoot == "" || interval <= 0 {
+		return nil, true, nil
+	}
+
+	dir, err := autoFetchCoordinationDir()
+	if err != nil {
+		return nil, true, fmt.Errorf("resolve auto-fetch coordination dir: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, true, fmt.Errorf("create auto-fetch coordination dir: %w", err)
+	}
+
+	key := autoFetchRepoKey(repoRoot)
+	stampPath := filepath.Join(dir, key+".stamp")
+	lockPath := filepath.Join(dir, key+".lock")
+	now := autoFetchNow()
+
+	fresh, err := autoFetchStampFresh(stampPath, now, interval)
+	if err != nil {
+		return nil, true, err
+	}
+	if fresh {
+		return nil, false, nil
+	}
+
+	lockFile, err := createAutoFetchLock(lockPath, now)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, false, nil
+		}
+		return nil, true, err
+	}
+	if _, writeErr := fmt.Fprintf(lockFile, "%s\n%d\n", repoRoot, now.UnixNano()); writeErr != nil {
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
+		return nil, true, fmt.Errorf("write auto-fetch lock: %w", writeErr)
+	}
+	if err := lockFile.Close(); err != nil {
+		_ = os.Remove(lockPath)
+		return nil, true, fmt.Errorf("close auto-fetch lock: %w", err)
+	}
+
+	release := func(success bool) {
+		if success {
+			stampTime := autoFetchNow()
+			_ = os.WriteFile(stampPath, []byte(fmt.Sprintf("%d\n", stampTime.UnixNano())), 0o600)
+			_ = os.Chtimes(stampPath, stampTime, stampTime)
+		}
+		_ = os.Remove(lockPath)
+	}
+	return release, true, nil
+}
+
+func autoFetchRepoKey(repoRoot string) string {
+	key := filepath.Clean(repoRoot)
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+func autoFetchStampFresh(path string, now time.Time, interval time.Duration) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat auto-fetch stamp: %w", err)
+	}
+	return now.Sub(info.ModTime()) < interval, nil
+}
+
+func createAutoFetchLock(path string, now time.Time) (*os.File, error) {
+	lockFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		return lockFile, nil
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return nil, fmt.Errorf("create auto-fetch lock: %w", err)
+	}
+
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		}
+		return nil, fmt.Errorf("stat auto-fetch lock: %w", statErr)
+	}
+	if now.Sub(info.ModTime()) <= autoFetchLockStaleAfter {
+		return nil, os.ErrExist
+	}
+	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("remove stale auto-fetch lock: %w", removeErr)
+	}
+
+	lockFile, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, os.ErrExist
+		}
+		return nil, fmt.Errorf("create auto-fetch lock: %w", err)
+	}
+	return lockFile, nil
 }
 
 // autoFetchTickCmd returns a tea.Tick command for the next auto-fetch cycle.

@@ -119,8 +119,3 @@ const (
 
 // PR filter display label.
 const labelDraft = "Draft"
-
-// maxPREnrichConcurrency limits the number of parallel GetPR calls used to
-// fetch mergeable state for open PRs.  A small value (3) avoids saturating
-// GitHub API rate limits while still providing reasonable throughput.
-const maxPREnrichConcurrency = 3

@@ -19,7 +19,9 @@ const (
 
 // Undo action type constants.
 const (
-	actionStage   = "stage"
-	actionUnstage = "unstage"
-	actionAmend   = "amend"
+	actionStage        = "stage"
+	actionUnstage      = "unstage"
+	actionBranchDelete = "branch_delete"
+	actionDiscard      = "discard"
+	actionAmend        = "amend"
 )

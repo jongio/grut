@@ -481,8 +481,11 @@ func (p *Panel) Init(ctx context.Context) tea.Cmd {
 	p.ctx = ctx
 	// Resolve GitHub owner/repo from config or git remote.
 	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
-	// Only create GitHub client when we have a valid owner/repo.
-	p.initGitHubClient(ctx)
+	// The Git-only panel only needs owner/repo for header actions; avoid
+	// starting duplicate GitHub API loaders when the GitHub panel is present.
+	if p.mode != ModeGit {
+		p.initGitHubClient(ctx)
+	}
 	// Load git data + GitHub data in parallel.
 	return p.startGitHubLoad()
 }
@@ -504,7 +507,7 @@ func (p *Panel) initGitHubClient(ctx context.Context) {
 // client is available, all GitHub tab data in parallel.
 func (p *Panel) startGitHubLoad() tea.Cmd {
 	cmds := []tea.Cmd{p.loadData()}
-	if p.gh.client != nil {
+	if p.mode != ModeGit && p.gh.client != nil {
 		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
@@ -563,10 +566,14 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	// Re-resolve GitHub owner/repo for the new directory.
 	ctx := p.ctx
 	if ctx == nil {
-		ctx = context.Background()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "GitHub reload skipped: panel is not initialized", Level: notify.Warn}
+		}
 	}
 	p.gh.owner, p.gh.repo = p.gh.cfg.ResolveGitHubRepo(ctx, p.repoRoot)
-	p.initGitHubClient(ctx)
+	if p.mode != ModeGit {
+		p.initGitHubClient(ctx)
+	}
 	if p.git == nil {
 		return p, nil
 	}
@@ -576,10 +583,21 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 func (p *Panel) loadData() tea.Cmd {
 	g := p.git
 	ctx := p.ctx
+	mode := p.mode
 	return func() tea.Msg {
 		branches, brErr := g.BranchList(ctx)
 		if brErr != nil {
 			return dataLoadedMsg{err: brErr}
+		}
+		tags, tgErr := g.TagList(ctx)
+		if tgErr != nil {
+			return dataLoadedMsg{err: tgErr}
+		}
+		if mode == ModeGitHub {
+			return dataLoadedMsg{
+				branches: branches,
+				tags:     tags,
+			}
 		}
 		worktrees, wtErr := g.WorktreeList(ctx)
 		if wtErr != nil {
@@ -592,10 +610,6 @@ func (p *Panel) loadData() tea.Cmd {
 		stashes, stErr := g.StashList(ctx)
 		if stErr != nil {
 			return dataLoadedMsg{err: stErr}
-		}
-		tags, tgErr := g.TagList(ctx)
-		if tgErr != nil {
-			return dataLoadedMsg{err: tgErr}
 		}
 		reflog, rlErr := g.Reflog(ctx, "HEAD", 100)
 		if rlErr != nil {

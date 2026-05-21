@@ -226,8 +226,8 @@ func (p *ClaudeProvider) parseResponse(msg *anthropic.Message) CompletionRespons
 			OutputTokens: int(msg.Usage.OutputTokens),
 		},
 		Metadata: map[string]string{
-			"model":      msg.Model,
-			"message_id": msg.ID,
+			metadataKeyModel: msg.Model,
+			"message_id":     msg.ID,
 		},
 	}
 

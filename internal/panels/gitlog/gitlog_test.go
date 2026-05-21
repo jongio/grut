@@ -81,8 +81,10 @@ func TestNew_DefaultPageSize(t *testing.T) {
 
 func TestInit_LoadsCommits(t *testing.T) {
 	commits := makeCommits(10)
+	var gotOpts git.LogOpts
 	client := &mockGitClient{
 		LogFunc: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+			gotOpts = opts
 			return commits, nil
 		},
 	}
@@ -99,6 +101,7 @@ func TestInit_LoadsCommits(t *testing.T) {
 	require.True(t, ok)
 	assert.Len(t, loaded.commits, 10)
 	assert.False(t, loaded.append)
+	assert.True(t, gotOpts.OmitBody, "list loading should avoid bulk commit body payloads")
 }
 
 func TestHandleCommitsLoaded(t *testing.T) {

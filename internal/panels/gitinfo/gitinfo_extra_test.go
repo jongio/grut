@@ -1,7 +1,6 @@
 package gitinfo
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -174,7 +173,7 @@ func TestItemTypeForKind_AllCases(t *testing.T) {
 func TestRenderTag(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	tests := []struct {
 		name     string
@@ -227,7 +226,7 @@ func TestRenderTag(t *testing.T) {
 func TestRenderReflogEntry(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	tests := []struct {
 		name     string
@@ -297,7 +296,7 @@ func TestRenderReflogEntry(t *testing.T) {
 func TestGuessBranchRemoteURL_WithRemotes(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gitData.lastRemotes = []git.Remote{
 		{Name: "origin", FetchURL: "https://github.com/owner/repo.git"},
 		{Name: "upstream", FetchURL: "https://github.com/other/repo.git"},
@@ -310,7 +309,7 @@ func TestGuessBranchRemoteURL_WithRemotes(t *testing.T) {
 func TestGuessBranchRemoteURL_NoRemotes(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gitData.lastRemotes = nil
 
 	url := p.guessBranchRemoteURL(git.Branch{Name: "main"})
@@ -324,7 +323,7 @@ func TestGuessBranchRemoteURL_NoRemotes(t *testing.T) {
 func TestCopyHashToClipboard_OutOfBounds(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabItems[tabBranches] = nil
 	p.tabCursor[tabBranches] = 0
@@ -337,7 +336,7 @@ func TestCopyHashToClipboard_OutOfBounds(t *testing.T) {
 func TestCopyHashToClipboard_EmptyHash(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabItems[tabBranches] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}, hash: ""},
@@ -350,7 +349,7 @@ func TestCopyHashToClipboard_EmptyHash(t *testing.T) {
 }
 
 func TestCopyHashToClipboard_WithHash(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabItems[tabBranches] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}, hash: "abc1234"},
@@ -371,7 +370,7 @@ func TestCopyHashToClipboard_WithHash(t *testing.T) {
 func TestDoTagPush_OutOfBounds(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = nil
 	p.tabCursor[tabTags] = 0
@@ -384,7 +383,7 @@ func TestDoTagPush_OutOfBounds(t *testing.T) {
 func TestDoTagPush_WrongKind(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindRemoteSub, text: "Tags"},
@@ -399,7 +398,7 @@ func TestDoTagPush_WrongKind(t *testing.T) {
 func TestDoTagPush_ValidTag(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0"}},
@@ -421,7 +420,7 @@ func TestDoTagPush_ValidTag(t *testing.T) {
 func TestDoTagDelete_OutOfBounds(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = nil
 	p.tabCursor[tabTags] = 0
@@ -434,7 +433,7 @@ func TestDoTagDelete_OutOfBounds(t *testing.T) {
 func TestDoTagDelete_RemoteTag(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindRemoteTag, tag: git.Tag{Name: "v2.0.0"}},
@@ -449,7 +448,7 @@ func TestDoTagDelete_RemoteTag(t *testing.T) {
 func TestDoTagDelete_ValidTag(t *testing.T) {
 	t.Parallel()
 
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0"}},
@@ -470,7 +469,7 @@ func TestDoTagDelete_ValidTag(t *testing.T) {
 
 func TestCopyAndToast_Empty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	result, cmd := p.copyAndToast("")
 	assert.NotNil(t, result)
 	assert.Nil(t, cmd, "empty text should be no-op")
@@ -478,7 +477,7 @@ func TestCopyAndToast_Empty(t *testing.T) {
 
 func TestCopyAndToast_Short(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.copyAndToast("abc123")
 	// On CI, clipboard might fail; either way we get a toast.
 	assert.NotNil(t, cmd)
@@ -486,7 +485,7 @@ func TestCopyAndToast_Short(t *testing.T) {
 
 func TestCopyAndToast_LongTruncates(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	longText := "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLM"
 	_, cmd := p.copyAndToast(longText)
 	assert.NotNil(t, cmd)
@@ -498,7 +497,7 @@ func TestCopyAndToast_LongTruncates(t *testing.T) {
 
 func TestOpenURLAndToast(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.openURLAndToast("https://example.com", "Example")
 	assert.NotNil(t, cmd)
 	// Do NOT execute cmd() — it would open a real browser to example.com.
@@ -512,7 +511,7 @@ func TestOpenURLAndToast(t *testing.T) {
 
 func TestDoReflogCheckout_Empty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabReflog
 	p.tabItems[tabReflog] = nil
 	p.tabCursor[tabReflog] = 0
@@ -522,7 +521,7 @@ func TestDoReflogCheckout_Empty(t *testing.T) {
 
 func TestDoReflogCheckout_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabReflog
 	p.tabItems[tabReflog] = []listItem{
 		{kind: kindReflogEntry, reflog: git.ReflogEntry{Hash: "abc123", Message: "test"}},
@@ -534,7 +533,7 @@ func TestDoReflogCheckout_OutOfBounds(t *testing.T) {
 
 func TestDoReflogCheckout_Valid(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabReflog
 	p.tabItems[tabReflog] = []listItem{
 		{kind: kindReflogEntry, reflog: git.ReflogEntry{Hash: "abc123def456789", Message: "checkout: test"}},
@@ -552,7 +551,7 @@ func TestDoReflogCheckout_Valid(t *testing.T) {
 
 func TestHandleOpResult_StashOps(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	msg := opResultMsg{op: "checkout", err: fmt.Errorf("failed")}
 	_, cmd := p.handleOpResult(msg)
 	assert.NotNil(t, cmd)
@@ -578,7 +577,7 @@ func TestHandleOpResult_ExtendedOps(t *testing.T) {
 		tt := tt
 		t.Run(tt.op, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			msg := opResultMsg{op: tt.op, name: tt.name}
 			_, cmd := p.handleOpResult(msg)
 			assert.NotNil(t, cmd, "op %q should produce a command", tt.op)
@@ -592,7 +591,7 @@ func TestHandleOpResult_ExtendedOps(t *testing.T) {
 
 func TestExecuteAction_StashEntry(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:  kindStashEntry,
 		stash: git.StashEntry{Index: 2, Message: "WIP"},
@@ -605,7 +604,7 @@ func TestExecuteAction_StashEntry(t *testing.T) {
 
 func TestExecuteAction_RemoteWithURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:   kindRemote,
 		remote: git.Remote{Name: "origin", FetchURL: "git@github.com:user/repo.git"},
@@ -616,7 +615,7 @@ func TestExecuteAction_RemoteWithURL(t *testing.T) {
 
 func TestExecuteAction_RemoteNoURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:   kindRemote,
 		remote: git.Remote{Name: "empty", FetchURL: ""},
@@ -627,7 +626,7 @@ func TestExecuteAction_RemoteNoURL(t *testing.T) {
 
 func TestExecuteAction_Issue(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:  kindIssue,
 		issue: ghIssueItem{HTMLURL: "https://github.com/user/repo/issues/1", Number: 1},
@@ -638,7 +637,7 @@ func TestExecuteAction_Issue(t *testing.T) {
 
 func TestExecuteAction_IssueNoURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:  kindIssue,
 		issue: ghIssueItem{Number: 1},
@@ -649,7 +648,7 @@ func TestExecuteAction_IssueNoURL(t *testing.T) {
 
 func TestExecuteAction_PR(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind: kindPR,
 		pr:   ghPRItem{HTMLURL: "https://github.com/user/repo/pull/1", Number: 1},
@@ -660,7 +659,7 @@ func TestExecuteAction_PR(t *testing.T) {
 
 func TestExecuteAction_PRNoURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind: kindPR,
 		pr:   ghPRItem{Number: 1},
@@ -671,7 +670,7 @@ func TestExecuteAction_PRNoURL(t *testing.T) {
 
 func TestExecuteAction_ActionRun(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:      kindActionRun,
 		actionRun: ghActionItem{HTMLURL: "https://github.com/user/repo/actions/runs/1", RunNumber: 42},
@@ -682,7 +681,7 @@ func TestExecuteAction_ActionRun(t *testing.T) {
 
 func TestExecuteAction_ActionRunNoURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:      kindActionRun,
 		actionRun: ghActionItem{RunNumber: 42},
@@ -693,7 +692,7 @@ func TestExecuteAction_ActionRunNoURL(t *testing.T) {
 
 func TestExecuteAction_Tag(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind: kindTag,
 		tag:  git.Tag{Name: "v2.0.0"},
@@ -706,7 +705,7 @@ func TestExecuteAction_Tag(t *testing.T) {
 
 func TestExecuteAction_RemoteTag(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind: kindRemoteTag,
 		tag:  git.Tag{Name: "v2.0.0"},
@@ -718,7 +717,7 @@ func TestExecuteAction_RemoteTag(t *testing.T) {
 
 func TestExecuteAction_UnhandledKind(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemoteSub} // not in executeAction switch
 	_, cmd := p.executeAction(item)
 	assert.Nil(t, cmd)
@@ -730,7 +729,7 @@ func TestExecuteAction_UnhandledKind(t *testing.T) {
 
 func TestExecuteRightClickAction_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = nil
 	p.tabCursor[p.activeTab] = 0
 	_, cmd := p.executeRightClickAction(actions.ActionCheckout)
@@ -739,7 +738,7 @@ func TestExecuteRightClickAction_OutOfBounds(t *testing.T) {
 
 func TestExecuteRightClickAction_LocalBranch_Checkout(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "feature"}},
 	}
@@ -750,7 +749,7 @@ func TestExecuteRightClickAction_LocalBranch_Checkout(t *testing.T) {
 
 func TestExecuteRightClickAction_LocalBranch_CopyName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "feature"}},
 	}
@@ -761,7 +760,7 @@ func TestExecuteRightClickAction_LocalBranch_CopyName(t *testing.T) {
 
 func TestExecuteRightClickAction_RemoteBranch_CopyName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindRemoteBranch, branch: git.Branch{Name: "origin/main"}},
 	}
@@ -772,7 +771,7 @@ func TestExecuteRightClickAction_RemoteBranch_CopyName(t *testing.T) {
 
 func TestExecuteRightClickAction_Worktree_ChangeDirectory(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindWorktree, worktree: git.Worktree{Path: "/tmp/wt", Branch: "feature"}},
 	}
@@ -783,7 +782,7 @@ func TestExecuteRightClickAction_Worktree_ChangeDirectory(t *testing.T) {
 
 func TestExecuteRightClickAction_Worktree_CopyPath(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindWorktree, worktree: git.Worktree{Path: "/tmp/wt", Branch: "feature"}},
 	}
@@ -794,7 +793,7 @@ func TestExecuteRightClickAction_Worktree_CopyPath(t *testing.T) {
 
 func TestExecuteRightClickAction_Remote_CopyURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindRemote, remote: git.Remote{Name: "origin", FetchURL: "https://github.com/user/repo.git"}},
 	}
@@ -805,7 +804,7 @@ func TestExecuteRightClickAction_Remote_CopyURL(t *testing.T) {
 
 func TestExecuteRightClickAction_Remote_CopyURL_Empty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindRemote, remote: git.Remote{Name: "empty"}},
 	}
@@ -816,7 +815,7 @@ func TestExecuteRightClickAction_Remote_CopyURL_Empty(t *testing.T) {
 
 func TestExecuteRightClickAction_Stash_Apply(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "WIP"}},
 	}
@@ -827,7 +826,7 @@ func TestExecuteRightClickAction_Stash_Apply(t *testing.T) {
 
 func TestExecuteRightClickAction_Stash_Pop(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "WIP"}},
 	}
@@ -838,7 +837,7 @@ func TestExecuteRightClickAction_Stash_Pop(t *testing.T) {
 
 func TestExecuteRightClickAction_Stash_Drop(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "WIP"}},
 	}
@@ -849,7 +848,7 @@ func TestExecuteRightClickAction_Stash_Drop(t *testing.T) {
 
 func TestExecuteRightClickAction_Stash_PromptAction(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindStashEntry, stash: git.StashEntry{Index: 1, Message: "WIP"}},
 	}
@@ -861,7 +860,7 @@ func TestExecuteRightClickAction_Stash_PromptAction(t *testing.T) {
 
 func TestExecuteRightClickAction_Issue_OpenInBrowser(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindIssue, issue: ghIssueItem{HTMLURL: "https://github.com/user/repo/issues/1", Number: 1}},
 	}
@@ -872,7 +871,7 @@ func TestExecuteRightClickAction_Issue_OpenInBrowser(t *testing.T) {
 
 func TestExecuteRightClickAction_Issue_CopyURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindIssue, issue: ghIssueItem{HTMLURL: "https://github.com/user/repo/issues/1", Number: 1}},
 	}
@@ -883,7 +882,7 @@ func TestExecuteRightClickAction_Issue_CopyURL(t *testing.T) {
 
 func TestExecuteRightClickAction_Issue_CopyNumber(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindIssue, issue: ghIssueItem{Number: 42}},
 	}
@@ -894,7 +893,7 @@ func TestExecuteRightClickAction_Issue_CopyNumber(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_OpenInBrowser(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{HTMLURL: "https://github.com/user/repo/pull/1", Number: 1}},
 	}
@@ -905,7 +904,7 @@ func TestExecuteRightClickAction_PR_OpenInBrowser(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_CopyURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{HTMLURL: "https://github.com/user/repo/pull/1", Number: 1}},
 	}
@@ -916,7 +915,7 @@ func TestExecuteRightClickAction_PR_CopyURL(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_CopyNumber(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 99}},
 	}
@@ -927,7 +926,7 @@ func TestExecuteRightClickAction_PR_CopyNumber(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_CheckoutBranch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{HeadBranch: "feature-branch", Number: 1}},
 	}
@@ -940,7 +939,7 @@ func TestExecuteRightClickAction_PR_CheckoutBranch(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_CheckoutBranch_Empty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 1}},
 	}
@@ -951,7 +950,7 @@ func TestExecuteRightClickAction_PR_CheckoutBranch_Empty(t *testing.T) {
 
 func TestExecuteRightClickAction_ActionRun_OpenInBrowser(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{HTMLURL: "https://github.com/user/repo/actions/runs/1", RunNumber: 1}},
 	}
@@ -962,7 +961,7 @@ func TestExecuteRightClickAction_ActionRun_OpenInBrowser(t *testing.T) {
 
 func TestExecuteRightClickAction_ActionRun_CopyURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{HTMLURL: "https://github.com/user/repo/actions/runs/1", RunNumber: 1}},
 	}
@@ -973,7 +972,7 @@ func TestExecuteRightClickAction_ActionRun_CopyURL(t *testing.T) {
 
 func TestExecuteRightClickAction_Tag_Checkout(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc123"}},
 	}
@@ -985,7 +984,7 @@ func TestExecuteRightClickAction_Tag_Checkout(t *testing.T) {
 
 func TestExecuteRightClickAction_Tag_CopyName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc123"}},
 	}
@@ -996,7 +995,7 @@ func TestExecuteRightClickAction_Tag_CopyName(t *testing.T) {
 
 func TestExecuteRightClickAction_Tag_CopyHash(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc123"}},
 	}
@@ -1007,7 +1006,7 @@ func TestExecuteRightClickAction_Tag_CopyHash(t *testing.T) {
 
 func TestExecuteRightClickAction_Tag_Delete(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc123"}},
 	}
@@ -1019,7 +1018,7 @@ func TestExecuteRightClickAction_Tag_Delete(t *testing.T) {
 
 func TestExecuteRightClickAction_Tag_Push(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc123"}},
 	}
@@ -1031,7 +1030,7 @@ func TestExecuteRightClickAction_Tag_Push(t *testing.T) {
 
 func TestExecuteRightClickAction_UnhandledKind(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindRemoteSub},
 	}
@@ -1046,7 +1045,7 @@ func TestExecuteRightClickAction_UnhandledKind(t *testing.T) {
 
 func TestHandleMouseRightClick_InTabBar(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// ContentRow 0 is in the tab bar — should be no-op.
 	msg := panels.PanelMouseRightClickMsg{ContentRow: 0, ContentCol: 5}
 	_, cmd := p.handleMouseRightClick(msg)
@@ -1055,7 +1054,7 @@ func TestHandleMouseRightClick_InTabBar(t *testing.T) {
 
 func TestHandleMouseRightClick_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// A row beyond the items.
 	msg := panels.PanelMouseRightClickMsg{ContentRow: 100, ContentCol: 5}
 	_, cmd := p.handleMouseRightClick(msg)
@@ -1064,7 +1063,7 @@ func TestHandleMouseRightClick_OutOfBounds(t *testing.T) {
 
 func TestHandleMouseRightClick_ValidItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Populate some items.
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}},
@@ -1087,7 +1086,7 @@ func TestHandleMouseRightClick_ValidItem(t *testing.T) {
 func TestRequestWorktreeSwitch_NewTerminalMode(t *testing.T) {
 	t.Parallel()
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.cfg.WorktreeOpenMode = "new_terminal"
 	p.activeTab = tabWorktrees
 	p.tabItems[tabWorktrees] = []listItem{
@@ -1100,7 +1099,7 @@ func TestRequestWorktreeSwitch_NewTerminalMode(t *testing.T) {
 
 func TestRequestWorktreeSwitch_NoWorktreeSelected(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	p.tabItems[tabWorktrees] = nil
 	p.tabCursor[tabWorktrees] = 0
@@ -1114,7 +1113,7 @@ func TestRequestWorktreeSwitch_NoWorktreeSelected(t *testing.T) {
 
 func TestDoFetch_NoRemoteSelected(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// No remotes tab selected — fetches all.
 	_, cmd := p.doFetch()
 	assert.NotNil(t, cmd)
@@ -1122,7 +1121,7 @@ func TestDoFetch_NoRemoteSelected(t *testing.T) {
 
 func TestDoFetch_SingleRemote(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.remoteCount = 1
 	p.activeTab = tabRemotes
 	p.tabItems[tabRemotes] = []listItem{
@@ -1134,7 +1133,7 @@ func TestDoFetch_SingleRemote(t *testing.T) {
 
 func TestDoFetch_MultipleRemotes(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.remoteCount = 2
 	p.activeTab = tabRemotes
 	p.tabItems[tabRemotes] = []listItem{
@@ -1180,7 +1179,7 @@ func TestActionMergePR_IsValid(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_MergePR_Open(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"}},
@@ -1194,7 +1193,7 @@ func TestExecuteRightClickAction_PR_MergePR_Open(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_MergePR_Draft(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "WIP", State: "draft", HeadBranch: "wip"}},
@@ -1207,7 +1206,7 @@ func TestExecuteRightClickAction_PR_MergePR_Draft(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Done", State: prStateMerged}},
@@ -1220,7 +1219,7 @@ func TestExecuteRightClickAction_PR_MergePR_Merged(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_MergePR_Closed(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 5, Title: "Closed", State: "closed"}},
@@ -1233,7 +1232,7 @@ func TestExecuteRightClickAction_PR_MergePR_Closed(t *testing.T) {
 
 func TestExecuteRightClickAction_PR_MergePR_NoGHClient(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// ghClient is nil
 	p.tabItems[p.activeTab] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 42, Title: "Test", State: "open"}},
@@ -1249,7 +1248,7 @@ func TestExecuteRightClickAction_PR_MergePR_NoGHClient(t *testing.T) {
 
 func TestDoMergePR_WrongTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabBranches
 	p.tabItems[tabBranches] = []listItem{
@@ -1262,7 +1261,7 @@ func TestDoMergePR_WrongTab(t *testing.T) {
 
 func TestDoMergePR_EmptyCursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{} // empty
@@ -1300,7 +1299,7 @@ func TestMergeStrategyLabel(t *testing.T) {
 
 func TestHandleModalResult_PRMergeStrategy_Accept(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.pending = opPRMergeStrategy
 	p.pendingName = "42:feature-auth:Add authentication"
@@ -1319,7 +1318,7 @@ func TestHandleModalResult_PRMergeStrategy_AllStrategies(t *testing.T) {
 	for _, strategy := range []string{"merge", "squash", "rebase"} {
 		t.Run(strategy, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.gh.client = &mockGHClientFull{}
 			p.pending = opPRMergeStrategy
 			p.pendingName = "42:feature-auth:Add authentication"
@@ -1337,7 +1336,7 @@ func TestHandleModalResult_PRMergeStrategy_AllStrategies(t *testing.T) {
 
 func TestHandleModalResult_PRMergeStrategy_Cancel(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opPRMergeStrategy
 	p.pendingName = "42:feature-auth:Add auth"
 
@@ -1348,7 +1347,7 @@ func TestHandleModalResult_PRMergeStrategy_Cancel(t *testing.T) {
 
 func TestHandleModalResult_PRMergeStrategy_BadPendingName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opPRMergeStrategy
 	p.pendingName = "bad" // not enough parts
 
@@ -1362,11 +1361,11 @@ func TestHandleModalResult_PRMergeStrategy_BadPendingName(t *testing.T) {
 
 func TestHandleModalResult_PRMergeConfirm_Accept(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
-	p.ctx = context.Background()
+	p.ctx = t.Context()
 	p.pending = opPRMergeConfirm
 	p.pendingName = "42:squash:feature-auth"
 
@@ -1377,7 +1376,7 @@ func TestHandleModalResult_PRMergeConfirm_Accept(t *testing.T) {
 
 func TestHandleModalResult_PRMergeConfirm_Cancel(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opPRMergeConfirm
 	p.pendingName = "42:squash:feature-auth"
 
@@ -1388,7 +1387,7 @@ func TestHandleModalResult_PRMergeConfirm_Cancel(t *testing.T) {
 
 func TestHandleModalResult_PRMergeConfirm_BadPendingName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opPRMergeConfirm
 	p.pendingName = "bad"
 
@@ -1402,7 +1401,7 @@ func TestHandleModalResult_PRMergeConfirm_BadPendingName(t *testing.T) {
 
 func TestHandlePRMergeResult_Success(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Add auth", State: "open", HeadBranch: "feature-auth"},
 	}
@@ -1422,7 +1421,7 @@ func TestHandlePRMergeResult_Success(t *testing.T) {
 
 func TestHandlePRMergeResult_Error(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handlePRMergeResult(prMergeResultMsg{
 		number:   42,
@@ -1434,7 +1433,7 @@ func TestHandlePRMergeResult_Error(t *testing.T) {
 
 func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Test", State: "open", HeadBranch: "feature-x"},
 	}
@@ -1456,7 +1455,7 @@ func TestHandlePRMergeResult_ShowsDeleteBranchPrompt(t *testing.T) {
 
 func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{
 		{Number: 42, Title: "Test", State: "open"},
 	}
@@ -1480,11 +1479,11 @@ func TestHandlePRMergeResult_NoPromptWhenNoHeadBranch(t *testing.T) {
 
 func TestHandleModalResult_PRDeleteBranchAfterMerge_Confirm(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
-	p.ctx = context.Background()
+	p.ctx = t.Context()
 	p.pending = opPRDeleteBranchAfterMerge
 	p.pendingName = "feature-auth"
 
@@ -1495,7 +1494,7 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_Confirm(t *testing.T) {
 
 func TestHandleModalResult_PRDeleteBranchAfterMerge_Cancel(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opPRDeleteBranchAfterMerge
 	p.pendingName = "feature-auth"
 
@@ -1506,9 +1505,9 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_Cancel(t *testing.T) {
 
 func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
-	p.ctx = context.Background()
+	p.ctx = t.Context()
 	p.pending = opPRDeleteBranchAfterMerge
 	p.pendingName = ""
 
@@ -1522,7 +1521,7 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
 
 func TestHandlePRBranchDeleteResult_Success(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
 		branch: "feature-x",
@@ -1532,7 +1531,7 @@ func TestHandlePRBranchDeleteResult_Success(t *testing.T) {
 
 func TestHandlePRBranchDeleteResult_RemoteError(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
 		branch:    "feature-x",
@@ -1543,7 +1542,7 @@ func TestHandlePRBranchDeleteResult_RemoteError(t *testing.T) {
 
 func TestHandlePRBranchDeleteResult_LocalError(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
 		branch:   "feature-x",
@@ -1554,7 +1553,7 @@ func TestHandlePRBranchDeleteResult_LocalError(t *testing.T) {
 
 func TestHandlePRBranchDeleteResult_BothError(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handlePRBranchDeleteResult(prBranchDeleteResultMsg{
 		branch:    "feature-x",
@@ -1570,7 +1569,7 @@ func TestHandlePRBranchDeleteResult_BothError(t *testing.T) {
 
 func TestHandleKey_M_PRsTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.gh.client = &mockGHClientFull{}
 	p.activeTab = tabPRs
@@ -1586,7 +1585,7 @@ func TestHandleKey_M_PRsTab(t *testing.T) {
 
 func TestHandleKey_M_NotPRsTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabBranches
 
@@ -1596,7 +1595,7 @@ func TestHandleKey_M_NotPRsTab(t *testing.T) {
 
 func TestHandleKey_M_NoGHClient(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabPRs
 	// ghClient is nil
