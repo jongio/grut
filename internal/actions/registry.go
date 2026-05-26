@@ -72,9 +72,10 @@ const (
 	ActionDownloadAssets  ActionID = "download_assets"
 	ActionCheckoutBranch  ActionID = "checkout_branch"
 	ActionMergePR         ActionID = "merge_pr"
-	ActionShowContextMenu ActionID = "context_menu"
-	ActionPush            ActionID = "push"
-	ActionChangeDirectory ActionID = "change_directory"
+	ActionOpenInDefaultApp ActionID = "open_in_default_app"
+	ActionShowContextMenu  ActionID = "context_menu"
+	ActionPush             ActionID = "push"
+	ActionChangeDirectory  ActionID = "change_directory"
 )
 
 // ItemActions defines the default action and alternatives for an item type.
@@ -97,7 +98,7 @@ var Registry = map[ItemType]ItemActions{
 	ItemActionRun:    {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionRerun, ActionCopyURL}, Description: "open this workflow run in your browser"},
 	ItemWorkflow:     {Default: ActionDispatch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenInBrowser, ActionCopyURL}, Description: "dispatch this workflow"},
 	ItemRelease:      {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionDownloadAssets, ActionCopyURL, ActionCopyName}, Description: "open this release in your browser"},
-	ItemFile:         {Default: ActionOpenInEditor, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyPath, ActionStage, ActionPreview}, Description: "open this file in your editor"},
+	ItemFile:         {Default: ActionOpenInDefaultApp, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenInEditor, ActionCopyPath, ActionStage, ActionPreview}, Description: "open this file in its default app"},
 	ItemDirectory:    {Default: ActionExpandCollapse, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyPath}, Description: "expand or collapse this directory"},
 	ItemCommit:       {Default: ActionShowDetail, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyHash, ActionOpenInBrowser}, Description: "show details for this commit"},
 	ItemStatusFile:   {Default: ActionExpandDiff, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionStageUnstage, ActionCopyPath}, Description: "expand the inline diff for this file"},
@@ -127,7 +128,8 @@ var actionLabels = map[ActionID]string{
 	ActionCheckout:        "checkout",
 	ActionOpenTerminal:    "open terminal",
 	ActionOpenInBrowser:   "open in browser",
-	ActionOpenInEditor:    "open in editor",
+	ActionOpenInDefaultApp: "open in default app",
+	ActionOpenInEditor:     "open in editor",
 	ActionPromptAction:    "prompt action",
 	ActionApply:           "apply",
 	ActionPop:             "pop",

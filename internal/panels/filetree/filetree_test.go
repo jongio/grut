@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1985,17 +1986,21 @@ func TestMouseDoubleClick_OnFile(t *testing.T) {
 	ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
 	assert.Equal(t, fileIdx, ft.viewport.cursor)
 
+	// Stub StartDetachedFn to simulate a launch failure.
+	origFn := panels.StartDetachedFn
+	panels.StartDetachedFn = func(cmd *exec.Cmd) error {
+		return errors.New("simulated launch failure")
+	}
+	t.Cleanup(func() { panels.StartDetachedFn = origFn })
+
 	result, cmd := ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: fileIdx, ContentCol: 5})
 	panel := result.(*FileTree)
 	assert.Equal(t, fileIdx, panel.viewport.cursor)
 
-	// Double-click on a file should open it in the editor, not emit
+	// Double-click on a file should open it in the default app, not emit
 	// FileSelectedMsg. The returned command produces a toast.
 	require.NotNil(t, cmd, "double-click on file should produce a command")
 
-	// Force the error path by using a non-existent editor.
-	t.Setenv("VISUAL", "this_editor_does_not_exist_67890")
-	t.Setenv("EDITOR", "")
 	msg := cmd()
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok, "expected ShowToastMsg, got %T", msg)

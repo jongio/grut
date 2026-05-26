@@ -402,6 +402,8 @@ func (ft *FileTree) executeNewDir(dir, name string) (panels.Panel, tea.Cmd) {
 // executeRightClickAction dispatches a right-click action to the appropriate method.
 func (ft *FileTree) executeRightClickAction(action actions.ActionID) (panels.Panel, tea.Cmd) {
 	switch action { //nolint:exhaustive // only relevant cases handled
+	case actions.ActionOpenInDefaultApp:
+		return ft.openInDefaultApp()
 	case actions.ActionOpenInEditor:
 		return ft.openInEditor()
 	case actions.ActionExpandCollapse:
@@ -414,6 +416,25 @@ func (ft *FileTree) executeRightClickAction(action actions.ActionID) (panels.Pan
 		return ft, ft.emitCursorFileSelected()
 	}
 	return ft, nil
+}
+
+// openInDefaultApp opens the file at the cursor with the OS default application.
+func (ft *FileTree) openInDefaultApp() (panels.Panel, tea.Cmd) {
+	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
+		return ft, nil
+	}
+	n := ft.visible[ft.viewport.cursor]
+	if n.isDir {
+		return ft.selectOrExpand()
+	}
+	filePath := n.path
+	fileName := n.name
+	return ft, func() tea.Msg {
+		if err := panels.OpenInDefaultApp(ft.safeCtx(), filePath); err != nil {
+			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Opened " + fileName, Level: notify.Info}
+	}
 }
 
 // openInEditor opens the file at the cursor in the user's external editor.

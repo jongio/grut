@@ -93,6 +93,23 @@ var StartDetachedFn = func(cmd *exec.Cmd) error {
 	return nil
 }
 
+// OpenInDefaultApp opens a file using the OS-registered default application
+// for its file type. This is the "file manager" behavior: .pdf opens in a PDF
+// viewer, .png opens in an image viewer, etc.
+func OpenInDefaultApp(ctx context.Context, path string) error {
+	if err := ValidateEditorPath(path); err != nil {
+		return err
+	}
+	switch runtime.GOOS {
+	case "windows":
+		return StartDetachedFn(exec.CommandContext(ctx, "cmd", "/c", "start", "", path))
+	case "darwin":
+		return StartDetachedFn(exec.CommandContext(ctx, "open", path))
+	default:
+		return StartDetachedFn(exec.CommandContext(ctx, "xdg-open", path))
+	}
+}
+
 // OpenInEditor opens a file in the user's preferred editor.
 // It checks $VISUAL, $EDITOR, then tries common developer editors,
 // and finally falls back to platform defaults.

@@ -24,7 +24,7 @@ func TestDefaultAction(t *testing.T) {
 		{ItemIssue, ActionOpenInBrowser},
 		{ItemPR, ActionOpenInBrowser},
 		{ItemActionRun, ActionOpenInBrowser},
-		{ItemFile, ActionOpenInEditor},
+		{ItemFile, ActionOpenInDefaultApp},
 		{ItemDirectory, ActionExpandCollapse},
 		{ItemCommit, ActionShowDetail},
 		{ItemStatusFile, ActionExpandDiff},
@@ -73,7 +73,7 @@ func TestAllActions(t *testing.T) {
 		},
 		{
 			ItemFile,
-			[]ActionID{ActionOpenInEditor, ActionCopyPath, ActionStage, ActionPreview},
+			[]ActionID{ActionOpenInDefaultApp, ActionOpenInEditor, ActionCopyPath, ActionStage, ActionPreview},
 		},
 	}
 

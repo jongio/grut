@@ -1121,7 +1121,7 @@ func TestGetDoubleClickAction(t *testing.T) {
 	t.Run("nil DoubleClick map returns default", func(t *testing.T) {
 		ac := &ActionsConfig{DoubleClick: nil}
 		got := ac.GetDoubleClickAction("file")
-		assert.Equal(t, "open_in_editor", got)
+		assert.Equal(t, "open_in_default_app", got)
 	})
 
 	t.Run("override present returns override", func(t *testing.T) {
@@ -1133,7 +1133,7 @@ func TestGetDoubleClickAction(t *testing.T) {
 	t.Run("override absent returns default", func(t *testing.T) {
 		ac := &ActionsConfig{DoubleClick: map[string]string{"commit": "show_detail"}}
 		got := ac.GetDoubleClickAction("file")
-		assert.Equal(t, "open_in_editor", got)
+		assert.Equal(t, "open_in_default_app", got)
 	})
 }
 
