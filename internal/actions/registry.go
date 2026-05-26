@@ -37,41 +37,41 @@ const (
 type ActionID string
 
 const (
-	ActionCheckout        ActionID = "checkout"
-	ActionOpenTerminal    ActionID = "open_terminal"
-	ActionOpenInBrowser   ActionID = "open_in_browser"
-	ActionOpenInEditor    ActionID = "open_in_editor"
-	ActionPromptAction    ActionID = "prompt_action"
-	ActionApply           ActionID = "apply"
-	ActionPop             ActionID = "pop"
-	ActionDrop            ActionID = "drop"
-	ActionExpandCollapse  ActionID = "expand_collapse"
-	ActionShowDetail      ActionID = "show_detail"
-	ActionExpandDiff      ActionID = "expand_diff"
-	ActionStageUnstage    ActionID = "stage_unstage"
-	ActionOpenDiff        ActionID = "open_diff"
-	ActionResolveOurs     ActionID = "resolve_ours"
-	ActionResolveTheirs   ActionID = "resolve_theirs"
-	ActionPreview         ActionID = "preview"
-	ActionJump            ActionID = "jump"
-	ActionToggleDetails   ActionID = "toggle_details"
-	ActionEnableDisable   ActionID = "enable_disable"
-	ActionToggleOutput    ActionID = "toggle_output"
-	ActionCycleValue      ActionID = "cycle_value"
-	ActionCopyName        ActionID = "copy_name"
-	ActionCopyURL         ActionID = "copy_url"
-	ActionCopyNumber      ActionID = "copy_number"
-	ActionCopyHash        ActionID = "copy_hash"
-	ActionCopyPath        ActionID = "copy_path"
-	ActionStage           ActionID = "stage"
-	ActionApprove         ActionID = "approve"
-	ActionRemove          ActionID = "remove"
-	ActionDelete          ActionID = "delete"
-	ActionRerun           ActionID = "rerun"
-	ActionDispatch        ActionID = "dispatch"
-	ActionDownloadAssets  ActionID = "download_assets"
-	ActionCheckoutBranch  ActionID = "checkout_branch"
-	ActionMergePR         ActionID = "merge_pr"
+	ActionCheckout         ActionID = "checkout"
+	ActionOpenTerminal     ActionID = "open_terminal"
+	ActionOpenInBrowser    ActionID = "open_in_browser"
+	ActionOpenInEditor     ActionID = "open_in_editor"
+	ActionPromptAction     ActionID = "prompt_action"
+	ActionApply            ActionID = "apply"
+	ActionPop              ActionID = "pop"
+	ActionDrop             ActionID = "drop"
+	ActionExpandCollapse   ActionID = "expand_collapse"
+	ActionShowDetail       ActionID = "show_detail"
+	ActionExpandDiff       ActionID = "expand_diff"
+	ActionStageUnstage     ActionID = "stage_unstage"
+	ActionOpenDiff         ActionID = "open_diff"
+	ActionResolveOurs      ActionID = "resolve_ours"
+	ActionResolveTheirs    ActionID = "resolve_theirs"
+	ActionPreview          ActionID = "preview"
+	ActionJump             ActionID = "jump"
+	ActionToggleDetails    ActionID = "toggle_details"
+	ActionEnableDisable    ActionID = "enable_disable"
+	ActionToggleOutput     ActionID = "toggle_output"
+	ActionCycleValue       ActionID = "cycle_value"
+	ActionCopyName         ActionID = "copy_name"
+	ActionCopyURL          ActionID = "copy_url"
+	ActionCopyNumber       ActionID = "copy_number"
+	ActionCopyHash         ActionID = "copy_hash"
+	ActionCopyPath         ActionID = "copy_path"
+	ActionStage            ActionID = "stage"
+	ActionApprove          ActionID = "approve"
+	ActionRemove           ActionID = "remove"
+	ActionDelete           ActionID = "delete"
+	ActionRerun            ActionID = "rerun"
+	ActionDispatch         ActionID = "dispatch"
+	ActionDownloadAssets   ActionID = "download_assets"
+	ActionCheckoutBranch   ActionID = "checkout_branch"
+	ActionMergePR          ActionID = "merge_pr"
 	ActionOpenInDefaultApp ActionID = "open_in_default_app"
 	ActionShowContextMenu  ActionID = "context_menu"
 	ActionPush             ActionID = "push"
@@ -125,45 +125,45 @@ var allItemTypes = []ItemType{
 
 // actionLabels maps each action ID to a human-readable label.
 var actionLabels = map[ActionID]string{
-	ActionCheckout:        "checkout",
-	ActionOpenTerminal:    "open terminal",
-	ActionOpenInBrowser:   "open in browser",
+	ActionCheckout:         "checkout",
+	ActionOpenTerminal:     "open terminal",
+	ActionOpenInBrowser:    "open in browser",
 	ActionOpenInDefaultApp: "open in default app",
 	ActionOpenInEditor:     "open in editor",
-	ActionPromptAction:    "prompt action",
-	ActionApply:           "apply",
-	ActionPop:             "pop",
-	ActionDrop:            "drop",
-	ActionExpandCollapse:  "expand/collapse",
-	ActionShowDetail:      "show detail",
-	ActionExpandDiff:      "expand diff",
-	ActionStageUnstage:    "stage/unstage",
-	ActionOpenDiff:        "open diff",
-	ActionResolveOurs:     "resolve ours",
-	ActionResolveTheirs:   "resolve theirs",
-	ActionPreview:         "preview",
-	ActionJump:            "jump",
-	ActionToggleDetails:   "toggle details",
-	ActionEnableDisable:   "enable/disable",
-	ActionToggleOutput:    "toggle output",
-	ActionCycleValue:      "cycle value",
-	ActionCopyName:        "copy name",
-	ActionCopyURL:         "copy URL",
-	ActionCopyNumber:      "copy number",
-	ActionCopyHash:        "copy hash",
-	ActionCopyPath:        "copy path",
-	ActionStage:           "stage",
-	ActionApprove:         "approve",
-	ActionRemove:          "remove",
-	ActionDelete:          "delete",
-	ActionRerun:           "rerun",
-	ActionDispatch:        "dispatch",
-	ActionDownloadAssets:  "download assets",
-	ActionCheckoutBranch:  "checkout branch",
-	ActionMergePR:         "merge PR",
-	ActionShowContextMenu: "context menu",
-	ActionPush:            "push",
-	ActionChangeDirectory: "change directory",
+	ActionPromptAction:     "prompt action",
+	ActionApply:            "apply",
+	ActionPop:              "pop",
+	ActionDrop:             "drop",
+	ActionExpandCollapse:   "expand/collapse",
+	ActionShowDetail:       "show detail",
+	ActionExpandDiff:       "expand diff",
+	ActionStageUnstage:     "stage/unstage",
+	ActionOpenDiff:         "open diff",
+	ActionResolveOurs:      "resolve ours",
+	ActionResolveTheirs:    "resolve theirs",
+	ActionPreview:          "preview",
+	ActionJump:             "jump",
+	ActionToggleDetails:    "toggle details",
+	ActionEnableDisable:    "enable/disable",
+	ActionToggleOutput:     "toggle output",
+	ActionCycleValue:       "cycle value",
+	ActionCopyName:         "copy name",
+	ActionCopyURL:          "copy URL",
+	ActionCopyNumber:       "copy number",
+	ActionCopyHash:         "copy hash",
+	ActionCopyPath:         "copy path",
+	ActionStage:            "stage",
+	ActionApprove:          "approve",
+	ActionRemove:           "remove",
+	ActionDelete:           "delete",
+	ActionRerun:            "rerun",
+	ActionDispatch:         "dispatch",
+	ActionDownloadAssets:   "download assets",
+	ActionCheckoutBranch:   "checkout branch",
+	ActionMergePR:          "merge PR",
+	ActionShowContextMenu:  "context menu",
+	ActionPush:             "push",
+	ActionChangeDirectory:  "change directory",
 }
 
 // itemLabels maps each item type to a human-readable label.
