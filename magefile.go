@@ -10,8 +10,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +33,15 @@ var (
 	versionVar = "github.com/jongio/grut/internal/config.AppVersion"
 )
 
+const (
+	windowsRaceToolchainVersion         = "2.8.0"
+	windowsRaceToolchainSHA256          = "6252bf34fe2231a55ac7f03d482b36d2c7c58697990551bba508102cfb3f342e"
+	windowsRaceToolchainDownloadTimeout = 10 * time.Minute
+	windowsRaceToolchainExtractTimeout  = 10 * time.Minute
+)
+
+var validGoVersionRE = regexp.MustCompile(`^go\d+\.\d+(\.\d+)?(rc\d+|beta\d+)?$`)
+
 func init() {
 	// On Windows, Defender may block Go temp binaries compiled into %TEMP%.
 	// Redirect GOTMPDIR to a project-local directory to avoid this.
@@ -35,7 +49,10 @@ func init() {
 		return
 	}
 	tmpDir := filepath.Join(projectDir(), "bin", ".tmp")
-	os.MkdirAll(tmpDir, 0o755)
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to create GOTMPDIR %s: %v\n", tmpDir, err)
+		return
+	}
 	os.Setenv("GOTMPDIR", tmpDir)
 }
 
@@ -265,6 +282,71 @@ var deadcodeAllowlist = []string{
 	// gitinfo — test-only color/icon helpers (used in gitinfo_test.go)
 	"prColor",
 	"prActionIcon",
+
+	// gitstatus — test-only accessor (used in gitstatus_extra_test.go)
+	"GitStatus.fileColor",
+
+	// git/gittest — shared mock implementing full GitClient interface;
+	// many methods are interface stubs not yet exercised by tests
+	"MockClient.Status",
+	"MockClient.Diff",
+	"MockClient.Log",
+	"MockClient.Blame",
+	"MockClient.RepoRoot",
+	"MockClient.IsRepo",
+	"MockClient.DiffTreeFiles",
+	"MockClient.DiffFileNames",
+	"MockClient.Stage",
+	"MockClient.Unstage",
+	"MockClient.StageHunk",
+	"MockClient.UnstageHunk",
+	"MockClient.StageLine",
+	"MockClient.UnstageLine",
+	"MockClient.Commit",
+	"MockClient.BranchList",
+	"MockClient.CurrentBranch",
+	"MockClient.BranchCreate",
+	"MockClient.BranchDelete",
+	"MockClient.BranchRename",
+	"MockClient.Checkout",
+	"MockClient.Push",
+	"MockClient.Pull",
+	"MockClient.Fetch",
+	"MockClient.RemoteList",
+	"MockClient.RemoteAdd",
+	"MockClient.RemoteRemove",
+	"MockClient.WorktreeList",
+	"MockClient.WorktreeAdd",
+	"MockClient.WorktreeRemove",
+	"MockClient.StashList",
+	"MockClient.StashShow",
+	"MockClient.StashPush",
+	"MockClient.StashPop",
+	"MockClient.StashApply",
+	"MockClient.StashDrop",
+	"MockClient.TagList",
+	"MockClient.TagCreate",
+	"MockClient.TagDelete",
+	"MockClient.TagListRemote",
+	"MockClient.TagPush",
+	"MockClient.TagPushAll",
+	"MockClient.Merge",
+	"MockClient.MergeAbort",
+	"MockClient.Rebase",
+	"MockClient.RebaseContinue",
+	"MockClient.RebaseAbort",
+	"MockClient.CherryPick",
+	"MockClient.BisectStart",
+	"MockClient.BisectGood",
+	"MockClient.BisectBad",
+	"MockClient.BisectReset",
+	"MockClient.Reflog",
+	"MockClient.DiscardFile",
+	"MockClient.DiscardAllUnstaged",
+	"MockClient.Revert",
+	"MockClient.RevertContinue",
+	"MockClient.RevertAbort",
+	"MockClient.Reset",
 }
 
 // Default target when running `mage` with no args.
@@ -288,7 +370,15 @@ func Install() error {
 // Test runs all unit tests.
 func Test() error {
 	fmt.Println("\n=== Running tests ===")
-	return run("go", "test", "./...", "-count=1")
+	if err := run("go", "test", "./...", "-count=1"); err != nil {
+		return err
+	}
+	return runMagefileTests()
+}
+
+func runMagefileTests() error {
+	fmt.Println("\n=== Running magefile tests ===")
+	return run("go", "test", "-tags", "mage", "magefile.go", "magefile_test.go")
 }
 
 // CoverageReport generates an HTML coverage report and opens it in a browser.
@@ -354,6 +444,9 @@ func TestWSL() error {
 	wslPath = strings.TrimSpace(wslPath)
 
 	fmt.Printf("   Project (WSL): %s\n", wslPath)
+	if err := ensureWSLGoToolchain(); err != nil {
+		return fmt.Errorf("wsl go toolchain: %w", err)
+	}
 
 	// Single-quote the path for bash to prevent injection via directory names
 	// containing $(), backticks, or other shell metacharacters.
@@ -389,8 +482,8 @@ func TestWSL() error {
 	const wslTestTimeout = 10 * time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), wslTestTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "wsl", "bash", "-lc",
-		fmt.Sprintf("cd %s && go test ./... -count=1", escapedPath))
+	cmd := exec.CommandContext(ctx, "wsl", "bash", "-s")
+	cmd.Stdin = strings.NewReader(fmt.Sprintf("cd %s && %sgo test ./... -count=1", escapedPath, wslGoEnvPrefix()))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = projectDir()
@@ -413,6 +506,218 @@ func TestWSL() error {
 	return nil
 }
 
+type wslGoRunner struct {
+	run          func(time.Duration, string) error
+	output       func(time.Duration, string) (string, error)
+	localVersion func() (string, error)
+}
+
+func defaultWSLGoRunner() wslGoRunner {
+	return wslGoRunner{
+		run: func(timeout time.Duration, script string) error {
+			return wslBashRunTimeout(timeout, script)
+		},
+		output: func(timeout time.Duration, script string) (string, error) {
+			return wslBashOutputTimeout(timeout, script)
+		},
+		localVersion: localGoVersion,
+	}
+}
+
+func ensureWSLGoToolchain() error {
+	return defaultWSLGoRunner().ensureGoToolchain()
+}
+
+func (r wslGoRunner) ensureGoToolchain() error {
+	checkScript := wslGoEnvPrefix() + "command -v go >/dev/null 2>&1"
+	if err := r.run(30*time.Second, checkScript); err == nil {
+		if out, versionErr := r.output(30*time.Second, wslGoEnvPrefix()+"go version"); versionErr == nil {
+			fmt.Printf("   WSL Go: %s\n", strings.TrimSpace(out))
+		}
+		return nil
+	}
+
+	uname, err := r.output(30*time.Second, "uname -m")
+	if err != nil {
+		return fmt.Errorf("detect WSL architecture: %w", err)
+	}
+	arch, err := linuxGoArchFromUname(uname)
+	if err != nil {
+		return err
+	}
+	version, err := r.localVersion()
+	if err != nil {
+		return err
+	}
+	script, err := wslGoInstallScript(version, arch)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("   Go missing in WSL; installing %s for linux/%s under ~/.local/share/grut/go\n", version, arch)
+	if err := r.run(15*time.Minute, script); err != nil {
+		return fmt.Errorf("install Go in WSL: %w", err)
+	}
+	if err := r.run(30*time.Second, checkScript); err != nil {
+		return fmt.Errorf("verify installed Go in WSL: %w", err)
+	}
+	return nil
+}
+
+func wslBashRunTimeout(timeout time.Duration, script string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wsl", "bash", "-s")
+	cmd.Stdin = strings.NewReader(script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = projectDir()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("timed out after %s: %w", timeout, ctx.Err())
+	}
+	return err
+}
+
+func wslBashOutputTimeout(timeout time.Duration, script string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wsl", "bash", "-s")
+	cmd.Stdin = strings.NewReader(script)
+	cmd.Dir = projectDir()
+	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("timed out after %s: %w", timeout, ctx.Err())
+	}
+	return string(out), err
+}
+
+func localGoVersion() (string, error) {
+	out, err := cmdOutput("go", "env", "GOVERSION")
+	if err != nil {
+		return "", fmt.Errorf("detect local Go version: %w", err)
+	}
+	version := strings.TrimSpace(out)
+	if !validGoVersion(version) {
+		return "", fmt.Errorf("unsupported local Go version %q", version)
+	}
+	return version, nil
+}
+
+func linuxGoArchFromUname(uname string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(uname)) {
+	case "x86_64", "amd64":
+		return "amd64", nil
+	case "aarch64", "arm64":
+		return "arm64", nil
+	case "armv6l", "armv7l":
+		return "armv6l", nil
+	case "i386", "i686", "386":
+		return "386", nil
+	default:
+		return "", fmt.Errorf("unsupported WSL architecture %q", strings.TrimSpace(uname))
+	}
+}
+
+func wslGoEnvPrefix() string {
+	return `export PATH="$HOME/.local/share/grut/go/bin:$PATH"; `
+}
+
+func wslGoInstallScript(version, arch string) (string, error) {
+	if !validGoVersion(version) {
+		return "", fmt.Errorf("unsupported Go version %q", version)
+	}
+	if !validGoArch(arch) {
+		return "", fmt.Errorf("unsupported Go architecture %q", arch)
+	}
+	archiveName := fmt.Sprintf("%s.linux-%s.tar.gz", version, arch)
+	downloadURL := "https://go.dev/dl/" + archiveName
+
+	return fmt.Sprintf(`set -euo pipefail
+version=%s
+go_arch=%s
+archive_name=%s
+download_url=%s
+install_root="$HOME/.local/share/grut"
+install_dir="$install_root/go"
+archive="$install_root/$archive_name"
+mkdir -p "$install_root"
+if [ ! -x "$install_dir/bin/go" ] || ! "$install_dir/bin/go" version | grep -q " $version "; then
+  rm -rf "$install_dir"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required to verify the Go download manifest" >&2
+    exit 127
+  fi
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "sha256sum is required to verify the Go archive" >&2
+    exit 127
+  fi
+  if ! command -v tar >/dev/null 2>&1; then
+    echo "tar is required to install Go in WSL" >&2
+    exit 127
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 --connect-timeout 20 -o "$archive" "$download_url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$archive" "$download_url"
+  else
+    echo "curl or wget is required to install Go in WSL" >&2
+    exit 127
+  fi
+  checksum="$(
+    GRUT_GO_VERSION="$version" GRUT_GO_ARCH="$go_arch" python3 - <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+version = os.environ["GRUT_GO_VERSION"]
+filename = f"{version}.linux-{os.environ['GRUT_GO_ARCH']}.tar.gz"
+with urllib.request.urlopen("https://go.dev/dl/?mode=json&include=all", timeout=30) as response:
+    releases = json.load(response)
+for release in releases:
+    if release.get("version") != version:
+        continue
+    for file_info in release.get("files", []):
+        if file_info.get("filename") == filename:
+            print(file_info["sha256"])
+            sys.exit(0)
+print(f"checksum not found for {filename}", file=sys.stderr)
+sys.exit(1)
+PY
+  )"
+  actual="$(sha256sum "$archive" | awk '{print $1}')"
+  if [ "$checksum" != "$actual" ]; then
+    echo "checksum mismatch for $archive_name" >&2
+    echo "expected: $checksum" >&2
+    echo "actual:   $actual" >&2
+    exit 1
+  fi
+  tar -C "$install_root" -xzf "$archive"
+fi
+"$install_dir/bin/go" version
+`, shQuote(version), shQuote(arch), shQuote(archiveName), shQuote(downloadURL)), nil
+}
+
+func validGoVersion(version string) bool {
+	return validGoVersionRE.MatchString(version)
+}
+
+func validGoArch(arch string) bool {
+	switch arch {
+	case "386", "amd64", "arm64", "armv6l":
+		return true
+	default:
+		return false
+	}
+}
+
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
 // Vet runs go vet on all packages.
 func Vet() error {
 	fmt.Println("\n=== Running vet ===")
@@ -423,7 +728,9 @@ func Vet() error {
 func Build() error {
 	fmt.Println("\n=== Building binary ===")
 	binDir := filepath.Join(projectDir(), "bin")
-	os.MkdirAll(binDir, 0o755)
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return fmt.Errorf("create bin dir: %w", err)
+	}
 
 	version := devVersion()
 	ldflags := fmt.Sprintf("-X %s=%s", versionVar, version)
@@ -479,8 +786,14 @@ func Preflight() error {
 	if err := run("go", "test", "./...", "-count=1"); err != nil {
 		return fmt.Errorf("test: %w", err)
 	}
+	if err := runMagefileTests(); err != nil {
+		return fmt.Errorf("magefile test: %w", err)
+	}
 
 	fmt.Println("\n=== 8/14 Testing (race detector) ===")
+	if err := ensureWindowsRaceToolchain(); err != nil {
+		return fmt.Errorf("race toolchain: %w", err)
+	}
 	// Race-instrumented binaries are very large; redirect linker temp to
 	// GOTMPDIR (if set) to avoid filling a small C: drive on Windows.
 	if tmpDir := os.Getenv("GOTMPDIR"); tmpDir != "" && runtime.GOOS == "windows" {
@@ -607,6 +920,180 @@ func Preflight() error {
 	return nil
 }
 
+func ensureWindowsRaceToolchain() error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	if _, err := exec.LookPath("gcc"); err == nil {
+		return nil
+	}
+
+	spec, err := windowsRaceToolchainSpec(runtime.GOARCH)
+	if err != nil {
+		return err
+	}
+	root, err := windowsRaceToolchainRoot(spec)
+	if err != nil {
+		return err
+	}
+	binDir := windowsRaceToolchainBinDir(root)
+	compiler := filepath.Join(binDir, "gcc.exe")
+	if _, err := os.Stat(compiler); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		fmt.Printf("   C compiler missing; installing %s under %s\n", spec.name, root)
+		if err := installWindowsRaceToolchain(spec, root); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(compiler); err != nil {
+		return fmt.Errorf("installed compiler not found at %s: %w", compiler, err)
+	}
+	prependEnvPath(binDir)
+	fmt.Printf("   Race compiler: %s\n", compiler)
+	return nil
+}
+
+type windowsToolchainSpec struct {
+	name   string
+	url    string
+	sha256 string
+}
+
+func windowsRaceToolchainSpec(goarch string) (windowsToolchainSpec, error) {
+	if goarch != "amd64" {
+		return windowsToolchainSpec{}, fmt.Errorf("unsupported Windows race compiler architecture %q", goarch)
+	}
+	name := fmt.Sprintf("w64devkit-x64-%s.7z.exe", windowsRaceToolchainVersion)
+	return windowsToolchainSpec{
+		name:   name,
+		url:    fmt.Sprintf("https://github.com/skeeto/w64devkit/releases/download/v%s/%s", windowsRaceToolchainVersion, name),
+		sha256: windowsRaceToolchainSHA256,
+	}, nil
+}
+
+func windowsRaceToolchainRoot(spec windowsToolchainSpec) (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("locate user cache dir: %w", err)
+	}
+	name := strings.TrimSuffix(spec.name, ".7z.exe")
+	return filepath.Join(cacheDir, "grut", "toolchains", name), nil
+}
+
+func windowsRaceToolchainBinDir(root string) string {
+	return filepath.Join(root, "w64devkit", "bin")
+}
+
+func installWindowsRaceToolchain(spec windowsToolchainSpec, root string) error {
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	archive := filepath.Join(root, spec.name)
+	if err := ensureDownloadedFile(spec.url, archive, spec.sha256); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), windowsRaceToolchainExtractTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, archive, "-y", "-o"+root)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = root
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("extract %s timed out after %s: %w", spec.name, windowsRaceToolchainExtractTimeout, ctx.Err())
+		}
+		return fmt.Errorf("extract %s: %w", spec.name, err)
+	}
+	return nil
+}
+
+func ensureDownloadedFile(url, path, wantSHA256 string) (err error) {
+	if fileSHA256(path) == wantSHA256 {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	tmp := path + ".tmp"
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	out, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = out.Close()
+		}
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), windowsRaceToolchainDownloadTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create download request for %s: %w", url, err)
+	}
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec // URL is a pinned HTTPS release asset.
+	if err != nil {
+		return fmt.Errorf("download %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("download %s: %s", url, resp.Status)
+	}
+
+	hasher := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, hasher), resp.Body); err != nil {
+		return err
+	}
+	got := hex.EncodeToString(hasher.Sum(nil))
+	if got != wantSHA256 {
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", filepath.Base(path), wantSHA256, got)
+	}
+	closeErr := out.Close()
+	closed = true
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(tmp, path)
+}
+
+func fileSHA256(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func prependEnvPath(dir string) {
+	path := os.Getenv("PATH")
+	if path == "" {
+		os.Setenv("PATH", dir)
+		return
+	}
+	for _, entry := range filepath.SplitList(path) {
+		if strings.EqualFold(filepath.Clean(entry), filepath.Clean(dir)) {
+			return
+		}
+	}
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+path)
+}
+
 // Fmt formats all Go source files.
 func Fmt() error {
 	fmt.Println("=== Formatting ===")
@@ -661,7 +1148,7 @@ func BenchCompare() error {
 	dir := projectDir()
 	platform := benchPlatform()
 	baseline := filepath.Join(dir, "perf", "baselines", platform, "main.txt")
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("no baseline for %s at %s — run 'mage benchbaseline' first", platform, baseline)
 	}
 	fmt.Printf("   Platform: %s\n   Baseline: %s\n", platform, baseline)
@@ -719,7 +1206,7 @@ func BenchWSL() error {
 
 	baseline := filepath.Join(baselineDir, "main.txt")
 	wslBaseline := escapedPath + "/perf/baselines/linux-amd64/main.txt"
-	if _, err := os.Stat(baseline); os.IsNotExist(err) {
+	if _, err := os.Stat(baseline); errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("\n   No linux-amd64 baseline yet — saving current run as baseline.\n")
 		saveCmd := fmt.Sprintf("cp %s %s", currentTxt, wslBaseline)
 		save := exec.Command("wsl", "bash", "-lc", saveCmd)

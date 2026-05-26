@@ -31,6 +31,10 @@ type tickMsg struct {
 	time time.Time
 }
 
+type lineWindowRunner interface {
+	LinesWindow(offsetFromBottom, height int) ([]string, int)
+}
+
 // Panel is the embedded terminal panel. It implements [panels.Panel] and
 // [panels.Closer]. The panel wraps a [term.Runner] and provides two modes:
 //
@@ -38,17 +42,19 @@ type tickMsg struct {
 //   - Insert mode: keystrokes are collected and sent to the shell on Enter.
 //     The configured prefix key (default ctrl+b) exits insert mode.
 type Panel struct {
-	runner term.Runner
-	ctx    context.Context
-	cfg    config.TerminalConfig
-	shell  string       // display name for status bar
-	theme  *theme.Theme // optional theme for styled colors
-	input  []rune       // input buffer in insert mode
-	lines  []string     // latest snapshot of output lines
+	runner    term.Runner
+	ctx       context.Context
+	cfg       config.TerminalConfig
+	shell     string       // display name for status bar
+	theme     *theme.Theme // optional theme for styled colors
+	input     []rune       // input buffer in insert mode
+	lines     []string     // latest snapshot of output lines
+	lineCount int          // total runner scrollback lines when using windowed snapshots
 	panels.BasePanel
-	mode    mode
-	offset  int  // scroll offset from bottom (0 = latest)
-	ticking bool // whether the tick timer is active
+	mode          mode
+	offset        int  // scroll offset from bottom (0 = latest)
+	ticking       bool // whether the tick timer is active
+	windowedLines bool // whether lines already contains only the visible window
 }
 
 // Compile-time interface checks.
@@ -194,8 +200,7 @@ func (p *Panel) handleTick() (panels.Panel, tea.Cmd) {
 		p.ticking = false
 		return p, nil
 	}
-	// Refresh the line snapshot from the runner.
-	p.lines = p.runner.Lines()
+	p.refreshLines()
 	// Check if the process has exited.
 	select {
 	case <-p.runner.Done():
@@ -208,6 +213,23 @@ func (p *Panel) handleTick() (panels.Panel, tea.Cmd) {
 	}
 	// Schedule next tick.
 	return p, p.scheduleTick()
+}
+
+func (p *Panel) refreshLines() {
+	if p.runner == nil {
+		p.lines = nil
+		p.lineCount = 0
+		p.windowedLines = false
+		return
+	}
+	if windowed, ok := p.runner.(lineWindowRunner); ok {
+		p.lines, p.lineCount = windowed.LinesWindow(p.offset, p.contentHeight())
+		p.windowedLines = true
+		return
+	}
+	p.lines = p.runner.Lines()
+	p.lineCount = len(p.lines)
+	p.windowedLines = false
 }
 
 // ---------------------------------------------------------------------------
@@ -229,12 +251,14 @@ func (p *Panel) handleNormalKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "i", "enter":
 		p.mode = modeInsert
 		p.offset = 0 // scroll to bottom when entering insert mode
+		p.refreshLines()
 	case "j", "down":
 		p.scrollDown()
 	case "k", "up":
 		p.scrollUp()
 	case "G":
 		p.offset = 0 // scroll to bottom
+		p.refreshLines()
 	case "g":
 		p.scrollToTop()
 	}
@@ -290,24 +314,35 @@ func (p *Panel) scrollUp() {
 	if p.offset < maxOffset {
 		p.offset++
 	}
+	p.refreshLines()
 }
 
 func (p *Panel) scrollDown() {
 	if p.offset > 0 {
 		p.offset--
 	}
+	p.refreshLines()
 }
 
 func (p *Panel) scrollToTop() {
 	p.offset = p.maxOffset()
+	p.refreshLines()
 }
 
 func (p *Panel) maxOffset() int {
 	contentHeight := p.contentHeight()
-	if contentHeight <= 0 || len(p.lines) <= contentHeight {
+	totalLines := p.totalLines()
+	if contentHeight <= 0 || totalLines <= contentHeight {
 		return 0
 	}
-	return len(p.lines) - contentHeight
+	return totalLines - contentHeight
+}
+
+func (p *Panel) totalLines() int {
+	if p.lineCount > 0 || p.windowedLines {
+		return p.lineCount
+	}
+	return len(p.lines)
 }
 
 func (p *Panel) contentHeight() int {
@@ -331,7 +366,7 @@ func (p *Panel) renderContent(width, contentHeight int) string {
 	if contentHeight <= 0 {
 		return ""
 	}
-	totalLines := len(p.lines)
+	totalLines := p.totalLines()
 	if totalLines == 0 {
 		// Show empty area.
 		emptyLine := lipgloss.NewStyle().Width(width).Render("")
@@ -341,16 +376,19 @@ func (p *Panel) renderContent(width, contentHeight int) string {
 		}
 		return strings.Join(empty, "\n")
 	}
-	// Calculate the visible window. offset=0 means latest lines visible.
-	end := totalLines - p.offset
-	if end < 0 {
-		end = 0
+	visible := p.lines
+	if !p.windowedLines {
+		// Calculate the visible window. offset=0 means latest lines visible.
+		end := totalLines - p.offset
+		if end < 0 {
+			end = 0
+		}
+		start := end - contentHeight
+		if start < 0 {
+			start = 0
+		}
+		visible = p.lines[start:end]
 	}
-	start := end - contentHeight
-	if start < 0 {
-		start = 0
-	}
-	visible := p.lines[start:end]
 	lineStyle := lipgloss.NewStyle().Width(width)
 	rendered := make([]string, 0, contentHeight)
 	for _, line := range visible {

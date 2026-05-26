@@ -33,6 +33,49 @@ func (c *Client) BranchList(ctx context.Context) ([]Branch, error) {
 	return parseBranchList(out)
 }
 
+// CurrentBranch returns the current branch with ahead/behind tracking info
+// without enumerating all branches. Uses `git rev-parse --abbrev-ref HEAD`
+// for the name and `git status --porcelain=v2 --branch` for tracking counts.
+func (c *Client) CurrentBranch(ctx context.Context) (Branch, error) {
+	nameOut, err := c.run(ctx, "rev-parse", "--abbrev-ref", refHEAD)
+	if err != nil {
+		return Branch{}, fmt.Errorf("current branch: %w", err)
+	}
+	name := strings.TrimSpace(nameOut)
+	if name == "" || name == refHEAD {
+		// Detached HEAD state.
+		return Branch{Name: name, IsCurrent: true}, nil
+	}
+
+	b := Branch{Name: name, IsCurrent: true}
+
+	// Get ahead/behind from porcelain v2 branch header.
+	statusOut, err := c.run(ctx, "status", "--porcelain=v2", "--branch")
+	if err != nil {
+		// Return name without tracking info on error.
+		return b, nil //nolint:nilerr // intentional: degrade gracefully to name-only branch
+	}
+
+	for _, line := range strings.Split(statusOut, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.HasPrefix(line, "# branch.ab ") {
+			// Format: "# branch.ab +N -M"
+			parts := strings.Fields(line)
+			if len(parts) >= 4 {
+				if v, e := strconv.Atoi(strings.TrimPrefix(parts[2], "+")); e == nil {
+					b.Ahead = v
+				}
+				if v, e := strconv.Atoi(strings.TrimPrefix(parts[3], "-")); e == nil {
+					b.Behind = v
+				}
+			}
+			break
+		}
+	}
+
+	return b, nil
+}
+
 // parseBranchList parses for-each-ref output into Branch entries.
 func parseBranchList(output string) ([]Branch, error) {
 	branches := make([]Branch, 0)

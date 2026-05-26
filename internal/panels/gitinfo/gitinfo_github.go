@@ -2,11 +2,9 @@
 package gitinfo
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -205,18 +203,15 @@ type tabPagination struct {
 type IssueFilterKind int
 
 const (
-	issueFilterAll       IssueFilterKind = iota
-	issueFilterAssigned                  // assignee == current user
-	issueFilterMentioned                 // placeholder — shows all
-	issueFilterCreated                   // author == current user
+	issueFilterAll      IssueFilterKind = iota
+	issueFilterAssigned                 // assignee == current user
+	issueFilterCreated                  // author == current user
 )
 
 func (f IssueFilterKind) String() string {
 	switch f {
 	case issueFilterAssigned:
 		return "Assigned"
-	case issueFilterMentioned:
-		return "Mentioned"
 	case issueFilterCreated:
 		return "Created"
 	default:
@@ -495,9 +490,6 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 				})
 			}
 		}
-		// Enrich open PRs with mergeable state (concurrency-limited).
-		enrichPRsMergeableState(ctx, client, owner, repo, result.prs)
-
 		// Cross-reference action runs to PRs by head branch.
 		if len(result.prs) > 0 && len(result.actions) > 0 {
 			actionByBranch := make(map[string]ghActionItem, len(result.actions))
@@ -703,7 +695,7 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	}
 }
 
-// loadPRsPage fetches a single page of pull requests with mergeable state enrichment.
+// loadPRsPage fetches a single page of pull requests.
 func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
 	owner, repo := p.gh.owner, p.gh.repo
@@ -740,42 +732,8 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 				HTMLURL:    ghPR.GetHTMLURL(),
 			})
 		}
-		// Enrich open PRs with mergeable state (concurrency-limited).
-		enrichPRsMergeableState(ctx, client, owner, repo, items)
 		return ghPRsPageMsg{prs: items, nextPage: pr.NextPage, replace: replace}
 	}
-}
-
-// enrichPRsMergeableState fetches the mergeable state for each open PR in prs
-// using at most maxPREnrichConcurrency parallel GetPR calls.  This avoids the
-// N+1 fan-out that would otherwise saturate GitHub API rate limits.
-func enrichPRsMergeableState(ctx context.Context, client ghclient.Client, owner, repo string, prs []ghPRItem) {
-	if len(prs) == 0 {
-		return
-	}
-	sem := make(chan struct{}, maxPREnrichConcurrency)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	for i, pr := range prs {
-		if pr.State != prStateOpen {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{} // acquire slot
-		go func(idx int, num int) {
-			defer wg.Done()
-			defer func() { <-sem }() // release slot
-			detail, err := client.GetPR(ctx, owner, repo, num)
-			if err != nil {
-				slog.Warn("github: fetch PR detail for mergeable state failed", "number", num, "err", err)
-				return
-			}
-			mu.Lock()
-			prs[idx].MergeableState = detail.GetMergeableState()
-			mu.Unlock()
-		}(i, pr.Number)
-	}
-	wg.Wait()
 }
 
 // loadActionsPage fetches a single page of workflow runs.
@@ -1123,7 +1081,7 @@ func (p *Panel) ghTabCountStr(tab tabID) string {
 // Quick filter cycling
 // ---------------------------------------------------------------------------
 func (p *Panel) cycleIssueFilter() (panels.Panel, tea.Cmd) {
-	p.gh.issueFilter = (p.gh.issueFilter + 1) % 4
+	p.gh.issueFilter = (p.gh.issueFilter + 1) % 3
 	p.applyIssueFilter()
 	filter := p.gh.issueFilter.String()
 	return p, func() tea.Msg {
@@ -1164,9 +1122,6 @@ func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
 	switch p.gh.issueFilter {
 	case issueFilterAssigned:
 		return iss.Assignee == p.gh.user
-	case issueFilterMentioned:
-		// GitHub list API doesn't expose "mentioned" — show all for now.
-		return true
 	case issueFilterCreated:
 		return iss.Author == p.gh.user
 	default:

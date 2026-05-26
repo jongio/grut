@@ -131,6 +131,35 @@ func (t *Terminal) Lines() []string {
 	return cp
 }
 
+// LinesWindow returns only the visible line window and the total scrollback
+// length. offsetFromBottom follows the panel convention: 0 means newest lines.
+func (t *Terminal) LinesWindow(offsetFromBottom, height int) ([]string, int) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	total := len(t.lines)
+	if height <= 0 || total == 0 {
+		return nil, total
+	}
+	if offsetFromBottom < 0 {
+		offsetFromBottom = 0
+	}
+	end := total - offsetFromBottom
+	if end < 0 {
+		end = 0
+	}
+	if end > total {
+		end = total
+	}
+	start := end - height
+	if start < 0 {
+		start = 0
+	}
+	cp := make([]string, end-start)
+	copy(cp, t.lines[start:end])
+	return cp, total
+}
+
 // Close closes stdin, kills the process if still running, and waits for
 // the done channel to be closed.
 func (t *Terminal) Close() error {

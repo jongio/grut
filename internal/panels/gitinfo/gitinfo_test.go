@@ -33,6 +33,16 @@ type mockGitOps struct {
 	branchErr error
 }
 
+type countingGitOps struct {
+	mockGitOps
+	branchCalls   int
+	worktreeCalls int
+	remoteCalls   int
+	stashCalls    int
+	tagCalls      int
+	reflogCalls   int
+}
+
 func (m *mockGitOps) BranchList(_ context.Context) ([]git.Branch, error) {
 	return m.branches, m.branchErr
 }
@@ -73,14 +83,45 @@ func (m *mockGitOps) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEnt
 	return nil, nil
 }
 
+func (m *countingGitOps) BranchList(ctx context.Context) ([]git.Branch, error) {
+	m.branchCalls++
+	return m.mockGitOps.BranchList(ctx)
+}
+
+func (m *countingGitOps) WorktreeList(ctx context.Context) ([]git.Worktree, error) {
+	m.worktreeCalls++
+	return m.mockGitOps.WorktreeList(ctx)
+}
+
+func (m *countingGitOps) RemoteList(ctx context.Context) ([]git.Remote, error) {
+	m.remoteCalls++
+	return m.mockGitOps.RemoteList(ctx)
+}
+
+func (m *countingGitOps) StashList(ctx context.Context) ([]git.StashEntry, error) {
+	m.stashCalls++
+	return m.mockGitOps.StashList(ctx)
+}
+
+func (m *countingGitOps) TagList(ctx context.Context) ([]git.Tag, error) {
+	m.tagCalls++
+	return m.mockGitOps.TagList(ctx)
+}
+
+func (m *countingGitOps) Reflog(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error) {
+	m.reflogCalls++
+	return m.mockGitOps.Reflog(ctx, ref, limit)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-func newTestPanel(mock *mockGitOps) *Panel {
+func newTestPanel(t *testing.T, mock *mockGitOps) *Panel {
+	t.Helper()
 	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
-	cmd := p.Init(context.Background())
+	cmd := p.Init(t.Context())
 	if cmd != nil {
 		msg := cmd()
 		p.Update(msg)
@@ -89,10 +130,11 @@ func newTestPanel(mock *mockGitOps) *Panel {
 }
 
 // newTestGitHubPanel creates a Panel in ModeGitHub (only GitHub tabs visible).
-func newTestGitHubPanel(mock *mockGitOps) *Panel {
+func newTestGitHubPanel(t *testing.T, mock *mockGitOps) *Panel {
+	t.Helper()
 	p := NewGitHub(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
 	p.lastWidth = 200 // wide enough that tab labels are never abbreviated
-	cmd := p.Init(context.Background())
+	cmd := p.Init(t.Context())
 	if cmd != nil {
 		msg := cmd()
 		p.Update(msg)
@@ -154,7 +196,7 @@ func TestPanelImplementsInterface(t *testing.T) {
 
 func TestInitialLoad(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// Branches tab should have 2 items (local only — ModeGit filters out remote).
 	assert.Equal(t, 2, len(p.tabItems[tabBranches]))
@@ -178,7 +220,7 @@ func TestInitialLoad(t *testing.T) {
 
 func TestCursorNavigation(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	initial := p.tabCursor[tabBranches]
@@ -194,7 +236,7 @@ func TestCursorNavigation(t *testing.T) {
 
 func TestTabSwitching(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	assert.Equal(t, tabBranches, p.activeTab)
 
@@ -214,7 +256,7 @@ func TestTabSwitching(t *testing.T) {
 
 func TestDataRefreshOnMessages(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// BranchChangedMsg should trigger reload.
 	_, cmd := p.Update(panels.BranchChangedMsg{Name: "feature"})
@@ -239,7 +281,7 @@ func TestDataRefreshOnMessages(t *testing.T) {
 
 func TestEmptyData(t *testing.T) {
 	mock := &mockGitOps{}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// All tabs should have zero items.
 	assert.Equal(t, 0, len(p.tabItems[tabBranches]))
@@ -250,7 +292,7 @@ func TestEmptyData(t *testing.T) {
 
 func TestViewRendering(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	view := p.View(60, 20)
 	assert.NotEmpty(t, view)
@@ -261,7 +303,7 @@ func TestViewRendering(t *testing.T) {
 
 func TestViewEmptyDimensions(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	assert.Empty(t, p.View(0, 10))
 	assert.Empty(t, p.View(10, 0))
@@ -288,7 +330,7 @@ func TestKeyBindings(t *testing.T) {
 
 func TestStashTabSwitchViaKey(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	assert.Equal(t, tabBranches, p.activeTab)
@@ -308,7 +350,7 @@ func TestStashTabSwitchViaKey(t *testing.T) {
 
 func TestStashTabRendering(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	// Render with branches as active tab — stash tab label rendered as inactive.
@@ -328,7 +370,7 @@ func TestStashTabRendering(t *testing.T) {
 
 func TestKeyNavigationIntegration(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	// Record initial cursor.
@@ -356,7 +398,7 @@ func TestLoadError(t *testing.T) {
 		branchErr: assert.AnError,
 	}
 	p := New(mock, config.GitConfig{WorktreeOpenMode: "current"}, config.GitHubConfig{}, config.ActionsConfig{}, "/test/repo", "ascii", nil)
-	cmd := p.Init(context.Background())
+	cmd := p.Init(t.Context())
 	require.NotNil(t, cmd)
 
 	msg := cmd()
@@ -367,7 +409,7 @@ func TestLoadError(t *testing.T) {
 
 func TestHashAlwaysShown(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// Render a branch line at a narrow width.
 	view := p.View(30, 10)
@@ -377,7 +419,7 @@ func TestHashAlwaysShown(t *testing.T) {
 
 func TestPerTabCursorPreservation(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	// Move cursor down in branches tab.
@@ -399,7 +441,7 @@ func TestPerTabCursorPreservation(t *testing.T) {
 
 func TestMouseClick_TabBarSwitchesTabs(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 
 	// Initially on branches tab.
@@ -415,7 +457,7 @@ func TestMouseClick_TabBarSwitchesTabs(t *testing.T) {
 
 func TestMouseClick_ContentRowSelectsItem(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 
 	// branches tab has 2 items (local only in ModeGit). Cursor starts on current branch.
@@ -432,7 +474,7 @@ func TestMouseClick_ContentRowSelectsItem(t *testing.T) {
 
 func TestMouseClick_OutOfBoundsIgnored(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 
 	cursor := p.tabCursor[tabBranches]
@@ -444,7 +486,7 @@ func TestMouseClick_OutOfBoundsIgnored(t *testing.T) {
 
 func TestMouseDoubleClick_ContentRowTriggersAction(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 	p.Focused = true
 
@@ -458,7 +500,7 @@ func TestMouseDoubleClick_ContentRowTriggersAction(t *testing.T) {
 
 func TestMouseDoubleClick_TabBarIgnored_NoGitHub(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 
 	// Double-click on tab bar row is always a no-op (tab switching is
@@ -469,7 +511,7 @@ func TestMouseDoubleClick_TabBarIgnored_NoGitHub(t *testing.T) {
 
 func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetSize(80, 20)
 
 	cursor := p.tabCursor[tabBranches]
@@ -484,7 +526,7 @@ func TestMouseDoubleClick_OutOfBoundsIgnored(t *testing.T) {
 
 func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = "myorg"
 	p.gh.repo = "myrepo"
 	p.SetSize(80, 20)
@@ -507,7 +549,7 @@ func TestHeaderDoubleClick_OpensRepoInBrowser(t *testing.T) {
 
 func TestHeaderDoubleClick_NoOwner_Noop(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = ""
 	p.gh.repo = "repo"
 	p.SetSize(80, 20)
@@ -518,7 +560,7 @@ func TestHeaderDoubleClick_NoOwner_Noop(t *testing.T) {
 
 func TestHeaderDoubleClick_NoRepo_Noop(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = "owner"
 	p.gh.repo = ""
 	p.SetSize(80, 20)
@@ -529,7 +571,7 @@ func TestHeaderDoubleClick_NoRepo_Noop(t *testing.T) {
 
 func TestMouseDoubleClick_TabBar_Noop_WithGitHub(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
 	p.SetSize(80, 20)
@@ -542,7 +584,7 @@ func TestMouseDoubleClick_TabBar_Noop_WithGitHub(t *testing.T) {
 
 func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = "jongio"
 	p.gh.repo = "grut"
 
@@ -561,7 +603,7 @@ func TestOpenRepoInBrowser_ConstructsCorrectURL(t *testing.T) {
 
 func TestMouseDoubleClick_ContentRow_StillWorks(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
 	p.SetSize(80, 20)
@@ -580,7 +622,7 @@ func TestMouseDoubleClick_ContentRow_StillWorks(t *testing.T) {
 
 func TestRemoteCount_SingleRemote(t *testing.T) {
 	mock := defaultMock() // 1 remote, same fetch/push URL
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// tabItems includes the remote + its fetch sub-row.
 	assert.Equal(t, 2, len(p.tabItems[tabRemotes]))
@@ -595,7 +637,7 @@ func TestRemoteCount_MultipleRemotes(t *testing.T) {
 			{Name: "upstream", FetchURL: "https://github.com/c/d", PushURL: "git@github.com:c/d"},
 		},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	// origin = 2 items (remote + fetch), upstream = 3 items (remote + fetch + push)
 	assert.Equal(t, 5, len(p.tabItems[tabRemotes]))
@@ -605,7 +647,7 @@ func TestRemoteCount_MultipleRemotes(t *testing.T) {
 
 func TestRemoteCount_RenderedInTabBar(t *testing.T) {
 	mock := defaultMock() // 1 remote
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 
 	view := p.View(80, 20)
 	// Tab bar should say "Remotes 1" not "Remotes 2".
@@ -619,7 +661,7 @@ func TestRemoteCount_RenderedInTabBar(t *testing.T) {
 
 func TestRKey_SwitchesToRemotesTab(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	assert.Equal(t, tabBranches, p.activeTab)
@@ -692,7 +734,6 @@ func TestIssueFilterKind_String(t *testing.T) {
 	}{
 		{issueFilterAll, "All"},
 		{issueFilterAssigned, "Assigned"},
-		{issueFilterMentioned, "Mentioned"},
 		{issueFilterCreated, "Created"},
 		{IssueFilterKind(99), "All"}, // default
 	}
@@ -722,14 +763,14 @@ func TestPRFilterKind_String(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleGHDataLoaded_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{err: assert.AnError})
 	assert.Nil(t, cmd) // error is stored on panel, no cmd returned
 	assert.NotNil(t, p.gh.err)
 }
 
 func TestHandleGHDataLoaded_ValidData(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.user = ""
 	issues := sampleIssues()
 	prs := samplePRs()
@@ -751,7 +792,7 @@ func TestHandleGHDataLoaded_ValidData(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_EmptyData(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleGHDataLoaded(ghDataLoadedMsg{})
 	assert.Nil(t, cmd)
 	assert.Equal(t, 0, len(p.tabItems[tabIssues]))
@@ -764,7 +805,7 @@ func TestHandleGHDataLoaded_EmptyData(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleOpResult_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleOpResult(opResultMsg{op: "checkout", name: "main", err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -795,7 +836,7 @@ func TestHandleOpResult_AllOps(t *testing.T) {
 
 	for _, tt := range ops {
 		t.Run(tt.op, func(t *testing.T) {
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			_, cmd := p.handleOpResult(opResultMsg{op: tt.op, name: tt.name})
 			require.NotNil(t, cmd, "op %s should return a command", tt.op)
 		})
@@ -807,7 +848,7 @@ func TestHandleOpResult_AllOps(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandlePRDetailsLoaded_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handlePRDetailsLoaded(prDetailsLoadedMsg{number: 1, err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -817,7 +858,7 @@ func TestHandlePRDetailsLoaded_Error(t *testing.T) {
 }
 
 func TestHandlePRDetailsLoaded_ValidData(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	files := []panels.PRFile{{Filename: "main.go", Status: "modified", Additions: 10, Deletions: 2}}
 	commits := []panels.PRCommit{{SHA: "abc123", Message: "fix bug", Author: "user", Date: "Jan 1 10:00"}}
 
@@ -830,7 +871,7 @@ func TestHandlePRDetailsLoaded_ValidData(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleActionJobsLoaded_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionJobsLoaded(actionJobsLoadedMsg{runID: 1, err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -840,7 +881,7 @@ func TestHandleActionJobsLoaded_Error(t *testing.T) {
 }
 
 func TestHandleActionJobsLoaded_ValidJobs(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	jobs := []panels.ActionJob{
 		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
 	}
@@ -849,7 +890,7 @@ func TestHandleActionJobsLoaded_ValidJobs(t *testing.T) {
 }
 
 func TestHandleActionJobsLoaded_FailedJobNoClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// No ghClient set, so even with a failed job, no log-fetch Cmd is appended.
 	jobs := []panels.ActionJob{
 		{ID: 1, Name: "build", Status: "completed", Conclusion: "failure"},
@@ -863,7 +904,7 @@ func TestHandleActionJobsLoaded_FailedJobNoClient(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleActionLogLoaded_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionLogLoaded(actionLogLoadedMsg{runID: 1, jobID: 2, err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -874,7 +915,7 @@ func TestHandleActionLogLoaded_Error(t *testing.T) {
 }
 
 func TestHandleActionLogLoaded_ValidLog(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionLogLoaded(actionLogLoadedMsg{runID: 1, jobID: 2, log: "build output..."})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -890,7 +931,7 @@ func TestHandleActionLogLoaded_ValidLog(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleActionRerunResult_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionRerunResult(actionRerunResultMsg{runID: 1, err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -901,7 +942,7 @@ func TestHandleActionRerunResult_Error(t *testing.T) {
 }
 
 func TestHandleActionRerunResult_Success(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionRerunResult(actionRerunResultMsg{runID: 1})
 	require.NotNil(t, cmd)
 }
@@ -911,7 +952,7 @@ func TestHandleActionRerunResult_Success(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleActionCancelResult_Error(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionCancelResult(actionCancelResultMsg{runID: 1, err: assert.AnError})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -922,7 +963,7 @@ func TestHandleActionCancelResult_Error(t *testing.T) {
 }
 
 func TestHandleActionCancelResult_Success(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleActionCancelResult(actionCancelResultMsg{runID: 1})
 	require.NotNil(t, cmd)
 }
@@ -932,7 +973,7 @@ func TestHandleActionCancelResult_Success(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleMouseWheel_ScrollUp(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 20)
 	p.tabOffset[tabBranches] = 2
 
@@ -941,7 +982,7 @@ func TestHandleMouseWheel_ScrollUp(t *testing.T) {
 }
 
 func TestHandleMouseWheel_ScrollDown(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 5) // small height to allow scrolling
 
 	p.handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
@@ -954,7 +995,7 @@ func TestHandleMouseWheel_ScrollDown(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleModalResult_Accept_BranchCreate(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCreate
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "new-branch"})
 	require.NotNil(t, cmd)
@@ -962,7 +1003,7 @@ func TestHandleModalResult_Accept_BranchCreate(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_BranchDelete(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchDelete
 	p.pendingName = "feature"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -970,7 +1011,7 @@ func TestHandleModalResult_Accept_BranchDelete(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_BranchRename(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchRename
 	p.pendingName = "old-name"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "new-name"})
@@ -978,7 +1019,7 @@ func TestHandleModalResult_Accept_BranchRename(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_BranchRename_SameName(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchRename
 	p.pendingName = "same"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "same"})
@@ -986,14 +1027,14 @@ func TestHandleModalResult_Accept_BranchRename_SameName(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_WorktreeCreate(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorktreeCreate
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "wt-branch"})
 	require.NotNil(t, cmd)
 }
 
 func TestHandleModalResult_Accept_WorktreeDelete(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorktreeDelete
 	p.pendingName = "/path/wt"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -1001,7 +1042,7 @@ func TestHandleModalResult_Accept_WorktreeDelete(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_RemoteAdd(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAdd
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "upstream"})
 	require.NotNil(t, cmd)
@@ -1011,7 +1052,7 @@ func TestHandleModalResult_Accept_RemoteAdd(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_RemoteAddURL(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAddURL
 	p.pendingName = "upstream"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "https://github.com/user/repo"})
@@ -1019,7 +1060,7 @@ func TestHandleModalResult_Accept_RemoteAddURL(t *testing.T) {
 }
 
 func TestHandleModalResult_Accept_RemoteDelete(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteDelete
 	p.pendingName = "origin"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -1027,7 +1068,7 @@ func TestHandleModalResult_Accept_RemoteDelete(t *testing.T) {
 }
 
 func TestHandleModalResult_Reject(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCreate
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
 	assert.Nil(t, cmd)
@@ -1037,7 +1078,7 @@ func TestHandleModalResult_Reject(t *testing.T) {
 func TestHandleModalResult_EmptyValue(t *testing.T) {
 	ops := []pendingOp{opBranchCreate, opBranchRename, opWorktreeCreate, opRemoteAdd, opRemoteAddURL}
 	for _, op := range ops {
-		p := newTestPanel(defaultMock())
+		p := newTestPanel(t, defaultMock())
 		p.pending = op
 		p.pendingName = "old"
 		_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: ""})
@@ -1050,7 +1091,7 @@ func TestHandleModalResult_EmptyValue(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoAction_CurrentBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	// Cursor is on "main" (current branch).
 	_, cmd := p.doAction()
@@ -1058,7 +1099,7 @@ func TestDoAction_CurrentBranch(t *testing.T) {
 }
 
 func TestDoAction_NonCurrentBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.tabCursor[tabBranches] = 1 // "feature"
 	_, cmd := p.doAction()
@@ -1066,7 +1107,7 @@ func TestDoAction_NonCurrentBranch(t *testing.T) {
 }
 
 func TestDoAction_Worktree(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabWorktrees
 	p.tabCursor[tabWorktrees] = 0
@@ -1075,7 +1116,7 @@ func TestDoAction_Worktree(t *testing.T) {
 }
 
 func TestDoAction_Remote(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 0
@@ -1084,7 +1125,7 @@ func TestDoAction_Remote(t *testing.T) {
 }
 
 func TestDoAction_OutOfBounds(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.tabCursor[tabBranches] = 999
 	_, cmd := p.doAction()
@@ -1092,7 +1133,7 @@ func TestDoAction_OutOfBounds(t *testing.T) {
 }
 
 func TestDoAction_Issue(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabIssues
 	p.tabItems[tabIssues] = []listItem{
@@ -1104,7 +1145,7 @@ func TestDoAction_Issue(t *testing.T) {
 }
 
 func TestDoAction_IssueNoURL(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabIssues
 	p.tabItems[tabIssues] = []listItem{
@@ -1116,7 +1157,7 @@ func TestDoAction_IssueNoURL(t *testing.T) {
 }
 
 func TestDoAction_PR(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{
@@ -1128,7 +1169,7 @@ func TestDoAction_PR(t *testing.T) {
 }
 
 func TestDoAction_PRNoURL(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{
@@ -1140,7 +1181,7 @@ func TestDoAction_PRNoURL(t *testing.T) {
 }
 
 func TestDoAction_ActionRun(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabActions
 	p.tabItems[tabActions] = []listItem{
@@ -1152,7 +1193,7 @@ func TestDoAction_ActionRun(t *testing.T) {
 }
 
 func TestDoAction_ActionRunNoURL(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabActions
 	p.tabItems[tabActions] = []listItem{
@@ -1168,7 +1209,7 @@ func TestDoAction_ActionRunNoURL(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoCreate_Branches(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	_, cmd := p.doCreate()
 	require.NotNil(t, cmd)
@@ -1176,7 +1217,7 @@ func TestDoCreate_Branches(t *testing.T) {
 }
 
 func TestDoCreate_Worktrees(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	_, cmd := p.doCreate()
 	require.NotNil(t, cmd)
@@ -1184,7 +1225,7 @@ func TestDoCreate_Worktrees(t *testing.T) {
 }
 
 func TestDoCreate_Remotes(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	_, cmd := p.doCreate()
 	require.NotNil(t, cmd)
@@ -1192,7 +1233,7 @@ func TestDoCreate_Remotes(t *testing.T) {
 }
 
 func TestDoCreate_Stash_NoOp(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabStash
 	_, cmd := p.doCreate()
 	assert.Nil(t, cmd)
@@ -1203,7 +1244,7 @@ func TestDoCreate_Stash_NoOp(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoDelete_CurrentBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// cursor on "main" (current)
 	_, cmd := p.doDelete()
 	require.NotNil(t, cmd)
@@ -1215,7 +1256,7 @@ func TestDoDelete_CurrentBranch(t *testing.T) {
 }
 
 func TestDoDelete_NonCurrentBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabBranches] = 1 // "feature"
 	_, cmd := p.doDelete()
 	require.NotNil(t, cmd)
@@ -1224,7 +1265,7 @@ func TestDoDelete_NonCurrentBranch(t *testing.T) {
 }
 
 func TestDoDelete_RemoteBranch(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
 	_, cmd := p.doDelete()
@@ -1236,7 +1277,7 @@ func TestDoDelete_RemoteBranch(t *testing.T) {
 }
 
 func TestDoDelete_Worktree(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	p.tabCursor[tabWorktrees] = 0
 	_, cmd := p.doDelete()
@@ -1245,7 +1286,7 @@ func TestDoDelete_Worktree(t *testing.T) {
 }
 
 func TestDoDelete_Remote(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 0
 	_, cmd := p.doDelete()
@@ -1255,7 +1296,7 @@ func TestDoDelete_Remote(t *testing.T) {
 }
 
 func TestDoDelete_OutOfBounds(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabBranches] = 999
 	_, cmd := p.doDelete()
 	assert.Nil(t, cmd)
@@ -1266,7 +1307,7 @@ func TestDoDelete_OutOfBounds(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoRename_LocalBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabCursor[tabBranches] = 1 // "feature" (local, non-current)
 	_, cmd := p.doRename()
 	require.NotNil(t, cmd)
@@ -1275,7 +1316,7 @@ func TestDoRename_LocalBranch(t *testing.T) {
 }
 
 func TestDoRename_RemoteBranch(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
 	_, cmd := p.doRename()
@@ -1287,7 +1328,7 @@ func TestDoRename_RemoteBranch(t *testing.T) {
 }
 
 func TestDoRename_NilBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees // no branch at cursor
 	_, cmd := p.doRename()
 	assert.Nil(t, cmd)
@@ -1298,7 +1339,7 @@ func TestDoRename_NilBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoFetch_WithRemote(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 0 // "origin" remote
 	_, cmd := p.doFetch()
@@ -1306,7 +1347,7 @@ func TestDoFetch_WithRemote(t *testing.T) {
 }
 
 func TestDoFetch_FetchAll(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches // not on a remote
 	_, cmd := p.doFetch()
 	require.NotNil(t, cmd)
@@ -1324,7 +1365,7 @@ func TestBuildItems_CursorOnCurrentBranch(t *testing.T) {
 			{Name: "main", IsCurrent: true, Hash: "ccc"},
 		},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	// Current branch "main" is at index 2 in local branches.
 	assert.Equal(t, 2, p.tabCursor[tabBranches])
 	assert.Equal(t, "main", p.tabItems[tabBranches][p.tabCursor[tabBranches]].branch.Name)
@@ -1343,7 +1384,7 @@ func TestBuildItems_ModeGitShowsOnlyLocalBranches(t *testing.T) {
 			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
 		},
 	}
-	p := newTestPanel(mock) // ModeGit
+	p := newTestPanel(t, mock) // ModeGit
 
 	assert.Equal(t, 2, len(p.tabItems[tabBranches]), "ModeGit should show only local branches")
 	for _, item := range p.tabItems[tabBranches] {
@@ -1361,7 +1402,7 @@ func TestBuildItems_ModeGitHubShowsOnlyRemoteBranches(t *testing.T) {
 			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
 		},
 	}
-	p := newTestGitHubPanel(mock) // ModeGitHub
+	p := newTestGitHubPanel(t, mock) // ModeGitHub
 
 	assert.Equal(t, 2, len(p.tabItems[tabBranches]), "ModeGitHub should show only remote branches")
 	for _, item := range p.tabItems[tabBranches] {
@@ -1379,7 +1420,7 @@ func TestBuildItems_ModeAllShowsBothBranches(t *testing.T) {
 			{Name: "origin/dev", IsRemote: true, Hash: "ddd"},
 		},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.mode = ModeAll
 	p.doBuildItems()
 
@@ -1407,11 +1448,11 @@ func TestBuildItems_GitHubPanelBranchCountReflectsFiltering(t *testing.T) {
 		},
 	}
 	// Git panel: 2 local branches.
-	pGit := newTestPanel(mock)
+	pGit := newTestPanel(t, mock)
 	assert.Equal(t, 2, len(pGit.tabItems[tabBranches]))
 
 	// GitHub panel: 1 remote branch.
-	pGH := newTestGitHubPanel(mock)
+	pGH := newTestGitHubPanel(t, mock)
 	assert.Equal(t, 1, len(pGH.tabItems[tabBranches]))
 }
 
@@ -1421,7 +1462,7 @@ func TestBuildItems_GitHubPanelBranchCountReflectsFiltering(t *testing.T) {
 
 func TestRebuildFromCurrent_CursorClamped(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.tabCursor[tabBranches] = 2 // beyond last item (ModeGit has 2 local branches)
 
 	// Shrink branches.
@@ -1434,7 +1475,7 @@ func TestRebuildFromCurrent_CursorClamped(t *testing.T) {
 
 func TestRebuildFromCurrent_EmptyList(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.tabCursor[tabBranches] = 2
 
 	p.gitData.lastBranches = nil
@@ -1447,7 +1488,7 @@ func TestRebuildFromCurrent_EmptyList(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderLine_AllKinds(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	width := 80
 
 	tests := []struct {
@@ -1473,7 +1514,7 @@ func TestRenderLine_AllKinds(t *testing.T) {
 }
 
 func TestRenderLine_UnknownKind(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	line := p.renderLine(listItem{kind: itemKind(99)}, 80, false)
 	assert.Empty(t, line)
 }
@@ -1483,7 +1524,7 @@ func TestRenderLine_UnknownKind(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderIssue_Content(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Fix auth token", Labels: []string{"bug"}}}
 	line := p.renderIssue(item, 80, false)
 	assert.Contains(t, line, "#42")
@@ -1492,7 +1533,7 @@ func TestRenderIssue_Content(t *testing.T) {
 }
 
 func TestRenderPR_Content(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "Add auth", State: "open"}}
 	line := p.renderPR(item, 80, false)
 	assert.Contains(t, line, "#10")
@@ -1501,21 +1542,21 @@ func TestRenderPR_Content(t *testing.T) {
 }
 
 func TestRenderPR_DraftState(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{Number: 11, Title: "Draft PR", State: "draft"}}
 	line := p.renderPR(item, 80, false)
 	assert.Contains(t, line, "draft")
 }
 
 func TestRenderPR_MergedState(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{Number: 12, Title: "Merged PR", State: "merged"}}
 	line := p.renderPR(item, 80, false)
 	assert.Contains(t, line, "merged")
 }
 
 func TestRenderActionRun_Content(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 42, Status: "completed",
 		Conclusion: "success", Branch: "main", CreatedAt: "Jan 1 10:00",
@@ -1528,7 +1569,7 @@ func TestRenderActionRun_Content(t *testing.T) {
 }
 
 func TestRenderActionRun_Failure(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 101, WorkflowName: "Deploy", RunNumber: 5, Conclusion: "failure",
 	}}
@@ -1537,7 +1578,7 @@ func TestRenderActionRun_Failure(t *testing.T) {
 }
 
 func TestRenderActionRun_InProgress(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 102, WorkflowName: "Test", RunNumber: 3, Status: "in_progress",
 	}}
@@ -1565,7 +1606,7 @@ func TestActionsStatusIcon(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.tabItems[tabActions] = nil
 			for _, a := range tt.actions {
 				p.tabItems[tabActions] = append(p.tabItems[tabActions], listItem{kind: kindActionRun, actionRun: a})
@@ -1627,7 +1668,7 @@ func TestRemoteToHTTPS_Unknown(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCycleIssueFilter(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), nil, nil)
 
 	assert.Equal(t, issueFilterAll, p.gh.issueFilter)
@@ -1635,10 +1676,7 @@ func TestCycleIssueFilter(t *testing.T) {
 	p.cycleIssueFilter() // All -> Assigned
 	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 
-	p.cycleIssueFilter() // Assigned -> Mentioned
-	assert.Equal(t, issueFilterMentioned, p.gh.issueFilter)
-
-	p.cycleIssueFilter() // Mentioned -> Created
+	p.cycleIssueFilter() // Assigned -> Created
 	assert.Equal(t, issueFilterCreated, p.gh.issueFilter)
 
 	p.cycleIssueFilter() // Created -> All
@@ -1646,7 +1684,7 @@ func TestCycleIssueFilter(t *testing.T) {
 }
 
 func TestCyclePRFilter(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, samplePRs(), nil)
 
 	assert.Equal(t, prFilterAll, p.gh.prFilter)
@@ -1665,7 +1703,7 @@ func TestCyclePRFilter(t *testing.T) {
 }
 
 func TestCycleIssueFilter_FiltersItems(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), nil, nil)
 
 	// All: all 3 issues.
@@ -1676,17 +1714,14 @@ func TestCycleIssueFilter_FiltersItems(t *testing.T) {
 	assert.Equal(t, issueFilterAssigned, p.gh.issueFilter)
 	assert.Equal(t, 1, len(p.tabItems[tabIssues]))
 
-	// Mentioned: all issues.
-	p.cycleIssueFilter()
-	assert.Equal(t, 3, len(p.tabItems[tabIssues]))
-
 	// Created: issues by testuser (1 and 3).
 	p.cycleIssueFilter()
+	assert.Equal(t, issueFilterCreated, p.gh.issueFilter)
 	assert.Equal(t, 2, len(p.tabItems[tabIssues]))
 }
 
 func TestCyclePRFilter_FiltersItems(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, samplePRs(), nil)
 
 	// All: 3 PRs.
@@ -1713,7 +1748,7 @@ func TestCyclePRFilter_FiltersItems(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMatchesIssueFilter_AllCases(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.user = "testuser"
 
 	iss := ghIssueItem{Author: "testuser", Assignee: "testuser"}
@@ -1727,9 +1762,6 @@ func TestMatchesIssueFilter_AllCases(t *testing.T) {
 	p.gh.issueFilter = issueFilterAssigned
 	assert.False(t, p.matchesIssueFilter(ghIssueItem{Assignee: "other"}))
 
-	p.gh.issueFilter = issueFilterMentioned
-	assert.True(t, p.matchesIssueFilter(iss))
-
 	p.gh.issueFilter = issueFilterCreated
 	assert.True(t, p.matchesIssueFilter(iss))
 
@@ -1738,7 +1770,7 @@ func TestMatchesIssueFilter_AllCases(t *testing.T) {
 }
 
 func TestMatchesPRFilter_AllCases(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.user = "testuser"
 
 	pr := ghPRItem{Author: "other", State: "open"}
@@ -1766,49 +1798,49 @@ func TestMatchesPRFilter_AllCases(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBranchSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	assert.Nil(t, p.branchSelectedCmd())
 }
 
 func TestWorktreeSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.worktreeSelectedCmd())
 }
 
 func TestRemoteSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.remoteSelectedCmd())
 }
 
 func TestStashSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.stashSelectedCmd())
 }
 
 func TestIssueSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.issueSelectedCmd())
 }
 
 func TestPRSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.prSelectedCmd())
 }
 
 func TestActionRunSelectedCmd_WrongTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.actionRunSelectedCmd())
 }
 
 func TestBranchSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	cmd := p.branchSelectedCmd()
 	require.NotNil(t, cmd)
@@ -1819,7 +1851,7 @@ func TestBranchSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestWorktreeSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	cmd := p.worktreeSelectedCmd()
 	require.NotNil(t, cmd)
@@ -1830,7 +1862,7 @@ func TestWorktreeSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestRemoteSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	cmd := p.remoteSelectedCmd()
 	require.NotNil(t, cmd)
@@ -1841,7 +1873,7 @@ func TestRemoteSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestStashSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabStash
 	cmd := p.stashSelectedCmd()
 	require.NotNil(t, cmd)
@@ -1852,7 +1884,7 @@ func TestStashSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestIssueSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), nil, nil)
 	p.activeTab = tabIssues
 	cmd := p.issueSelectedCmd()
@@ -1864,7 +1896,7 @@ func TestIssueSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestPRSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, samplePRs(), nil)
 	p.activeTab = tabPRs
 	cmd := p.prSelectedCmd()
@@ -1872,7 +1904,7 @@ func TestPRSelectedCmd_ValidCursor(t *testing.T) {
 }
 
 func TestActionRunSelectedCmd_ValidCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	cmd := p.actionRunSelectedCmd()
@@ -1884,25 +1916,25 @@ func TestActionRunSelectedCmd_ValidCursor(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSelectedBranch_WrongKind(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	assert.Nil(t, p.selectedBranch())
 }
 
 func TestSelectedWorktree_WrongKind(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.selectedWorktree())
 }
 
 func TestSelectedRemote_WrongKind(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	assert.Nil(t, p.selectedRemote())
 }
 
 func TestSelectedRemote_OnRemoteSub(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 1 // fetch URL sub-item
 	assert.Nil(t, p.selectedRemote())
@@ -1913,14 +1945,14 @@ func TestSelectedRemote_OnRemoteSub(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleGitHubTabBarClick_Issues(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.handleGitHubTabBarClick(1) // " Issues ..." starts at pos 1
 	assert.Equal(t, tabIssues, p.activeTab)
 }
 
 func TestHandleGitHubTabBarClick_PRs(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	// PRs label starts after "Issues N" + " · " separator.
 	issueLabel := len("Issues 3")
@@ -1930,7 +1962,7 @@ func TestHandleGitHubTabBarClick_PRs(t *testing.T) {
 }
 
 func TestHandleGitHubTabBarClick_Actions(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	// Click far enough right to land in Actions.
 	issueLabel := len("Issues 3")
@@ -1941,7 +1973,7 @@ func TestHandleGitHubTabBarClick_Actions(t *testing.T) {
 }
 
 func TestHandleGitHubTabBarClick_Abbreviated(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	// Force abbreviated mode by setting a narrow width.
 	p.lastWidth = 30
@@ -1965,7 +1997,7 @@ func TestHandleGitHubTabBarClick_Abbreviated(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEnsureCursorVisible_Below(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 5) // small height → viewH = 4 (5 - 1 tab bar)
 	p.tabCursor[tabBranches] = 2
 	p.tabOffset[tabBranches] = 0
@@ -1975,7 +2007,7 @@ func TestEnsureCursorVisible_Below(t *testing.T) {
 }
 
 func TestEnsureCursorVisible_Above(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 5)
 	p.tabCursor[tabBranches] = 0
 	p.tabOffset[tabBranches] = 2
@@ -1984,7 +2016,7 @@ func TestEnsureCursorVisible_Above(t *testing.T) {
 }
 
 func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 0)
 	// Should not panic.
 	p.ensureCursorVisible()
@@ -1995,7 +2027,7 @@ func TestEnsureCursorVisible_ZeroHeight(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGithubPollTickCmd_NilClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.cfg.PollInterval = 30
 	// ghClient is nil by default.
 	cmd := p.githubPollTickCmd()
@@ -2003,17 +2035,112 @@ func TestGithubPollTickCmd_NilClient(t *testing.T) {
 }
 
 func TestGithubPollTickCmd_ZeroPollInterval(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.cfg.PollInterval = 0
 	cmd := p.githubPollTickCmd()
 	assert.Nil(t, cmd)
 }
 
 func TestGithubPollTickCmd_NegativePollInterval(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.cfg.PollInterval = -1
 	cmd := p.githubPollTickCmd()
 	assert.Nil(t, cmd)
+}
+
+func TestInit_ModeGitDoesNotCreateGitHubClient(t *testing.T) {
+	p := New(
+		defaultMock(),
+		config.GitConfig{WorktreeOpenMode: "current"},
+		config.GitHubConfig{Owner: "owner", Repo: "repo", PollInterval: 60},
+		confirmedAllActions(),
+		"/test/repo",
+		"ascii",
+		nil,
+	)
+
+	cmd := p.Init(t.Context())
+
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "owner", p.gh.owner)
+	assert.Equal(t, "repo", p.gh.repo)
+	assert.Nil(t, p.gh.client, "ModeGit should not create a GitHub client")
+	assert.Zero(t, p.gh.pageSize)
+	assert.False(t, p.tabPaging[tabIssues].loading)
+}
+
+func TestStartGitHubLoad_ModeGitSkipsGitHubWork(t *testing.T) {
+	p := New(
+		defaultMock(),
+		config.GitConfig{WorktreeOpenMode: "current"},
+		config.GitHubConfig{PollInterval: 60, PageSize: 25},
+		confirmedAllActions(),
+		"/test/repo",
+		"ascii",
+		nil,
+	)
+	p.ctx = t.Context()
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+
+	cmd := p.startGitHubLoad()
+
+	assert.NotNil(t, cmd)
+	assert.Zero(t, p.gh.pageSize, "ModeGit should not initialize GitHub pagination")
+	assert.False(t, p.tabPaging[tabIssues].loading)
+	assert.False(t, p.tabPaging[tabPRs].loading)
+	assert.False(t, p.tabPaging[tabActions].loading)
+}
+
+func TestStartGitHubLoad_ModeGitHubStartsGitHubWork(t *testing.T) {
+	p := NewGitHub(
+		defaultMock(),
+		config.GitConfig{WorktreeOpenMode: "current"},
+		config.GitHubConfig{PollInterval: 60, PageSize: 25},
+		confirmedAllActions(),
+		"/test/repo",
+		"ascii",
+		nil,
+	)
+	p.ctx = t.Context()
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+
+	cmd := p.startGitHubLoad()
+
+	assert.NotNil(t, cmd)
+	assert.Equal(t, 25, p.gh.pageSize)
+	assert.True(t, p.tabPaging[tabIssues].loading)
+	assert.True(t, p.tabPaging[tabPRs].loading)
+	assert.True(t, p.tabPaging[tabActions].loading)
+}
+
+func TestLoadData_ModeGitHubSkipsHiddenGitTabs(t *testing.T) {
+	mock := &countingGitOps{mockGitOps: *defaultMock()}
+	p := NewGitHub(
+		mock,
+		config.GitConfig{WorktreeOpenMode: "current"},
+		config.GitHubConfig{},
+		confirmedAllActions(),
+		"/test/repo",
+		"ascii",
+		nil,
+	)
+	p.ctx = t.Context()
+
+	msg := p.loadData()()
+	loaded, ok := msg.(dataLoadedMsg)
+	require.True(t, ok)
+	require.NoError(t, loaded.err)
+
+	assert.Equal(t, 1, mock.branchCalls)
+	assert.Equal(t, 1, mock.tagCalls)
+	assert.Zero(t, mock.worktreeCalls, "ModeGitHub should not load hidden worktree tab data")
+	assert.Zero(t, mock.remoteCalls, "ModeGitHub should not load hidden remote tab data")
+	assert.Zero(t, mock.stashCalls, "ModeGitHub should not load hidden stash tab data")
+	assert.Zero(t, mock.reflogCalls, "ModeGitHub should not load hidden reflog tab data")
 }
 
 // ---------------------------------------------------------------------------
@@ -2021,7 +2148,7 @@ func TestGithubPollTickCmd_NegativePollInterval(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestKeyTabSwitch_B(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabWorktrees
 	p.Update(tea.KeyPressMsg{Code: 'b'})
@@ -2029,21 +2156,21 @@ func TestKeyTabSwitch_B(t *testing.T) {
 }
 
 func TestKeyTabSwitch_W(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'w'})
 	assert.Equal(t, tabWorktrees, p.activeTab)
 }
 
 func TestKeyTabSwitch_S(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 's'})
 	assert.Equal(t, tabStash, p.activeTab)
 }
 
 func TestKeyTabSwitch_I_NoGHClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'i'})
 	// Without ghClient, should not switch to issues.
@@ -2051,14 +2178,14 @@ func TestKeyTabSwitch_I_NoGHClient(t *testing.T) {
 }
 
 func TestKeyTabSwitch_P_NoGHClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'p'})
 	assert.NotEqual(t, tabPRs, p.activeTab)
 }
 
 func TestKeyTabSwitch_A_NoGHClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'a'})
 	assert.NotEqual(t, tabActions, p.activeTab)
@@ -2082,7 +2209,7 @@ func TestKeyNavigation_NotFocused_ReturnsNil(t *testing.T) {
 		{Code: 'f'},
 	}
 	for _, key := range keys {
-		p := newTestPanel(defaultMock())
+		p := newTestPanel(t, defaultMock())
 		p.Focused = false
 		_, cmd := p.Update(key)
 		assert.Nil(t, cmd, "key %v with Focused=false should return nil cmd", key)
@@ -2094,7 +2221,7 @@ func TestKeyNavigation_NotFocused_ReturnsNil(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEscKey_IssuesTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabIssues
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -2103,7 +2230,7 @@ func TestEscKey_IssuesTab(t *testing.T) {
 }
 
 func TestEscKey_PRsTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabPRs
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -2112,7 +2239,7 @@ func TestEscKey_PRsTab(t *testing.T) {
 }
 
 func TestEscKey_ActionsTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabActions
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -2121,7 +2248,7 @@ func TestEscKey_ActionsTab(t *testing.T) {
 }
 
 func TestEscKey_BranchesTab_NoOp(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabBranches
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -2134,7 +2261,7 @@ func TestEscKey_BranchesTab_NoOp(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestView_GitHubUnavailable(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.err = assert.AnError
 	p.activeTab = tabIssues
 	// No items in issues tab + ghErr set → should show "GitHub unavailable".
@@ -2143,7 +2270,7 @@ func TestView_GitHubUnavailable(t *testing.T) {
 }
 
 func TestView_GitHubTab_NoItems(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	// No ghErr, no items → should show "No items".
 	view := p.View(80, 20)
@@ -2155,7 +2282,7 @@ func TestView_GitHubTab_NoItems(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSetActiveTab_AllNames(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	names := map[string]tabID{
 		"branches":  tabBranches,
 		"worktrees": tabWorktrees,
@@ -2172,14 +2299,14 @@ func TestSetActiveTab_AllNames(t *testing.T) {
 }
 
 func TestSetActiveTab_InvalidName(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.SetActiveTab("invalid")
 	assert.Equal(t, tabBranches, p.activeTab, "invalid name should not change tab")
 }
 
 func TestActiveTabSelectionCmd_AllTabs(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
 	tabs := []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabIssues, tabPRs, tabActions}
@@ -2191,7 +2318,7 @@ func TestActiveTabSelectionCmd_AllTabs(t *testing.T) {
 }
 
 func TestUpdate_GithubPollTickMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Without ghClient, the poll tick should still be handled without panic.
 	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
 	// Since ghClient is nil, loadGitHubData will be called but
@@ -2200,7 +2327,7 @@ func TestUpdate_GithubPollTickMsg(t *testing.T) {
 }
 
 func TestRenderTabBar_WithAndWithoutGH(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	bar := p.renderTabBar(80)
 	// Tab bar content is rendered with ANSI codes; check for partial text.
 	assert.NotEmpty(t, bar)
@@ -2214,7 +2341,7 @@ func TestRenderTabBar_WithAndWithoutGH(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoActionsRerun_NoItems(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 0
 	// No items in actions tab.
@@ -2223,7 +2350,7 @@ func TestDoActionsRerun_NoItems(t *testing.T) {
 }
 
 func TestDoActionsRerun_WithItem(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 0
@@ -2236,14 +2363,14 @@ func TestDoActionsRerun_WithItem(t *testing.T) {
 }
 
 func TestDoActionsCancel_NoItems(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabActions
 	_, cmd := p.doActionsCancel()
 	assert.Nil(t, cmd)
 }
 
 func TestDoActionsCancel_WithItem(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 0
@@ -2252,7 +2379,7 @@ func TestDoActionsCancel_WithItem(t *testing.T) {
 }
 
 func TestDoActionsRerun_OutOfBounds(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 999
@@ -2261,7 +2388,7 @@ func TestDoActionsRerun_OutOfBounds(t *testing.T) {
 }
 
 func TestDoActionsCancel_OutOfBounds(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 999
@@ -2274,7 +2401,7 @@ func TestDoActionsCancel_OutOfBounds(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoFetch_OnRemoteSubItem(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 1 // fetch URL sub-item, not a remote
 	_, cmd := p.doFetch()
@@ -2286,7 +2413,7 @@ func TestDoFetch_OnRemoteSubItem(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleModalResult_BranchRename_WhitespaceOnly(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchRename
 	p.pendingName = "old-name"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   "})
@@ -2298,7 +2425,7 @@ func TestHandleModalResult_BranchRename_WhitespaceOnly(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestView_WithGHTabsHasFilterLabels(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	// Simulate ghClient non-nil by checking renderTabBar behavior.
 	// Since we can't easily set ghClient, test the View path for GitHub tabs.
@@ -2308,7 +2435,7 @@ func TestView_WithGHTabsHasFilterLabels(t *testing.T) {
 }
 
 func TestView_ActionsTabContent(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	view := p.View(80, 20)
@@ -2317,7 +2444,7 @@ func TestView_ActionsTabContent(t *testing.T) {
 }
 
 func TestView_PRsTabContent(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	populateGH(p, nil, samplePRs(), nil)
 	p.activeTab = tabPRs
 	view := p.View(80, 20)
@@ -2330,14 +2457,14 @@ func TestView_PRsTabContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderStashEntry_NarrowWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "A very long message that should be truncated"}}
 	line := p.renderStashEntry(item, 15, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderStashEntry_VeryNarrow(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "msg"}}
 	line := p.renderStashEntry(item, 3, false)
 	assert.NotEmpty(t, line)
@@ -2367,6 +2494,7 @@ type mockGHClientFull struct {
 	rerunErr   error
 	cancelErr  error
 	mergeErr   error
+	getPRCalls int
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2403,6 +2531,7 @@ func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullReq
 }
 
 func (m *mockGHClientFull) GetPR(_ context.Context, _, _ string, _ int) (*gh.PullRequest, error) {
+	m.getPRCalls++
 	return nil, nil
 }
 
@@ -2531,13 +2660,36 @@ func (m *mockGHClientFull) ListReleasesPage(_ context.Context, _, _ string, _ *g
 }
 
 // newGHPanelWithClient creates a panel with a real mock ghClient for full GitHub testing.
-func newGHPanelWithClient(mock *mockGitOps, ghMock *mockGHClientFull) *Panel {
-	p := newTestGitHubPanel(mock)
+func newGHPanelWithClient(t *testing.T, mock *mockGitOps, ghMock *mockGHClientFull) *Panel {
+	t.Helper()
+	p := newTestGitHubPanel(t, mock)
 	p.gh.client = ghMock
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
-	p.ctx = context.Background()
+	p.ctx = t.Context()
 	return p
+}
+
+func TestLoadPRsPageDoesNotEnrichEveryPR(t *testing.T) {
+	num1, num2 := 1, 2
+	title1, title2 := "First PR", "Second PR"
+	state := prStateOpen
+	head1, head2 := "feature/one", "feature/two"
+	ghMock := &mockGHClientFull{
+		prs: []*gh.PullRequest{
+			{Number: &num1, Title: &title1, State: &state, Head: &gh.PullRequestBranch{Ref: &head1}, User: ghUser("a")},
+			{Number: &num2, Title: &title2, State: &state, Head: &gh.PullRequestBranch{Ref: &head2}, User: ghUser("b")},
+		},
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.gh.pageSize = 25
+
+	msg := p.loadPRsPage(1, true)()
+	loaded, ok := msg.(ghPRsPageMsg)
+	require.True(t, ok)
+
+	require.Len(t, loaded.prs, 2)
+	assert.Zero(t, ghMock.getPRCalls, "PR list refresh should not make one detail request per PR")
 }
 
 // helper to create a gh.User pointer
@@ -2624,7 +2776,7 @@ func TestLoadGitHubData_FullPath(t *testing.T) {
 		}(),
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.loadGitHubData()
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -2664,7 +2816,7 @@ func TestLoadGitHubData_SkipsPRsInIssueList(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 	assert.Empty(t, result.issues, "PRs in issue list should be skipped")
@@ -2688,7 +2840,7 @@ func TestLoadGitHubData_DraftAndMergedPRs(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 	assert.Equal(t, "draft", result.prs[0].State)
@@ -2704,7 +2856,7 @@ func TestLoadGitHubData_APIErrors(t *testing.T) {
 		runsErr:   assert.AnError,
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 	assert.Empty(t, result.user)
@@ -2743,7 +2895,7 @@ func TestLoadPRDetails_Success(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.loadPRDetails(42)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -2760,7 +2912,7 @@ func TestLoadPRDetails_Success(t *testing.T) {
 
 func TestLoadPRDetails_FilesError(t *testing.T) {
 	ghMock := &mockGHClientFull{prFilesErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadPRDetails(1)()
 	result := msg.(prDetailsLoadedMsg)
 	assert.NotNil(t, result.err)
@@ -2769,7 +2921,7 @@ func TestLoadPRDetails_FilesError(t *testing.T) {
 
 func TestLoadPRDetails_CommitsError(t *testing.T) {
 	ghMock := &mockGHClientFull{prCommErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadPRDetails(1)()
 	result := msg.(prDetailsLoadedMsg)
 	assert.NotNil(t, result.err)
@@ -2793,7 +2945,7 @@ func TestLoadPRDetails_CommitWithoutAuthor(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadPRDetails(1)()
 	result := msg.(prDetailsLoadedMsg)
 	require.Nil(t, result.err)
@@ -2809,7 +2961,7 @@ func TestLoadPRDetails_CommitNilCommit(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadPRDetails(1)()
 	result := msg.(prDetailsLoadedMsg)
 	require.Nil(t, result.err)
@@ -2852,7 +3004,7 @@ func TestLoadActionJobs_Success(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.loadActionJobs(100)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -2867,7 +3019,7 @@ func TestLoadActionJobs_Success(t *testing.T) {
 
 func TestLoadActionJobs_Error(t *testing.T) {
 	ghMock := &mockGHClientFull{jobsErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadActionJobs(100)()
 	result := msg.(actionJobsLoadedMsg)
 	assert.NotNil(t, result.err)
@@ -2885,7 +3037,7 @@ func TestLoadActionJobs_NoTimestamps(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadActionJobs(100)()
 	result := msg.(actionJobsLoadedMsg)
 	assert.Nil(t, result.err)
@@ -2899,7 +3051,7 @@ func TestLoadActionJobs_NoTimestamps(t *testing.T) {
 
 func TestLoadActionLog_Success(t *testing.T) {
 	ghMock := &mockGHClientFull{jobLog: "Step 1: checkout\nStep 2: build\nDone."}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.loadActionLog(100, 200)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -2913,7 +3065,7 @@ func TestLoadActionLog_Success(t *testing.T) {
 
 func TestLoadActionLog_Error(t *testing.T) {
 	ghMock := &mockGHClientFull{jobLogErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadActionLog(100, 200)()
 	result := msg.(actionLogLoadedMsg)
 	assert.NotNil(t, result.err)
@@ -2925,7 +3077,7 @@ func TestLoadActionLog_Error(t *testing.T) {
 
 func TestHandleKey_I_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'i'})
 	assert.Equal(t, tabIssues, p.activeTab)
@@ -2933,7 +3085,7 @@ func TestHandleKey_I_WithGHClient(t *testing.T) {
 
 func TestHandleKey_P_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'p'})
 	assert.Equal(t, tabPRs, p.activeTab)
@@ -2941,7 +3093,7 @@ func TestHandleKey_P_WithGHClient(t *testing.T) {
 
 func TestHandleKey_A_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	p.Update(tea.KeyPressMsg{Code: 'a'})
 	assert.Equal(t, tabActions, p.activeTab)
@@ -2949,7 +3101,7 @@ func TestHandleKey_A_WithGHClient(t *testing.T) {
 
 func TestHandleKey_R_ActionsTab_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
@@ -2960,7 +3112,7 @@ func TestHandleKey_R_ActionsTab_WithGHClient(t *testing.T) {
 
 func TestHandleKey_X_ActionsTab_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
@@ -2970,7 +3122,7 @@ func TestHandleKey_X_ActionsTab_WithGHClient(t *testing.T) {
 }
 
 func TestHandleKey_X_BranchesTab_DeletesCurrentBranchWarns(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabBranches
 	// Cursor is on "main" (IsCurrent), so delete should warn.
@@ -2984,7 +3136,7 @@ func TestHandleKey_X_BranchesTab_DeletesCurrentBranchWarns(t *testing.T) {
 }
 
 func TestHandleKey_X_ActionsTab_NoGHClient(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
@@ -2993,7 +3145,7 @@ func TestHandleKey_X_ActionsTab_NoGHClient(t *testing.T) {
 }
 
 func TestHandleKey_F_IssuesTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	populateGH(p, sampleIssues(), nil, nil)
 	p.activeTab = tabIssues
@@ -3003,7 +3155,7 @@ func TestHandleKey_F_IssuesTab(t *testing.T) {
 }
 
 func TestHandleKey_F_PRsTab(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	populateGH(p, nil, samplePRs(), nil)
 	p.activeTab = tabPRs
@@ -3014,7 +3166,7 @@ func TestHandleKey_F_PRsTab(t *testing.T) {
 
 func TestHandleKey_R_Remotes_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.Focused = true
 	p.activeTab = tabBranches // not actions tab, so 'r' = remotes tab
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 'r'})
@@ -3028,7 +3180,7 @@ func TestHandleKey_R_Remotes_WithGHClient(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRequestCheckout_RemoteBranch(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.Focused = true
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 0 // "origin/main" (remote — only branch in ModeGitHub)
@@ -3043,7 +3195,7 @@ func TestRequestCheckout_RemoteBranch(t *testing.T) {
 }
 
 func TestRequestCheckout_NilBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees // no branch at cursor
 	_, cmd := p.requestCheckout()
 	assert.Nil(t, cmd)
@@ -3054,7 +3206,7 @@ func TestRequestCheckout_NilBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRequestWorktreeSwitch_NilWorktree(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches // no worktree at cursor
 	_, cmd := p.requestWorktreeSwitch()
 	assert.Nil(t, cmd)
@@ -3063,7 +3215,7 @@ func TestRequestWorktreeSwitch_NilWorktree(t *testing.T) {
 func TestRequestWorktreeSwitch_NewTerminal(t *testing.T) {
 	mock := defaultMock()
 	p := New(mock, config.GitConfig{WorktreeOpenMode: "new_terminal"}, config.GitHubConfig{}, confirmedAllActions(), "/test/repo", "ascii", nil)
-	cmd := p.Init(context.Background())
+	cmd := p.Init(t.Context())
 	if cmd != nil {
 		msg := cmd()
 		p.Update(msg)
@@ -3075,7 +3227,7 @@ func TestRequestWorktreeSwitch_NewTerminal(t *testing.T) {
 }
 
 func TestRequestWorktreeSwitch_CurrentMode(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorktrees
 	p.tabCursor[tabWorktrees] = 0
 	_, cmd := p.requestWorktreeSwitch()
@@ -3092,7 +3244,7 @@ func TestRequestWorktreeSwitch_CurrentMode(t *testing.T) {
 
 func TestRenderTabBar_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
 	bar := panels.StripANSI(p.renderTabBar(80))
@@ -3104,7 +3256,7 @@ func TestRenderTabBar_WithGHClient(t *testing.T) {
 
 func TestRenderTabBar_WithIssueFilter(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.gh.issueFilter = issueFilterAssigned
 	p.activeTab = tabIssues
@@ -3115,7 +3267,7 @@ func TestRenderTabBar_WithIssueFilter(t *testing.T) {
 
 func TestRenderTabBar_WithPRFilter(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.gh.prFilter = prFilterMine
 	p.activeTab = tabPRs
@@ -3126,7 +3278,7 @@ func TestRenderTabBar_WithPRFilter(t *testing.T) {
 
 func TestRenderTabBar_ActiveGHTab(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.activeTab = tabActions
 
@@ -3140,7 +3292,7 @@ func TestRenderTabBar_ActiveGHTab(t *testing.T) {
 
 func TestEnsureCursorVisible_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.SetSize(80, 5) // height 5, tab bar is 1 line (ModeGitHub) → viewH = 4
 	p.tabCursor[tabIssues] = 2
@@ -3151,7 +3303,7 @@ func TestEnsureCursorVisible_WithGHClient(t *testing.T) {
 
 func TestEnsureCursorVisible_SmallHeight_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.SetSize(80, 1)        // height 1, tab bar is 1 line → viewH = 0 → early return
 	p.ensureCursorVisible() // should not panic
 }
@@ -3162,7 +3314,7 @@ func TestEnsureCursorVisible_SmallHeight_WithGHClient(t *testing.T) {
 
 func TestKeyBindings_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	bindings := p.KeyBindings()
 
 	actions := make(map[string]bool)
@@ -3180,7 +3332,7 @@ func TestKeyBindings_WithGHClient(t *testing.T) {
 
 func TestGithubPollTickCmd_ValidConfig(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.gh.cfg.PollInterval = 30
 	cmd := p.githubPollTickCmd()
 	assert.NotNil(t, cmd, "valid ghClient + positive interval should return a tick cmd")
@@ -3192,7 +3344,7 @@ func TestGithubPollTickCmd_ValidConfig(t *testing.T) {
 
 func TestHandleActionJobsLoaded_FailedJobWithClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u"), jobLog: "error log"}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	jobs := []panels.ActionJob{
 		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
 		{ID: 2, Name: "test", Status: "completed", Conclusion: "failure"},
@@ -3203,7 +3355,7 @@ func TestHandleActionJobsLoaded_FailedJobWithClient(t *testing.T) {
 
 func TestHandleActionJobsLoaded_NoFailedJobs(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	jobs := []panels.ActionJob{
 		{ID: 1, Name: "build", Status: "completed", Conclusion: "success"},
 	}
@@ -3217,7 +3369,7 @@ func TestHandleActionJobsLoaded_NoFailedJobs(t *testing.T) {
 
 func TestView_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
 	view := panels.StripANSI(p.View(80, 20))
@@ -3227,7 +3379,7 @@ func TestView_WithGHClient(t *testing.T) {
 
 func TestView_WithGHClient_TinyHeight(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	// Height 2 = exactly the tab bar, no content room.
 	view := p.View(80, 2)
 	assert.NotEmpty(t, view)
@@ -3235,7 +3387,7 @@ func TestView_WithGHClient_TinyHeight(t *testing.T) {
 
 func TestView_WithGHClient_GHUnavailable(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.gh.err = assert.AnError
 	p.activeTab = tabPRs
 	view := p.View(80, 20)
@@ -3247,37 +3399,37 @@ func TestView_WithGHClient_GHUnavailable(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUpdate_PRDetailsLoadedMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update(prDetailsLoadedMsg{number: 1, files: nil, commits: nil})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_ActionJobsLoadedMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update(actionJobsLoadedMsg{runID: 1, jobs: nil})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_ActionLogLoadedMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update(actionLogLoadedMsg{runID: 1, jobID: 2, log: "log"})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_ActionRerunResultMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update(actionRerunResultMsg{runID: 1})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_ActionCancelResultMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update(actionCancelResultMsg{runID: 1})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_UnhandledMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.Update("some random string msg")
 	assert.Nil(t, cmd, "unhandled message should return nil cmd")
 }
@@ -3288,7 +3440,7 @@ func TestUpdate_UnhandledMsg(t *testing.T) {
 
 func TestMouseClick_GHTabBarClick(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.SetSize(80, 20)
 
@@ -3300,7 +3452,7 @@ func TestMouseClick_GHTabBarClick(t *testing.T) {
 
 func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.SetSize(80, 20)
 
@@ -3311,7 +3463,7 @@ func TestMouseClick_ContentRow_WithGHClient(t *testing.T) {
 
 func TestMouseDoubleClick_WithGHClient_TabBar_Noop(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
 	// In ModeGitHub with ghOwner/ghRepo set, double-click on the tab bar
@@ -3322,7 +3474,7 @@ func TestMouseDoubleClick_WithGHClient_TabBar_Noop(t *testing.T) {
 
 func TestHeaderDoubleClick_WithGHClient_OpensRepo(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.SetSize(80, 20)
 
 	// Stub the browser launcher so the test never opens a real browser
@@ -3343,7 +3495,7 @@ func TestHeaderDoubleClick_WithGHClient_OpensRepo(t *testing.T) {
 
 func TestMouseWheel_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 	p.SetSize(80, 5)
 
@@ -3358,7 +3510,7 @@ func TestMouseWheel_WithGHClient(t *testing.T) {
 
 func TestPRSelectedCmd_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, nil, samplePRs(), nil)
 	p.activeTab = tabPRs
 	cmd := p.prSelectedCmd()
@@ -3371,7 +3523,7 @@ func TestPRSelectedCmd_WithGHClient(t *testing.T) {
 
 func TestActionRunSelectedCmd_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	cmd := p.actionRunSelectedCmd()
@@ -3384,7 +3536,7 @@ func TestActionRunSelectedCmd_WithGHClient(t *testing.T) {
 
 func TestRerunFailedJobsCmd_Success(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.rerunFailedJobsCmd(100)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -3395,7 +3547,7 @@ func TestRerunFailedJobsCmd_Success(t *testing.T) {
 
 func TestRerunFailedJobsCmd_Error(t *testing.T) {
 	ghMock := &mockGHClientFull{rerunErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.rerunFailedJobsCmd(100)()
 	result := msg.(actionRerunResultMsg)
 	assert.NotNil(t, result.err)
@@ -3403,7 +3555,7 @@ func TestRerunFailedJobsCmd_Error(t *testing.T) {
 
 func TestCancelWorkflowRunCmd_Success(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	cmd := p.cancelWorkflowRunCmd(100)
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -3414,7 +3566,7 @@ func TestCancelWorkflowRunCmd_Success(t *testing.T) {
 
 func TestCancelWorkflowRunCmd_Error(t *testing.T) {
 	ghMock := &mockGHClientFull{cancelErr: assert.AnError}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.cancelWorkflowRunCmd(100)()
 	result := msg.(actionCancelResultMsg)
 	assert.NotNil(t, result.err)
@@ -3425,7 +3577,7 @@ func TestCancelWorkflowRunCmd_Error(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderIssue_NarrowWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "A very long issue title that needs truncation", Labels: []string{"bug"}}}
 	// Width of 20 forces title truncation.
 	line := p.renderIssue(item, 20, true)
@@ -3433,35 +3585,35 @@ func TestRenderIssue_NarrowWidth(t *testing.T) {
 }
 
 func TestRenderIssue_NoLabels(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "No labels"}}
 	line := p.renderIssue(item, 80, false)
 	assert.Contains(t, line, "#1")
 }
 
 func TestRenderIssue_TinyWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindIssue, issue: ghIssueItem{Number: 1, Title: "Bug", Labels: []string{"big-label"}}}
 	line := p.renderIssue(item, 5, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderPR_NarrowWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "A very long PR title that needs truncation", State: "open"}}
 	line := p.renderPR(item, 20, true)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderPR_TinyWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{Number: 10, Title: "PR", State: "open"}}
 	line := p.renderPR(item, 5, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderActionRun_NarrowWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "A Very Long Workflow Name", RunNumber: 42,
 		Status: "completed", Conclusion: "success", Branch: "main", CreatedAt: "Jan 1 10:00",
@@ -3471,7 +3623,7 @@ func TestRenderActionRun_NarrowWidth(t *testing.T) {
 }
 
 func TestRenderActionRun_TinyWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "success", Branch: "main", CreatedAt: "Jan 1",
 	}}
@@ -3480,7 +3632,7 @@ func TestRenderActionRun_TinyWidth(t *testing.T) {
 }
 
 func TestRenderActionRun_UnknownStatus(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 1, Status: "waiting", Conclusion: "",
 	}}
@@ -3489,7 +3641,7 @@ func TestRenderActionRun_UnknownStatus(t *testing.T) {
 }
 
 func TestRenderActionRun_TimedOut(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "timed_out",
 	}}
@@ -3498,7 +3650,7 @@ func TestRenderActionRun_TimedOut(t *testing.T) {
 }
 
 func TestRenderActionRun_Queued(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 1, Status: "queued",
 	}}
@@ -3507,7 +3659,7 @@ func TestRenderActionRun_Queued(t *testing.T) {
 }
 
 func TestRenderActionRun_NoBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindActionRun, actionRun: ghActionItem{
 		RunID: 100, WorkflowName: "CI", RunNumber: 1, Conclusion: "success",
 	}}
@@ -3520,14 +3672,14 @@ func TestRenderActionRun_NoBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderBranch_NarrowTruncation(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "a-very-long-branch-name-that-exceeds-width", Hash: "abc1234"}}
 	line := p.renderBranch(item, 20, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderBranch_AheadBehind(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "feature", Hash: "abc1234", Ahead: 3, Behind: 2}}
 	line := p.renderBranch(item, 80, false)
 	assert.Contains(t, line, "↑3")
@@ -3535,7 +3687,7 @@ func TestRenderBranch_AheadBehind(t *testing.T) {
 }
 
 func TestRenderBranch_TinyWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindLocalBranch, branch: git.Branch{Name: "main", Hash: "abc1234"}}
 	line := p.renderBranch(item, 3, false)
 	assert.NotEmpty(t, line)
@@ -3546,28 +3698,28 @@ func TestRenderBranch_TinyWidth(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderWorktree_NarrowTruncation(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/very/long/path/to/worktree/directory", Branch: "main", Head: "abc1234567"}}
 	line := p.renderWorktree(item, 20, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderWorktree_TinyWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/p", Branch: "b", Head: "abc1234567"}}
 	line := p.renderWorktree(item, 3, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderWorktree_NoBranch(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/test", Head: "abc"}}
 	line := p.renderWorktree(item, 80, false)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderWorktree_ShortHead(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindWorktree, worktree: git.Worktree{Path: "/test", Branch: "main", Head: "abc"}}
 	line := p.renderWorktree(item, 80, false)
 	assert.Contains(t, line, "abc")
@@ -3578,14 +3730,14 @@ func TestRenderWorktree_ShortHead(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderRemote_WithCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemote, remote: git.Remote{Name: "origin"}}
 	line := p.renderRemote(item, 80, true)
 	assert.NotEmpty(t, line)
 }
 
 func TestRenderRemoteSub_WithCursor(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemoteSub, text: "fetch: https://example.com"}
 	line := p.renderRemoteSub(item, 80, true)
 	assert.NotEmpty(t, line)
@@ -3596,7 +3748,7 @@ func TestRenderRemoteSub_WithCursor(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderStashEntry_ZeroWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "msg"}}
 	line := p.renderStashEntry(item, 0, false)
 	assert.NotEmpty(t, line) // lipgloss renders empty string but width=0
@@ -3607,7 +3759,7 @@ func TestRenderStashEntry_ZeroWidth(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoAction_StashEntry(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabStash
 	p.tabCursor[tabStash] = 0
 	_, cmd := p.doAction()
@@ -3619,7 +3771,7 @@ func TestDoAction_StashEntry(t *testing.T) {
 }
 
 func TestDoAction_RemoteSub(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 1 // remoteSub item
 	_, cmd := p.doAction()
@@ -3631,7 +3783,7 @@ func TestDoAction_RemoteSub(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTabCyclesGitTabs(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	assert.Equal(t, tabBranches, p.activeTab)
 
@@ -3643,7 +3795,7 @@ func TestTabCyclesGitTabs(t *testing.T) {
 }
 
 func TestShiftTabCyclesGitTabsBackward(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = true
 	assert.Equal(t, tabBranches, p.activeTab)
 
@@ -3655,7 +3807,7 @@ func TestShiftTabCyclesGitTabsBackward(t *testing.T) {
 }
 
 func TestTabCyclesGitHubTabs(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.Focused = true
 	// ModeGitHub starts on tabIssues (set by NewGitHub).
 	assert.Equal(t, tabIssues, p.activeTab)
@@ -3668,7 +3820,7 @@ func TestTabCyclesGitHubTabs(t *testing.T) {
 }
 
 func TestShiftTabCyclesGitHubTabsBackward(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.Focused = true
 	assert.Equal(t, tabIssues, p.activeTab)
 
@@ -3680,7 +3832,7 @@ func TestShiftTabCyclesGitHubTabsBackward(t *testing.T) {
 }
 
 func TestTabNotFocusedDoesNothing(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Focused = false
 	p.activeTab = tabBranches
 	p.Update(tea.KeyPressMsg{Code: '\t'})
@@ -3688,13 +3840,13 @@ func TestTabNotFocusedDoesNothing(t *testing.T) {
 }
 
 func TestVisibleTabsGitMode(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	tabs := p.visibleTabs()
 	assert.Equal(t, []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}, tabs)
 }
 
 func TestVisibleTabsGitHubMode(t *testing.T) {
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	tabs := p.visibleTabs()
 	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}, tabs)
 }
@@ -3704,7 +3856,7 @@ func TestVisibleTabsGitHubMode(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoDelete_StashEntry(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabStash
 	p.tabCursor[tabStash] = 0
 	_, cmd := p.doDelete()
@@ -3717,7 +3869,7 @@ func TestDoDelete_StashEntry(t *testing.T) {
 
 func TestUpdate_GithubPollTickMsg_WithGHClient(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.gh.cfg.PollInterval = 30
 	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
 	assert.NotNil(t, cmd, "poll tick with ghClient should trigger loadGitHubData + next tick")
@@ -3731,7 +3883,7 @@ func TestRequestCheckout_ShowsConfirmation(t *testing.T) {
 	mock := &mockGitOps{
 		branches: []git.Branch{{Name: "main", IsCurrent: true}, {Name: "develop"}},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 1 // develop
 	_, cmd := p.requestCheckout()
@@ -3748,7 +3900,7 @@ func TestHandleModalResult_BranchCheckout_Accept(t *testing.T) {
 	mock := &mockGitOps{
 		branches: []git.Branch{{Name: "main"}, {Name: "develop"}},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.pending = opBranchCheckout
 	p.pendingName = "develop"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -3773,7 +3925,7 @@ func TestHandleModalResult_BranchCheckout_Accept(t *testing.T) {
 }
 
 func TestHandleModalResult_BranchCheckout_Decline(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCheckout
 	p.pendingName = "develop"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
@@ -3782,7 +3934,7 @@ func TestHandleModalResult_BranchCheckout_Decline(t *testing.T) {
 }
 
 func TestCheckoutDirty_CleanTree_ProceedsWithCheckout(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", dirty: false})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -3794,7 +3946,7 @@ func TestCheckoutDirty_CleanTree_ProceedsWithCheckout(t *testing.T) {
 }
 
 func TestCheckoutDirty_DirtyTree_ShowsStashDialog(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", dirty: true})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -3805,7 +3957,7 @@ func TestCheckoutDirty_DirtyTree_ShowsStashDialog(t *testing.T) {
 }
 
 func TestCheckoutDirty_StatusError_FallsBackToCheckout(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	_, cmd := p.handleCheckoutDirty(checkoutDirtyMsg{ref: "feature", err: fmt.Errorf("status failed")})
 	require.NotNil(t, cmd)
 	msg := cmd()
@@ -3816,7 +3968,7 @@ func TestCheckoutDirty_StatusError_FallsBackToCheckout(t *testing.T) {
 }
 
 func TestHandleModalResult_BranchCheckoutStash_Accept(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCheckoutStash
 	p.pendingName = "feature"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -3830,7 +3982,7 @@ func TestHandleModalResult_BranchCheckoutStash_Accept(t *testing.T) {
 }
 
 func TestHandleModalResult_BranchCheckoutStash_Decline(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCheckoutStash
 	p.pendingName = "feature"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
@@ -3846,7 +3998,7 @@ func TestDoAction_StashEntry_ShowsPrompt(t *testing.T) {
 	mock := &mockGitOps{
 		stashes: []git.StashEntry{{Index: 0, Message: "WIP"}},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.activeTab = tabStash
 	p.tabCursor[tabStash] = 0
 	_, cmd := p.doAction()
@@ -3858,7 +4010,7 @@ func TestDoAction_StashEntry_ShowsPrompt(t *testing.T) {
 }
 
 func TestHandleModalResult_StashAction_Apply(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "apply"})
@@ -3871,7 +4023,7 @@ func TestHandleModalResult_StashAction_Apply(t *testing.T) {
 }
 
 func TestHandleModalResult_StashAction_Pop(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "pop"})
@@ -3883,7 +4035,7 @@ func TestHandleModalResult_StashAction_Pop(t *testing.T) {
 }
 
 func TestHandleModalResult_StashAction_Drop(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "drop"})
@@ -3895,7 +4047,7 @@ func TestHandleModalResult_StashAction_Drop(t *testing.T) {
 }
 
 func TestHandleModalResult_StashAction_Unknown(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "unknown"})
@@ -3914,7 +4066,7 @@ func TestDoAction_Remote_ReturnsCmd(t *testing.T) {
 	mock := &mockGitOps{
 		remotes: []git.Remote{{Name: "origin", FetchURL: "https://github.com/user/repo"}},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.activeTab = tabRemotes
 	p.tabCursor[tabRemotes] = 0
 	_, cmd := p.doAction()
@@ -3936,7 +4088,7 @@ var (
 func TestDoAction_FirstUsePrompt(t *testing.T) {
 	// With no confirmations, doAction should show the confirmation modal
 	// instead of executing the action.
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{} // no confirmations
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 1 // "feature" (non-current)
@@ -3954,7 +4106,7 @@ func TestDoAction_FirstUsePrompt(t *testing.T) {
 }
 
 func TestDoAction_FirstUseAcceptWithRemember(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{} // no confirmations
 
 	// Simulate the first-use prompt state for a stash entry.
@@ -3980,7 +4132,7 @@ func TestDoAction_FirstUseAcceptWithRemember(t *testing.T) {
 }
 
 func TestDoAction_FirstUseAcceptWithoutRemember(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{} // no confirmations
 
 	// Simulate the first-use prompt state for a remote.
@@ -4004,7 +4156,7 @@ func TestDoAction_FirstUseAcceptWithoutRemember(t *testing.T) {
 }
 
 func TestDoAction_FirstUseReject(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{}
 
 	p.activeTab = tabBranches
@@ -4018,7 +4170,7 @@ func TestDoAction_FirstUseReject(t *testing.T) {
 
 func TestDoAction_AlreadyConfirmed(t *testing.T) {
 	// Pre-confirmed item type should bypass the prompt and execute directly.
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{
 		Confirmed: map[string]bool{
 			string(actions.ItemStashEntry): true,
@@ -4042,7 +4194,7 @@ func TestDoAction_BlockedWhilePending(t *testing.T) {
 	// doAction must be a no-op when a pending operation is already active.
 	// This prevents Enter key-repeat after a modal dismissal from
 	// triggering duplicate workflow dispatches (or any other action).
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{
 		Confirmed: map[string]bool{
 			string(actions.ItemLocalBranch): true,
@@ -4067,7 +4219,7 @@ func TestDoAction_FirstUseWorktreeCursorReset(t *testing.T) {
 	// the worktree path must be captured at double-click time. If a data
 	// reload resets the cursor to 0 before the modal result arrives, the
 	// panel should still use the originally-clicked worktree path.
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsCfg = config.ActionsConfig{} // unconfirmed
 	p.activeTab = tabWorktrees
 
@@ -4115,7 +4267,7 @@ func TestWatchFrames(t *testing.T) {
 }
 
 func TestActionsStatusIcon_WatchingCycles(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[tabActions] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{Status: "in_progress"}},
 	}
@@ -4129,7 +4281,7 @@ func TestActionsStatusIcon_WatchingCycles(t *testing.T) {
 }
 
 func TestActionsStatusIcon_NotWatchingFallback(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[tabActions] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{Status: "in_progress"}},
 	}
@@ -4139,7 +4291,7 @@ func TestActionsStatusIcon_NotWatchingFallback(t *testing.T) {
 }
 
 func TestActionsStatusIcon_WatchingOverriddenByConclusion(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	p.actionsWatchFrame = 2
 
@@ -4157,21 +4309,21 @@ func TestActionsStatusIcon_WatchingOverriddenByConclusion(t *testing.T) {
 }
 
 func TestActionsWatchTickCmd_WhenWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	cmd := p.actionsWatchTickCmd()
 	require.NotNil(t, cmd, "actionsWatchTickCmd should return a command when watching")
 }
 
 func TestActionsWatchTickCmd_WhenNotWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = false
 	cmd := p.actionsWatchTickCmd()
 	assert.Nil(t, cmd, "actionsWatchTickCmd should return nil when not watching")
 }
 
 func TestActionsWatchTickMsg_AdvancesFrame(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	p.actionsWatchFrame = 0
 
@@ -4186,7 +4338,7 @@ func TestActionsWatchTickMsg_AdvancesFrame(t *testing.T) {
 }
 
 func TestActionsWatchTickMsg_StopsWhenNotWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = false
 	p.actionsWatchFrame = 2
 
@@ -4196,7 +4348,7 @@ func TestActionsWatchTickMsg_StopsWhenNotWatching(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_StartsWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = false
 
 	msg := ghDataLoadedMsg{
@@ -4213,7 +4365,7 @@ func TestHandleGHDataLoaded_StartsWatching(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_StopsWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	p.actionsWatchFrame = 3
 
@@ -4230,7 +4382,7 @@ func TestHandleGHDataLoaded_StopsWatching(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_QueuedStartsWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = false
 
 	msg := ghDataLoadedMsg{
@@ -4245,7 +4397,7 @@ func TestHandleGHDataLoaded_QueuedStartsWatching(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_AlreadyWatchingNoRestart(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	p.actionsWatchFrame = 2
 
@@ -4263,7 +4415,7 @@ func TestHandleGHDataLoaded_AlreadyWatchingNoRestart(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_ErrorDoesNotCrash(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 
 	msg := ghDataLoadedMsg{
@@ -4277,7 +4429,7 @@ func TestHandleGHDataLoaded_ErrorDoesNotCrash(t *testing.T) {
 }
 
 func TestHandleGHDataLoaded_EmptyActionsStopsWatching(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 
 	msg := ghDataLoadedMsg{
@@ -4294,7 +4446,7 @@ func TestHandleGHDataLoaded_EmptyActionsStopsWatching(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestActionsWatchTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.actionsWatching = true
 	cmd := p.actionsWatchTickCmd()
 	require.NotNil(t, cmd)
@@ -4309,7 +4461,7 @@ func TestActionsWatchTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
 
 func TestGithubPollTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
 	ghMock := &mockGHClientFull{user: ghUser("u")}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	p.gh.cfg.PollInterval = 1 // 1 second — fast for test
 	cmd := p.githubPollTickCmd()
 	require.NotNil(t, cmd)
@@ -4328,7 +4480,7 @@ func TestGithubPollTickCmd_WrapsInTargetedPanelMsg(t *testing.T) {
 
 func TestWKey_SwitchesToWorktreesTab(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	assert.Equal(t, tabBranches, p.activeTab)
@@ -4339,7 +4491,7 @@ func TestWKey_SwitchesToWorktreesTab(t *testing.T) {
 
 func TestWKey_SwitchesToWorkflowsInGitHub(t *testing.T) {
 	mock := defaultMock()
-	p := newTestGitHubPanel(mock)
+	p := newTestGitHubPanel(t, mock)
 	p.Focused = true
 
 	p.Update(tea.KeyPressMsg{Code: 'w'})
@@ -4348,7 +4500,7 @@ func TestWKey_SwitchesToWorkflowsInGitHub(t *testing.T) {
 
 func TestLKey_SwitchesToReflogTab(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	p.Update(tea.KeyPressMsg{Code: 'l'})
@@ -4357,7 +4509,7 @@ func TestLKey_SwitchesToReflogTab(t *testing.T) {
 
 func TestLKey_SwitchesToReleasesInGitHub(t *testing.T) {
 	mock := defaultMock()
-	p := newTestGitHubPanel(mock)
+	p := newTestGitHubPanel(t, mock)
 	p.Focused = true
 
 	p.Update(tea.KeyPressMsg{Code: 'l'})
@@ -4366,7 +4518,7 @@ func TestLKey_SwitchesToReleasesInGitHub(t *testing.T) {
 
 func TestDKey_PageDown(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	// Pressing PgDn should not panic; page down on the active tab.
@@ -4376,7 +4528,7 @@ func TestDKey_PageDown(t *testing.T) {
 
 func TestUKey_PageUp(t *testing.T) {
 	mock := defaultMock()
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.Focused = true
 
 	// Pressing PgUp should not panic; page up on the active tab.
@@ -4386,7 +4538,7 @@ func TestUKey_PageUp(t *testing.T) {
 
 func TestDKey_DispatchWorkflow(t *testing.T) {
 	mock := defaultMock()
-	p := newTestGitHubPanel(mock)
+	p := newTestGitHubPanel(t, mock)
 	p.Focused = true
 
 	// Switch to workflows tab first.
@@ -4506,7 +4658,7 @@ func TestPRActionIcon_ConclusionOverridesStatus(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderPR_OpenDirty_ContainsOpen(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 42, Title: "Fix conflicts", State: "open", MergeableState: "dirty",
 	}}
@@ -4517,7 +4669,7 @@ func TestRenderPR_OpenDirty_ContainsOpen(t *testing.T) {
 }
 
 func TestRenderPR_Closed(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 99, Title: "Old PR", State: "closed",
 	}}
@@ -4526,7 +4678,7 @@ func TestRenderPR_Closed(t *testing.T) {
 }
 
 func TestRenderPR_WithActionIcon_Success(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 38, Title: "Update deps", State: "open",
 		ActionStatus: "completed", ActionConclusion: "success",
@@ -4536,7 +4688,7 @@ func TestRenderPR_WithActionIcon_Success(t *testing.T) {
 }
 
 func TestRenderPR_WithActionIcon_Failure(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 35, Title: "Refactor auth", State: "open",
 		ActionStatus: "completed", ActionConclusion: "failure",
@@ -4546,7 +4698,7 @@ func TestRenderPR_WithActionIcon_Failure(t *testing.T) {
 }
 
 func TestRenderPR_WithActionIcon_InProgress(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 42, Title: "Fix login redirect", State: "open",
 		ActionStatus: "in_progress",
@@ -4556,7 +4708,7 @@ func TestRenderPR_WithActionIcon_InProgress(t *testing.T) {
 }
 
 func TestRenderPR_NoActionIcon_WhenNoRun(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 10, Title: "Simple PR", State: "open",
 	}}
@@ -4567,7 +4719,7 @@ func TestRenderPR_NoActionIcon_WhenNoRun(t *testing.T) {
 }
 
 func TestRenderPR_ActionIcon_NarrowWidth(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindPR, pr: ghPRItem{
 		Number: 42, Title: "Very long title that needs truncation", State: "open",
 		ActionConclusion: "success",
@@ -4582,7 +4734,7 @@ func TestRenderPR_ActionIcon_NarrowWidth(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBuildGitHubItems_ActionCrossReference(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	prs := []ghPRItem{
 		{Number: 10, Title: "Auth", State: "open", HeadBranch: "main"},
 		{Number: 11, Title: "Deploy", State: "open", HeadBranch: "feature"},
@@ -4637,7 +4789,7 @@ func TestBuildGitHubItems_ActionCrossReference(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderBranch_ANSIInjection(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindLocalBranch, branch: git.Branch{
 		Name: "\x1b[31mevil-branch\x1b[0m",
 		Hash: "abc1234",
@@ -4649,7 +4801,7 @@ func TestRenderBranch_ANSIInjection(t *testing.T) {
 }
 
 func TestRightClickLabel_ANSIInjection(t *testing.T) {
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	tests := []struct {
 		name string
 		item listItem

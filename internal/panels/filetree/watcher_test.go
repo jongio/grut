@@ -43,7 +43,7 @@ func TestWatcher_DetectsFileCreation(t *testing.T) {
 
 	w.addDir(dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	cmd := w.start(ctx)
@@ -85,7 +85,7 @@ func TestWatcher_DetectsFileDeletion(t *testing.T) {
 
 	w.addDir(dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	cmd := w.start(ctx)
@@ -126,7 +126,7 @@ func TestWatcher_DetectsFileModification(t *testing.T) {
 
 	w.addDir(dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	cmd := w.start(ctx)
@@ -164,7 +164,7 @@ func TestWatcher_DebounceCoalesces(t *testing.T) {
 
 	w.addDir(dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	cmd := w.start(ctx)
@@ -210,7 +210,7 @@ func TestWatcher_StopsOnContextCancel(t *testing.T) {
 
 	w.addDir(dir)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	cmd := w.start(ctx)
 
@@ -229,6 +229,48 @@ func TestWatcher_StopsOnContextCancel(t *testing.T) {
 		assert.True(t, isNil, "expected nil message after context cancellation")
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for watcher to stop")
+	}
+}
+
+func TestWatcher_StartCancelsPreviousCommand(t *testing.T) {
+	w := &watcher{
+		dirs:     make(map[string]bool),
+		debounce: 50 * time.Millisecond,
+		pollInt:  250 * time.Millisecond,
+		polling:  true,
+	}
+	defer w.stop()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	first := w.start(ctx)
+	firstDone := make(chan any, 1)
+	go func() {
+		firstDone <- first()
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+
+	second := w.start(ctx)
+	select {
+	case msg := <-firstDone:
+		assert.Nil(t, msg, "previous watcher command should be canceled on restart")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for previous watcher command to be canceled")
+	}
+
+	secondDone := make(chan any, 1)
+	go func() {
+		secondDone <- second()
+	}()
+
+	select {
+	case msg := <-secondDone:
+		_, ok := msg.(RefreshMsg)
+		assert.True(t, ok, "new watcher command should keep polling after restart")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for restarted watcher command")
 	}
 }
 
@@ -264,13 +306,12 @@ func TestWatcher_PollingFallback(t *testing.T) {
 		debounce: 50 * time.Millisecond,
 		pollInt:  100 * time.Millisecond,
 		polling:  true,
-		done:     make(chan struct{}),
 	}
 	defer w.stop()
 
 	assert.True(t, w.isPolling())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	cmd := w.start(ctx)

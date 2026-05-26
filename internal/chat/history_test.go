@@ -1,6 +1,9 @@
 package chat
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestPushStoresEntries(t *testing.T) {
 	var h InputHistory
@@ -43,6 +46,23 @@ func TestPushSkipsEmpty(t *testing.T) {
 
 	if len(h.entries) != 0 {
 		t.Fatalf("expected 0 entries, got %d", len(h.entries))
+	}
+}
+
+func TestPushCapsHistory(t *testing.T) {
+	var h InputHistory
+	for i := 0; i < maxInputHistoryEntries+5; i++ {
+		h.Push(fmt.Sprintf("entry-%03d", i))
+	}
+
+	if len(h.entries) != maxInputHistoryEntries {
+		t.Fatalf("expected %d entries, got %d", maxInputHistoryEntries, len(h.entries))
+	}
+	if h.entries[0] != "entry-005" {
+		t.Fatalf("expected oldest retained entry-005, got %q", h.entries[0])
+	}
+	if h.entries[len(h.entries)-1] != "entry-204" {
+		t.Fatalf("expected newest retained entry-204, got %q", h.entries[len(h.entries)-1])
 	}
 }
 

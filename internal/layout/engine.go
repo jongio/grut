@@ -944,7 +944,8 @@ func (e *Engine) CloseFocusedPanel() error {
 	if len(names) <= 1 {
 		return fmt.Errorf("cannot close the last panel")
 	}
-	e.panels[focusedName].Blur()
+	focusedPanel := e.panels[focusedName]
+	focusedPanel.Blur()
 	newTree, found := RemoveLeaf(tab.Tree, focusedName)
 	if !found {
 		return fmt.Errorf("panel %q not found in tree", focusedName)
@@ -954,6 +955,9 @@ func (e *Engine) CloseFocusedPanel() error {
 	// may still reference it. Only uniquely-named split panels (e.g.
 	// "preview:2") are safe to remove.
 	if isUniqueInstanceName(focusedName) {
+		if closer, ok := focusedPanel.(panels.Closer); ok {
+			closer.Close()
+		}
 		delete(e.panels, focusedName)
 	}
 	e.panelOrder = tab.Tree.PanelNames()

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-18
+
 ### Contributors
 
 Thanks to the following people for their contributions to this release:
@@ -17,6 +19,12 @@ Thanks to the following people for their contributions to this release:
 New contributors: **Copilot** — welcome!
 
 ### Added
+- Full inline editor with standard actions: copy (Ctrl+C), cut (Ctrl+X), paste (Ctrl+V), select all (Ctrl+A), undo (Ctrl+Z), redo (Ctrl+Y)
+- Mouse support in edit mode: click-to-position cursor, drag-select, double-click for word selection
+- Async clipboard operations via Bubble Tea Cmd pattern (non-blocking UI)
+- Bracketed paste support (tea.PasteMsg) with automatic CRLF normalization
+- Word navigation (Ctrl+Left/Right), line operations (Home/End, Ctrl+Home/End)
+- 21 documented edit mode keybindings in help overlay and docs/keybindings.md
 - Preview dual-mode diff toggle - press `f` in the preview panel to switch between file-on-disk and contextual diff view. The diff shown adapts to your context: commit diff when browsing commit files, branch comparison diff in branch mode, PR diff for pull requests, and working tree diff with git filter active. Title shows `[diff]` suffix when in diff mode.
 - Edit blocked in diff mode - press `f` to return to file view before editing with `e`
 - Inline editor mode — press `e` in the preview panel to edit files directly, `Ctrl+S` to save, `Escape` to discard
@@ -79,6 +87,7 @@ New contributors: **Copilot** — welcome!
 - Add 22 security tests covering git message validation, MCP tool injection, path traversal, and extension install safety
 
 ### Performance
+- Cache syntax highlight lexer/style/formatter on Preview struct — eliminates 160+ lookups per keystroke in edit mode
 - Bounded LRU caches with size limits to prevent unbounded memory growth
 - Fix goroutine leak in filesystem watcher cleanup
 - Auto-cleanup exited AI agents from AgentTracker after 30-second grace period

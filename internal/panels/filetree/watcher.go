@@ -32,7 +32,6 @@ type watcher struct {
 	fsw      *fsnotify.Watcher
 	dirs     map[string]bool // currently watched directories
 	cancel   context.CancelFunc
-	done     chan struct{}
 	debounce time.Duration
 	pollInt  time.Duration
 	stopOnce sync.Once // ensures stop() cleanup runs exactly once (F29)
@@ -53,7 +52,6 @@ func newWatcher(debounce, pollInterval time.Duration) *watcher {
 		dirs:     make(map[string]bool),
 		debounce: debounce,
 		pollInt:  pollInterval,
-		done:     make(chan struct{}),
 	}
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -68,29 +66,25 @@ func newWatcher(debounce, pollInterval time.Duration) *watcher {
 // start begins watching. It returns a tea.Cmd that will produce RefreshMsg
 // when filesystem changes are detected.
 func (w *watcher) start(ctx context.Context) tea.Cmd {
+	runCtx, cancel := context.WithCancel(ctx)
+
 	w.mu.Lock()
-	ctx, w.cancel = context.WithCancel(ctx)
-	w.done = make(chan struct{}) // fresh channel per start (F28)
-	w.mu.Unlock()
-	// F29: Spawn a shutdown goroutine that invokes stop() when the context
-	// is cancelled. This ensures resources are freed even when the
-	// application shuts down via context cancellation alone. The stop()
-	// method is idempotent (sync.Once), so calling it from here AND from
-	// an explicit Close() is safe.
-	go func() {
-		<-ctx.Done()
-		w.stop()
-	}()
-	if w.polling {
-		return w.startPolling(ctx)
+	if w.cancel != nil {
+		w.cancel()
 	}
-	return w.startFSNotify(ctx)
+	w.cancel = cancel
+	polling := w.polling
+	w.mu.Unlock()
+
+	if polling {
+		return w.startPolling(runCtx)
+	}
+	return w.startFSNotify(runCtx)
 }
 
 // startFSNotify runs the fsnotify event loop with debouncing.
 func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		defer close(w.done)
 		var timer *time.Timer
 		var timerC <-chan time.Time
 		for {
@@ -137,7 +131,6 @@ func (w *watcher) startFSNotify(ctx context.Context) tea.Cmd {
 // startPolling runs a simple polling loop.
 func (w *watcher) startPolling(ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		defer close(w.done)
 		ticker := time.NewTicker(w.pollInt)
 		defer ticker.Stop()
 		for {
@@ -193,6 +186,7 @@ func (w *watcher) stop() {
 	w.stopOnce.Do(func() {
 		w.mu.Lock()
 		cancelFn := w.cancel
+		w.cancel = nil
 		w.mu.Unlock()
 		if cancelFn != nil {
 			cancelFn()

@@ -9,6 +9,11 @@ import (
 
 // Log returns commits from git log.
 func (c *Client) Log(ctx context.Context, opts LogOpts) ([]Commit, error) {
+	bodyFormat := "%b"
+	if opts.OmitBody {
+		bodyFormat = ""
+	}
+
 	// Build the format string: fields separated by \x1e (RS).
 	// Each commit record is terminated by \x1f (US) so that multi-line
 	// body text (%b) does not break record boundaries.
@@ -19,9 +24,9 @@ func (c *Client) Log(ctx context.Context, opts LogOpts) ([]Commit, error) {
 		"%ae", // author email
 		"%aI", // author date ISO 8601
 		"%s",  // subject
-		"%b",  // body
-		"%P",  // parent hashes
-		"%D",  // ref names
+		bodyFormat,
+		"%P", // parent hashes
+		"%D", // ref names
 	}, FieldSep) + RecordEnd
 
 	args := []string{"log", "--format=" + format}

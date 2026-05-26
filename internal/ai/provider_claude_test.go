@@ -284,7 +284,7 @@ func TestParseResponse_TextContent(t *testing.T) {
 	assert.Equal(t, 15, resp.TokensUsed.InputTokens)
 	assert.Equal(t, 4, resp.TokensUsed.OutputTokens)
 	assert.Equal(t, "msg_123", resp.Metadata["message_id"])
-	assert.Equal(t, "claude-sonnet-4-20250514", resp.Metadata["model"])
+	assert.Equal(t, "claude-sonnet-4-20250514", resp.Metadata[metadataKeyModel])
 	assert.Empty(t, resp.ToolCalls)
 }
 

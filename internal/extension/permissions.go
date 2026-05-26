@@ -34,6 +34,11 @@ func ValidPermission(p string) bool {
 }
 
 // CheckPermission reports whether ext has been granted perm.
+//
+// NOTE(#174): This function correctly checks the manifest declaration, but no
+// runtime call-site currently enforces permissions before executing extension
+// operations. MCP subprocess extensions run with full OS-level user privileges
+// regardless of their declared permissions. See SECURITY.md for roadmap.
 func CheckPermission(ext *ExtensionInfo, perm Permission) bool {
 	return ManifestHasPermission(&ext.Manifest, perm)
 }

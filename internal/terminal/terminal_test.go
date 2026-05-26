@@ -105,6 +105,47 @@ func TestLinesReturnsDefensiveCopy(t *testing.T) {
 	assert.Equal(t, "a", term.lines[0])
 }
 
+func TestLinesWindowReturnsVisibleSliceAndTotal(t *testing.T) {
+	term := &Terminal{
+		maxLines: 100,
+		done:     make(chan struct{}),
+		exitCode: -1,
+		lines:    []string{"a", "b", "c", "d"},
+	}
+
+	lines, total := term.LinesWindow(0, 2)
+	assert.Equal(t, 4, total)
+	assert.Equal(t, []string{"c", "d"}, lines)
+
+	lines, total = term.LinesWindow(1, 2)
+	assert.Equal(t, 4, total)
+	assert.Equal(t, []string{"b", "c"}, lines)
+
+	lines[0] = "changed"
+	assert.Equal(t, "b", term.lines[1], "window should be a defensive copy")
+}
+
+func TestLinesWindowBoundaryConditions(t *testing.T) {
+	term := &Terminal{
+		maxLines: 100,
+		done:     make(chan struct{}),
+		exitCode: -1,
+		lines:    []string{"a", "b", "c", "d"},
+	}
+
+	lines, total := term.LinesWindow(99, 2)
+	assert.Equal(t, 4, total)
+	assert.Empty(t, lines, "offset beyond scrollback should clamp to an empty window")
+
+	lines, total = term.LinesWindow(0, 99)
+	assert.Equal(t, 4, total)
+	assert.Equal(t, []string{"a", "b", "c", "d"}, lines)
+
+	lines, total = term.LinesWindow(0, 0)
+	assert.Equal(t, 4, total)
+	assert.Nil(t, lines)
+}
+
 func TestLinesEmptyInitially(t *testing.T) {
 	term := &Terminal{
 		maxLines: 100,

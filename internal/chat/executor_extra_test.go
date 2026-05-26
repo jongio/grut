@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1221,7 +1222,7 @@ func TestBulkDelete_Success(t *testing.T) {
 	assert.Contains(t, result.Content, "deleted 2 file(s)")
 
 	_, err := os.Stat(f1)
-	assert.True(t, os.IsNotExist(err))
+	assert.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestBulkDelete_MissingPaths(t *testing.T) {

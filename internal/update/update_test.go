@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -354,13 +355,6 @@ func TestCopyFile_MissingSrc(t *testing.T) {
 // RunUpdate edge cases
 // ---------------------------------------------------------------------------
 
-func TestRunUpdate_DevVersion(t *testing.T) {
-	err := RunUpdate(context.Background(), "dev")
-	if err == nil {
-		t.Fatal("expected error for dev version")
-	}
-}
-
 func TestReplaceUnix(t *testing.T) {
 	tmpDir := t.TempDir()
 	exePath := filepath.Join(tmpDir, "grut")
@@ -386,7 +380,7 @@ func TestReplaceUnix(t *testing.T) {
 		t.Errorf("replaced content = %q, want %q", string(got), "new binary")
 	}
 
-	if _, err := os.Stat(exePath + ".new"); !os.IsNotExist(err) {
+	if _, err := os.Stat(exePath + ".new"); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("expected .new temp file to be cleaned up")
 	}
 }

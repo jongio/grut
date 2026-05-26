@@ -33,7 +33,7 @@ func TestLoadGitHubData_IssuesFailOtherSucceed(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result, ok := msg.(ghDataLoadedMsg)
 	require.True(t, ok)
@@ -59,7 +59,7 @@ func TestLoadGitHubData_PRsFailOtherSucceed(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 
@@ -82,7 +82,7 @@ func TestLoadGitHubData_RunsFailOtherSucceed(t *testing.T) {
 		},
 	}
 
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 
@@ -95,7 +95,7 @@ func TestLoadGitHubData_UserFailOtherSucceed(t *testing.T) {
 	ghMock := &mockGHClientFull{
 		userErr: assert.AnError,
 	}
-	p := newGHPanelWithClient(defaultMock(), ghMock)
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	msg := p.loadGitHubData()()
 	result := msg.(ghDataLoadedMsg)
 
@@ -109,7 +109,7 @@ func TestLoadGitHubData_UserFailOtherSucceed(t *testing.T) {
 
 func TestHandleRepoChanged_ResetsGitHubState(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	// Pre-populate GitHub state to verify it gets cleared.
 	p.gh.owner = "old-owner"
@@ -154,7 +154,7 @@ func TestHandleRepoChanged_ResetsGitHubState(t *testing.T) {
 
 func TestHandleRepoChanged_ClearsGitData(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	// Verify pre-populated git data exists.
 	require.NotNil(t, p.gitData.lastBranches)
@@ -175,7 +175,7 @@ func TestHandleRepoChanged_ClearsGitData(t *testing.T) {
 
 func TestLoadMoreIfNeeded_GitTab_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	cmd := p.loadMoreIfNeeded()
 	assert.Nil(t, cmd, "git tabs don't paginate")
@@ -183,7 +183,7 @@ func TestLoadMoreIfNeeded_GitTab_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_NoPaging_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.tabPaging[tabIssues] = tabPagination{allLoaded: true} // all loaded
 	cmd := p.loadMoreIfNeeded()
@@ -192,7 +192,7 @@ func TestLoadMoreIfNeeded_NoPaging_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_Loading_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 2}
 	p.tabItems[tabIssues] = make([]listItem, 10)
@@ -202,7 +202,7 @@ func TestLoadMoreIfNeeded_Loading_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_EmptyItems_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.tabPaging[tabIssues] = tabPagination{nextPage: 2}
 	p.tabItems[tabIssues] = nil
@@ -212,7 +212,7 @@ func TestLoadMoreIfNeeded_EmptyItems_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_NextPageZero_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.tabPaging[tabIssues] = tabPagination{nextPage: 0}
 	p.tabItems[tabIssues] = make([]listItem, 10)
@@ -222,7 +222,7 @@ func TestLoadMoreIfNeeded_NextPageZero_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_CursorFarFromEnd_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.Height = 10
 	// 20 items, cursor at 0, well away from triggerIdx (20-5=15).
@@ -240,7 +240,7 @@ func TestLoadMoreIfNeeded_CursorFarFromEnd_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_CursorNearEnd_TriggersLoad(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -263,7 +263,7 @@ func TestLoadMoreIfNeeded_CursorNearEnd_TriggersLoad(t *testing.T) {
 
 func TestLoadMoreIfNeeded_Debounce_ReturnsNil(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -285,7 +285,7 @@ func TestLoadMoreIfNeeded_Debounce_ReturnsNil(t *testing.T) {
 
 func TestLoadMoreIfNeeded_PRsTab(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -306,7 +306,7 @@ func TestLoadMoreIfNeeded_PRsTab(t *testing.T) {
 
 func TestLoadMoreIfNeeded_ActionsTab(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -327,7 +327,7 @@ func TestLoadMoreIfNeeded_ActionsTab(t *testing.T) {
 
 func TestLoadMoreIfNeeded_WorkflowsTab(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -348,7 +348,7 @@ func TestLoadMoreIfNeeded_WorkflowsTab(t *testing.T) {
 
 func TestLoadMoreIfNeeded_ReleasesTab(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -369,7 +369,7 @@ func TestLoadMoreIfNeeded_ReleasesTab(t *testing.T) {
 
 func TestLoadMoreIfNeeded_ViewEndNearEnd_TriggersLoad(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -396,7 +396,7 @@ func TestLoadMoreIfNeeded_ViewEndNearEnd_TriggersLoad(t *testing.T) {
 
 func TestHandleMouseWheel_ScrollDown_IncreasesOffset(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 5)
 	p.activeTab = tabBranches
 	p.tabOffset[tabBranches] = 0
@@ -414,7 +414,7 @@ func TestHandleMouseWheel_ScrollDown_IncreasesOffset(t *testing.T) {
 
 func TestHandleMouseWheel_ScrollUp_DecreasesOffset(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 10)
 	p.activeTab = tabBranches
 	p.tabOffset[tabBranches] = 5
@@ -425,7 +425,7 @@ func TestHandleMouseWheel_ScrollUp_DecreasesOffset(t *testing.T) {
 
 func TestHandleMouseWheel_ScrollUp_ClampsToZero(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 10)
 	p.activeTab = tabBranches
 	p.tabOffset[tabBranches] = 1 // less than ScrollDelta (3)
@@ -436,7 +436,7 @@ func TestHandleMouseWheel_ScrollUp_ClampsToZero(t *testing.T) {
 
 func TestHandleMouseWheel_ScrollDown_ClampsToMaxOffset(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 10)
 	p.activeTab = tabBranches
 
@@ -448,7 +448,7 @@ func TestHandleMouseWheel_ScrollDown_ClampsToMaxOffset(t *testing.T) {
 
 func TestHandleMouseWheel_ScrollDown_ManyItems(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetSize(80, 5) // small viewport
 	p.activeTab = tabBranches
 
@@ -475,7 +475,7 @@ func TestHandleMouseWheel_ScrollDown_ManyItems(t *testing.T) {
 
 func TestHandleMouseWheel_ReturnsLoadMoreCmd(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.owner = "owner"
 	p.gh.repo = "repo"
@@ -501,7 +501,7 @@ func TestHandleMouseWheel_ReturnsLoadMoreCmd(t *testing.T) {
 
 func TestCrossRefPRsActions_MatchingBranch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	p.gh.allPRs = []ghPRItem{
 		{Number: 1, HeadBranch: "feature-a"},
@@ -525,7 +525,7 @@ func TestCrossRefPRsActions_MatchingBranch(t *testing.T) {
 
 func TestCrossRefPRsActions_EmptyPRs(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = nil
 	p.tabItems[tabActions] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{Branch: "main"}},
@@ -537,7 +537,7 @@ func TestCrossRefPRsActions_EmptyPRs(t *testing.T) {
 
 func TestCrossRefPRsActions_EmptyActions(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{{Number: 1, HeadBranch: "main"}}
 	p.tabItems[tabActions] = nil
 
@@ -547,7 +547,7 @@ func TestCrossRefPRsActions_EmptyActions(t *testing.T) {
 
 func TestCrossRefPRsActions_SkipsNonActionRunItems(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{
 		{Number: 1, HeadBranch: "main"},
 	}
@@ -562,7 +562,7 @@ func TestCrossRefPRsActions_SkipsNonActionRunItems(t *testing.T) {
 
 func TestCrossRefPRsActions_NoMatchingBranches(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.gh.allPRs = []ghPRItem{
 		{Number: 1, HeadBranch: "feature-x"},
 	}
@@ -580,28 +580,28 @@ func TestCrossRefPRsActions_NoMatchingBranches(t *testing.T) {
 
 func TestRenderTabBar_NarrowWidth_10(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	result := p.renderTabBar(10)
 	assert.NotEmpty(t, result, "should render something at width 10")
 }
 
 func TestRenderTabBar_NarrowWidth_15(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	result := p.renderTabBar(15)
 	assert.NotEmpty(t, result, "should render something at width 15")
 }
 
 func TestRenderTabBar_NarrowWidth_20(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	result := p.renderTabBar(20)
 	assert.NotEmpty(t, result, "should render something at width 20")
 }
 
 func TestRenderTabBar_Width_1(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Extremely narrow — must not panic.
 	result := p.renderTabBar(1)
 	assert.NotEmpty(t, result)
@@ -609,7 +609,7 @@ func TestRenderTabBar_Width_1(t *testing.T) {
 
 func TestRenderTabBar_Width_0(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Zero width — must not panic.
 	result := p.renderTabBar(0)
 	_ = result // just verify no panic
@@ -617,7 +617,7 @@ func TestRenderTabBar_Width_0(t *testing.T) {
 
 func TestRenderTabBar_ModeGitHub_NarrowWidth(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	result := p.renderTabBar(15)
 	assert.NotEmpty(t, result, "GitHub mode should render at narrow width")
 }
@@ -647,7 +647,7 @@ func TestRenderTabBar_ModeAll_NoGHClient(t *testing.T) {
 
 func TestRenderTabBar_ModeGit(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.mode = ModeGit
 	result := p.renderTabBar(80)
 	assert.NotEmpty(t, result)
@@ -667,7 +667,7 @@ func TestRenderTabBar_ActiveGitHubTab_ModeAll(t *testing.T) {
 
 func TestRenderTabBar_WithPagingIndicators(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.tabItems[tabIssues] = []listItem{{kind: kindIssue}}
 	p.tabPaging[tabIssues] = tabPagination{nextPage: 2} // not allLoaded → shows "+"
@@ -679,7 +679,7 @@ func TestRenderTabBar_WithPagingIndicators(t *testing.T) {
 
 func TestRenderTabBar_WithFilters(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.client = &mockGHClientFull{}
 	p.gh.issueFilter = issueFilterAssigned
 	p.gh.prFilter = prFilterMine
@@ -695,7 +695,7 @@ func TestRenderTabBar_WithFilters(t *testing.T) {
 
 func TestPageDown_EmptyTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 	p.activeTab = tabStash
 	p.tabItems[tabStash] = nil
@@ -708,7 +708,7 @@ func TestPageDown_EmptyTab(t *testing.T) {
 
 func TestPageUp_EmptyTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 	p.activeTab = tabStash
 	p.tabItems[tabStash] = nil
@@ -720,7 +720,7 @@ func TestPageUp_EmptyTab(t *testing.T) {
 
 func TestPageDown_LargeList(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 
 	items := make([]listItem, 100)
@@ -739,7 +739,7 @@ func TestPageDown_LargeList(t *testing.T) {
 
 func TestPageDown_NearEnd(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 
 	items := make([]listItem, 15)
@@ -756,7 +756,7 @@ func TestPageDown_NearEnd(t *testing.T) {
 
 func TestPageUp_FromMiddle(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 
 	items := make([]listItem, 50)
@@ -776,7 +776,7 @@ func TestPageUp_FromMiddle(t *testing.T) {
 
 func TestPageUp_ClampsToZero(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 	p.activeTab = tabBranches
 
@@ -793,7 +793,7 @@ func TestPageUp_ClampsToZero(t *testing.T) {
 
 func TestPageDown_NegativeViewH(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 1 // With tab bar, viewH will be <= 0.
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 1
@@ -804,7 +804,7 @@ func TestPageDown_NegativeViewH(t *testing.T) {
 
 func TestPageUp_NegativeViewH(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 1
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 2
@@ -819,7 +819,7 @@ func TestPageUp_NegativeViewH(t *testing.T) {
 
 func TestGhTabCountStr_AllLoaded(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[tabIssues] = []listItem{{kind: kindIssue}, {kind: kindIssue}, {kind: kindIssue}}
 	p.tabPaging[tabIssues] = tabPagination{allLoaded: true}
 
@@ -828,7 +828,7 @@ func TestGhTabCountStr_AllLoaded(t *testing.T) {
 
 func TestGhTabCountStr_MorePages(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.tabItems[tabIssues] = []listItem{{kind: kindIssue}, {kind: kindIssue}}
 	p.tabPaging[tabIssues] = tabPagination{nextPage: 2}
 
@@ -837,7 +837,7 @@ func TestGhTabCountStr_MorePages(t *testing.T) {
 
 func TestGhTabCountStr_GitTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Git tabs (tabBranches < tabIssues) should just return count.
 	assert.Equal(t, fmt.Sprintf("%d", len(p.tabItems[tabBranches])), p.ghTabCountStr(tabBranches))
 }

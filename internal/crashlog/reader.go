@@ -2,7 +2,9 @@ package crashlog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,7 +19,7 @@ func List() ([]*CrashReport, error) {
 	dir := crashDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("reading crash directory: %w", err)
@@ -61,7 +63,7 @@ func Read(id string) (*CrashReport, error) {
 	dir := crashDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("no crash reports found")
 		}
 		return nil, fmt.Errorf("reading crash directory: %w", err)
@@ -95,7 +97,7 @@ func Clear() (int, error) {
 	dir := crashDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("reading crash directory: %w", err)

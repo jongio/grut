@@ -196,6 +196,8 @@ func TestScaffold_FilesContainExpectedContent(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(data), "handle_request")
 		assert.Contains(t, string(data), "initialize")
+		assert.Contains(t, string(data), "json.JSONDecodeError")
+		assert.Contains(t, string(data), "Parse error")
 	})
 
 	t.Run("mcp-node server.js has handleRequest", func(t *testing.T) {
@@ -206,6 +208,8 @@ func TestScaffold_FilesContainExpectedContent(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(data), "handleRequest")
 		assert.Contains(t, string(data), "initialize")
+		assert.Contains(t, string(data), "try")
+		assert.Contains(t, string(data), "Parse error")
 	})
 
 	t.Run("mcp-node package.json has name", func(t *testing.T) {

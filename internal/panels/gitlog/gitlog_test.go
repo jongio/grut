@@ -12,6 +12,7 @@ import (
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/panels/commitrender"
@@ -36,44 +37,7 @@ func testRenderCommitLine(p *Panel, c git.Commit, graphPrefix string, width int,
 }
 
 // mockGitClient implements git.StatusReader for testing.
-type mockGitClient struct {
-	logFn func(ctx context.Context, opts git.LogOpts) ([]git.Commit, error)
-}
-
-func (m *mockGitClient) Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error) {
-	if m.logFn != nil {
-		return m.logFn(ctx, opts)
-	}
-	return nil, nil
-}
-
-func (m *mockGitClient) Status(ctx context.Context) ([]git.FileStatus, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Diff(ctx context.Context, opts git.DiffOpts) ([]git.FileDiff, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Blame(ctx context.Context, path string) ([]git.BlameLine, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) RepoRoot(ctx context.Context) (string, error) {
-	return "/repo", nil
-}
-
-func (m *mockGitClient) IsRepo(ctx context.Context) (bool, error) {
-	return true, nil
-}
-
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
-}
+type mockGitClient = gittest.MockClient
 
 // makeCommits generates n sequential test commits.
 func makeCommits(n int) []git.Commit {
@@ -117,8 +81,10 @@ func TestNew_DefaultPageSize(t *testing.T) {
 
 func TestInit_LoadsCommits(t *testing.T) {
 	commits := makeCommits(10)
+	var gotOpts git.LogOpts
 	client := &mockGitClient{
-		logFn: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+		LogFunc: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+			gotOpts = opts
 			return commits, nil
 		},
 	}
@@ -135,6 +101,7 @@ func TestInit_LoadsCommits(t *testing.T) {
 	require.True(t, ok)
 	assert.Len(t, loaded.commits, 10)
 	assert.False(t, loaded.append)
+	assert.True(t, gotOpts.OmitBody, "list loading should avoid bulk commit body payloads")
 }
 
 func TestHandleCommitsLoaded(t *testing.T) {
@@ -359,7 +326,7 @@ func TestPageNavigation(t *testing.T) {
 func TestPagination_LoadMore(t *testing.T) {
 	callCount := 0
 	client := &mockGitClient{
-		logFn: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+		LogFunc: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
 			callCount++
 			return makeCommits(5), nil
 		},
@@ -594,7 +561,7 @@ func TestRenderLog_WithCommits(t *testing.T) {
 
 func TestHandleBranchSelected_NewBranch(t *testing.T) {
 	client := &mockGitClient{
-		logFn: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+		LogFunc: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
 			return makeCommits(5), nil
 		},
 	}
@@ -1212,7 +1179,7 @@ func newTestPanelWithCommits(t *testing.T, n int) *Panel {
 	t.Helper()
 	commits := makeCommits(n)
 	client := &mockGitClient{
-		logFn: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
+		LogFunc: func(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
 			return commits, nil
 		},
 	}

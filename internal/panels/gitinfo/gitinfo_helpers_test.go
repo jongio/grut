@@ -20,20 +20,20 @@ import (
 
 func TestTitle_GitMode(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	assert.Equal(t, "Git", p.Title())
 }
 
 func TestTitle_GitHubPublic(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.repoPrivate = false
 	assert.Equal(t, "GitHub", p.Title())
 }
 
 func TestTitle_GitHubPrivateASCII(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.repoPrivate = true
 	p.iconMode = "ascii"
 	assert.Equal(t, "GitHub (private)", p.Title())
@@ -41,7 +41,7 @@ func TestTitle_GitHubPrivateASCII(t *testing.T) {
 
 func TestTitle_GitHubPrivateNerd(t *testing.T) {
 	t.Parallel()
-	p := newTestGitHubPanel(defaultMock())
+	p := newTestGitHubPanel(t, defaultMock())
 	p.gh.repoPrivate = true
 	p.iconMode = "nerd"
 	assert.Equal(t, "GitHub \uf023", p.Title())
@@ -53,7 +53,7 @@ func TestTitle_GitHubPrivateNerd(t *testing.T) {
 
 func TestCurrentBranch_Found(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// After Init the panel has branches from defaultMock with "main" as current.
 	assert.Equal(t, "main", p.currentBranch())
 }
@@ -65,14 +65,14 @@ func TestCurrentBranch_NoCurrent(t *testing.T) {
 			{Name: "feature", IsCurrent: false, Hash: "abc1234"},
 		},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	assert.Equal(t, "main", p.currentBranch(), "should fall back to main when no branch is current")
 }
 
 func TestCurrentBranch_EmptyBranches(t *testing.T) {
 	t.Parallel()
 	mock := &mockGitOps{}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	assert.Equal(t, "main", p.currentBranch())
 }
 
@@ -130,7 +130,7 @@ func TestTabBarHeight_ModeAll_NoGHClient(t *testing.T) {
 
 func TestPageDown_Basic(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 	p.activeTab = tabBranches
 
@@ -145,7 +145,7 @@ func TestPageDown_Basic(t *testing.T) {
 
 func TestPageDown_ZeroHeight(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 0 // viewH = 0 - tabBarHeight ≤ 0
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 0
@@ -155,7 +155,7 @@ func TestPageDown_ZeroHeight(t *testing.T) {
 
 func TestPageUp_Basic(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 10
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 2
@@ -165,7 +165,7 @@ func TestPageUp_Basic(t *testing.T) {
 
 func TestPageUp_ZeroHeight(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 0
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 2
@@ -175,7 +175,7 @@ func TestPageUp_ZeroHeight(t *testing.T) {
 
 func TestPageDown_ClampsToEnd(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.Height = 100 // very tall → pageDown jumps past all items
 	p.activeTab = tabBranches
 	n := len(p.tabItems[tabBranches])
@@ -229,7 +229,7 @@ func TestRenderWorkflow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			item := listItem{kind: kindWorkflow, workflow: tt.wf}
 			result := p.renderWorkflow(item, 80, tt.isCursor)
 			assert.NotEmpty(t, result)
@@ -240,7 +240,7 @@ func TestRenderWorkflow(t *testing.T) {
 
 func TestRenderWorkflow_NarrowWidth(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	wf := ghWorkflowItem{ID: 1, Name: "A Very Long Workflow Name That Should Truncate", State: "active", Path: ".github/workflows/ci.yml"}
 	item := listItem{kind: kindWorkflow, workflow: wf}
 	result := p.renderWorkflow(item, 20, false)
@@ -249,7 +249,7 @@ func TestRenderWorkflow_NarrowWidth(t *testing.T) {
 
 func TestRenderWorkflow_ZeroWidth(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	wf := ghWorkflowItem{ID: 1, Name: "CI", State: "active", Path: ".github/workflows/ci.yml"}
 	item := listItem{kind: kindWorkflow, workflow: wf}
 	result := p.renderWorkflow(item, 5, false)
@@ -305,7 +305,7 @@ func TestRenderRelease(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			item := listItem{kind: kindRelease, release: tt.rel}
 			result := p.renderRelease(item, 80, tt.isCursor)
 			assert.NotEmpty(t, result)
@@ -316,7 +316,7 @@ func TestRenderRelease(t *testing.T) {
 
 func TestRenderRelease_NarrowWidth(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	rel := ghReleaseItem{TagName: "v1.0.0", Name: "A Very Long Release Name", Author: "dev", CreatedAt: "2024-01-15", AssetsCount: 5}
 	item := listItem{kind: kindRelease, release: rel}
 	result := p.renderRelease(item, 20, false)
@@ -329,7 +329,7 @@ func TestRenderRelease_NarrowWidth(t *testing.T) {
 
 func TestRenderLine_Workflow(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindWorkflow, workflow: ghWorkflowItem{ID: 1, Name: "CI", State: "active"}}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -338,7 +338,7 @@ func TestRenderLine_Workflow(t *testing.T) {
 
 func TestRenderLine_Release(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRelease, release: ghReleaseItem{TagName: "v1.0.0"}}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -347,7 +347,7 @@ func TestRenderLine_Release(t *testing.T) {
 
 func TestRenderLine_Remote(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemote, remote: git.Remote{Name: "origin"}}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -356,7 +356,7 @@ func TestRenderLine_Remote(t *testing.T) {
 
 func TestRenderLine_RemoteSub(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemoteSub, text: "https://github.com/user/repo"}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -364,7 +364,7 @@ func TestRenderLine_RemoteSub(t *testing.T) {
 
 func TestRenderLine_Stash(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 0, Message: "WIP"}}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -373,7 +373,7 @@ func TestRenderLine_Stash(t *testing.T) {
 
 func TestRenderLine_Reflog(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindReflogEntry, reflog: git.ReflogEntry{Hash: "abc1234", Action: "commit", Message: "test", Date: time.Now()}}
 	result := p.renderLine(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -382,7 +382,7 @@ func TestRenderLine_Reflog(t *testing.T) {
 
 func TestRenderLine_UnknownKindReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: itemKind(999)}
 	result := p.renderLine(item, 80, false)
 	assert.Empty(t, result, "unknown kind should return empty")
@@ -394,7 +394,7 @@ func TestRenderLine_UnknownKindReturnsEmpty(t *testing.T) {
 
 func TestDoOpenInBrowser_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 999 // out of bounds
 	_, cmd := p.doOpenInBrowser()
@@ -403,7 +403,7 @@ func TestDoOpenInBrowser_OutOfBounds(t *testing.T) {
 
 func TestDoOpenInBrowser_NegativeCursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = -1
 	_, cmd := p.doOpenInBrowser()
@@ -412,7 +412,7 @@ func TestDoOpenInBrowser_NegativeCursor(t *testing.T) {
 
 func TestDoOpenInBrowser_RemoteItem_HasURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabRemotes
 	// After Init, remotes tab should have items from defaultMock.
 	require.True(t, len(p.tabItems[tabRemotes]) > 0)
@@ -429,7 +429,7 @@ func TestDoOpenInBrowser_BranchNoRemotes(t *testing.T) {
 		branches: []git.Branch{{Name: "main", IsCurrent: true, Hash: "abc1234"}},
 		remotes:  nil, // no remotes → guessBranchRemoteURL returns ""
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.activeTab = tabBranches
 	p.tabCursor[tabBranches] = 0
 
@@ -444,7 +444,7 @@ func TestDoOpenInBrowser_BranchNoRemotes(t *testing.T) {
 
 func TestDoOpenInBrowser_IssueItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabIssues
 	p.tabItems[tabIssues] = []listItem{
 		{kind: kindIssue, issue: ghIssueItem{Number: 42, HTMLURL: "https://github.com/user/repo/issues/42"}},
@@ -457,7 +457,7 @@ func TestDoOpenInBrowser_IssueItem(t *testing.T) {
 
 func TestDoOpenInBrowser_PRItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabPRs
 	p.tabItems[tabPRs] = []listItem{
 		{kind: kindPR, pr: ghPRItem{Number: 10, HTMLURL: "https://github.com/user/repo/pull/10"}},
@@ -470,7 +470,7 @@ func TestDoOpenInBrowser_PRItem(t *testing.T) {
 
 func TestDoOpenInBrowser_ActionRunItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabActions
 	p.tabItems[tabActions] = []listItem{
 		{kind: kindActionRun, actionRun: ghActionItem{RunNumber: 100, HTMLURL: "https://github.com/user/repo/actions/runs/100"}},
@@ -483,7 +483,7 @@ func TestDoOpenInBrowser_ActionRunItem(t *testing.T) {
 
 func TestDoOpenInBrowser_WorkflowItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = []listItem{
 		{kind: kindWorkflow, workflow: ghWorkflowItem{Name: "CI", HTMLURL: "https://github.com/user/repo/actions/workflows/ci.yml"}},
@@ -496,7 +496,7 @@ func TestDoOpenInBrowser_WorkflowItem(t *testing.T) {
 
 func TestDoOpenInBrowser_ReleaseItem(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabReleases
 	p.tabItems[tabReleases] = []listItem{
 		{kind: kindRelease, release: ghReleaseItem{TagName: "v1.0.0", HTMLURL: "https://github.com/user/repo/releases/tag/v1.0.0"}},
@@ -509,7 +509,7 @@ func TestDoOpenInBrowser_ReleaseItem(t *testing.T) {
 
 func TestDoOpenInBrowser_TagWithRemotes(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc1234"}},
@@ -527,7 +527,7 @@ func TestDoOpenInBrowser_TagNoRemotes(t *testing.T) {
 		branches: []git.Branch{{Name: "main", IsCurrent: true}},
 		remotes:  nil,
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.activeTab = tabTags
 	p.tabItems[tabTags] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1.0.0"}},
@@ -544,7 +544,7 @@ func TestDoOpenInBrowser_TagNoRemotes(t *testing.T) {
 
 func TestDoOpenInBrowser_StashEntry_NoURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabStash
 	require.True(t, len(p.tabItems[tabStash]) > 0)
 	p.tabCursor[tabStash] = 0
@@ -560,7 +560,7 @@ func TestDoOpenInBrowser_StashEntry_NoURL(t *testing.T) {
 
 func TestDoOpenInBrowser_RemoteBranch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 	// Find the remote branch in items (origin/main).
 	for i, item := range p.tabItems[tabBranches] {
@@ -580,7 +580,7 @@ func TestDoOpenInBrowser_RemoteBranch(t *testing.T) {
 
 func TestHandleModalResult_RejectClearsOp(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCreate
 	p.pendingName = "test"
 
@@ -591,7 +591,7 @@ func TestHandleModalResult_RejectClearsOp(t *testing.T) {
 
 func TestHandleModalResult_RemoteAdd(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAdd
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "upstream"})
@@ -607,7 +607,7 @@ func TestHandleModalResult_RemoteAdd(t *testing.T) {
 
 func TestHandleModalResult_RemoteAdd_EmptyName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAdd
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: ""})
@@ -616,7 +616,7 @@ func TestHandleModalResult_RemoteAdd_EmptyName(t *testing.T) {
 
 func TestHandleModalResult_RemoteAddURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAddURL
 	p.pendingName = "upstream"
 
@@ -632,7 +632,7 @@ func TestHandleModalResult_RemoteAddURL(t *testing.T) {
 
 func TestHandleModalResult_RemoteAddURL_EmptyURL(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteAddURL
 	p.pendingName = "upstream"
 
@@ -642,7 +642,7 @@ func TestHandleModalResult_RemoteAddURL_EmptyURL(t *testing.T) {
 
 func TestHandleModalResult_RemoteDelete(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opRemoteDelete
 	p.pendingName = "origin"
 
@@ -658,7 +658,7 @@ func TestHandleModalResult_RemoteDelete(t *testing.T) {
 
 func TestHandleModalResult_BranchCheckout(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opBranchCheckout
 	p.pendingName = "feature"
 
@@ -684,7 +684,7 @@ func TestHandleModalResult_BranchCheckout(t *testing.T) {
 
 func TestHandleModalResult_StashApply(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 
@@ -699,7 +699,7 @@ func TestHandleModalResult_StashApply(t *testing.T) {
 
 func TestHandleModalResult_StashPop(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "1"
 
@@ -714,7 +714,7 @@ func TestHandleModalResult_StashPop(t *testing.T) {
 
 func TestHandleModalResult_StashDrop(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 
@@ -728,7 +728,7 @@ func TestHandleModalResult_StashDrop(t *testing.T) {
 
 func TestHandleModalResult_StashUnknownAction(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "0"
 
@@ -743,7 +743,7 @@ func TestHandleModalResult_StashUnknownAction(t *testing.T) {
 
 func TestHandleModalResult_StashAction_InvalidIndex(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opStashAction
 	p.pendingName = "not-a-number"
 
@@ -766,7 +766,7 @@ func TestHandleModalResult_StashAction_ShortCodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.pending = opStashAction
 			p.pendingName = "0"
 
@@ -782,7 +782,7 @@ func TestHandleModalResult_StashAction_ShortCodes(t *testing.T) {
 
 func TestHandleModalResult_TagCreate(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagCreate
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "v1.0.0"})
@@ -797,7 +797,7 @@ func TestHandleModalResult_TagCreate(t *testing.T) {
 
 func TestHandleModalResult_TagCreate_EmptyName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagCreate
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: ""})
@@ -806,7 +806,7 @@ func TestHandleModalResult_TagCreate_EmptyName(t *testing.T) {
 
 func TestHandleModalResult_TagMessage(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagMessage
 	p.pendingName = "v1.0.0"
 
@@ -822,7 +822,7 @@ func TestHandleModalResult_TagMessage(t *testing.T) {
 
 func TestHandleModalResult_TagMessage_Empty(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagMessage
 	p.pendingName = "v1.0.0"
 
@@ -837,7 +837,7 @@ func TestHandleModalResult_TagMessage_Empty(t *testing.T) {
 
 func TestHandleModalResult_TagDelete(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagDelete
 	p.pendingName = "v1.0.0"
 
@@ -852,7 +852,7 @@ func TestHandleModalResult_TagDelete(t *testing.T) {
 
 func TestHandleModalResult_TagPush(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagPush
 	p.pendingName = "v1.0.0"
 
@@ -867,7 +867,7 @@ func TestHandleModalResult_TagPush(t *testing.T) {
 
 func TestHandleModalResult_TagCheckout(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opTagCheckout
 	p.pendingName = "v1.0.0"
 
@@ -882,7 +882,7 @@ func TestHandleModalResult_TagCheckout(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatch(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatch
 	p.pendingName = "123:CI"
 	p.tabItems[tabWorkflows] = []listItem{
@@ -902,7 +902,7 @@ func TestHandleModalResult_WorkflowDispatch(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatch_EmptyRef(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatch
 	p.pendingName = "123:CI"
 	p.tabItems[tabWorkflows] = []listItem{
@@ -920,7 +920,7 @@ func TestHandleModalResult_WorkflowDispatch_EmptyRef(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatch_InvalidID(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatch
 	p.pendingName = "0:CI" // workflowID=0 → early return
 
@@ -930,7 +930,7 @@ func TestHandleModalResult_WorkflowDispatch_InvalidID(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatch_MalformedName(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatch
 	p.pendingName = "no-colon" // can't SplitN into 2 parts with ":"
 
@@ -940,7 +940,7 @@ func TestHandleModalResult_WorkflowDispatch_MalformedName(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatchInputs(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "456:Deploy:main"
 	p.gh.client = &mockGHClientFull{} // non-nil to avoid panic
@@ -956,7 +956,7 @@ func TestHandleModalResult_WorkflowDispatchInputs(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatchInputs_EmptyInputs(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "456:Deploy:main"
 	p.gh.client = &mockGHClientFull{}
@@ -971,7 +971,7 @@ func TestHandleModalResult_WorkflowDispatchInputs_EmptyInputs(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatchInputs_InvalidID(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "0:Deploy:main" // workflowID=0
 
@@ -981,7 +981,7 @@ func TestHandleModalResult_WorkflowDispatchInputs_InvalidID(t *testing.T) {
 
 func TestHandleModalResult_WorkflowDispatchInputs_MissingRef(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opWorkflowDispatchInputs
 	p.pendingName = "456:Deploy" // only 2 parts, ref missing → ref=""
 
@@ -991,7 +991,7 @@ func TestHandleModalResult_WorkflowDispatchInputs_MissingRef(t *testing.T) {
 
 func TestHandleModalResult_UnknownOp(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.pending = opNone // already cleared; the default case returns nil.
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
@@ -1004,7 +1004,7 @@ func TestHandleModalResult_UnknownOp(t *testing.T) {
 
 func TestDoWorkflowDispatch_Valid(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = []listItem{
 		{kind: kindWorkflow, workflow: ghWorkflowItem{ID: 42, Name: "CI"}},
@@ -1019,7 +1019,7 @@ func TestDoWorkflowDispatch_Valid(t *testing.T) {
 
 func TestDoWorkflowDispatch_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = nil
 	p.tabCursor[tabWorkflows] = 0
@@ -1030,7 +1030,7 @@ func TestDoWorkflowDispatch_OutOfBounds(t *testing.T) {
 
 func TestDoWorkflowDispatch_WrongKind(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = []listItem{
 		{kind: kindTag, tag: git.Tag{Name: "v1"}}, // wrong kind
@@ -1047,7 +1047,7 @@ func TestDoWorkflowDispatch_WrongKind(t *testing.T) {
 
 func TestHandleWorkflowDispatchResult_Error(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handleWorkflowDispatchResult(workflowDispatchResultMsg{
 		workflowName: "CI",
@@ -1063,7 +1063,7 @@ func TestHandleWorkflowDispatchResult_Error(t *testing.T) {
 
 func TestHandleWorkflowDispatchResult_Success(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handleWorkflowDispatchResult(workflowDispatchResultMsg{
 		workflowName: "CI",
@@ -1079,7 +1079,7 @@ func TestHandleWorkflowDispatchResult_Success(t *testing.T) {
 
 func TestHandleWorkflowInputsFetched_WithInputs(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handleWorkflowInputsFetched(workflowInputsFetchedMsg{
 		workflowID:   42,
@@ -1102,7 +1102,7 @@ func TestHandleWorkflowInputsFetched_WithInputs(t *testing.T) {
 
 func TestHandleWorkflowInputsFetched_NoInputs(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	_, cmd := p.handleWorkflowInputsFetched(workflowInputsFetchedMsg{
 		workflowID:   42,
@@ -1120,7 +1120,7 @@ func TestHandleWorkflowInputsFetched_NoInputs(t *testing.T) {
 
 func TestWorkflowSelectedCmd_Valid(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = []listItem{
 		{kind: kindWorkflow, workflow: ghWorkflowItem{Name: "CI", Path: ".github/workflows/ci.yml"}},
@@ -1138,7 +1138,7 @@ func TestWorkflowSelectedCmd_Valid(t *testing.T) {
 
 func TestWorkflowSelectedCmd_WrongTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabBranches
 
 	cmd := p.workflowSelectedCmd()
@@ -1147,7 +1147,7 @@ func TestWorkflowSelectedCmd_WrongTab(t *testing.T) {
 
 func TestWorkflowSelectedCmd_OutOfBounds(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = nil
 	p.tabCursor[tabWorkflows] = 0
@@ -1158,7 +1158,7 @@ func TestWorkflowSelectedCmd_OutOfBounds(t *testing.T) {
 
 func TestWorkflowSelectedCmd_WrongKind(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.activeTab = tabWorkflows
 	p.tabItems[tabWorkflows] = []listItem{
 		{kind: kindTag}, // wrong kind
@@ -1175,7 +1175,7 @@ func TestWorkflowSelectedCmd_WrongKind(t *testing.T) {
 
 func TestRenderStashEntry_Truncation(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	tests := []struct {
 		name    string
@@ -1201,7 +1201,7 @@ func TestRenderStashEntry_Truncation(t *testing.T) {
 
 func TestRenderStashEntry_WithCursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindStashEntry, stash: git.StashEntry{Index: 2, Message: "experimental"}}
 	result := p.renderStashEntry(item, 80, true)
 	assert.NotEmpty(t, result)
@@ -1214,7 +1214,7 @@ func TestRenderStashEntry_WithCursor(t *testing.T) {
 
 func TestRenderReflogEntry_Truncation(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 
 	tests := []struct {
 		name  string
@@ -1240,7 +1240,7 @@ func TestRenderReflogEntry_Truncation(t *testing.T) {
 
 func TestRenderReflogEntry_WithCursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{
 		kind:   kindReflogEntry,
 		reflog: git.ReflogEntry{Hash: "abc1234", Action: "checkout", Message: "main to feature", Date: time.Now()},
@@ -1255,7 +1255,7 @@ func TestRenderReflogEntry_WithCursor(t *testing.T) {
 
 func TestRenderRemote_Cursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemote, remote: git.Remote{Name: "origin"}}
 	result := p.renderRemote(item, 80, true)
 	assert.NotEmpty(t, result)
@@ -1264,7 +1264,7 @@ func TestRenderRemote_Cursor(t *testing.T) {
 
 func TestRenderRemoteSub_Cursor(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemoteSub, text: "https://github.com/user/repo (fetch)"}
 	result := p.renderRemoteSub(item, 80, true)
 	assert.NotEmpty(t, result)
@@ -1276,7 +1276,7 @@ func TestRenderRemoteSub_Cursor(t *testing.T) {
 
 func TestViewRendering_StashTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetActiveTab("stash")
 	view := p.View(80, 20)
 	assert.NotEmpty(t, view)
@@ -1286,7 +1286,7 @@ func TestViewRendering_StashTab(t *testing.T) {
 
 func TestViewRendering_RemotesTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	p.SetActiveTab("remotes")
 	view := p.View(80, 20)
 	assert.NotEmpty(t, view)
@@ -1300,7 +1300,7 @@ func TestViewRendering_TagsTab(t *testing.T) {
 		{Name: "v1.0.0", Hash: "abc1234", IsAnnotated: true},
 		{Name: "v0.9.0", Hash: "def5678"},
 	}
-	p := newTestPanel(mock)
+	p := newTestPanel(t, mock)
 	p.SetActiveTab("tags")
 	view := p.View(80, 20)
 	assert.NotEmpty(t, view)
@@ -1309,7 +1309,7 @@ func TestViewRendering_TagsTab(t *testing.T) {
 
 func TestViewRendering_ReflogTab(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// Reflog is loaded via mock's Reflog(), which returns nil.
 	// Inject items directly.
 	p.tabItems[tabReflog] = []listItem{
@@ -1328,7 +1328,7 @@ func TestViewRendering_ReflogTab(t *testing.T) {
 
 func TestRenderTag_RemoteTag(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindRemoteTag, tag: git.Tag{Name: "v2.0.0", Hash: "abc1234"}}
 	result := p.renderTag(item, 80, false)
 	assert.NotEmpty(t, result)
@@ -1337,7 +1337,7 @@ func TestRenderTag_RemoteTag(t *testing.T) {
 
 func TestRenderTag_ZeroWidth(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	item := listItem{kind: kindTag, tag: git.Tag{Name: "v1.0.0", Hash: "abc"}}
 	result := p.renderTag(item, 5, false)
 	_ = result // must not panic
@@ -1370,7 +1370,7 @@ func TestSetActiveTab_AllTabNames(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := newTestPanel(defaultMock())
+			p := newTestPanel(t, defaultMock())
 			p.SetActiveTab(tt.name)
 			assert.Equal(t, tt.tab, p.activeTab)
 		})
@@ -1410,21 +1410,21 @@ func TestTabRowUseShort_Narrow(t *testing.T) {
 
 func TestGhTabLabelWidth_Full(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	w := p.ghTabLabelWidth("Branches", "Br", "3", false)
 	assert.Equal(t, len("Branches 3"), w)
 }
 
 func TestGhTabLabelWidth_Short(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	w := p.ghTabLabelWidth("Branches", "Br", "3", true)
 	assert.Equal(t, len("Br 3"), w)
 }
 
 func TestGhTabLabelWidth_NoShort(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	w := p.ghTabLabelWidth("Tags", "", "5", true)
 	// short is empty, so it uses the full name even when useShort=true.
 	assert.Equal(t, len("Tags 5"), w)
@@ -1432,7 +1432,7 @@ func TestGhTabLabelWidth_NoShort(t *testing.T) {
 
 func TestGhTabLabelWidth_UnicodeCount(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	// "✓" is 3 bytes in UTF-8 but 1 display column.
 	// "Actions ✓" should be 9 display columns, not 11 bytes.
 	w := p.ghTabLabelWidth("Actions", "Act", "✓", false)
@@ -1441,7 +1441,7 @@ func TestGhTabLabelWidth_UnicodeCount(t *testing.T) {
 
 func TestGhTabLabelWidth_UnicodeShort(t *testing.T) {
 	t.Parallel()
-	p := newTestPanel(defaultMock())
+	p := newTestPanel(t, defaultMock())
 	w := p.ghTabLabelWidth("Actions", "Act", "✓", true)
 	assert.Equal(t, 5, w, "short name + Unicode count: 'Act ✓' = 5 columns")
 }

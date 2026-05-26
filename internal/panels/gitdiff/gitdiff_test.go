@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/git/gittest"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/stretchr/testify/assert"
@@ -130,42 +131,7 @@ func loadTestTheme(t *testing.T) *theme.Theme {
 }
 
 // mockGitClient satisfies git.StatusReader for testing the async load path.
-type mockGitClient struct {
-	diffResult []git.FileDiff
-	diffErr    error
-}
-
-func (m *mockGitClient) Diff(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
-	return m.diffResult, m.diffErr
-}
-
-func (m *mockGitClient) Status(_ context.Context) ([]git.FileStatus, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Log(_ context.Context, _ git.LogOpts) ([]git.Commit, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) Blame(_ context.Context, _ string) ([]git.BlameLine, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) RepoRoot(_ context.Context) (string, error) {
-	return "", nil
-}
-
-func (m *mockGitClient) IsRepo(_ context.Context) (bool, error) {
-	return true, nil
-}
-
-func (m *mockGitClient) DiffTreeFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockGitClient) DiffFileNames(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
-}
+type mockGitClient = gittest.MockClient
 
 // --- Construction tests ---
 
@@ -548,8 +514,12 @@ func TestPrevFileClampsAtStart(t *testing.T) {
 // --- Message handling ---
 
 func TestShowDiffMsgTriggersLoad(t *testing.T) {
+	diffResult := []git.FileDiff{sampleDiff()}
+	var diffErr error
 	mock := &mockGitClient{
-		diffResult: []git.FileDiff{sampleDiff()},
+		DiffFunc: func(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
+			return diffResult, diffErr
+		},
 	}
 	p := New(mock, nil)
 	p.Init(context.Background())
@@ -573,8 +543,12 @@ func TestShowDiffMsgTriggersLoad(t *testing.T) {
 }
 
 func TestFileSelectedMsgTriggersLoad(t *testing.T) {
+	diffResult := []git.FileDiff{sampleDiff()}
+	var diffErr error
 	mock := &mockGitClient{
-		diffResult: []git.FileDiff{sampleDiff()},
+		DiffFunc: func(_ context.Context, _ git.DiffOpts) ([]git.FileDiff, error) {
+			return diffResult, diffErr
+		},
 	}
 	p := New(mock, nil)
 	p.Init(context.Background())

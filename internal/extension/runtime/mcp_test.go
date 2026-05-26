@@ -215,6 +215,9 @@ func TestMCPRuntime_Name(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMCPRuntime_LoadAndRunning(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildBlockingHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)
@@ -224,6 +227,9 @@ func TestMCPRuntime_LoadAndRunning(t *testing.T) {
 }
 
 func TestMCPRuntime_CloseStopsProcess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildBlockingHelper(t)
 	rt := newTestRuntime(t)
 
@@ -235,6 +241,9 @@ func TestMCPRuntime_CloseStopsProcess(t *testing.T) {
 }
 
 func TestMCPRuntime_CloseAlreadyExited(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildExitingHelper(t)
 	rt := newTestRuntime(t)
 
@@ -258,6 +267,9 @@ func TestMCPRuntime_CloseWithoutLoad(t *testing.T) {
 }
 
 func TestMCPRuntime_CloseIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildBlockingHelper(t)
 	rt := newTestRuntime(t)
 
@@ -279,6 +291,9 @@ func TestMCPRuntime_LoadInvalidEntryPoint(t *testing.T) {
 }
 
 func TestMCPRuntime_LoadTwice(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildBlockingHelper(t)
 	rt := newTestRuntime(t)
 	t.Cleanup(rt.Close)
@@ -301,6 +316,9 @@ func TestMCPRuntime_SendRequestNotLoaded(t *testing.T) {
 }
 
 func TestMCPRuntime_SendRequestAfterClose(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
 	bin := buildBlockingHelper(t)
 	rt := newTestRuntime(t)
 

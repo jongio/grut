@@ -16,10 +16,25 @@ function handleRequest(request) {
   return { error: { code: -32601, message: "Method not found: " + method } };
 }
 
-rl.on("line", (line) => {
-  const request = JSON.parse(line);
-  const response = handleRequest(request);
+function writeResponse(id, response) {
   response.jsonrpc = "2.0";
-  response.id = request.id;
+  response.id = id;
   process.stdout.write(JSON.stringify(response) + "\n");
+}
+
+rl.on("line", (line) => {
+  let request;
+  try {
+    request = JSON.parse(line);
+  } catch {
+    writeResponse(null, { error: { code: -32700, message: "Parse error" } });
+    return;
+  }
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    writeResponse(null, { error: { code: -32600, message: "Invalid Request" } });
+    return;
+  }
+
+  const response = handleRequest(request);
+  writeResponse(request.id, response);
 });

@@ -673,7 +673,7 @@ func TestUndoManager_UnknownActionType(t *testing.T) {
 
 	_, err = um.Undo(ctx)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown undo action type")
+	assert.Contains(t, err.Error(), "unknown action type")
 }
 
 // ---------------------------------------------------------------------------

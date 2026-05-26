@@ -31,6 +31,26 @@ func newTestEngine(t *testing.T) *Engine {
 	return engine
 }
 
+type closeTrackingPanel struct {
+	panels.BasePanel
+	closeCount *int
+}
+
+func newCloseTrackingPanel(closeCount *int) *closeTrackingPanel {
+	return &closeTrackingPanel{
+		BasePanel:  panels.BasePanel{PanelTitle: "closer"},
+		closeCount: closeCount,
+	}
+}
+
+func (p *closeTrackingPanel) Init(context.Context) tea.Cmd { return nil }
+
+func (p *closeTrackingPanel) Update(tea.Msg) (panels.Panel, tea.Cmd) { return p, nil }
+
+func (p *closeTrackingPanel) View(_, _ int) string { return "" }
+
+func (p *closeTrackingPanel) Close() { (*p.closeCount)++ }
+
 func TestNewEngine(t *testing.T) {
 	engine := newTestEngine(t)
 
@@ -1633,6 +1653,40 @@ func TestEngineCloseFocusedPanel_UniqueInstance(t *testing.T) {
 	// Close the focused panel (which should be the split-added instance).
 	err = engine.CloseFocusedPanel()
 	require.NoError(t, err)
+}
+
+func TestEngineCloseFocusedPanel_ClosesUniqueInstance(t *testing.T) {
+	closeCount := 0
+	reg := NewRegistry()
+	reg.Register("closer", func() panels.Panel {
+		return newCloseTrackingPanel(&closeCount)
+	})
+	preset := Preset{
+		Name:   "single",
+		Tree:   &LeafNode{Panel: "closer"},
+		Panels: []string{"closer"},
+	}
+	engine, err := NewEngine(reg, preset)
+	require.NoError(t, err)
+	engine.SetSize(100, 30)
+
+	_, err = engine.SplitFocusedVertical("closer")
+	require.NoError(t, err)
+	order := engine.PanelOrder()
+	require.Len(t, order, 2)
+	for i, name := range order {
+		if isUniqueInstanceName(name) {
+			engine.focusIdx = i
+			break
+		}
+	}
+	require.True(t, isUniqueInstanceName(engine.FocusedName()))
+
+	err = engine.CloseFocusedPanel()
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, closeCount)
+	assert.NotContains(t, engine.Panels(), "closer:1")
 }
 
 func TestEngineAddTab_FullPreset(t *testing.T) {

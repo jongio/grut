@@ -144,14 +144,15 @@ type GitStatus struct {
 	err        error           // last error from loading status
 	selected   map[string]bool // file paths selected for bulk ops
 	// Per-file diff expansion and cache.
-	expandedFiles map[string]bool       // paths of expanded files
-	diffCache     map[string][]git.Hunk // cached diffs keyed by path
-	activeFile    string                // path of the file in hunk/line mode
-	pendingOp     string
-	pendingName   string
-	pendingPath   string           // file path for pending destructive ops (e.g. discard)
-	files         []git.FileStatus // latest status from git
-	rows          []row            // flattened visible rows
+	expandedFiles  map[string]bool       // paths of expanded files
+	diffCache      map[string][]git.Hunk // cached diffs keyed by path
+	diffCacheOrder []string              // insertion-order keys for LRU eviction
+	activeFile     string                // path of the file in hunk/line mode
+	pendingOp      string
+	pendingName    string
+	pendingPath    string           // file path for pending destructive ops (e.g. discard)
+	files          []git.FileStatus // latest status from git
+	rows           []row            // flattened visible rows
 	panels.BasePanel
 	cursor     int      // index into rows
 	offset     int      // viewport scroll offset
@@ -165,6 +166,16 @@ type GitStatus struct {
 	rowsDirty bool   // true when rows need rebuilding before next render
 	theme     *theme.Theme
 	colors    panelColors
+	// Cached lipgloss styles for hot-path rendering (avoid per-row allocations).
+	styleSectionHeader lipgloss.Style
+	styleHunkHeader    lipgloss.Style
+	styleAdded         lipgloss.Style
+	styleRemoved       lipgloss.Style
+	styleDim           lipgloss.Style
+	styleStaged        lipgloss.Style
+	styleUnstaged      lipgloss.Style
+	styleUntracked     lipgloss.Style
+	styleDefault       lipgloss.Style
 }
 
 // Compile-time interface check.
@@ -172,15 +183,33 @@ var _ panels.Panel = (*GitStatus)(nil)
 
 // New creates a new GitStatus panel.
 func New(client GitClient, th *theme.Theme) *GitStatus {
-	return &GitStatus{
+	colors := initColors(th)
+	p := &GitStatus{
 		BasePanel:     panels.BasePanel{PanelTitle: "gitstatus"},
 		git:           client,
 		selected:      make(map[string]bool),
 		expandedFiles: make(map[string]bool),
 		diffCache:     make(map[string][]git.Hunk),
 		theme:         th,
-		colors:        initColors(th),
+		colors:        colors,
 	}
+	p.rebuildContentStyles()
+	return p
+}
+
+// rebuildContentStyles initializes or re-creates the cached foreground styles
+// used in the render hot path. Call once at construction and again if the theme
+// changes.
+func (p *GitStatus) rebuildContentStyles() {
+	p.styleSectionHeader = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.SectionHeader)).Bold(true)
+	p.styleHunkHeader = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.HunkHeader))
+	p.styleAdded = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Added))
+	p.styleRemoved = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Removed))
+	p.styleDim = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
+	p.styleStaged = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Staged))
+	p.styleUnstaged = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Unstaged))
+	p.styleUntracked = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Untracked))
+	p.styleDefault = lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Default))
 }
 
 // ---------------------------------------------------------------------------
@@ -253,10 +282,14 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		p.diffCache[msg.path] = msg.hunks
-		// Evict oldest entries if cache exceeds limit.
+		p.diffCacheOrder = append(p.diffCacheOrder, msg.path)
+		// Evict oldest half of entries if cache exceeds limit (LRU).
 		if len(p.diffCache) > maxDiffCacheEntries {
-			p.diffCache = make(map[string][]git.Hunk)
-			p.diffCache[msg.path] = msg.hunks
+			evictCount := len(p.diffCacheOrder) / 2
+			for _, key := range p.diffCacheOrder[:evictCount] {
+				delete(p.diffCache, key)
+			}
+			p.diffCacheOrder = p.diffCacheOrder[evictCount:]
 		}
 		p.rebuildRows()
 		p.rowsDirty = false
@@ -1177,6 +1210,7 @@ func (p *GitStatus) invalidateDiffCaches() {
 	for k := range p.diffCache {
 		delete(p.diffCache, k)
 	}
+	p.diffCacheOrder = p.diffCacheOrder[:0]
 	for k := range p.expandedFiles {
 		delete(p.expandedFiles, k)
 	}
@@ -1285,11 +1319,7 @@ func (p *GitStatus) renderRow(r *row, width int, isCursor bool, rs *rowStyles) s
 
 func (p *GitStatus) renderSectionHeader(r *row, width int) string {
 	label := fmt.Sprintf("── %s ──", r.section.String())
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(p.colors.SectionHeader)).
-		Bold(true).
-		Width(width).
-		Render(label)
+	return p.styleSectionHeader.Width(width).Render(label)
 }
 
 func (p *GitStatus) renderFileRow(r *row, width int) string {
@@ -1317,32 +1347,22 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 		remaining := width - len(dirContent) - len(dirLabel) - 1
 		if remaining > 0 {
 			var out strings.Builder
-			out.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color(p.fileColor(r.section))).
-				Render(dirContent))
-			out.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color(p.colors.Dim)).
-				Render(dirLabel))
+			out.WriteString(p.fileStyle(r.section).Render(dirContent))
+			out.WriteString(p.styleDim.Render(dirLabel))
 			return out.String()
 		}
 	} else {
 		b.WriteString(name)
 	}
-	fg := p.fileColor(r.section)
+	fgStyle := p.fileStyle(r.section)
 	// Expand indicator.
 	if r.expanded {
 		var out strings.Builder
-		out.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color(fg)).
-			Render(b.String()))
-		out.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color(p.colors.Dim)).
-			Render(" ▼"))
+		out.WriteString(fgStyle.Render(b.String()))
+		out.WriteString(p.styleDim.Render(" ▼"))
 		return out.String()
 	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(fg)).
-		Render(b.String())
+	return fgStyle.Render(b.String())
 }
 
 func (p *GitStatus) renderHunkRow(r *row, _ int) string {
@@ -1351,9 +1371,7 @@ func (p *GitStatus) renderHunkRow(r *row, _ int) string {
 	if r.hunkEntry != nil {
 		b.WriteString(r.hunkEntry.Header)
 	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(p.colors.HunkHeader)).
-		Render(b.String())
+	return p.styleHunkHeader.Render(b.String())
 }
 
 func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
@@ -1362,22 +1380,20 @@ func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
 	}
 	var b strings.Builder
 	b.WriteString("    ")
-	var fg string
+	var style lipgloss.Style
 	switch r.diffLine.Type {
 	case git.DiffLineAdded:
 		b.WriteByte('+')
-		fg = p.colors.Added
+		style = p.styleAdded
 	case git.DiffLineRemoved:
 		b.WriteByte('-')
-		fg = p.colors.Removed
+		style = p.styleRemoved
 	default:
 		b.WriteByte(' ')
-		fg = p.colors.Dim
+		style = p.styleDim
 	}
 	b.WriteString(r.diffLine.Content)
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(fg)).
-		Render(b.String())
+	return style.Render(b.String())
 }
 
 func statusIndicator(f *git.FileStatus, sec section) string {
@@ -1424,5 +1440,19 @@ func (p *GitStatus) fileColor(sec section) string {
 		return p.colors.Untracked
 	default:
 		return p.colors.Default
+	}
+}
+
+// fileStyle returns the cached style for the given section's file color.
+func (p *GitStatus) fileStyle(sec section) lipgloss.Style {
+	switch sec {
+	case sectionStaged:
+		return p.styleStaged
+	case sectionUnstaged:
+		return p.styleUnstaged
+	case sectionUntracked:
+		return p.styleUntracked
+	default:
+		return p.styleDefault
 	}
 }

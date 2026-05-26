@@ -92,6 +92,7 @@ func RegisterDefaults(ctx context.Context, r *Registry, cfg *config.Config, gc g
 		})
 	}
 
+	// TODO: status panel is intentionally a placeholder awaiting implementation.
 	// Panels still using placeholders (no self-registered builder yet).
 	for _, name := range []string{slotStatus} {
 		if !r.Has(name) {

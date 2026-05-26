@@ -40,14 +40,13 @@ sboms:
 
 signs:
   - cmd: cosign
+    signature: "${artifact}.sigstore.json"
     artifacts: checksum
     args:
       - "sign-blob"
-      - "--yes"
-      - "--oidc-issuer=https://token.actions.githubusercontent.com"
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
+      - "--yes"
 
 changelog:
   sort: asc
