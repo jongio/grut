@@ -58,13 +58,14 @@ type Notification struct {
 // toasts (auto-dismiss), inline (persistent), and modals (blocking).
 // It lives in the root app model and is not owned by individual panels.
 type Manager struct {
-	inlines      map[string]*inlineNotification
-	modal        *modalState
-	toasts       []toast
-	nextID       int64
-	screenWidth  int // terminal width (set via SetSize)
-	screenHeight int // terminal height (set via SetSize)
-	mu           sync.RWMutex
+	inlines       map[string]*inlineNotification
+	modal         *modalState
+	toasts        []toast
+	nextID        int64
+	nextInlineSeq int64
+	screenWidth   int // terminal width (set via SetSize)
+	screenHeight  int // terminal height (set via SetSize)
+	mu            sync.RWMutex
 }
 
 // NewManager creates a new notification manager with no active notifications.
@@ -109,8 +110,11 @@ func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration)
 func (m *Manager) AddInline(id, msg string, level Level) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	seq := m.nextInlineSeq
+	m.nextInlineSeq++
 	m.inlines[id] = &inlineNotification{
-		id: id,
+		id:  id,
+		seq: seq,
 		notification: Notification{
 			Message:   msg,
 			Level:     level,
@@ -120,11 +124,11 @@ func (m *Manager) AddInline(id, msg string, level Level) {
 	// Evict oldest if over cap (defensive bound against unbounded growth).
 	if len(m.inlines) > maxInlineNotifications {
 		var oldestID string
-		var oldestTime time.Time
+		var oldestSeq int64 = -1
 		for k, v := range m.inlines {
-			if oldestID == "" || v.notification.CreatedAt.Before(oldestTime) {
+			if oldestSeq < 0 || v.seq < oldestSeq {
 				oldestID = k
-				oldestTime = v.notification.CreatedAt
+				oldestSeq = v.seq
 			}
 		}
 		if oldestID != "" {

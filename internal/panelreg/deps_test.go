@@ -40,6 +40,9 @@ func TestDepsNewGitClientNonGitDir(t *testing.T) {
 	// Switch to a temp dir that is NOT a git repo.
 	// NewGitClient still succeeds (it validates the dir exists, not that it's a repo).
 	tmp := t.TempDir()
+	// Resolve symlinks so path matches os.Getwd() on macOS (/var → /private/var).
+	tmp, err := filepath.EvalSymlinks(tmp)
+	require.NoError(t, err)
 	orig, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(tmp))

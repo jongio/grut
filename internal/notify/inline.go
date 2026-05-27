@@ -11,6 +11,7 @@ import (
 // that require user attention (e.g., "git not found").
 type inlineNotification struct {
 	id           string
+	seq          int64 // insertion order for deterministic eviction
 	notification Notification
 }
 

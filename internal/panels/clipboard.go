@@ -57,8 +57,10 @@ func PasteFromClipboard(ctx context.Context) (string, error) {
 
 	result := strings.ReplaceAll(string(out), "\r\n", "\n")
 	result = strings.TrimRight(result, "\r")
-	// Platform paste commands append a trailing newline to stdout;
-	// strip exactly one so the returned text matches what was copied.
-	result = strings.TrimSuffix(result, "\n")
+	// Windows Get-Clipboard appends a trailing newline to stdout;
+	// strip it so the returned text matches what was copied.
+	if runtime.GOOS == "windows" {
+		result = strings.TrimSuffix(result, "\n")
+	}
 	return result, nil
 }

@@ -3087,6 +3087,9 @@ func TestFileSelectedMsgWithDirectoryChangesDir(t *testing.T) {
 	m = updated.(Model)
 
 	tmpDir := t.TempDir()
+	// Resolve symlinks so path matches os.Getwd() on macOS (/var → /private/var).
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
 
 	// Send FileSelectedMsg with a directory path — should be converted to
 	// ChangeDirectoryMsg internally, changing the process CWD.
@@ -3117,6 +3120,9 @@ func TestChangeDirectoryMsgResetsGitFields(t *testing.T) {
 	m = updated.(Model)
 
 	tmpDir := t.TempDir() // not a git repo
+	// Resolve symlinks so path matches os.Getwd() on macOS (/var → /private/var).
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
 	genBefore := m.branchInfoGen
 	updated, cmd := m.Update(panels.ChangeDirectoryMsg{Path: tmpDir})
 	m = updated.(Model)
@@ -3193,6 +3199,9 @@ func TestCWDEditEnterChangesDirectory(t *testing.T) {
 	m = updated.(Model)
 
 	tmpDir := t.TempDir()
+	// Resolve symlinks so path matches os.Getwd() on macOS (/var → /private/var).
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
 	m.cwdEditing = true
 	m.cwdEditValue = tmpDir
 	m.cwdEditCursor = len([]rune(tmpDir))
