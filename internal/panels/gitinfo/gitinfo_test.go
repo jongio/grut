@@ -2319,11 +2319,11 @@ func TestActiveTabSelectionCmd_AllTabs(t *testing.T) {
 
 func TestUpdate_GithubPollTickMsg(t *testing.T) {
 	p := newTestPanel(t, defaultMock())
-	// Without ghClient, the poll tick should still be handled without panic.
+	// Without ghClient, the poll tick should be handled without panic.
+	// Since ghClient is nil, load functions return nil (no-op).
 	_, cmd := p.Update(githubPollTickMsg{Time: time.Now()})
-	// Since ghClient is nil, loadGitHubData will be called but
-	// githubPollTickCmd returns nil.
-	assert.NotNil(t, cmd)
+	// All load functions return nil when client is nil, so Batch produces nil.
+	assert.Nil(t, cmd)
 }
 
 func TestRenderTabBar_WithAndWithoutGH(t *testing.T) {
@@ -2354,12 +2354,9 @@ func TestDoActionsRerun_WithItem(t *testing.T) {
 	populateGH(p, nil, nil, sampleActions())
 	p.activeTab = tabActions
 	p.tabCursor[tabActions] = 0
-	// doActionsRerun needs ghClient to actually create the cmd.
-	// Without ghClient, rerunFailedJobsCmd will panic. Test the selection logic.
+	// Without ghClient, rerunFailedJobsCmd correctly returns nil (no-op).
 	_, cmd := p.doActionsRerun()
-	// rerunFailedJobsCmd calls p.gh.client which is nil, but the cmd func is returned.
-	// The test verifies doActionsRerun found the item and returned a cmd (lazy eval).
-	assert.NotNil(t, cmd)
+	assert.Nil(t, cmd)
 }
 
 func TestDoActionsCancel_NoItems(t *testing.T) {

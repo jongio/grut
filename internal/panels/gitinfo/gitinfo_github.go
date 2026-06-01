@@ -384,6 +384,9 @@ func tabRowUseShort(tabs []struct{ name, short, count string }, width int) bool 
 
 func (p *Panel) loadGitHubData() tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -626,6 +629,9 @@ func (p *Panel) buildGitHubItems(issues []ghIssueItem, prs []ghPRItem, actionRun
 // loadGitHubMeta fetches repo info and current user asynchronously.
 func (p *Panel) loadGitHubMeta() tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -649,6 +655,9 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 // loadIssuesPage fetches a single page of issues.
 func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
@@ -698,6 +707,9 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 // loadPRsPage fetches a single page of pull requests.
 func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
@@ -739,6 +751,9 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 // loadActionsPage fetches a single page of workflow runs.
 func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
@@ -770,6 +785,9 @@ func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 // loadWorkflowsPage fetches a single page of workflow definitions.
 func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
@@ -796,6 +814,9 @@ func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 // loadReleasesPage fetches a single page of releases.
 func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
@@ -1218,6 +1239,9 @@ func (p *Panel) prSelectedCmd() tea.Cmd {
 // loadPRDetails returns a Cmd that fetches PR files and commits from GitHub.
 func (p *Panel) loadPRDetails(number int) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -1344,6 +1368,9 @@ func (p *Panel) workflowSelectedCmd() tea.Cmd {
 // loadActionJobs returns a Cmd that fetches jobs (with steps) for a workflow run.
 func (p *Panel) loadActionJobs(runID int64) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -1412,6 +1439,9 @@ func (p *Panel) handleActionJobsLoaded(msg actionJobsLoadedMsg) (panels.Panel, t
 // loadActionLog returns a Cmd that fetches logs for a specific job.
 func (p *Panel) loadActionLog(runID, jobID int64) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -1443,6 +1473,9 @@ func (p *Panel) handleActionLogLoaded(msg actionLogLoadedMsg) (panels.Panel, tea
 
 func (p *Panel) rerunFailedJobsCmd(runID int64) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return nil
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
