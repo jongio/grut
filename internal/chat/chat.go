@@ -229,7 +229,11 @@ func (m Model) Height() int {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.input.SetWidth(width - 4) // Account for prompt and padding
+	inputWidth := width - 4 // Account for prompt and padding
+	if inputWidth < 1 {
+		inputWidth = 1
+	}
+	m.input.SetWidth(inputWidth)
 }
 
 // ClearHistory removes all conversation history and resets the display.

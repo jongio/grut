@@ -74,7 +74,11 @@ func (m Model) renderView() string {
 func (m Model) RenderModalContent(width, height int) string {
 	// Override model dimensions for modal-scoped rendering.
 	m.width = width
-	m.input.SetWidth(width - 4) // account for prompt and padding
+	inputWidth := width - 4 // account for prompt and padding
+	if inputWidth < 1 {
+		inputWidth = 1
+	}
+	m.input.SetWidth(inputWidth)
 
 	// Reserve lines: status separator (1) + input (1) + optional extra.
 	extraLines := 0
@@ -479,6 +483,15 @@ func (m Model) renderError() string {
 // renderInput renders the input line with a styled prompt prefix
 // followed by the text input widget.
 func (m Model) renderInput() string {
+	// Ensure the textinput has a valid width before rendering — the textinput
+	// panics with "makeslice: len out of range" if its width is 0.
+	if m.input.Width() <= 0 {
+		w := m.effectiveWidth() - 4
+		if w < 1 {
+			w = 1
+		}
+		m.input.SetWidth(w)
+	}
 	promptColor := defaultPromptColor
 	if m.theme != nil && m.theme.Colors.NormalGreen != "" {
 		promptColor = m.theme.Colors.NormalGreen

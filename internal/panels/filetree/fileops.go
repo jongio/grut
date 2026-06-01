@@ -3,9 +3,11 @@ package filetree
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -429,8 +431,15 @@ func (ft *FileTree) openInDefaultApp() (panels.Panel, tea.Cmd) {
 	}
 	filePath := n.path
 	fileName := n.name
-	return ft, func() tea.Msg {
-		if err := panels.OpenInDefaultApp(ft.safeCtx(), filePath); err != nil {
+	ctx := ft.safeCtx()
+	return ft, func() (msg tea.Msg) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in openInDefaultApp cmd", "recover", r, "file", filePath, "stack", string(debug.Stack()))
+				msg = notify.ShowToastMsg{Message: "Open crashed: " + fmt.Sprint(r), Level: notify.Error}
+			}
+		}()
+		if err := panels.OpenInDefaultApp(ctx, filePath); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened " + fileName, Level: notify.Info}
@@ -448,8 +457,15 @@ func (ft *FileTree) openInEditor() (panels.Panel, tea.Cmd) {
 	}
 	filePath := n.path
 	fileName := n.name
-	return ft, func() tea.Msg {
-		if err := panels.OpenInEditor(ft.safeCtx(), filePath); err != nil {
+	ctx := ft.safeCtx()
+	return ft, func() (msg tea.Msg) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in openInEditor cmd", "recover", r, "file", filePath, "stack", string(debug.Stack()))
+				msg = notify.ShowToastMsg{Message: "Open crashed: " + fmt.Sprint(r), Level: notify.Error}
+			}
+		}()
+		if err := panels.OpenInEditor(ctx, filePath); err != nil {
 			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
 		}
 		return notify.ShowToastMsg{Message: "Opened " + fileName, Level: notify.Info}

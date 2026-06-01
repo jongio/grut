@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/actions"
@@ -2038,6 +2039,44 @@ func TestMouseDoubleClick_OnFile_NotFileSelected(t *testing.T) {
 	assert.False(t, isFileSelected, "double-click on file should open editor, not emit FileSelectedMsg")
 }
 
+func TestMouseDoubleClick_OnFile_AutoConfirm(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+	// Do NOT pre-confirm — test auto-confirm behavior for files.
+	// actionsCfg.Confirmed is nil (zero value).
+
+	// Find first file index.
+	fileIdx := -1
+	for i, n := range ft.visible {
+		if !n.isDir {
+			fileIdx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, fileIdx, 0)
+
+	// Set cursor as the first click would.
+	ft.viewport.cursor = fileIdx
+
+	// Stub StartDetachedFn to capture the open attempt.
+	origFn := panels.StartDetachedFn
+	panels.StartDetachedFn = func(cmd *exec.Cmd) error {
+		return errors.New("simulated launch failure")
+	}
+	t.Cleanup(func() { panels.StartDetachedFn = origFn })
+
+	_, cmd := ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: fileIdx, ContentCol: 5})
+	// Should auto-confirm and attempt to open, not show a first-use modal.
+	require.NotNil(t, cmd, "double-click on unconfirmed file should auto-confirm and open")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg from auto-confirm open, got %T", msg)
+	assert.Contains(t, toast.Message, "Open failed")
+	// Verify the config was updated (auto-confirmed).
+	assert.True(t, ft.actionsCfg.IsConfirmed(string(actions.ItemFile)))
+}
+
 func TestMouseDoubleClick_OnDirectory(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
@@ -2069,6 +2108,95 @@ func TestMouseDoubleClick_OutOfBounds(t *testing.T) {
 	originalCursor := ft.viewport.cursor
 	ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: 100, ContentCol: 5})
 	assert.Equal(t, originalCursor, ft.viewport.cursor, "out-of-bounds double-click should not change cursor")
+}
+
+// TestMouseClick_SelfDetectedDoubleClick verifies that two rapid single-click
+// messages (PanelMouseClickMsg) on the same row trigger a double-click action
+// via the filetree's self-contained double-click detection. This is the primary
+// path on Windows terminals where the engine may not detect double-clicks.
+func TestMouseClick_SelfDetectedDoubleClick(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+	ft.actionsCfg.Confirmed = map[string]bool{string(actions.ItemFile): true}
+
+	// Find first file index.
+	fileIdx := -1
+	for i, n := range ft.visible {
+		if !n.isDir {
+			fileIdx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, fileIdx, 0)
+
+	// Stub StartDetachedFn to capture the open attempt.
+	origFn := panels.StartDetachedFn
+	panels.StartDetachedFn = func(cmd *exec.Cmd) error {
+		return errors.New("simulated launch failure")
+	}
+	t.Cleanup(func() { panels.StartDetachedFn = origFn })
+
+	// First click: should be a normal single-click (emits FileSelectedMsg).
+	_, cmd1 := ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
+	require.NotNil(t, cmd1, "first click should emit FileSelectedMsg")
+	msg1 := cmd1()
+	_, isFileSelected := msg1.(panels.FileSelectedMsg)
+	assert.True(t, isFileSelected, "first click should produce FileSelectedMsg, got %T", msg1)
+
+	// Second click at same row (rapid): should trigger double-click action.
+	_, cmd2 := ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
+	require.NotNil(t, cmd2, "second rapid click should trigger open action")
+	msg2 := cmd2()
+	toast, ok := msg2.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg from double-click open, got %T", msg2)
+	assert.Contains(t, toast.Message, "Open failed")
+}
+
+// TestMouseClick_ReClickAlreadySelectedFile verifies that clicking on a file
+// that is already under the cursor (from a prior mouse click) triggers the
+// open action regardless of timing. This is the fallback for Windows Terminal
+// where double-click events may not be delivered.
+func TestMouseClick_ReClickAlreadySelectedFile(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.focused = true
+	ft.actionsCfg.Confirmed = map[string]bool{string(actions.ItemFile): true}
+
+	// Find first file index.
+	fileIdx := -1
+	for i, n := range ft.visible {
+		if !n.isDir {
+			fileIdx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, fileIdx, 0)
+
+	// Stub StartDetachedFn to capture the open attempt.
+	origFn := panels.StartDetachedFn
+	panels.StartDetachedFn = func(cmd *exec.Cmd) error {
+		return errors.New("simulated launch failure")
+	}
+	t.Cleanup(func() { panels.StartDetachedFn = origFn })
+
+	// First click: normal single-click that selects the file.
+	_, cmd1 := ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
+	require.NotNil(t, cmd1)
+	msg1 := cmd1()
+	_, isFileSelected := msg1.(panels.FileSelectedMsg)
+	assert.True(t, isFileSelected, "first click should produce FileSelectedMsg")
+
+	// Simulate a SLOW second click (wait > 500ms so timing-based detection fails).
+	time.Sleep(600 * time.Millisecond)
+
+	// Second click on same row: should STILL open because cursor is already there.
+	_, cmd2 := ft.Update(panels.PanelMouseClickMsg{ContentRow: fileIdx, ContentCol: 5})
+	require.NotNil(t, cmd2, "re-click on selected file should trigger open action")
+	msg2 := cmd2()
+	toast, ok := msg2.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg from re-click open, got %T", msg2)
+	assert.Contains(t, toast.Message, "Open failed")
 }
 
 // ---------------------------------------------------------------------------

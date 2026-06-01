@@ -1889,3 +1889,66 @@ func TestEngineHandleMouseClick_HeaderThenContentRow0_NotDoubleClick(t *testing.
 	assert.Equal(t, name, engine.FocusedName(),
 		"panel should be focused after two single clicks")
 }
+
+// msgTrackingPanel records all messages it receives via Update.
+type msgTrackingPanel struct {
+	panels.BasePanel
+	msgs []tea.Msg
+}
+
+func (p *msgTrackingPanel) Init(context.Context) tea.Cmd { return nil }
+
+func (p *msgTrackingPanel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
+	p.msgs = append(p.msgs, msg)
+	return p, nil
+}
+
+func (p *msgTrackingPanel) View(_, _ int) string { return "" }
+
+// TestEngineHandleMouseClick_DoubleClickDetected verifies that two clicks
+// at the same position within the threshold are detected as a double-click
+// and a PanelMouseDoubleClickMsg is sent to the panel.
+func TestEngineHandleMouseClick_DoubleClickDetected(t *testing.T) {
+	tracker := &msgTrackingPanel{
+		BasePanel: panels.BasePanel{PanelTitle: "tracker"},
+	}
+	reg := NewRegistry()
+	reg.Register("tracker", func() panels.Panel {
+		return tracker
+	})
+	preset := Preset{
+		Name:   "test",
+		Tree:   &LeafNode{Panel: "tracker"},
+		Panels: []string{"tracker"},
+	}
+	engine, err := NewEngine(reg, preset)
+	require.NoError(t, err)
+	engine.SetSize(80, 30)
+
+	rects := engine.PanelRects()
+	require.Contains(t, rects, "tracker")
+	r := rects["tracker"]
+
+	tabH := engine.TabBarHeight()
+	border := engine.BorderSize()
+
+	t.Logf("rect: %+v, tabH: %d, border: %d", r, tabH, border)
+
+	// Click in the middle of the panel content area.
+	termX := r.X + r.Width/2 + border
+	termY := r.Y + 3 + tabH + border // row 3 inside panel
+	t.Logf("click at termX=%d, termY=%d", termX, termY)
+
+	// First click: should produce a PanelMouseClickMsg.
+	engine.Update(tea.MouseClickMsg{X: termX, Y: termY, Button: tea.MouseLeft})
+	require.Len(t, tracker.msgs, 1)
+	_, isSingle := tracker.msgs[0].(panels.PanelMouseClickMsg)
+	assert.True(t, isSingle, "first click should be PanelMouseClickMsg, got %T", tracker.msgs[0])
+
+	// Second click at same position: should produce a PanelMouseDoubleClickMsg.
+	engine.Update(tea.MouseClickMsg{X: termX, Y: termY, Button: tea.MouseLeft})
+	require.Len(t, tracker.msgs, 2)
+	dblMsg, isDouble := tracker.msgs[1].(panels.PanelMouseDoubleClickMsg)
+	assert.True(t, isDouble, "second click should be PanelMouseDoubleClickMsg, got %T", tracker.msgs[1])
+	assert.Equal(t, 3, dblMsg.ContentRow, "double-click ContentRow should match click position")
+}

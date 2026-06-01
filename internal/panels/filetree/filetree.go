@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -189,6 +190,12 @@ type FileTree struct {
 	showHidden        bool
 	listMode          bool // true = flat list with relative paths, false = tree view
 	statusLoadPending bool // prevents redundant loadGitFileStatus dispatches
+	// Self-contained double-click detection: the engine's detection relies on
+	// two consecutive MouseClickMsg events at the same position, but on Windows
+	// terminals the second press may not be delivered as a separate event.
+	// We detect double-clicks ourselves in handleMouseClick by comparing timing.
+	lastClickTime time.Time
+	lastClickIdx  int // absolute index in visible slice (not viewport-relative row)
 }
 
 // Compile-time interface check.
@@ -957,6 +964,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.requestRename()
 	case "o":
 		return ft.openInEditor()
+	case "O":
+		return ft.openInDefaultApp()
 	case "y":
 		return ft.copyPath()
 	case "c":
@@ -982,22 +991,49 @@ func (ft *FileTree) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Pane
 	if idx < 0 || idx >= len(ft.visible) {
 		return ft, nil
 	}
+	prevCursor := ft.viewport.cursor
 	ft.viewport.cursor = idx
+	// Double-click detection: two clicks on the same absolute index within 500ms.
+	now := time.Now()
+	hadPriorClick := !ft.lastClickTime.IsZero()
+	isDouble := ft.lastClickIdx == idx &&
+		now.Sub(ft.lastClickTime) <= 500*time.Millisecond
+	ft.lastClickTime = now
+	ft.lastClickIdx = idx
+	if isDouble {
+		ft.lastClickTime = time.Time{} // reset so triple-click isn't also double
+		return ft.executeDoubleClick()
+	}
+	// If clicking the same file that was already under the cursor (placed
+	// there by a prior mouse click), treat as an "open" action. This handles
+	// the case where Windows Terminal does not deliver a second MouseClickMsg
+	// rapidly enough for timing-based detection.
 	n := ft.visible[idx]
+	if !n.isDir && prevCursor == idx && hadPriorClick {
+		return ft.executeDoubleClick()
+	}
 	if n.isDir {
 		return ft.selectOrExpand()
 	}
 	return ft, ft.emitCursorFileSelected()
 }
 
-// handleMouseDoubleClick processes a double-click in the filetree panel.
-// For directories it toggles expand/collapse; for files it opens the file
-// in the user's preferred editor.
-func (ft *FileTree) handleMouseDoubleClick(_ panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
-	// Use the cursor set by the first click instead of recomputing
-	// from ft.viewport.offset + ContentRow.  A background refresh (filesystem
-	// watcher, git-status update) between the two clicks can change
-	// ft.viewport.offset, making the recomputed index wrong or out of bounds.
+// handleMouseDoubleClick processes a double-click in the filetree panel
+// when routed by the engine's own double-click detection. Delegates to
+// executeDoubleClick for the actual action.
+func (ft *FileTree) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (panels.Panel, tea.Cmd) {
+	idx := ft.viewport.offset + msg.ContentRow
+	if idx < 0 || idx >= len(ft.visible) {
+		return ft, nil
+	}
+	ft.viewport.cursor = idx
+	return ft.executeDoubleClick()
+}
+
+// executeDoubleClick performs the double-click action on the node at the
+// current cursor. For files it opens in the default app; for directories
+// it shows the first-use picker or executes the configured action.
+func (ft *FileTree) executeDoubleClick() (panels.Panel, tea.Cmd) {
 	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return ft, nil
 	}
@@ -1005,8 +1041,7 @@ func (ft *FileTree) handleMouseDoubleClick(_ panels.PanelMouseDoubleClickMsg) (p
 	if !n.isDir {
 		itemType := actions.ItemFile
 		if !ft.actionsCfg.IsConfirmed(string(itemType)) {
-			ft.pending = &pendingOperation{kind: opFirstUseConfirm, name: string(itemType)}
-			return ft, rightclick.FirstUseCmd(itemType)
+			config.SaveDoubleClickChoice(&ft.actionsCfg, string(itemType), string(actions.DefaultAction(itemType)))
 		}
 		action := actions.ActionID(ft.actionsCfg.GetDoubleClickAction(string(itemType)))
 		return ft.executeRightClickAction(action)
