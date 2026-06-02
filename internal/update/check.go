@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -174,6 +175,9 @@ func fetchLatestVersion() (string, error) {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	if token := resolveGitHubToken(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -245,4 +249,31 @@ func writeCache(path string, cache *updateCache) {
 	}
 
 	_ = os.WriteFile(path, raw, cacheFilePerm)
+}
+
+// ghTokenTimeout limits how long we wait for `gh auth token`.
+const ghTokenTimeout = 3 * time.Second
+
+// resolveGitHubToken attempts to discover a GitHub token for authenticated
+// API requests. Returns empty string if no token is available (caller falls
+// back to unauthenticated). This avoids 403 rate-limit errors on the
+// releases/latest endpoint (60 req/hour unauthenticated vs 5000 authenticated).
+func resolveGitHubToken(ctx context.Context) string {
+	// 1. Try gh auth token (GitHub CLI).
+	ghCtx, cancel := context.WithTimeout(ctx, ghTokenTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ghCtx, "gh", "auth", "token").Output()
+	if err == nil {
+		if token := strings.TrimSpace(string(out)); token != "" {
+			return token
+		}
+	}
+	// 2. Fallback to environment variables.
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		return t
+	}
+	if t := os.Getenv("GH_TOKEN"); t != "" {
+		return t
+	}
+	return ""
 }
