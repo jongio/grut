@@ -7,10 +7,10 @@ auto-generated from git history during each release.
 
 | Name | Contributions |
 |------|---------------|
-| **Copilot** | 162 |
-| **Jon Gallant** | 85 |
+| **Copilot** | 164 |
+| **Jon Gallant** | 87 |
 | **jongio** | 4 |
 
 ---
 
-*Last updated: 2026-05-27*
+*Last updated: 2026-06-02*
