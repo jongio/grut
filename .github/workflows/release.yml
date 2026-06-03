@@ -185,8 +185,27 @@ jobs:
             "perf/baselines/$PLATFORM/main.txt"
           git diff --cached --quiet || \
             git commit -m "perf: add ${VERSION} $PLATFORM baseline and release notes [skip ci]"
-          git pull --rebase origin main
-          git push
+          # Rebase onto latest main. If conflict on generated baselines, resolve
+          # by keeping our version (the fresh benchmark output).
+          git pull --rebase origin main || {
+            # Auto-resolve conflicts in generated baseline files by taking ours
+            git checkout --theirs -- "perf/baselines/$PLATFORM/main.txt" 2>/dev/null || true
+            cp bench-release.txt "perf/baselines/$PLATFORM/main.txt"
+            git add "perf/baselines/$PLATFORM/main.txt"
+            # Resolve any other baseline conflicts the same way
+            git diff --name-only --diff-filter=U | grep '^perf/baselines/' | while read -r f; do
+              git checkout --ours -- "$f" 2>/dev/null || true
+              git add "$f"
+            done
+            # If there are still unresolved conflicts, abort and skip baseline push
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "::warning::Unresolvable rebase conflict; skipping baseline push"
+              git rebase --abort
+            else
+              git rebase --continue --no-edit || git rebase --skip
+            fi
+          }
+          git push || echo "::warning::Baseline push failed; release will proceed without updated baselines"
 
       - name: Clean intermediate files
         run: rm -f bench-release.txt perf-notes.md contrib-changelog.md contrib-release.md
