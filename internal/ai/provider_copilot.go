@@ -105,7 +105,8 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 		slog.Debug("copilot: tool definitions in streaming request are not forwarded to the SDK")
 	}
 	cfg := p.buildSessionConfig(req)
-	cfg.Streaming = true
+	streaming := true
+	cfg.Streaming = &streaming
 	session, err := p.client.CreateSession(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("copilot stream: create session: %w", err)
@@ -151,7 +152,7 @@ func (p *CopilotProvider) CompleteStream(ctx context.Context, req CompletionRequ
 		})
 	}
 	session.On(func(event copilot.SessionEvent) {
-		switch event.Type { //nolint:exhaustive // only relevant cases handled
+		switch event.Type() { //nolint:exhaustive // only relevant cases handled
 		case copilot.SessionEventTypeAssistantMessageDelta:
 			if d, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok && d.DeltaContent != "" {
 				select {

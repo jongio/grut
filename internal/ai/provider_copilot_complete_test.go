@@ -20,7 +20,7 @@ import (
 func TestCopilotComplete_FailsWhenClientCannotStart(t *testing.T) {
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -37,7 +37,7 @@ func TestCopilotComplete_FailsWhenClientCannotStart(t *testing.T) {
 func TestCopilotCompleteStream_FailsWhenClientCannotStart(t *testing.T) {
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -57,7 +57,7 @@ func TestCopilotComplete_CachedStartError(t *testing.T) {
 	// subsequent calls.
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -77,7 +77,7 @@ func TestCopilotComplete_CachedStartError(t *testing.T) {
 func TestCopilotCompleteStream_CachedStartError(t *testing.T) {
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -99,7 +99,7 @@ func TestCopilotComplete_WithToolsLogsDebug(t *testing.T) {
 	// the start failure. Tools are logged as debug and not forwarded.
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -120,7 +120,7 @@ func TestCopilotComplete_WithToolsLogsDebug(t *testing.T) {
 func TestCopilotCompleteStream_WithToolsLogsDebug(t *testing.T) {
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}
@@ -141,7 +141,7 @@ func TestCopilotClose_AfterFailedStart(t *testing.T) {
 	// After a failed start, Close should not panic.
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli-binary",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli-binary"},
 		}),
 		model: "gpt-4o",
 	}

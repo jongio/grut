@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 // ---------------------------------------------------------------------------
@@ -31,24 +32,14 @@ var safePermissionKinds = map[copilot.PermissionRequestKind]struct{}{
 	copilot.PermissionRequestKindMemory: {}, // storing facts / conventions
 }
 
-// permissionDenied is the result returned for dangerous permission requests.
-var permissionDenied = copilot.PermissionRequestResult{
-	Kind: copilot.PermissionRequestResultKindUserNotAvailable,
-}
-
-// permissionApproved is the result returned for safe permission requests.
-var permissionApproved = copilot.PermissionRequestResult{
-	Kind: copilot.PermissionRequestResultKindApproved,
-}
-
-// isSafePermission reports whether a permission request kind is classified
+// isSafePermission reports whether a permission request is classified
 // as safe (read-only, no side-effects). MCP requests are safe only when
 // the SDK marks them as ReadOnly.
 func isSafePermission(req copilot.PermissionRequest) bool {
-	if req.Kind == copilot.PermissionRequestKindMcp {
-		return req.ReadOnly != nil && *req.ReadOnly
+	if mcp, ok := req.(copilot.PermissionRequestMCP); ok {
+		return mcp.ReadOnly
 	}
-	_, safe := safePermissionKinds[req.Kind]
+	_, safe := safePermissionKinds[req.Kind()]
 	return safe
 }
 
@@ -57,35 +48,34 @@ func isSafePermission(req copilot.PermissionRequest) bool {
 // dangerous (write / shell / network) requests are denied by default.
 //
 // All decisions are logged for auditability.
-func policyPermissionHandler(req copilot.PermissionRequest, inv copilot.PermissionInvocation) (copilot.PermissionRequestResult, error) {
+func policyPermissionHandler(req copilot.PermissionRequest, inv copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+	kind := req.Kind()
 	attrs := []any{
-		"kind", string(req.Kind),
+		"kind", string(kind),
 		"session_id", inv.SessionID,
 	}
-	if req.Intention != nil {
-		attrs = append(attrs, "intention", *req.Intention)
-	}
-	if req.FullCommandText != nil {
-		attrs = append(attrs, "command", *req.FullCommandText)
-	}
-	if req.ToolName != nil {
-		attrs = append(attrs, "tool", *req.ToolName)
-	}
-	if req.Path != nil {
-		attrs = append(attrs, "path", *req.Path)
-	}
-	if req.FileName != nil {
-		attrs = append(attrs, "file", *req.FileName)
-	}
-	if req.URL != nil {
-		attrs = append(attrs, "url", *req.URL)
+
+	// Extract optional context fields from concrete request types for logging.
+	switch r := req.(type) {
+	case copilot.PermissionRequestRead:
+		attrs = append(attrs, "intention", r.Intention, "path", r.Path)
+	case copilot.PermissionRequestShell:
+		attrs = append(attrs, "intention", r.Intention, "command", r.FullCommandText)
+	case copilot.PermissionRequestWrite:
+		attrs = append(attrs, "intention", r.Intention, "file", r.FileName)
+	case copilot.PermissionRequestMCP:
+		attrs = append(attrs, "tool", r.ToolName, "server", r.ServerName)
+	case copilot.PermissionRequestURL:
+		attrs = append(attrs, "url", r.URL)
+	case copilot.PermissionRequestCustomTool:
+		attrs = append(attrs, "tool", r.ToolName)
 	}
 
 	if isSafePermission(req) {
 		slog.Debug("copilot: permission auto-approved (safe)", attrs...)
-		return permissionApproved, nil
+		return &rpc.PermissionDecisionApproveOnce{}, nil
 	}
 
-	slog.Warn(fmt.Sprintf("copilot: permission denied (dangerous: %s)", req.Kind), attrs...)
-	return permissionDenied, nil
+	slog.Warn(fmt.Sprintf("copilot: permission denied (dangerous: %s)", kind), attrs...)
+	return &rpc.PermissionDecisionUserNotAvailable{}, nil
 }

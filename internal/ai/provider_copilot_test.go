@@ -227,8 +227,8 @@ func TestEventToResponse_WithContent(t *testing.T) {
 }
 
 func TestEventToResponse_WithUsage(t *testing.T) {
-	inputTokens := float64(10)
-	outputTokens := float64(5)
+	inputTokens := int64(10)
+	outputTokens := int64(5)
 	event := &copilot.SessionEvent{
 		Data: &copilot.AssistantUsageData{
 			InputTokens:  &inputTokens,
@@ -244,7 +244,7 @@ func TestEventToResponse_WithUsage(t *testing.T) {
 
 func TestEventToResponse_NilContent(t *testing.T) {
 	event := &copilot.SessionEvent{
-		Data: &copilot.RawSessionEventData{},
+		Data: &copilot.RawSessionEventData{EventType: "unknown"},
 	}
 
 	resp := eventToResponse(event)
@@ -267,7 +267,7 @@ func TestExtractUsage_NoTokenFields(t *testing.T) {
 }
 
 func TestExtractUsage_InputOnly(t *testing.T) {
-	input := float64(42)
+	input := int64(42)
 	u := extractUsage(&copilot.AssistantUsageData{InputTokens: &input})
 
 	require.NotNil(t, u)
@@ -276,7 +276,7 @@ func TestExtractUsage_InputOnly(t *testing.T) {
 }
 
 func TestExtractUsage_OutputOnly(t *testing.T) {
-	output := float64(7)
+	output := int64(7)
 	u := extractUsage(&copilot.AssistantUsageData{OutputTokens: &output})
 
 	require.NotNil(t, u)
@@ -285,8 +285,8 @@ func TestExtractUsage_OutputOnly(t *testing.T) {
 }
 
 func TestExtractUsage_Both(t *testing.T) {
-	input := float64(100)
-	output := float64(50)
+	input := int64(100)
+	output := int64(50)
 	u := extractUsage(&copilot.AssistantUsageData{
 		InputTokens:  &input,
 		OutputTokens: &output,
@@ -298,8 +298,8 @@ func TestExtractUsage_Both(t *testing.T) {
 }
 
 func TestExtractUsage_ZeroValues(t *testing.T) {
-	input := float64(0)
-	output := float64(0)
+	input := int64(0)
+	output := int64(0)
 	u := extractUsage(&copilot.AssistantUsageData{
 		InputTokens:  &input,
 		OutputTokens: &output,
@@ -368,7 +368,7 @@ func TestEnsureStarted_SetsStartedFlag(t *testing.T) {
 	// spawning a real Copilot CLI process.
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli"},
 		}),
 	}
 
@@ -388,7 +388,7 @@ func TestCopilotProvider_Available_ReturnsFalseOnStartFailure(t *testing.T) {
 	// rather than propagating the error.
 	p := &CopilotProvider{
 		client: copilot.NewClient(&copilot.ClientOptions{
-			CLIPath: "/nonexistent/copilot-cli",
+			Connection: copilot.StdioConnection{Path: "/nonexistent/copilot-cli"},
 		}),
 	}
 

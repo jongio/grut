@@ -2026,17 +2026,20 @@ func TestMouseDoubleClick_OnFile_NotFileSelected(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, fileIdx, 0)
 
-	// Force the error path so we can inspect the message type.
-	t.Setenv("VISUAL", "this_editor_does_not_exist_67890")
-	t.Setenv("EDITOR", "")
+	// Stub StartDetachedFn to prevent actual OS file open.
+	origFn := panels.StartDetachedFn
+	panels.StartDetachedFn = func(cmd *exec.Cmd) error {
+		return errors.New("simulated launch failure")
+	}
+	t.Cleanup(func() { panels.StartDetachedFn = origFn })
 
 	_, cmd := ft.Update(panels.PanelMouseDoubleClickMsg{ContentRow: fileIdx, ContentCol: 5})
 	require.NotNil(t, cmd)
 	msg := cmd()
 
-	// Must NOT be FileSelectedMsg — double-click opens in editor, not selects.
+	// Must NOT be FileSelectedMsg — double-click opens in default app, not selects.
 	_, isFileSelected := msg.(panels.FileSelectedMsg)
-	assert.False(t, isFileSelected, "double-click on file should open editor, not emit FileSelectedMsg")
+	assert.False(t, isFileSelected, "double-click on file should open default app, not emit FileSelectedMsg")
 }
 
 func TestMouseDoubleClick_OnFile_AutoConfirm(t *testing.T) {

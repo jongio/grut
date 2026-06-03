@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,47 +14,66 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestIsSafePermission_ReadKind(t *testing.T) {
-	assert.True(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindRead}))
+	assert.True(t, isSafePermission(copilot.PermissionRequestRead{
+		Intention: "read config",
+		Path:      "/etc/config",
+	}))
 }
 
 func TestIsSafePermission_MemoryKind(t *testing.T) {
-	assert.True(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMemory}))
+	assert.True(t, isSafePermission(copilot.PermissionRequestMemory{
+		Fact: "test fact",
+	}))
 }
 
 func TestIsSafePermission_MCPReadOnly(t *testing.T) {
-	ro := true
-	assert.True(t, isSafePermission(copilot.PermissionRequest{
-		Kind:     copilot.PermissionRequestKindMcp,
-		ReadOnly: &ro,
+	assert.True(t, isSafePermission(copilot.PermissionRequestMCP{
+		ReadOnly:   true,
+		ToolName:   "test-tool",
+		ServerName: "test-server",
 	}))
 }
 
 func TestIsSafePermission_MCPNotReadOnly(t *testing.T) {
-	ro := false
-	assert.False(t, isSafePermission(copilot.PermissionRequest{
-		Kind:     copilot.PermissionRequestKindMcp,
-		ReadOnly: &ro,
+	assert.False(t, isSafePermission(copilot.PermissionRequestMCP{
+		ReadOnly:   false,
+		ToolName:   "test-tool",
+		ServerName: "test-server",
 	}))
 }
 
-func TestIsSafePermission_MCPNilReadOnly(t *testing.T) {
-	assert.False(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMcp}))
+func TestIsSafePermission_MCPDefaultReadOnly(t *testing.T) {
+	assert.False(t, isSafePermission(copilot.PermissionRequestMCP{
+		ToolName:   "test-tool",
+		ServerName: "test-server",
+	}))
 }
 
 func TestIsSafePermission_WriteKind(t *testing.T) {
-	assert.False(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindWrite}))
+	assert.False(t, isSafePermission(copilot.PermissionRequestWrite{
+		Intention: "write file",
+		FileName:  "/tmp/out",
+	}))
 }
 
 func TestIsSafePermission_ShellKind(t *testing.T) {
-	assert.False(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindShell}))
+	assert.False(t, isSafePermission(copilot.PermissionRequestShell{
+		FullCommandText: "rm -rf /",
+		Intention:       "delete everything",
+	}))
 }
 
 func TestIsSafePermission_URLKind(t *testing.T) {
-	assert.False(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindURL}))
+	assert.False(t, isSafePermission(copilot.PermissionRequestURL{
+		URL: "https://example.com",
+	}))
 }
 
 func TestIsSafePermission_CustomToolKind(t *testing.T) {
-	assert.False(t, isSafePermission(copilot.PermissionRequest{Kind: copilot.PermissionRequestKindCustomTool}))
+	assert.False(t, isSafePermission(copilot.PermissionRequestCustomTool{
+		ToolName:        "dangerous-tool",
+		ToolDescription: "does bad things",
+	}))
 }
 
 // ---------------------------------------------------------------------------
@@ -62,33 +82,33 @@ func TestIsSafePermission_CustomToolKind(t *testing.T) {
 
 func TestPolicyHandler_ApprovesRead(t *testing.T) {
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindRead},
+		copilot.PermissionRequestRead{Intention: "read", Path: "/tmp"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindApproved, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionApproveOnce{}, result)
 }
 
 func TestPolicyHandler_ApprovesMemory(t *testing.T) {
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMemory},
+		copilot.PermissionRequestMemory{Fact: "test"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindApproved, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionApproveOnce{}, result)
 }
 
 func TestPolicyHandler_ApprovesReadOnlyMCP(t *testing.T) {
-	ro := true
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind:     copilot.PermissionRequestKindMcp,
-			ReadOnly: &ro,
+		copilot.PermissionRequestMCP{
+			ReadOnly:   true,
+			ToolName:   "reader",
+			ServerName: "srv",
 		},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindApproved, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionApproveOnce{}, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -97,72 +117,66 @@ func TestPolicyHandler_ApprovesReadOnlyMCP(t *testing.T) {
 
 func TestPolicyHandler_DeniesWrite(t *testing.T) {
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindWrite},
+		copilot.PermissionRequestWrite{Intention: "write", FileName: "/tmp/x"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 func TestPolicyHandler_DeniesShell(t *testing.T) {
-	cmd := "rm -rf /"
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind:            copilot.PermissionRequestKindShell,
-			FullCommandText: &cmd,
+		copilot.PermissionRequestShell{
+			FullCommandText: "rm -rf /",
+			Intention:       "destroy",
 		},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 func TestPolicyHandler_DeniesURL(t *testing.T) {
-	url := "https://evil.example.com"
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind: copilot.PermissionRequestKindURL,
-			URL:  &url,
-		},
+		copilot.PermissionRequestURL{URL: "https://evil.example.com"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 func TestPolicyHandler_DeniesCustomTool(t *testing.T) {
-	tool := "dangerous-tool"
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind:     copilot.PermissionRequestKindCustomTool,
-			ToolName: &tool,
+		copilot.PermissionRequestCustomTool{
+			ToolName:        "dangerous-tool",
+			ToolDescription: "bad",
 		},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 func TestPolicyHandler_DeniesMCPWithWriteAccess(t *testing.T) {
-	ro := false
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind:     copilot.PermissionRequestKindMcp,
-			ReadOnly: &ro,
+		copilot.PermissionRequestMCP{
+			ReadOnly:   false,
+			ToolName:   "writer",
+			ServerName: "srv",
 		},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
-func TestPolicyHandler_DeniesMCPWithNilReadOnly(t *testing.T) {
+func TestPolicyHandler_DeniesMCPWithDefaultReadOnly(t *testing.T) {
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMcp},
+		copilot.PermissionRequestMCP{ToolName: "x", ServerName: "srv"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -171,50 +185,11 @@ func TestPolicyHandler_DeniesMCPWithNilReadOnly(t *testing.T) {
 
 func TestPolicyHandler_DeniesUnknownKind(t *testing.T) {
 	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: "some-future-kind"},
+		copilot.RawPermissionRequest{Discriminator: "some-future-kind"},
 		copilot.PermissionInvocation{SessionID: "test-session"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
-}
-
-// ---------------------------------------------------------------------------
-// policyPermissionHandler — metadata passthrough (no panics)
-// ---------------------------------------------------------------------------
-
-func TestPolicyHandler_HandlesAllOptionalFields(t *testing.T) {
-	intention := "read config"
-	cmd := "cat /etc/hosts"
-	tool := "file-reader"
-	path := "/etc/hosts"
-	file := "config.yaml"
-	url := "https://example.com"
-
-	// Safe request with all optional fields populated should not panic.
-	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{
-			Kind:            copilot.PermissionRequestKindRead,
-			Intention:       &intention,
-			FullCommandText: &cmd,
-			ToolName:        &tool,
-			Path:            &path,
-			FileName:        &file,
-			URL:             &url,
-		},
-		copilot.PermissionInvocation{SessionID: "test-session"},
-	)
-	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindApproved, result.Kind)
-}
-
-func TestPolicyHandler_HandlesNilOptionalFields(t *testing.T) {
-	// Dangerous request with all optional fields nil should not panic.
-	result, err := policyPermissionHandler(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindShell},
-		copilot.PermissionInvocation{SessionID: "test-session"},
-	)
-	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -229,17 +204,17 @@ func TestBuildSessionConfig_UsesPermissionPolicy(t *testing.T) {
 
 	// Invoke the handler with a dangerous request — must be denied.
 	result, err := cfg.OnPermissionRequest(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindShell},
+		copilot.PermissionRequestShell{FullCommandText: "rm -rf /", Intention: "bad"},
 		copilot.PermissionInvocation{SessionID: "test"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindUserNotAvailable, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionUserNotAvailable{}, result)
 
 	// Invoke with a safe request — must be approved.
 	result, err = cfg.OnPermissionRequest(
-		copilot.PermissionRequest{Kind: copilot.PermissionRequestKindRead},
+		copilot.PermissionRequestRead{Intention: "read", Path: "/tmp"},
 		copilot.PermissionInvocation{SessionID: "test"},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, copilot.PermissionRequestResultKindApproved, result.Kind)
+	assert.IsType(t, &rpc.PermissionDecisionApproveOnce{}, result)
 }
