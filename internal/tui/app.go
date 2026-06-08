@@ -1274,9 +1274,12 @@ func (m Model) renderNode(
 			if sh := lipgloss.Height(secondContent); sh > h {
 				h = sh
 			}
+			// Render the separator character once and reuse for all rows
+			// to avoid per-row lipgloss.Render overhead.
+			styledSep := sepStyle.Render("│")
 			sepLines := make([]string, h)
 			for i := range sepLines {
-				sepLines[i] = sepStyle.Render("│")
+				sepLines[i] = styledSep
 			}
 			sep := strings.Join(sepLines, "\n")
 			return lipgloss.JoinHorizontal(lipgloss.Top, firstContent, sep, secondContent)
@@ -1375,15 +1378,14 @@ func (m Model) renderPanel(
 	leftPad := strings.Repeat(" ", pad)
 	rightPad := strings.Repeat(" ", pad)
 	content := p.View(innerW, contentH)
-	// Truncate content to contentH lines so panels never overflow their
-	// allocated rectangle and push the footer off screen.
-	if lines := strings.Split(content, "\n"); len(lines) > contentH {
-		content = strings.Join(lines[:contentH], "\n")
-	}
 	// Normalize every content line to exactly innerW, then wrap with
 	// horizontal padding so the final line width equals contentW.
 	{
 		lines := strings.Split(content, "\n")
+		// Truncate to contentH lines so panels never overflow.
+		if len(lines) > contentH {
+			lines = lines[:contentH]
+		}
 		// Ensure we have exactly contentH lines.
 		for len(lines) < contentH {
 			lines = append(lines, strings.Repeat(" ", innerW))

@@ -566,7 +566,7 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 
 	content := b.String()
 
-	// Colours.
+	// Determine foreground color.
 	fg := ft.colors.Default
 	ignored := ft.isPathIgnored(n.path)
 	switch {
