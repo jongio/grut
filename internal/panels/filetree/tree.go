@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/mattn/go-runewidth"
 )
 
 // builderPool reuses strings.Builder instances to reduce per-frame
@@ -440,7 +441,26 @@ func (ft *FileTree) isSymlinkLoop(symlinkPath string) bool {
 // Area (PUA) characters as width 2.  Terminals with nerd fonts render PUA
 // glyphs as double-width even though Go's runewidth and lipgloss report
 // them as width 1.
+//
+// This uses runewidth.RuneWidth directly instead of lipgloss.Width(string(r))
+// to avoid per-rune string allocation. The input is always unstyled text
+// (no ANSI sequences) so ANSI-aware parsing is unnecessary.
 func displayWidth(s string) int {
+	// Fast path: if no PUA characters are present, use the optimized
+	// batch calculation from go-runewidth (zero allocations).
+	hasPUA := false
+	for _, r := range s {
+		if r >= 0xE000 && r <= 0xF8FF ||
+			r >= 0xF0000 && r <= 0xFFFFF ||
+			r >= 0x100000 && r <= 0x10FFFF {
+			hasPUA = true
+			break
+		}
+	}
+	if !hasPUA {
+		return runewidth.StringWidth(s)
+	}
+	// Slow path: PUA characters need width 2 override.
 	w := 0
 	for _, r := range s {
 		if r >= 0xE000 && r <= 0xF8FF ||
@@ -448,7 +468,7 @@ func displayWidth(s string) int {
 			r >= 0x100000 && r <= 0x10FFFF {
 			w += 2
 		} else {
-			w += lipgloss.Width(string(r))
+			w += runewidth.RuneWidth(r)
 		}
 	}
 	return w
@@ -461,7 +481,7 @@ func runeDisplayWidth(r rune) int {
 		r >= 0x100000 && r <= 0x10FFFF {
 		return 2
 	}
-	return lipgloss.Width(string(r))
+	return runewidth.RuneWidth(r)
 }
 
 // truncateToWidth truncates s so its display width does not exceed maxW.
