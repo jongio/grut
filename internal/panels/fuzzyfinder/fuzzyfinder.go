@@ -25,17 +25,19 @@ type FuzzyFinder struct {
 	items   []Item        // all items from all sources
 	matches []fuzzy.Match // filtered results
 	panels.BasePanel
-	cursor           int // index into matches
-	offset           int // scroll offset for results
-	qCursor          int // cursor position in query
-	theme            *theme.Theme
-	promptStyle      lipgloss.Style
-	placeholderStyle lipgloss.Style
-	matchHighlight   lipgloss.Style
-	descStyle        lipgloss.Style
-	statusStyle      lipgloss.Style
-	separatorStyle   lipgloss.Style
-	cursorBg         string
+	defaultCategories map[string]bool
+	activeSourceLabel string
+	cursor            int // index into matches
+	offset            int // scroll offset for results
+	qCursor           int // cursor position in query
+	theme             *theme.Theme
+	promptStyle       lipgloss.Style
+	placeholderStyle  lipgloss.Style
+	matchHighlight    lipgloss.Style
+	descStyle         lipgloss.Style
+	statusStyle       lipgloss.Style
+	separatorStyle    lipgloss.Style
+	cursorBg          string
 }
 
 // Compile-time interface check.
@@ -44,6 +46,13 @@ var _ panels.Panel = (*FuzzyFinder)(nil)
 // New creates a new FuzzyFinder with the given sources. Items are loaded
 // eagerly from all sources at construction time.
 func New(th *theme.Theme, sources ...Source) *FuzzyFinder {
+	return NewWithDefaultCategories(th, nil, sources...)
+}
+
+// NewWithDefaultCategories creates a FuzzyFinder whose no-prefix query is
+// limited to the given categories. An empty default category list shows all
+// source items when no source prefix is active.
+func NewWithDefaultCategories(th *theme.Theme, defaultCategories []string, sources ...Source) *FuzzyFinder {
 	tc := theme.Colors{}
 	if th != nil {
 		tc = th.Colors
@@ -59,6 +68,10 @@ func New(th *theme.Theme, sources ...Source) *FuzzyFinder {
 		statusStyle:      lipgloss.NewStyle().Foreground(panels.ColorOf(tc.BrightBlack, "#555555")),
 		separatorStyle:   lipgloss.NewStyle().Foreground(panels.ColorOf(tc.SelectionBg, "#2A2A2A")),
 		cursorBg:         panels.OrDefault(tc.SelectionBg, "#2A2A2A"),
+	}
+	if len(defaultCategories) > 0 {
+		ff.defaultCategories = categorySet(defaultCategories...)
+		ff.activeSourceLabel = sourceLabelForCategories(ff.defaultCategories)
 	}
 	ff.loadItems()
 	ff.filter()
@@ -77,22 +90,101 @@ func (ff *FuzzyFinder) loadItems() {
 // is empty, all items are shown in their original order. When there are
 // matches, they are re-ranked so that filename-level matches sort higher.
 func (ff *FuzzyFinder) filter() {
-	if ff.query == "" {
+	search, categories, label := ff.parseSourceFilter()
+	ff.activeSourceLabel = label
+	candidateItems, candidateIndexes := ff.filteredItems(categories)
+	if search == "" {
 		// Show all items when query is empty.
-		ff.matches = make([]fuzzy.Match, len(ff.items))
-		for i, item := range ff.items {
+		ff.matches = make([]fuzzy.Match, len(candidateItems))
+		for i, item := range candidateItems {
 			ff.matches[i] = fuzzy.Match{
 				Str:   item.Text,
-				Index: i,
+				Index: candidateIndexes[i],
 			}
 		}
 	} else {
-		ff.matches = fuzzy.FindFrom(ff.query, itemList(ff.items))
-		rerank(ff.query, ff.matches)
+		ff.matches = fuzzy.FindFrom(search, itemList(candidateItems))
+		for i := range ff.matches {
+			ff.matches[i].Index = candidateIndexes[ff.matches[i].Index]
+		}
+		rerank(search, ff.matches)
 	}
 	// Reset cursor and offset after filtering.
 	ff.cursor = 0
 	ff.offset = 0
+}
+
+func (ff *FuzzyFinder) filteredItems(categories map[string]bool) ([]Item, []int) {
+	if len(categories) == 0 {
+		indexes := make([]int, len(ff.items))
+		for i := range ff.items {
+			indexes[i] = i
+		}
+		return ff.items, indexes
+	}
+	items := make([]Item, 0, len(ff.items))
+	indexes := make([]int, 0, len(ff.items))
+	for i, item := range ff.items {
+		if categories[item.Category] {
+			items = append(items, item)
+			indexes = append(indexes, i)
+		}
+	}
+	return items, indexes
+}
+
+func (ff *FuzzyFinder) parseSourceFilter() (string, map[string]bool, string) {
+	if len(ff.query) >= 2 && ff.query[1] == ':' {
+		if categories, label, ok := categoriesForPrefix(ff.query[0]); ok {
+			return ff.query[2:], categories, label
+		}
+	}
+	return ff.query, ff.defaultCategories, sourceLabelForCategories(ff.defaultCategories)
+}
+
+func categoriesForPrefix(prefix byte) (map[string]bool, string, bool) {
+	switch prefix {
+	case 'f', 'F':
+		return categorySet(categoryFile), "files", true
+	case 'd', 'D':
+		return categorySet(categoryDirectory), "directories", true
+	case 'c', 'C':
+		return categorySet(categoryCommand), "commands", true
+	case 'b', 'B':
+		return categorySet(categoryBookmark), "bookmarks", true
+	case 'g', 'G':
+		return categorySet(categoryGitChanged), "git changed", true
+	default:
+		return nil, "", false
+	}
+}
+
+func categorySet(categories ...string) map[string]bool {
+	set := make(map[string]bool, len(categories))
+	for _, category := range categories {
+		set[category] = true
+	}
+	return set
+}
+
+func sourceLabelForCategories(categories map[string]bool) string {
+	if len(categories) != 1 {
+		return ""
+	}
+	switch {
+	case categories[categoryFile]:
+		return "files"
+	case categories[categoryDirectory]:
+		return "directories"
+	case categories[categoryCommand]:
+		return "commands"
+	case categories[categoryBookmark]:
+		return "bookmarks"
+	case categories[categoryGitChanged]:
+		return "git changed"
+	default:
+		return ""
+	}
 }
 
 // rerank re-sorts fuzzy matches so that filename-level hits rank higher
@@ -219,6 +311,9 @@ func (ff *FuzzyFinder) View(width, height int) string {
 	}
 	// Status bar
 	status := fmt.Sprintf(" %d/%d", len(ff.matches), len(ff.items))
+	if ff.activeSourceLabel != "" {
+		status = fmt.Sprintf(" %s · %d/%d", ff.activeSourceLabel, len(ff.matches), len(ff.items))
+	}
 	statusLine := ff.statusStyle.Width(width).Render(status)
 	lines = append(lines, statusLine)
 	return strings.Join(lines, "\n")

@@ -4,12 +4,16 @@
 package fuzzyfinder
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	bm "github.com/jongio/grut/internal/bookmarks"
+	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/keymap"
 	ignore "github.com/sabhiram/go-gitignore"
 )
@@ -276,7 +280,7 @@ func (ds *DirectorySource) Items() []Item {
 		items = append(items, Item{
 			Text:        "..",
 			Description: parent,
-			Category:    "directory",
+			Category:    categoryDirectory,
 			Value:       parent,
 		})
 	}
@@ -331,11 +335,93 @@ func (ds *DirectorySource) Items() []Item {
 		}
 		items = append(items, Item{
 			Text:     rel,
-			Category: "directory",
+			Category: categoryDirectory,
 			Value:    path,
 		})
 		return nil
 	})
+	return items
+}
+
+// ---------------------------------------------------------------------------
+// BookmarkSource
+// ---------------------------------------------------------------------------
+
+// BookmarkSource exposes saved directory bookmarks to the fuzzy finder.
+type BookmarkSource struct {
+	manager *bm.Manager
+}
+
+// NewBookmarkSource creates a source backed by the bookmark manager.
+func NewBookmarkSource(manager *bm.Manager) *BookmarkSource {
+	return &BookmarkSource{manager: manager}
+}
+
+// Name implements Source.
+func (bs *BookmarkSource) Name() string { return "bookmarks" }
+
+// Items implements Source.
+func (bs *BookmarkSource) Items() []Item {
+	if bs == nil || bs.manager == nil {
+		return nil
+	}
+	bookmarks := bs.manager.List()
+	items := make([]Item, 0, len(bookmarks))
+	for _, b := range bookmarks {
+		text := b.Name
+		if text == "" {
+			text = filepath.Base(b.Path)
+		}
+		items = append(items, Item{
+			Text:        text,
+			Description: b.Path,
+			Category:    categoryBookmark,
+			Value:       b.Path,
+		})
+	}
+	return items
+}
+
+// ---------------------------------------------------------------------------
+// GitChangedSource
+// ---------------------------------------------------------------------------
+
+// GitChangedSource exposes files with git status changes.
+type GitChangedSource struct {
+	root string
+}
+
+// NewGitChangedSource creates a source backed by git status.
+func NewGitChangedSource(root string) *GitChangedSource {
+	return &GitChangedSource{root: root}
+}
+
+// Name implements Source.
+func (gs *GitChangedSource) Name() string { return "git changed" }
+
+// Items implements Source.
+func (gs *GitChangedSource) Items() []Item {
+	if gs == nil || gs.root == "" {
+		return nil
+	}
+	client, err := git.NewClient(gs.root)
+	if err != nil {
+		return nil
+	}
+	statuses, err := client.Status(context.Background())
+	if err != nil {
+		return nil
+	}
+	items := make([]Item, 0, len(statuses))
+	for _, st := range statuses {
+		rel := filepath.ToSlash(st.Path)
+		items = append(items, Item{
+			Text:        rel,
+			Description: fmt.Sprintf("%s%s", st.StagedStatus, st.WorktreeStatus),
+			Category:    categoryGitChanged,
+			Value:       filepath.Join(gs.root, filepath.FromSlash(st.Path)),
+		})
+	}
 	return items
 }
 
