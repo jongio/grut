@@ -312,6 +312,11 @@ func configFilePath() string {
 	return filepath.Join(ConfigDir(), "config.toml")
 }
 
+// UserConfigFilePath returns the full path to the user's config file.
+func UserConfigFilePath() string {
+	return configFilePath()
+}
+
 // LoadDefaults returns a Config built solely from the embedded defaults
 // (defaults.toml), without reading any user config file. This is safe to
 // call from multiple goroutines and does not touch the filesystem, making
