@@ -448,6 +448,19 @@ func (p *Preview) copySelection() (panels.Panel, tea.Cmd) {
 	}
 }
 
+func (p *Preview) copyFilePath() (panels.Panel, tea.Cmd) {
+	if p.filePath == "" || p.ghMode {
+		return p, nil
+	}
+	path := p.filePath
+	return p, func() tea.Msg {
+		if err := panels.CopyToClipboard(context.Background(), path); err != nil {
+			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Copied path", Level: notify.Info}
+	}
+}
+
 func pluralize(n int, word string) string {
 	if n == 1 {
 		return "1 " + word
