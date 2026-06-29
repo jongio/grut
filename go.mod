@@ -9,7 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/anthropics/anthropic-sdk-go v1.52.0
+	github.com/anthropics/anthropic-sdk-go v1.53.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -36,8 +36,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260622092850-f39628c8a989 // indirect
-	github.com/charmbracelet/x/exp/golden v0.0.0-20260622092256-25656177ba8e // indirect
-	github.com/charmbracelet/x/exp/slice v0.0.0-20260628005914-6eb80f72a239 // indirect
+	github.com/charmbracelet/x/exp/golden v0.0.0-20260629091435-9c70f75e26a4 // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20260629091435-9c70f75e26a4 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
