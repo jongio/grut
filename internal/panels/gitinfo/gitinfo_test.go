@@ -9,7 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"

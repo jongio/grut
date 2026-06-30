@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -662,7 +662,7 @@ func TestClient_ListIssues_CacheTypeError(t *testing.T) {
 	})
 
 	local := gh.IssueListByRepoOptions{}
-	local.Page = 0
+	local.ListOptions.Page = 0
 	key := fmt.Sprintf("issues:%s/%s:%+v", "owner", "repo", local)
 	client.cache.Set(key, "wrong type")
 

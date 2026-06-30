@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 	ghclient "github.com/jongio/grut/internal/github"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 	"gopkg.in/yaml.v3"
 )
 

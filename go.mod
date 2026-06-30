@@ -14,7 +14,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/github/copilot-sdk/go v1.0.4
-	github.com/google/go-github/v68 v68.0.0
+	github.com/google/go-github/v88 v88.0.0
 	github.com/mark3labs/mcp-go v0.55.1
 	github.com/mattn/go-runewidth v0.0.24
 	github.com/pelletier/go-toml/v2 v2.4.2

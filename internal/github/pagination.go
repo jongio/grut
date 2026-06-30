@@ -3,7 +3,7 @@ package github
 import (
 	"fmt"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 )
 
 // pageEntry is a generic cache wrapper for a single page of results.
