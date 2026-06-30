@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 )
 
 // clientImpl implements the Client interface using the google/go-github SDK.
@@ -41,7 +41,7 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 	if opts != nil {
 		local = *opts
 	}
-	local.Page = 0
+	local.ListOptions.Page = 0
 	key := fmt.Sprintf("issues:%s/%s:%+v", owner, repo, local)
 	if v, ok := c.cache.Get(key); ok {
 		issues, ok := v.([]*gh.Issue)
@@ -51,7 +51,7 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 		return issues, nil
 	}
 
-	local.Page = 1
+	local.ListOptions.Page = 1
 	allIssues := make([]*gh.Issue, 0, 30)
 	for page := 0; page < maxPaginationPages; page++ {
 		issues, resp, err := c.gh.Issues.ListByRepo(ctx, owner, repo, &local)
@@ -66,7 +66,7 @@ func (c *clientImpl) ListIssues(ctx context.Context, owner, repo string, opts *g
 		if resp.NextPage == 0 {
 			break
 		}
-		local.Page = resp.NextPage
+		local.ListOptions.Page = resp.NextPage
 	}
 
 	c.cache.Set(key, allIssues)
@@ -78,8 +78,8 @@ func (c *clientImpl) ListIssuesPage(ctx context.Context, owner, repo string, opt
 	if opts != nil {
 		local = *opts
 	}
-	if local.Page == 0 {
-		local.Page = 1
+	if local.ListOptions.Page == 0 {
+		local.ListOptions.Page = 1
 	}
 	key := fmt.Sprintf("issues-page:%s/%s:%+v", owner, repo, local)
 	return listPage[*gh.Issue](c, key, "list issues page", func() ([]*gh.Issue, *gh.Response, int, error) {
@@ -629,7 +629,7 @@ func (c *clientImpl) DispatchWorkflow(ctx context.Context, owner, repo string, w
 		Ref:    ref,
 		Inputs: inputs,
 	}
-	resp, err := c.gh.Actions.CreateWorkflowDispatchEventByID(ctx, owner, repo, workflowID, event)
+	_, resp, err := c.gh.Actions.CreateWorkflowDispatchEventByID(ctx, owner, repo, workflowID, event)
 	if err != nil {
 		// Surface specific auth scope issues clearly.
 		if resp != nil && resp.StatusCode == 403 {
