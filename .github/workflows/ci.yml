@@ -46,7 +46,7 @@ jobs:
       # Pin actions to full SHA for supply-chain security.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: "1.26.x"
 
@@ -73,7 +73,7 @@ jobs:
       - name: Check strict formatting (gofumpt)
         if: runner.os == 'Linux'
         run: |
-          go install mvdan.cc/gofumpt@v0.9.2 || { echo "gofumpt install failed, skipping"; exit 0; }
+          go install mvdan.cc/gofumpt@v0.10.0 || { echo "gofumpt install failed, skipping"; exit 0; }
           unformatted=$(gofumpt -l .)
           if [ -n "$unformatted" ]; then
             echo "::error::Files need strict formatting (gofumpt):"
@@ -84,8 +84,8 @@ jobs:
       - name: Check dead code
         if: runner.os == 'Linux'
         run: |
-          go install golang.org/x/tools/cmd/deadcode@v0.43.0
-          go install github.com/magefile/mage@v1.16.0
+          go install golang.org/x/tools/cmd/deadcode@v0.47.0
+          go install github.com/magefile/mage@v1.17.2
           mage deadcode
 
       - run: go build ./...
@@ -94,9 +94,9 @@ jobs:
 
       - name: golangci-lint
         if: runner.os == 'Linux'
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@d583c34f0599d37dbac4a198b9c83201be380893 # v9.3.0
         with:
-          version: v2.11.3
+          version: v2.12.2
           install-mode: goinstall
 
       - name: Test with coverage
@@ -139,7 +139,7 @@ jobs:
       - name: govulncheck
         if: runner.os == 'Linux'
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
           govulncheck ./...
 
   # Verify the binary compiles for all release platforms.
@@ -153,7 +153,7 @@ jobs:
       # Pin actions to full SHA for supply-chain security.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: "1.26.x"
 
