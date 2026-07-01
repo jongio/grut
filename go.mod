@@ -9,11 +9,11 @@ require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/anthropics/anthropic-sdk-go v1.54.0
+	github.com/anthropics/anthropic-sdk-go v1.55.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gabriel-vasile/mimetype v1.4.13
-	github.com/github/copilot-sdk/go v1.0.4
+	github.com/github/copilot-sdk/go v1.0.5
 	github.com/google/go-github/v88 v88.0.0
 	github.com/mark3labs/mcp-go v0.55.1
 	github.com/mattn/go-runewidth v0.0.24
