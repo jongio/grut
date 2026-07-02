@@ -178,6 +178,23 @@ Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, d
 
 ---
 
+## Diff Viewer
+
+Diff viewer panel for file, commit, branch, and PR diffs.
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Scroll up/down |
+| `d/u` | Page down/up |
+| `g/G` | Jump to top/bottom |
+| `t` | Toggle inline/side-by-side |
+| `n/N` | Next/previous hunk |
+| `[/]` | Previous/next file |
+| `w` | Toggle ignore whitespace |
+| `R` | Toggle review annotations |
+
+---
+
 ## Edit Mode
 
 Active when editing a file inline (press e in Preview to enter).

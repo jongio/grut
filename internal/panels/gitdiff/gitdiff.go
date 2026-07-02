@@ -68,6 +68,7 @@ type GitDiff struct {
 	staged                bool // whether viewing staged (index) changes
 	loading               bool // true while async diff fetch is in progress
 	showReviewAnnotations bool // toggle for inline annotation display
+	ignoreWhitespace      bool // when true, pass -w to git diff to hide whitespace-only changes
 }
 
 // diffLoadedMsg is the result of an async diff fetch (F01: no blocking in Update).
@@ -234,6 +235,7 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	ignoreWS := d.ignoreWhitespace
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -244,10 +246,11 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 			ctx = context.Background()
 		}
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
-			CommitA:  commitA,
-			CommitB:  commitB,
-			ThreeDot: threeDot,
-			Path:     path,
+			CommitA:   commitA,
+			CommitB:   commitB,
+			ThreeDot:  threeDot,
+			Path:      path,
+			IgnoreAll: ignoreWS,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -282,6 +285,8 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		d.prevFile()
 	case "R":
 		d.toggleReviewAnnotations()
+	case "w":
+		return d, d.toggleIgnoreWhitespace()
 	}
 	return d, nil
 }
@@ -340,7 +345,10 @@ func (d *GitDiff) Title() string {
 	}
 	base := filepath.Base(d.path)
 	if d.staged {
-		return base + " (staged)"
+		base += " (staged)"
+	}
+	if d.ignoreWhitespace {
+		base += " [ignore ws]"
 	}
 	return base
 }
@@ -355,6 +363,7 @@ func (d *GitDiff) KeyBindings() []panels.KeyBinding {
 		{Key: "n/N", Description: "Next/previous hunk", Action: "hunk_nav"},
 		{Key: "[/]", Description: "Previous/next file", Action: "file_nav"},
 		{Key: "R", Description: "Toggle review annotations", Action: "toggle_review"},
+		{Key: "w", Description: "Toggle ignore whitespace", Action: "toggle_whitespace"},
 	}
 }
 
@@ -386,6 +395,7 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	ignoreWS := d.ignoreWhitespace
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -396,8 +406,9 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 			ctx = context.Background()
 		}
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
-			Staged: staged,
-			Path:   path,
+			Staged:    staged,
+			Path:      path,
+			IgnoreAll: ignoreWS,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -796,6 +807,22 @@ func (d *GitDiff) toggleReviewAnnotations() {
 	d.showReviewAnnotations = !d.showReviewAnnotations
 	d.rebuildLines()
 	d.clampScroll()
+}
+
+// toggleIgnoreWhitespace flips ignore-whitespace mode and re-runs the current
+// diff so whitespace-only changes are hidden or shown. It works for
+// working-tree, staged, and ref-comparison (commit, branch, and PR) diffs.
+// The flag is stored on the panel, so it persists as the user navigates
+// between files in the same session view.
+func (d *GitDiff) toggleIgnoreWhitespace() tea.Cmd {
+	d.ignoreWhitespace = !d.ignoreWhitespace
+	if d.path == "" {
+		return nil
+	}
+	if d.compareMode {
+		return d.startRefDiffLoad(d.path, d.compareCommitA, d.compareCommitB, d.compareThree)
+	}
+	return d.startDiffLoad(d.path, d.staged)
 }
 
 // filterFindingsForFile returns only findings whose File matches the
