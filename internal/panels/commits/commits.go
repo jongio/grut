@@ -8,6 +8,7 @@ package commits
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,6 +52,8 @@ const (
 // panel easy to mock in tests.
 type gitOps interface {
 	Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error)
+	FormatPatch(ctx context.Context, hash string) (string, error)
+	RepoRoot(ctx context.Context) (string, error)
 }
 
 type panelColors struct {
@@ -328,6 +331,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
@@ -782,6 +786,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "x":
+		return p.exportPatch()
 	case "/":
 		p.searchMode = true
 		p.searchQuery = ""
@@ -1023,6 +1029,90 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 			Level:   notify.Success,
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Patch export
+// ---------------------------------------------------------------------------
+
+// exportPatch writes the commit under the cursor to a single-commit patch
+// file at the repository root, named after the commit subject. The written
+// path is shown as a toast; any failure surfaces as an error toast.
+func (p *Panel) exportPatch() (panels.Panel, tea.Cmd) {
+	if p.cursor < 0 || p.cursor >= p.activeLen() {
+		return p, nil
+	}
+	c := p.commitAt(p.cursor)
+	if c.Hash == "" {
+		return p, nil
+	}
+
+	patch, err := p.gitClient.FormatPatch(p.ctx, c.Hash)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+	root, err := p.gitClient.RepoRoot(p.ctx)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	dest := filepath.Join(root, patchFileName(c.Subject))
+	if err := os.WriteFile(dest, []byte(patch), 0o600); err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Wrote " + dest,
+			Level:   notify.Success,
+		}
+	}
+}
+
+func patchErrorToast(err error) tea.Cmd {
+	msg := err.Error()
+	return func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Export failed: " + msg,
+			Level:   notify.Error,
+		}
+	}
+}
+
+// patchFileName builds a filesystem-safe patch file name from a commit
+// subject, mirroring the "NNNN-slug.patch" form that git format-patch uses.
+// A single commit is always sequence 0001.
+func patchFileName(subject string) string {
+	slug := slugify(subject)
+	if slug == "" {
+		slug = "patch"
+	}
+	const maxSlug = 50
+	if len(slug) > maxSlug {
+		slug = strings.Trim(slug[:maxSlug], "-")
+	}
+	return "0001-" + slug + ".patch"
+}
+
+// slugify lowercases s and replaces every run of non-alphanumeric characters
+// with a single dash, trimming leading and trailing dashes. The result is
+// safe to use as a file name on any platform.
+func slugify(s string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // ---------------------------------------------------------------------------
