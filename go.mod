@@ -1,6 +1,6 @@
 module github.com/jongio/grut
 
-go 1.26.3
+go 1.26.4
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -9,7 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/anthropics/anthropic-sdk-go v1.55.1
+	github.com/anthropics/anthropic-sdk-go v1.56.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gabriel-vasile/mimetype v1.4.13
