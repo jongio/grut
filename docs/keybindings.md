@@ -68,6 +68,7 @@ File Tree panel (panel 1).
 | `c` | Copy file |
 | `p` | Paste file |
 | `space` | Toggle stage/unstage |
+| `I` | Add selected entry to .gitignore |
 | `J/K` | Scroll preview down/up |
 
 ---
