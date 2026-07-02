@@ -134,6 +134,7 @@ GitHub panel (panel 3).
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
 | `m` | Merge PR (PRs tab) |
+| `M` | Copy issue or PR as a markdown link (Issues/PRs tabs) |
 | `r` | Rerun (Actions tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |
