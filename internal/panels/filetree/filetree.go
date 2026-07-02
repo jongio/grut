@@ -575,6 +575,8 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "enter/l/→", Description: "Expand dir / select file", Action: "expand"},
 		{Key: "h/←", Description: "Collapse dir / go to parent", Action: "collapse"},
+		{Key: "H", Description: "Collapse all directories", Action: "collapse_all"},
+		{Key: "L", Description: "Expand all directories", Action: "expand_all"},
 		{Key: ".", Description: "Toggle hidden files", Action: "toggle_hidden"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
@@ -938,6 +940,10 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.selectOrExpand()
 	case "h", "left":
 		return ft.collapseOrParent()
+	case "H":
+		ft.collapseAllDirs()
+	case "L":
+		ft.expandAllDirs()
 	case ".":
 		ft.toggleHidden()
 	case "f":
@@ -1480,6 +1486,72 @@ func (ft *FileTree) collapseAll(n *node) {
 			ft.collapseAll(child)
 		}
 	}
+}
+
+// expandAll recursively expands and loads every directory under n. Symlinked
+// directories are only expanded when following symlinks is enabled and the
+// target is safe, matching the guards in selectOrExpand.
+func (ft *FileTree) expandAll(n *node) {
+	for _, child := range n.children {
+		if !child.isDir {
+			continue
+		}
+		if child.isSymlink {
+			if !ft.cfg.GetFollowSymlinks() || !ft.isPathSafe(child.path) || ft.isSymlinkLoop(child.path) {
+				continue
+			}
+		}
+		ft.loadChildren(child)
+		child.expanded = true
+		ft.expandAll(child)
+	}
+}
+
+// collapseAllDirs collapses every directory in the tree and keeps the cursor on
+// the nearest still-visible ancestor of its previous position.
+func (ft *FileTree) collapseAllDirs() {
+	prev := ft.CursorPath()
+	ft.collapseAll(ft.root)
+	ft.rebuildVisible()
+	ft.cursorToPathOrAncestor(prev)
+}
+
+// expandAllDirs expands and loads every directory in the tree, keeping the
+// cursor on its previous node.
+func (ft *FileTree) expandAllDirs() {
+	prev := ft.CursorPath()
+	ft.expandAll(ft.root)
+	ft.rebuildVisible()
+	ft.restoreCursorToPath(prev)
+}
+
+// cursorToPathOrAncestor positions the cursor on the node matching path, or on
+// the nearest visible ancestor directory when the exact node is no longer
+// visible (for example after collapsing the whole tree). Falls back to the top.
+func (ft *FileTree) cursorToPathOrAncestor(path string) {
+	if path == "" {
+		ft.goToTop()
+		return
+	}
+	best := -1
+	bestLen := -1
+	for i, n := range ft.visible {
+		if n.path == path {
+			ft.viewport.cursor = i
+			ft.ensureCursorVisible()
+			return
+		}
+		if len(n.path) > bestLen && strings.HasPrefix(path, n.path+string(filepath.Separator)) {
+			best = i
+			bestLen = len(n.path)
+		}
+	}
+	if best >= 0 {
+		ft.viewport.cursor = best
+		ft.ensureCursorVisible()
+		return
+	}
+	ft.goToTop()
 }
 
 // ---------------------------------------------------------------------------
