@@ -784,8 +784,43 @@ func (p *Preview) loadContextDiffCmd(path string, dc *panels.DiffContext) tea.Cm
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
+		lines := renderDiffLines(diffs, tc)
+		// Prepend an at-a-glance summary of the whole change (all files in the
+		// range), so commit and PR diffs show how big the change is without
+		// scrolling. The extra fetch is best-effort; on error the diff still
+		// renders without a summary.
+		if all, serr := gc.Diff(ctx, git.DiffOpts{
+			CommitA:  commitA,
+			CommitB:  commitB,
+			ThreeDot: threeDot,
+		}); serr == nil {
+			if summary := diffStatSummaryLine(git.Stat(all), tc); summary != "" {
+				lines = append([]string{summary, ""}, lines...)
+			}
+		}
+		return diffLoadedMsg{path: path, lines: lines}
 	}
+}
+
+// diffStatSummaryLine renders a compact, styled one-line change summary such as
+// "5 files changed, +128 -34". Insertions are colored like additions and
+// deletions like removals; the file count uses the diff header color. It
+// returns an empty string when there are no changes.
+func diffStatSummaryLine(s git.DiffStat, tc theme.Colors) string {
+	if s.IsZero() {
+		return ""
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
+	addStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
+	delStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
+	noun := "files"
+	if s.FilesChanged == 1 {
+		noun = "file"
+	}
+	label := labelStyle.Render(fmt.Sprintf("%d %s changed, ", s.FilesChanged, noun))
+	ins := addStyle.Render(fmt.Sprintf("+%d", s.Insertions))
+	del := delStyle.Render(fmt.Sprintf("-%d", s.Deletions))
+	return label + ins + " " + del
 }
 
 // renderDiffLines converts parsed diff hunks to styled display lines.
