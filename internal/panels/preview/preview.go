@@ -508,6 +508,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			if p.hasSelection() {
 				return p.copySelection()
 			}
+		case "Y":
+			return p.copyPermalink()
 		case "escape", "esc":
 			if p.hasSelection() {
 				p.clearSelection()
@@ -632,6 +634,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
 		{Key: "B", Description: "Toggle blame", Action: "toggle_blame"},
 		{Key: "y/Ctrl+C", Description: "Copy selection", Action: "copy_selection"},
+		{Key: "Y", Description: "Copy GitHub permalink", Action: "copy_permalink"},
 	}
 }
 
