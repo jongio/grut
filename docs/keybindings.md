@@ -81,6 +81,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `s` | Stage file/hunk/line |
 | `u` | Unstage file/hunk/line |
 | `d` | Discard unstaged changes |
+| `y` | Copy the current diff hunk (or file path) to the clipboard |
 | `c` | Commit staged changes |
 | `p` | Pull from remote |
 | `a` | Stage all |
