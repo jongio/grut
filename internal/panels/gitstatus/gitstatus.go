@@ -398,6 +398,7 @@ func (p *GitStatus) KeyBindings() []panels.KeyBinding {
 		{Key: "enter/l", Description: "Expand file diff", Action: "expand"},
 		{Key: "h", Description: "Enter hunk mode", Action: "hunk_mode"},
 		{Key: "d", Description: "Discard unstaged changes", Action: "discard"},
+		{Key: "y", Description: "Copy hunk (or file path) to clipboard", Action: "copy"},
 		{Key: "space", Description: "Toggle select for bulk", Action: "toggle_select"},
 		{Key: "a", Description: "Stage all", Action: "stage_all"},
 		{Key: "U", Description: "Unstage all", Action: "unstage_all"},
@@ -774,6 +775,87 @@ func (p *GitStatus) copyPath() (panels.Panel, tea.Cmd) {
 	}
 }
 
+// copyAtCursor copies the hunk under the cursor when the cursor is on a hunk
+// or diff line, and otherwise falls back to copying the file path. This keeps
+// "y" consistent with the copy-path binding used elsewhere while adding hunk
+// copying inside an expanded diff.
+func (p *GitStatus) copyAtCursor() (panels.Panel, tea.Cmd) {
+	if hunk, ok := p.hunkAtCursor(); ok {
+		return p.copyHunk(hunk)
+	}
+	return p.copyPath()
+}
+
+// hunkAtCursor returns the hunk the cursor is currently on, whether the cursor
+// sits on the hunk header row or one of its diff lines.
+func (p *GitStatus) hunkAtCursor() (git.Hunk, bool) {
+	if p.cursor < 0 || p.cursor >= len(p.rows) {
+		return git.Hunk{}, false
+	}
+	r := &p.rows[p.cursor]
+	switch r.kind {
+	case rowHunk:
+		if r.hunkEntry != nil {
+			return *r.hunkEntry, true
+		}
+	case rowDiffLine:
+		hunks := p.diffCache[p.fileKey(r)]
+		if r.hunkIdx >= 0 && r.hunkIdx < len(hunks) {
+			return hunks[r.hunkIdx], true
+		}
+	case rowSection, rowFile:
+		return git.Hunk{}, false
+	}
+	return git.Hunk{}, false
+}
+
+// copyHunk writes the hunk as a unified diff to the OS clipboard.
+func (p *GitStatus) copyHunk(hunk git.Hunk) (panels.Panel, tea.Cmd) {
+	text := hunkText(hunk)
+	if err := panels.CopyToClipboard(p.ctx, text); err != nil {
+		errMsg := err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Copy failed: " + errMsg, Level: notify.Error}
+		}
+	}
+	n := len(hunk.Lines)
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: fmt.Sprintf("Copied hunk (%d lines)", n),
+			Level:   notify.Success,
+		}
+	}
+}
+
+// hunkText renders a hunk back into unified diff text, restoring the leading
+// space, "+" or "-" that identifies each line. When the parsed header is
+// missing it is rebuilt from the hunk's line ranges.
+func hunkText(h git.Hunk) string {
+	header := h.Header
+	if header == "" {
+		header = fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
+	}
+	var b strings.Builder
+	b.WriteString(header)
+	b.WriteString("\n")
+	for _, line := range h.Lines {
+		switch line.Type {
+		case git.DiffLineContext:
+			b.WriteString(" ")
+		case git.DiffLineAdded:
+			b.WriteString("+")
+		case git.DiffLineRemoved:
+			b.WriteString("-")
+		}
+		b.WriteString(line.Content)
+		b.WriteString("\n")
+	}
+	if h.NoNewlineEOF {
+		b.WriteString("\\ No newline at end of file\n")
+	}
+	return b.String()
+}
+
 // handleMouseWheel scrolls the git status viewport.
 func (p *GitStatus) handleMouseWheel(msg tea.MouseWheelMsg) (panels.Panel, tea.Cmd) {
 	m := msg.Mouse()
@@ -838,6 +920,8 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.unstageAll()
 	case "d":
 		return p.discardAtCursor()
+	case "y":
+		return p.copyAtCursor()
 	case "R":
 		p.loading = true
 		p.expandedFiles = make(map[string]bool)
