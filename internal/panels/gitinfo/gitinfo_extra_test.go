@@ -1516,6 +1516,236 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Comment on issue/PR (issue #252) — distinct from inline review comments (#212)
+// ---------------------------------------------------------------------------
+
+// collectCmdMsgs runs a cmd and recursively expands tea.BatchMsg so tests can
+// inspect every message a batched command would emit.
+func collectCmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, collectCmdMsgs(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+func TestDoCommentOnItem_Issue(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.NotNil(t, cmd, "should open the composer")
+	assert.Equal(t, opIssuePRComment, p.pending)
+	assert.Equal(t, "issue:1", p.pendingName)
+}
+
+func TestDoCommentOnItem_PR(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabPRs
+	p.tabCursor[tabPRs] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.NotNil(t, cmd, "should open the composer")
+	assert.Equal(t, opIssuePRComment, p.pending)
+	assert.Equal(t, "PR:10", p.pendingName)
+}
+
+func TestDoCommentOnItem_NoClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = nil
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.Nil(t, cmd, "no client should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCommentOnItem_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+
+	_, cmd := p.doCommentOnItem()
+	assert.Nil(t, cmd, "empty list should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+// TestHandleModalResult_IssuePRComment_EmptyBody verifies that submitting a
+// blank comment is rejected client-side and never calls the API.
+func TestHandleModalResult_IssuePRComment_EmptyBody(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   \n  "})
+	assert.NotNil(t, cmd, "empty body should still surface a warning toast")
+	assert.Equal(t, opNone, p.pending, "pending state must be cleared")
+
+	// Draining the toast cmd must not hit the API.
+	for _, msg := range collectCmdMsgs(cmd) {
+		if toast, ok := msg.(notify.ShowToastMsg); ok {
+			assert.Equal(t, notify.Warn, toast.Level)
+		}
+	}
+	assert.Equal(t, 0, mock.commentCalls, "empty body must not call CommentOnIssue")
+}
+
+// TestHandleModalResult_IssuePRComment_Cancel verifies Escape cancels without
+// calling the API.
+func TestHandleModalResult_IssuePRComment_Cancel(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancel should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+	assert.Equal(t, 0, mock.commentCalls)
+}
+
+func TestHandleModalResult_IssuePRComment_BadPendingName(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.pending = opIssuePRComment
+	p.pendingName = "bad" // missing ":number"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "hi"})
+	assert.Nil(t, cmd)
+	assert.Equal(t, 0, mock.commentCalls)
+}
+
+// TestHandleModalResult_IssuePRComment_PostsAndRefreshes exercises the full
+// comment-then-refresh flow: submit a body, confirm CommentOnIssue is called
+// with the right args, then confirm the conversation preview is refreshed.
+func TestHandleModalResult_IssuePRComment_PostsAndRefreshes(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = mock
+	p.ctx = t.Context()
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:1"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "  LGTM, shipping it  "})
+	assert.NotNil(t, cmd, "accepting a non-empty body should post the comment")
+	assert.Equal(t, opNone, p.pending)
+
+	// Run the post command; it should call the API with the trimmed body.
+	postMsg := cmd()
+	result, ok := postMsg.(commentResultMsg)
+	assert.True(t, ok, "post cmd should yield a commentResultMsg")
+	assert.NoError(t, result.err)
+	assert.Equal(t, 1, mock.commentCalls)
+	assert.Equal(t, 1, mock.commentNumber)
+	assert.Equal(t, "LGTM, shipping it", mock.commentBody, "body should be trimmed")
+
+	// Handling the result should show a success toast and refresh the preview.
+	_, resultCmd := p.handleCommentResult(result)
+	assert.NotNil(t, resultCmd)
+	var sawSuccess, sawRefresh bool
+	for _, msg := range collectCmdMsgs(resultCmd) {
+		switch m := msg.(type) {
+		case notify.ShowToastMsg:
+			if m.Level == notify.Success {
+				sawSuccess = true
+			}
+		case panels.IssueSelectedMsg:
+			sawRefresh = true
+		}
+	}
+	assert.True(t, sawSuccess, "should show a success toast")
+	assert.True(t, sawRefresh, "should refresh the conversation preview")
+}
+
+func TestHandleCommentResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+
+	_, cmd := p.handleCommentResult(commentResultMsg{
+		number: 42,
+		kind:   commentKindIssue,
+		err:    errors.New("network down"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	var sawError bool
+	for _, msg := range collectCmdMsgs(cmd) {
+		if toast, ok := msg.(notify.ShowToastMsg); ok && toast.Level == notify.Error {
+			sawError = true
+		}
+	}
+	assert.True(t, sawError, "failed comment should surface an error toast")
+}
+
+func TestCommentCmd_PostsBody(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.commentCmd(7, "hello world", commentKindPR)
+	msg := cmd()
+	result, ok := msg.(commentResultMsg)
+	assert.True(t, ok)
+	assert.NoError(t, result.err)
+	assert.Equal(t, 7, result.number)
+	assert.Equal(t, commentKindPR, result.kind)
+	assert.Equal(t, 1, mock.commentCalls)
+	assert.Equal(t, "hello world", mock.commentBody)
+}
+
+func TestCommentCmd_PropagatesError(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{commentErr: errors.New("403 forbidden")}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.commentCmd(7, "hello", commentKindIssue)
+	msg := cmd()
+	result, ok := msg.(commentResultMsg)
+	assert.True(t, ok)
+	assert.Error(t, result.err)
+}
+
+// ---------------------------------------------------------------------------
 // handlePRBranchDeleteResult
 // ---------------------------------------------------------------------------
 

@@ -2492,6 +2492,11 @@ type mockGHClientFull struct {
 	cancelErr  error
 	mergeErr   error
 	getPRCalls int
+
+	commentCalls  int
+	commentNumber int
+	commentBody   string
+	commentErr    error
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2518,8 +2523,11 @@ func (m *mockGHClientFull) EditIssue(_ context.Context, _, _ string, _ int, _ *g
 	return nil
 }
 
-func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, _ int, _ string) error {
-	return nil
+func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, number int, body string) error {
+	m.commentCalls++
+	m.commentNumber = number
+	m.commentBody = body
+	return m.commentErr
 }
 func (m *mockGHClientFull) CloseIssue(_ context.Context, _, _ string, _ int) error  { return nil }
 func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) error { return nil }

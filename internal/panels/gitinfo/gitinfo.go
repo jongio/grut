@@ -148,6 +148,7 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opIssuePRComment                     // awaiting comment body for an issue or PR
 )
 
 // ---------------------------------------------------------------------------
@@ -743,6 +744,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 
 	case prMergeResultMsg:
 		return p.handlePRMergeResult(msg)
+	case commentResultMsg:
+		return p.handleCommentResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
 
@@ -874,6 +877,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
 			panels.KeyBinding{Key: "W", Description: "Workflows tab", Action: "tab_workflows"},
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
+			panels.KeyBinding{Key: "c", Description: "Comment on issue/PR", Action: "item_comment"},
 		)
 	}
 	return bindings
@@ -1124,6 +1128,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "m":
 		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.doMergePR()
+		}
+	case "c":
+		if (p.activeTab == tabIssues || p.activeTab == tabPRs) && p.gh.client != nil {
+			return p.doCommentOnItem()
 		}
 	case "pgdown":
 		p.pageDown()
@@ -2113,6 +2121,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opIssuePRComment:
+		return p.handleIssuePRComment(a)
 	}
 	return p, nil
 }
