@@ -402,3 +402,16 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 		}
 	}
 }
+
+func (p *Panel) handlePRRequestReviewers(a modalArgs) (panels.Panel, tea.Cmd) {
+	// User submitted reviewer logins. Empty input cancels.
+	reviewers := parseReviewerLogins(a.msg.Value)
+	if len(reviewers) == 0 {
+		return p, nil
+	}
+	prNumber, err := strconv.Atoi(a.name)
+	if err != nil || prNumber == 0 {
+		return p, nil
+	}
+	return p, p.requestReviewersCmd(prNumber, reviewers)
+}

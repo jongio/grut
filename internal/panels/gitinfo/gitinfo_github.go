@@ -132,6 +132,13 @@ type prMergeResultMsg struct {
 	err        error
 }
 
+// prRequestReviewersResultMsg carries the result of a request-reviewers operation.
+type prRequestReviewersResultMsg struct {
+	err       error
+	reviewers []string
+	number    int
+}
+
 // prBranchDeleteResultMsg carries the result of deleting a branch after PR merge.
 type prBranchDeleteResultMsg struct {
 	branch    string
@@ -1787,6 +1794,103 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 		},
 		p.loadData(),
 	)
+}
+
+// doRequestReviewers initiates the request-reviewers flow for the selected PR.
+// It opens a single-line input for one or more comma-separated reviewer logins.
+func (p *Panel) doRequestReviewers() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindPR {
+		return p, nil
+	}
+	pr := items[cursor].pr
+
+	// Guard: only request reviewers on open PRs.
+	if pr.State != prStateOpen {
+		stateLabel := pr.State
+		if stateLabel == "" {
+			stateLabel = stateUnknown
+		}
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Cannot request reviewers on PR #%d: state is %s", pr.Number, stateLabel),
+				Level:   notify.Warn,
+			}
+		}
+	}
+
+	if p.gh.client == nil {
+		return p, nil
+	}
+
+	p.clearPending()
+	p.pending = opPRRequestReviewers
+	p.pendingName = fmt.Sprintf("%d", pr.Number)
+
+	title := fmt.Sprintf("Request reviewers for PR #%d", pr.Number)
+	return p, notify.ShowInput(title, "logins, comma separated (e.g. octocat, hubot)")
+}
+
+// parseReviewerLogins splits a comma-separated string of GitHub logins into a
+// trimmed, de-duplicated slice, preserving first-seen order. A leading "@" on
+// any login is stripped and empty entries are dropped. De-duplication is
+// case-insensitive since GitHub logins are case-insensitive.
+func parseReviewerLogins(input string) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, part := range strings.Split(input, ",") {
+		login := strings.TrimSpace(part)
+		login = strings.TrimPrefix(login, "@")
+		login = strings.TrimSpace(login)
+		if login == "" {
+			continue
+		}
+		key := strings.ToLower(login)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, login)
+	}
+	return out
+}
+
+// requestReviewersCmd returns a tea.Cmd that requests reviewers asynchronously.
+func (p *Panel) requestReviewersCmd(number int, reviewers []string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		err := client.RequestReviewers(ctx, owner, repo, number, reviewers)
+		return prRequestReviewersResultMsg{number: number, reviewers: reviewers, err: err}
+	}
+}
+
+// handlePRRequestReviewersResult processes the async result of a
+// request-reviewers operation, showing a notification and refreshing PR detail.
+func (p *Panel) handlePRRequestReviewersResult(msg prRequestReviewersResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Request reviewers on PR #%d failed: %s", msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	toastMsg := fmt.Sprintf("Requested %s on PR #%d", strings.Join(msg.reviewers, ", "), msg.number)
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{Message: toastMsg, Level: notify.Success}
+		},
+	}
+	// Refresh PR detail so requested reviewers show in the preview.
+	if p.gh.client != nil {
+		cmds = append(cmds, p.loadPRDetails(msg.number))
+	}
+	return p, tea.Batch(cmds...)
 }
 
 // ---------------------------------------------------------------------------
