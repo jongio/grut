@@ -26,6 +26,8 @@ type modalArgs struct {
 	msg         notify.ModalResultMsg
 	name        string
 	pendingPath string
+	issueTitle  string // captured new-issue draft title (opIssueCreate* flow)
+	issueBody   string // captured new-issue draft body (opIssueCreate* flow)
 	git         gitOps
 	ctx         context.Context
 }
@@ -401,4 +403,42 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 			localErr:  localErr,
 		}
 	}
+}
+
+// handleIssueCreateTitle is step 1 of the new-issue flow. It validates the
+// title and advances to the body step. An empty title is rejected with an
+// inline message and the title prompt is re-shown so the flow stays recoverable.
+func (p *Panel) handleIssueCreateTitle(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := strings.TrimSpace(a.msg.Value)
+	if title == "" {
+		p.pending = opIssueCreateTitle
+		return p, tea.Batch(
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Issue title is required", Level: notify.Warn}
+			},
+			notify.ShowInput("New Issue — Title (required)", "Title cannot be empty"),
+		)
+	}
+	p.gh.issueDraftTitle = title
+	p.pending = opIssueCreateBody
+	return p, notify.ShowInput("New Issue — Body", "Optional description (leave empty to skip)")
+}
+
+// handleIssueCreateBody is step 2 of the new-issue flow. It records the body
+// and advances to the optional labels step.
+func (p *Panel) handleIssueCreateBody(a modalArgs) (panels.Panel, tea.Cmd) {
+	p.gh.issueDraftTitle = a.issueTitle
+	p.gh.issueDraftBody = strings.TrimSpace(a.msg.Value)
+	p.pending = opIssueCreateLabels
+	return p, notify.ShowInput("New Issue — Labels", "comma,separated (optional)")
+}
+
+// handleIssueCreateLabels is step 3 of the new-issue flow. It parses the
+// optional labels and creates the issue.
+func (p *Panel) handleIssueCreateLabels(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := a.issueTitle
+	if title == "" {
+		return p, nil
+	}
+	return p, p.createIssueCmd(title, a.issueBody, parseIssueLabels(a.msg.Value))
 }

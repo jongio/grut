@@ -132,6 +132,7 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
+| `n` | Create issue (Issues tab) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
 | `m` | Merge PR (PRs tab) |

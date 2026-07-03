@@ -148,6 +148,9 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opIssueCreateTitle                   // awaiting new issue title (step 1)
+	opIssueCreateBody                    // awaiting new issue body (step 2)
+	opIssueCreateLabels                  // awaiting new issue labels (step 3)
 )
 
 // ---------------------------------------------------------------------------
@@ -306,6 +309,10 @@ type githubState struct {
 	prFilter    PRFilterKind
 	repoPrivate bool
 	pageSize    int
+	// New-issue create flow (multi-step input overlay driven by opIssueCreate*).
+	issueDraftTitle    string // in-progress new-issue title
+	issueDraftBody     string // in-progress new-issue body
+	pendingSelectIssue int    // issue number to select after the next Issues refresh (0 = none)
 }
 
 // ---------------------------------------------------------------------------
@@ -745,6 +752,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
+	case issueCreateResultMsg:
+		return p.handleIssueCreateResult(msg)
 
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
@@ -1912,6 +1921,12 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 		p.pending = opTagCreate
 		return p, notify.ShowInput("Tag Name", "tag-name")
 	case tabIssues:
+		if p.gh.client != nil {
+			p.clearPending()
+			p.pending = opIssueCreateTitle
+			return p, notify.ShowInput("New Issue — Title", "Issue title (required)")
+		}
+		// Fallback: open the browser new-issue page when no API client is available.
 		if p.gh.owner != "" && p.gh.repo != "" {
 			url := fmt.Sprintf("https://github.com/%s/%s/issues/new", p.gh.owner, p.gh.repo)
 			return p, func() tea.Msg {
@@ -2049,12 +2064,16 @@ func (p *Panel) clearPending() {
 	p.pending = opNone
 	p.pendingName = ""
 	p.pendingPath = ""
+	p.gh.issueDraftTitle = ""
+	p.gh.issueDraftBody = ""
 }
 
 func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
 	op := p.pending
 	name := p.pendingName
 	pendingPath := p.pendingPath
+	issueTitle := p.gh.issueDraftTitle
+	issueBody := p.gh.issueDraftBody
 	p.clearPending()
 	if !msg.Accept {
 		return p, nil
@@ -2063,6 +2082,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		msg:         msg,
 		name:        name,
 		pendingPath: pendingPath,
+		issueTitle:  issueTitle,
+		issueBody:   issueBody,
 		git:         p.git,
 		ctx:         p.ctx,
 	}
@@ -2113,6 +2134,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opIssueCreateTitle:
+		return p.handleIssueCreateTitle(a)
+	case opIssueCreateBody:
+		return p.handleIssueCreateBody(a)
+	case opIssueCreateLabels:
+		return p.handleIssueCreateLabels(a)
 	}
 	return p, nil
 }

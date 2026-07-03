@@ -139,6 +139,13 @@ type prBranchDeleteResultMsg struct {
 	localErr  error
 }
 
+// issueCreateResultMsg carries the result of a create-issue operation.
+type issueCreateResultMsg struct {
+	err    error
+	title  string
+	number int
+}
+
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
 // input definitions from the workflow YAML file.
 type workflowInputsFetchedMsg struct {
@@ -894,6 +901,14 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 		p.tabCursor[tabIssues] = savedCursor
 		p.tabOffset[tabIssues] = savedOffset
 	}
+	// After a full refresh, select the just-created issue if one is pending.
+	if msg.replace && p.gh.pendingSelectIssue != 0 {
+		found := p.selectIssueByNumber(p.gh.pendingSelectIssue)
+		p.gh.pendingSelectIssue = 0
+		if found {
+			return p, p.issueSelectedCmd()
+		}
+	}
 	return p, nil
 }
 
@@ -1148,6 +1163,91 @@ func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
 	default:
 		return true
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Issue creation
+// ---------------------------------------------------------------------------
+
+// parseIssueLabels splits a comma-separated labels string into a trimmed,
+// de-duplicated slice, dropping empty entries.
+func parseIssueLabels(raw string) []string {
+	seen := make(map[string]bool)
+	var labels []string
+	for _, part := range strings.Split(raw, ",") {
+		label := strings.TrimSpace(part)
+		if label == "" || seen[label] {
+			continue
+		}
+		seen[label] = true
+		labels = append(labels, label)
+	}
+	return labels
+}
+
+// createIssueCmd returns a tea.Cmd that creates a new issue asynchronously
+// and reports the outcome via issueCreateResultMsg.
+func (p *Panel) createIssueCmd(title, body string, labels []string) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return nil
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		req := &gh.IssueRequest{Title: gh.Ptr(title)}
+		if body != "" {
+			req.Body = gh.Ptr(body)
+		}
+		if len(labels) > 0 {
+			req.Labels = &labels
+		}
+		issue, err := client.CreateIssue(ctx, owner, repo, req)
+		if err != nil {
+			return issueCreateResultMsg{err: err, title: title}
+		}
+		return issueCreateResultMsg{number: issue.GetNumber(), title: issue.GetTitle()}
+	}
+}
+
+// handleIssueCreateResult processes the async result of creating an issue.
+// On success it refreshes the Issues list and queues selection of the new item.
+func (p *Panel) handleIssueCreateResult(msg issueCreateResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Create issue failed: " + errStr,
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Make sure the refreshed list is visible and reset pagination for a page-1 reload.
+	p.activeTab = tabIssues
+	p.gh.pendingSelectIssue = msg.number
+	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Created issue #%d", msg.number),
+				Level:   notify.Success,
+			}
+		},
+		p.loadIssuesPage(1, true),
+	)
+}
+
+// selectIssueByNumber moves the Issues-tab cursor to the issue with the given
+// number, if present in the current filtered view. Returns true when found.
+func (p *Panel) selectIssueByNumber(number int) bool {
+	for i, item := range p.tabItems[tabIssues] {
+		if item.kind == kindIssue && item.issue.Number == number {
+			p.tabCursor[tabIssues] = i
+			p.ensureCursorVisible()
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Panel) applyPRFilter() {
