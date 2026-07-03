@@ -132,10 +132,12 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
+| `N` | Notifications tab |
+| `Enter` | Open notification in browser (Notifications tab) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
-| `m` | Merge PR (PRs tab) |
-| `r` | Rerun (Actions tab) |
+| `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
+| `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |
 
