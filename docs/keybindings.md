@@ -134,6 +134,7 @@ GitHub panel (panel 3).
 | `l` | Releases tab |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
+| `n` | Create pull request (PRs tab) |
 | `m` | Merge PR (PRs tab) |
 | `r` | Rerun (Actions tab) |
 | `x` | Cancel (Actions tab) |

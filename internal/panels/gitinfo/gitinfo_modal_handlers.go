@@ -402,3 +402,62 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 		}
 	}
 }
+
+// prCreateAbort resets the in-progress draft and shows a warning toast. It is
+// used by the create-PR steps when validation fails.
+func (p *Panel) prCreateAbort(message string) (panels.Panel, tea.Cmd) {
+	p.prDraft = prCreateDraft{}
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{Message: message, Level: notify.Warn}
+	}
+}
+
+// handlePRCreateHead captures the head branch, then prompts for the base.
+func (p *Panel) handlePRCreateHead(a modalArgs) (panels.Panel, tea.Cmd) {
+	head := strings.TrimSpace(a.msg.Value)
+	if head == "" {
+		return p.prCreateAbort("Cannot open PR: head branch is required")
+	}
+	p.prDraft.head = head
+	p.pending = opPRCreateBase
+	return p, notify.ShowInputWithValue("PR Base Branch", "base-branch", p.prDraft.base)
+}
+
+// handlePRCreateBase captures the base branch, guards head==base, then prompts
+// for the title.
+func (p *Panel) handlePRCreateBase(a modalArgs) (panels.Panel, tea.Cmd) {
+	base := strings.TrimSpace(a.msg.Value)
+	if base == "" {
+		return p.prCreateAbort("Cannot open PR: base branch is required")
+	}
+	if base == p.prDraft.head {
+		return p.prCreateAbort(fmt.Sprintf("Cannot open PR: head and base are both %q", base))
+	}
+	p.prDraft.base = base
+	p.pending = opPRCreateTitle
+	return p, notify.ShowInput("PR Title", "title")
+}
+
+// handlePRCreateTitle captures the required title, then prompts for the
+// optional body.
+func (p *Panel) handlePRCreateTitle(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := strings.TrimSpace(a.msg.Value)
+	if title == "" {
+		return p.prCreateAbort("Cannot open PR: title is required")
+	}
+	p.prDraft.title = title
+	p.pending = opPRCreateBody
+	return p, notify.ShowInput("PR Body", "(optional)")
+}
+
+// handlePRCreateBody captures the optional body and fires the create request.
+func (p *Panel) handlePRCreateBody(a modalArgs) (panels.Panel, tea.Cmd) {
+	body := strings.TrimSpace(a.msg.Value)
+	head, base, title := p.prDraft.head, p.prDraft.base, p.prDraft.title
+	p.prDraft = prCreateDraft{}
+	if head == "" || base == "" || title == "" {
+		// Defensive: state was lost somehow; abort quietly with a warning.
+		return p.prCreateAbort("Cannot open PR: missing branch or title")
+	}
+	return p, p.createPRCmd(head, base, title, body)
+}

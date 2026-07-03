@@ -139,6 +139,12 @@ type prBranchDeleteResultMsg struct {
 	localErr  error
 }
 
+// prCreateResultMsg carries the result of creating a pull request.
+type prCreateResultMsg struct {
+	pr  ghPRItem
+	err error
+}
+
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
 // input definitions from the workflow YAML file.
 type workflowInputsFetchedMsg struct {
@@ -244,20 +250,22 @@ func (f PRFilterKind) String() string {
 
 // ghDataLoadedMsg carries the result of an async GitHub data load.
 type ghDataLoadedMsg struct {
-	err         error
-	user        string
-	issues      []ghIssueItem
-	prs         []ghPRItem
-	actions     []ghActionItem
-	workflows   []ghWorkflowItem
-	releases    []ghReleaseItem
-	repoPrivate bool
+	err           error
+	user          string
+	defaultBranch string
+	issues        []ghIssueItem
+	prs           []ghPRItem
+	actions       []ghActionItem
+	workflows     []ghWorkflowItem
+	releases      []ghReleaseItem
+	repoPrivate   bool
 }
 
 // ghMetaLoadedMsg carries repo metadata and current user info.
 type ghMetaLoadedMsg struct {
-	user        string
-	repoPrivate bool
+	user          string
+	defaultBranch string
+	repoPrivate   bool
 }
 
 // ghIssuesPageMsg carries one page of issues from the GitHub API.
@@ -397,6 +405,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 			slog.Warn("github: fetch repo info failed", "owner", owner, "repo", repo, "err", err)
 		} else if repoInfo != nil {
 			result.repoPrivate = repoInfo.GetPrivate()
+			result.defaultBranch = repoInfo.GetDefaultBranch()
 		}
 		// Get current user.
 		user, err := client.CurrentUser(ctx)
@@ -568,8 +577,17 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 	if msg.user != "" {
 		p.gh.user = msg.user
 	}
+	if msg.defaultBranch != "" {
+		p.gh.defaultBranch = msg.defaultBranch
+	}
 	p.gh.repoPrivate = msg.repoPrivate
 	p.buildGitHubItems(msg.issues, msg.prs, msg.actions, msg.workflows, msg.releases)
+	// If a create/merge flow requested a specific PR be reselected after this
+	// refresh, honor it now that the list has been rebuilt.
+	if p.gh.pendingSelectPR != 0 {
+		p.selectPRByNumber(p.gh.pendingSelectPR)
+		p.gh.pendingSelectPR = 0
+	}
 	// Determine if any workflow run is still in progress or queued.
 	wasWatching := p.actionsWatching
 	p.actionsWatching = false
@@ -641,6 +659,7 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 			slog.Warn("github: fetch repo info failed", "owner", owner, "repo", repo, "err", err)
 		} else if repoInfo != nil {
 			result.repoPrivate = repoInfo.GetPrivate()
+			result.defaultBranch = repoInfo.GetDefaultBranch()
 		}
 		user, err := client.CurrentUser(ctx)
 		if err != nil {
@@ -866,6 +885,9 @@ func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 func (p *Panel) handleMetaLoaded(msg ghMetaLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.user != "" {
 		p.gh.user = msg.user
+	}
+	if msg.defaultBranch != "" {
+		p.gh.defaultBranch = msg.defaultBranch
 	}
 	p.gh.repoPrivate = msg.repoPrivate
 	return p, nil
@@ -1790,8 +1812,176 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 }
 
 // ---------------------------------------------------------------------------
-// GitHub item rendering
+// GitHub PR creation
 // ---------------------------------------------------------------------------
+
+// doCreatePR starts the multi-step flow to open a pull request from the TUI.
+// Head is prefilled with the current local branch and base with the repo
+// default branch; both remain editable in the modal.
+func (p *Panel) doCreatePR() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	head := p.currentLocalBranch()
+	if head == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Cannot open PR: no current branch detected",
+				Level:   notify.Warn,
+			}
+		}
+	}
+	if !p.branchIsPushed(head) {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Push branch %q before opening a PR", head),
+				Level:   notify.Warn,
+			}
+		}
+	}
+	base := p.gh.defaultBranch
+	if base == "" {
+		base = branchMain
+	}
+	p.clearPending()
+	p.prDraft = prCreateDraft{head: head, base: base}
+	p.pending = opPRCreateHead
+	return p, notify.ShowInputWithValue("PR Head Branch", "head-branch", head)
+}
+
+// currentLocalBranch returns the name of the current local branch by scanning
+// the full branch list, which includes local branches even in GitHub mode.
+// It returns "" when no current local branch can be determined.
+func (p *Panel) currentLocalBranch() string {
+	for _, b := range p.gitData.lastBranches {
+		if !b.IsRemote && b.IsCurrent {
+			return b.Name
+		}
+	}
+	return ""
+}
+
+// remoteBranchName strips the leading remote name from a remote-tracking ref,
+// e.g. "origin/main" becomes "main".
+func remoteBranchName(name string) string {
+	if i := strings.IndexByte(name, '/'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+// branchIsPushed reports whether the named local branch appears to exist on a
+// remote: either it tracks an upstream, or a remote branch with a matching
+// short name is present in the branch list.
+func (p *Panel) branchIsPushed(name string) bool {
+	for _, b := range p.gitData.lastBranches {
+		if !b.IsRemote && b.Name == name && b.Upstream != "" {
+			return true
+		}
+		if b.IsRemote && remoteBranchName(b.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+// createPRCmd returns a tea.Cmd that opens the pull request asynchronously.
+func (p *Panel) createPRCmd(head, base, title, body string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		req := &gh.NewPullRequest{
+			Title: gh.Ptr(title),
+			Head:  gh.Ptr(head),
+			Base:  gh.Ptr(base),
+		}
+		if body != "" {
+			req.Body = gh.Ptr(body)
+		}
+		created, err := client.CreatePR(ctx, owner, repo, req)
+		if err != nil {
+			return prCreateResultMsg{err: err}
+		}
+		if created == nil {
+			return prCreateResultMsg{err: fmt.Errorf("no pull request returned")}
+		}
+		author := ""
+		if created.User != nil {
+			author = created.User.GetLogin()
+		}
+		state := created.GetState()
+		if created.GetDraft() {
+			state = stateDraft
+		}
+		return prCreateResultMsg{pr: ghPRItem{
+			Number:     created.GetNumber(),
+			Title:      created.GetTitle(),
+			State:      state,
+			HeadBranch: created.GetHead().GetRef(),
+			Author:     author,
+			HTMLURL:    created.GetHTMLURL(),
+		}}
+	}
+}
+
+// handlePRCreateResult processes the async result of opening a pull request.
+func (p *Panel) handlePRCreateResult(msg prCreateResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Create PR failed: " + errStr,
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Show all PRs so the new one is guaranteed visible, then insert it
+	// optimistically for immediate feedback ahead of the server refresh.
+	p.gh.prFilter = prFilterAll
+	exists := false
+	for i := range p.gh.allPRs {
+		if p.gh.allPRs[i].Number == msg.pr.Number {
+			p.gh.allPRs[i] = msg.pr
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		p.gh.allPRs = append([]ghPRItem{msg.pr}, p.gh.allPRs...)
+	}
+	p.applyPRFilter()
+	p.selectPRByNumber(msg.pr.Number)
+	// Refresh from the server and reselect the new PR once it arrives.
+	p.gh.pendingSelectPR = msg.pr.Number
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("PR #%d created", msg.pr.Number),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
+// selectPRByNumber moves the PRs-tab cursor to the PR with the given number,
+// if it is present in the currently visible list.
+func (p *Panel) selectPRByNumber(number int) {
+	if number == 0 {
+		return
+	}
+	for i, item := range p.tabItems[tabPRs] {
+		if item.kind == kindPR && item.pr.Number == number {
+			p.tabCursor[tabPRs] = i
+			if p.activeTab == tabPRs {
+				p.ensureCursorVisible()
+			}
+			return
+		}
+	}
+}
+
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
 func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	iss := item.issue

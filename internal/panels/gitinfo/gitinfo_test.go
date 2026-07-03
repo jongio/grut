@@ -2492,6 +2492,13 @@ type mockGHClientFull struct {
 	cancelErr  error
 	mergeErr   error
 	getPRCalls int
+
+	// Create-PR controls.
+	createdPR   *gh.PullRequest    // returned by CreatePR when createErr is nil
+	createErr   error              // returned by CreatePR
+	createReq   *gh.NewPullRequest // captured request passed to CreatePR
+	createCalls int                // number of times CreatePR was called
+	repoInfo    *gh.Repository     // returned by RepoInfo
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2552,8 +2559,10 @@ func (m *mockGHClientFull) GetPRCommits(_ context.Context, _, _ string, _ int) (
 	return m.prCommits, m.prCommErr
 }
 
-func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, _ *gh.NewPullRequest) (*gh.PullRequest, error) {
-	return nil, nil
+func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, req *gh.NewPullRequest) (*gh.PullRequest, error) {
+	m.createCalls++
+	m.createReq = req
+	return m.createdPR, m.createErr
 }
 
 func (m *mockGHClientFull) MergePR(_ context.Context, _, _ string, _ int, _ string, _ *gh.PullRequestOptions) error {
@@ -2605,7 +2614,7 @@ func (m *mockGHClientFull) ListNotifications(_ context.Context, _ *gh.Notificati
 }
 func (m *mockGHClientFull) MarkRead(_ context.Context, _ string) error { return nil }
 func (m *mockGHClientFull) RepoInfo(_ context.Context, _, _ string) (*gh.Repository, error) {
-	return nil, nil
+	return m.repoInfo, nil
 }
 
 func (m *mockGHClientFull) ListWorkflows(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.Workflow, error) {
@@ -4835,4 +4844,273 @@ func TestRightClickLabel_ANSIInjection(t *testing.T) {
 			assert.Contains(t, label, tt.want)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Create pull request from the PRs tab (issue #249)
+// ---------------------------------------------------------------------------
+
+// pushedFeatureBranches returns a branch set with "feature" as the current,
+// pushed local branch plus its remote counterpart and origin/main.
+func pushedFeatureBranches() []git.Branch {
+	return []git.Branch{
+		{Name: "feature", IsCurrent: true, Upstream: "origin/feature"},
+		{Name: "origin/feature", IsRemote: true},
+		{Name: "origin/main", IsRemote: true},
+	}
+}
+
+func TestDoCreatePR_PrefillsHeadAndBase(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd, "should open the head-branch input")
+	assert.Equal(t, opPRCreateHead, p.pending)
+	assert.Equal(t, "feature", p.prDraft.head, "head should prefill with current branch")
+	assert.Equal(t, "main", p.prDraft.base, "base should prefill with default branch")
+}
+
+func TestDoCreatePR_DefaultBranchFallback(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "" // unknown default → fall back to main
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	assert.Equal(t, branchMain, p.prDraft.base)
+}
+
+func TestDoCreatePR_NoCurrentBranchWarns(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gitData.lastBranches = []git.Branch{{Name: "origin/main", IsRemote: true}}
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Equal(t, opNone, p.pending, "no modal flow should start")
+}
+
+func TestDoCreatePR_UnpushedBranchWarns(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	// Current branch has no upstream and no matching remote branch.
+	p.gitData.lastBranches = []git.Branch{{Name: "feature", IsCurrent: true}}
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Push branch")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCreatePR_NilClientNoop(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock()) // no gh client wired
+	p.gh.client = nil
+	p.activeTab = tabPRs
+
+	_, cmd := p.doCreatePR()
+	assert.Nil(t, cmd, "no client should be a no-op")
+}
+
+func TestPRCreateFlow_EmptyTitleRejected(t *testing.T) {
+	ghMock := &mockGHClientFull{}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	p.doCreatePR()
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "feature"}) // head
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"})    // base
+	require.Equal(t, opPRCreateTitle, p.pending)
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   "}) // blank title
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "draft should reset on abort")
+	assert.Zero(t, ghMock.createCalls, "CreatePR must not be called with an empty title")
+}
+
+func TestPRCreateFlow_HeadEqualsBaseRejected(t *testing.T) {
+	ghMock := &mockGHClientFull{}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	p.doCreatePR()
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"}) // head edited to main
+	require.Equal(t, opPRCreateBase, p.pending)
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"}) // base == head
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "head and base")
+	assert.Equal(t, prCreateDraft{}, p.prDraft)
+	assert.Zero(t, ghMock.createCalls)
+}
+
+func TestPRCreateFlow_Success(t *testing.T) {
+	num := 42
+	createdPR := &gh.PullRequest{
+		Number: &num,
+		Title:  gh.Ptr("My new PR"),
+		State:  gh.Ptr(prStateOpen),
+		Head:   &gh.PullRequestBranch{Ref: gh.Ptr("feature")},
+		User:   ghUser("me"),
+	}
+	ghMock := &mockGHClientFull{createdPR: createdPR, prs: []*gh.PullRequest{createdPR}}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gh.prFilter = prFilterMine // start on a filtered view to prove it resets
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	require.Equal(t, opPRCreateHead, p.pending)
+
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "feature"})
+	require.Equal(t, opPRCreateBase, p.pending)
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"})
+	require.Equal(t, opPRCreateTitle, p.pending)
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "My new PR"})
+	require.Equal(t, opPRCreateBody, p.pending)
+
+	_, createCmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "Closes #249"})
+	require.NotNil(t, createCmd)
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "draft should reset once the request fires")
+
+	msg := createCmd()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok, "expected prCreateResultMsg, got %T", msg)
+	require.NoError(t, res.err)
+	assert.Equal(t, 42, res.pr.Number)
+
+	// The request should carry the exact head, base, title, and body entered.
+	require.NotNil(t, ghMock.createReq)
+	assert.Equal(t, 1, ghMock.createCalls)
+	assert.Equal(t, "My new PR", ghMock.createReq.GetTitle())
+	assert.Equal(t, "feature", ghMock.createReq.GetHead())
+	assert.Equal(t, "main", ghMock.createReq.GetBase())
+	assert.Equal(t, "Closes #249", ghMock.createReq.GetBody())
+
+	// Handling the result inserts the PR, resets the filter, and queues reselect.
+	_, afterCmd := p.handlePRCreateResult(res)
+	require.NotNil(t, afterCmd)
+	assert.Equal(t, prFilterAll, p.gh.prFilter, "filter should reset so the new PR is visible")
+	require.NotEmpty(t, p.gh.allPRs)
+	assert.Equal(t, 42, p.gh.allPRs[0].Number, "new PR inserted at the front")
+	assert.Equal(t, 42, p.gh.pendingSelectPR, "reselect queued for the post-refresh load")
+	// The visible cursor should land on the new PR.
+	require.NotEmpty(t, p.tabItems[tabPRs])
+	assert.Equal(t, 42, p.tabItems[tabPRs][p.tabCursor[tabPRs]].pr.Number)
+}
+
+func TestCreatePRCmd_OmitsEmptyBody(t *testing.T) {
+	ghMock := &mockGHClientFull{createdPR: &gh.PullRequest{Number: gh.Ptr(1), Title: gh.Ptr("t"), State: gh.Ptr(prStateOpen), Head: &gh.PullRequestBranch{Ref: gh.Ptr("feature")}}}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.NoError(t, res.err)
+	require.NotNil(t, ghMock.createReq)
+	assert.Nil(t, ghMock.createReq.Body, "empty body should be omitted from the request")
+}
+
+func TestCreatePRCmd_ErrorPropagates(t *testing.T) {
+	ghMock := &mockGHClientFull{createErr: fmt.Errorf("api down")}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.Error(t, res.err)
+}
+
+func TestCreatePRCmd_NilResultIsError(t *testing.T) {
+	ghMock := &mockGHClientFull{} // createdPR nil, createErr nil
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.Error(t, res.err, "a nil PR with no error should surface as an error")
+}
+
+func TestHandlePRCreateResult_ErrorShowsToast(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+
+	_, cmd := p.handlePRCreateResult(prCreateResultMsg{err: fmt.Errorf("boom")})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "boom")
+	assert.Empty(t, p.gh.allPRs, "no PR should be inserted on failure")
+}
+
+func TestHandleModalResultCancel_ResetsPRDraft(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.pending = opPRCreateTitle
+	p.prDraft = prCreateDraft{head: "feature", base: "main"}
+
+	p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "cancel should clear the in-progress draft")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleGHDataLoaded_ConsumesPendingSelectPR(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.activeTab = tabPRs
+	p.gh.prFilter = prFilterAll
+	p.gh.pendingSelectPR = 7
+
+	p.Update(ghDataLoadedMsg{prs: []ghPRItem{
+		{Number: 9, State: prStateOpen},
+		{Number: 7, State: prStateOpen},
+	}})
+
+	require.Len(t, p.tabItems[tabPRs], 2)
+	assert.Equal(t, 7, p.tabItems[tabPRs][p.tabCursor[tabPRs]].pr.Number, "cursor should land on the queued PR")
+	assert.Zero(t, p.gh.pendingSelectPR, "pendingSelectPR should be consumed")
+}
+
+func TestHandleMetaLoaded_StoresDefaultBranch(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.Update(ghMetaLoadedMsg{user: "me", defaultBranch: "develop", repoPrivate: true})
+	assert.Equal(t, "develop", p.gh.defaultBranch)
+}
+
+func TestNKey_OnPRsTabStartsCreateFlow(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.Focused = true
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'n'})
+	require.NotNil(t, cmd, "'n' on the PRs tab should open the create-PR flow")
+	assert.Equal(t, opPRCreateHead, p.pending)
+	assert.Equal(t, "feature", p.prDraft.head)
 }

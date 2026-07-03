@@ -148,6 +148,10 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opPRCreateHead                       // awaiting create-PR head branch
+	opPRCreateBase                       // awaiting create-PR base branch
+	opPRCreateTitle                      // awaiting create-PR title
+	opPRCreateBody                       // awaiting create-PR body (optional, final step)
 )
 
 // ---------------------------------------------------------------------------
@@ -294,18 +298,28 @@ type gitState struct {
 // githubState holds all GitHub-related integration state: API client,
 // repository metadata, and cached issue / PR data.
 type githubState struct {
-	client      ghclient.Client
-	err         error
-	owner       string
-	repo        string
-	user        string
-	allIssues   []ghIssueItem
-	allPRs      []ghPRItem
-	cfg         config.GitHubConfig
-	issueFilter IssueFilterKind
-	prFilter    PRFilterKind
-	repoPrivate bool
-	pageSize    int
+	client          ghclient.Client
+	err             error
+	owner           string
+	repo            string
+	user            string
+	defaultBranch   string // repo default branch, used to prefill PR base
+	allIssues       []ghIssueItem
+	allPRs          []ghPRItem
+	cfg             config.GitHubConfig
+	issueFilter     IssueFilterKind
+	prFilter        PRFilterKind
+	pendingSelectPR int // PR number to reselect after the next data load (0 = none)
+	repoPrivate     bool
+	pageSize        int
+}
+
+// prCreateDraft holds the field values captured across the multi-step
+// create-PR modal flow (head then base then title then body).
+type prCreateDraft struct {
+	head  string
+	base  string
+	title string
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +347,7 @@ type Panel struct {
 	activeTab         tabID         // currently active tab
 	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp     // operation awaiting modal result
+	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
 	actionsWatchFrame int           // current animation frame index into watchFrames
 	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
@@ -745,6 +760,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
+	case prCreateResultMsg:
+		return p.handlePRCreateResult(msg)
 
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
@@ -1921,6 +1938,8 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 				return notify.ShowToastMsg{Message: "Opened new issue page", Level: notify.Info}
 			}
 		}
+	case tabPRs:
+		return p.doCreatePR()
 	}
 	return p, nil
 }
@@ -2057,6 +2076,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	pendingPath := p.pendingPath
 	p.clearPending()
 	if !msg.Accept {
+		// Abort any in-progress create-PR flow so a later run starts clean.
+		p.prDraft = prCreateDraft{}
 		return p, nil
 	}
 	a := modalArgs{
@@ -2113,6 +2134,14 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opPRCreateHead:
+		return p.handlePRCreateHead(a)
+	case opPRCreateBase:
+		return p.handlePRCreateBase(a)
+	case opPRCreateTitle:
+		return p.handlePRCreateTitle(a)
+	case opPRCreateBody:
+		return p.handlePRCreateBody(a)
 	}
 	return p, nil
 }
