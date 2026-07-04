@@ -157,6 +157,23 @@ Commits panel (panel 4).
 
 ---
 
+## Diff Viewer
+
+Diff viewer panel (shows the diff for the selected file or commit).
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Scroll up/down |
+| `d/u` | Page down/up |
+| `g/G` | Top/bottom |
+| `t` | Toggle inline/side-by-side |
+| `n/N` | Next/previous hunk |
+| `[/]` | Previous/next file |
+| `y` | Copy the current hunk to the clipboard |
+| `R` | Toggle review annotations |
+
+---
+
 ## Preview
 
 Preview panel (panel 5).
