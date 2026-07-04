@@ -1115,6 +1115,30 @@ func TestDoAction_Worktree(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestExecuteRightClick_Worktree_OpenInEditor(t *testing.T) {
+	p := newTestPanel(t, defaultMock())
+	p.activeTab = tabWorktrees
+	p.tabItems[tabWorktrees] = []listItem{
+		{kind: kindWorktree, worktree: git.Worktree{Path: "/test/repo", Branch: "main"}},
+	}
+	p.tabCursor[tabWorktrees] = 0
+	p.pendingPath = "/test/repo"
+
+	// Stub the editor launcher so the test never spawns a real editor.
+	orig := panels.StartDetachedFn
+	panels.StartDetachedFn = func(*exec.Cmd) error { return nil }
+	t.Cleanup(func() { panels.StartDetachedFn = orig })
+
+	_, cmd := p.executeRightClickAction(actions.ActionOpenInEditor)
+	require.NotNil(t, cmd)
+	assert.Empty(t, p.pendingPath, "pendingPath should be cleared after opening editor")
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg, got %T", msg)
+	assert.Equal(t, notify.Success, toast.Level)
+	assert.Contains(t, toast.Message, "/test/repo")
+}
+
 func TestDoAction_Remote(t *testing.T) {
 	p := newTestPanel(t, defaultMock())
 	p.Focused = true

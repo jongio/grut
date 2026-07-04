@@ -1705,6 +1705,14 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionChangeDirectory:
 			// pendingPath is consumed inside requestWorktreeSwitch
 			return p.requestWorktreeSwitch()
+		case actions.ActionOpenInEditor:
+			p.pendingPath = ""
+			return p, func() tea.Msg {
+				if err := panels.OpenInEditor(p.ctx, wtPath); err != nil {
+					return notify.ShowToastMsg{Message: "Editor error: " + err.Error(), Level: notify.Error}
+				}
+				return notify.ShowToastMsg{Message: "Opened editor at " + wtPath, Level: notify.Success}
+			}
 		case actions.ActionOpenTerminal:
 			p.pendingPath = ""
 			return p, func() tea.Msg {
