@@ -4,6 +4,7 @@ package gitinfo
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1786,6 +1787,139 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 			}
 		},
 		p.loadData(),
+	)
+}
+
+// assignSelfResultMsg carries the result of assigning an issue or PR to the
+// current user.
+type assignSelfResultMsg struct {
+	kind   string // "issue" or "PR"
+	login  string
+	err    error
+	number int
+}
+
+// doAssignSelf assigns the item under the cursor (Issues or PRs tab) to the
+// current user.
+func (p *Panel) doAssignSelf() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	switch items[cursor].kind { //nolint:exhaustive // only issues and PRs are assignable
+	case kindIssue:
+		return p.doAssignSelfFor("issue", items[cursor].issue.Number)
+	case kindPR:
+		return p.doAssignSelfFor("PR", items[cursor].pr.Number)
+	default:
+		return p, nil
+	}
+}
+
+// doAssignSelfFor prepares a confirmation modal to assign the given issue or
+// PR to the current user.
+func (p *Panel) doAssignSelfFor(kind string, number int) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || number == 0 {
+		return p, nil
+	}
+	p.clearPending()
+	p.pending = opAssignSelf
+	// Encode the kind and number for the modal handler.
+	p.pendingName = fmt.Sprintf("%s:%d", kind, number)
+	who := p.gh.user
+	if who == "" {
+		who = "yourself"
+	}
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("Assign %s #%d", kind, number),
+		fmt.Sprintf("Assign this %s to %s?", kind, who),
+	)
+}
+
+// handleAssignSelfConfirm runs the async assignment after modal confirmation.
+// The pending name is "<kind>:<number>".
+func (p *Panel) handleAssignSelfConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	kind, number, ok := parseAssignSelfName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.assignSelfCmd(kind, number)
+}
+
+// parseAssignSelfName splits a "<kind>:<number>" pending name.
+func parseAssignSelfName(name string) (kind string, number int, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(name[idx+1:])
+	if err != nil {
+		return "", 0, false
+	}
+	return name[:idx], n, true
+}
+
+// assignSelfCmd assigns the issue/PR to the current user asynchronously. If the
+// current user login is not cached, it is fetched first.
+func (p *Panel) assignSelfCmd(kind string, number int) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	login := p.gh.user
+	return func() tea.Msg {
+		who := login
+		if who == "" {
+			user, err := client.CurrentUser(ctx)
+			if err != nil {
+				return assignSelfResultMsg{kind: kind, number: number, err: err}
+			}
+			if user != nil && user.Login != nil {
+				who = *user.Login
+			}
+		}
+		if who == "" {
+			return assignSelfResultMsg{kind: kind, number: number, err: fmt.Errorf("could not determine current user")}
+		}
+		err := client.AddAssignees(ctx, owner, repo, number, []string{who})
+		return assignSelfResultMsg{kind: kind, number: number, login: who, err: err}
+	}
+}
+
+// handleAssignSelfResult processes the async result of an assign-to-me op.
+func (p *Panel) handleAssignSelfResult(msg assignSelfResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assign %s #%d failed: %s", msg.kind, msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Reflect assignment locally for issues (PR items do not display assignee).
+	if msg.kind == "issue" {
+		for i := range p.gh.allIssues {
+			if p.gh.allIssues[i].Number == msg.number {
+				p.gh.allIssues[i].Assignee = msg.login
+				break
+			}
+		}
+		for i := range p.tabItems[tabIssues] {
+			if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+				p.tabItems[tabIssues][i].issue.Assignee = msg.login
+				break
+			}
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assigned %s #%d to %s", msg.kind, msg.number, msg.login),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
 	)
 }
 

@@ -148,6 +148,7 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opAssignSelf                         // awaiting assign-to-me confirmation
 )
 
 // ---------------------------------------------------------------------------
@@ -745,6 +746,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
+	case assignSelfResultMsg:
+		return p.handleAssignSelfResult(msg)
 
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
@@ -874,6 +877,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
 			panels.KeyBinding{Key: "W", Description: "Workflows tab", Action: "tab_workflows"},
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
+			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 		)
 	}
 	return bindings
@@ -1124,6 +1128,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "m":
 		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.doMergePR()
+		}
+	case "A":
+		if (p.activeTab == tabIssues || p.activeTab == tabPRs) && p.gh.client != nil {
+			return p.doAssignSelf()
 		}
 	case "pgdown":
 		p.pageDown()
@@ -1766,6 +1774,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p.copyAndToast(item.issue.HTMLURL)
 		case actions.ActionCopyNumber:
 			return p.copyAndToast(fmt.Sprintf("%d", item.issue.Number))
+		case actions.ActionAssignSelf:
+			return p.doAssignSelfFor("issue", item.issue.Number)
 		}
 	case kindPR:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -1789,6 +1799,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p, notify.ShowConfirm("Checkout PR Branch", fmt.Sprintf("Switch to branch %q?", ref))
 		case actions.ActionMergePR:
 			return p.doMergePR()
+		case actions.ActionAssignSelf:
+			return p.doAssignSelfFor("PR", item.pr.Number)
 		}
 	case kindActionRun:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -2113,6 +2125,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opAssignSelf:
+		return p.handleAssignSelfConfirm(a)
 	}
 	return p, nil
 }

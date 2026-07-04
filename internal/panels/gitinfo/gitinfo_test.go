@@ -2472,26 +2472,27 @@ func TestRenderStashEntry_VeryNarrow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type mockGHClientFull struct {
-	user       *gh.User
-	userErr    error
-	issues     []*gh.Issue
-	issuesErr  error
-	prs        []*gh.PullRequest
-	prsErr     error
-	runs       []*gh.WorkflowRun
-	runsErr    error
-	prFiles    []*gh.CommitFile
-	prFilesErr error
-	prCommits  []*gh.RepositoryCommit
-	prCommErr  error
-	jobs       []*gh.WorkflowJob
-	jobsErr    error
-	jobLog     string
-	jobLogErr  error
-	rerunErr   error
-	cancelErr  error
-	mergeErr   error
-	getPRCalls int
+	user            *gh.User
+	userErr         error
+	issues          []*gh.Issue
+	issuesErr       error
+	prs             []*gh.PullRequest
+	prsErr          error
+	runs            []*gh.WorkflowRun
+	runsErr         error
+	prFiles         []*gh.CommitFile
+	prFilesErr      error
+	prCommits       []*gh.RepositoryCommit
+	prCommErr       error
+	jobs            []*gh.WorkflowJob
+	jobsErr         error
+	jobLog          string
+	jobLogErr       error
+	rerunErr        error
+	cancelErr       error
+	mergeErr        error
+	getPRCalls      int
+	addAssigneesErr error
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2523,6 +2524,9 @@ func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, _ int,
 }
 func (m *mockGHClientFull) CloseIssue(_ context.Context, _, _ string, _ int) error  { return nil }
 func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) error { return nil }
+func (m *mockGHClientFull) AddAssignees(_ context.Context, _, _ string, _ int, _ []string) error {
+	return m.addAssigneesErr
+}
 func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, error) {
 	return m.prs, m.prsErr
 }

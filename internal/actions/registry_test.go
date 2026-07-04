@@ -65,7 +65,7 @@ func TestAllActions(t *testing.T) {
 		},
 		{
 			ItemPR,
-			[]ActionID{ActionOpenInBrowser, ActionMergePR, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch},
+			[]ActionID{ActionOpenInBrowser, ActionMergePR, ActionAssignSelf, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch},
 		},
 		{
 			ItemStashEntry,
@@ -105,6 +105,14 @@ func TestAllActionsNoAlternatives(t *testing.T) {
 
 func TestAllActionsUnknownType(t *testing.T) {
 	assert.Nil(t, AllActions("nonexistent"))
+}
+
+func TestAllActions_IssueAndPRIncludeAssignSelf(t *testing.T) {
+	assert.Contains(t, AllActions(ItemIssue), ActionAssignSelf,
+		"issue actions should include assign-to-me")
+	assert.Contains(t, AllActions(ItemPR), ActionAssignSelf,
+		"PR actions should include assign-to-me")
+	assert.Equal(t, "assign to me", ActionLabel(ActionAssignSelf))
 }
 
 // ---------------------------------------------------------------------------
