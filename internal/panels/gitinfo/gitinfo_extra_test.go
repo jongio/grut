@@ -1615,3 +1615,236 @@ func TestPRMessageTypes(t *testing.T) {
 	_ = panels.PRMergeFailedMsg{Number: 1, Err: errors.New("fail")}
 	_ = panels.PRMergedMsg{Number: 1, Strategy: "squash"}
 }
+
+// ---------------------------------------------------------------------------
+// Close/reopen issue (#258)
+// ---------------------------------------------------------------------------
+
+func TestParseIssueStateName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		wantNumber int
+		wantState  string
+		wantOK     bool
+	}{
+		{"42:closed", 42, "closed", true},
+		{"5:open", 5, "open", true},
+		{"bad", 0, "", false},
+		{"42:", 0, "", false},
+		{":closed", 0, "", false},
+		{"abc:closed", 0, "", false},
+		{"", 0, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, s, ok := parseIssueStateName(tt.name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantNumber, n)
+			assert.Equal(t, tt.wantState, s)
+		})
+	}
+}
+
+func TestDoCloseReopenIssueFor_OpenIssueClosesIt(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 42, Title: "Fix bug", State: "open"})
+	assert.NotNil(t, cmd, "should show a confirm modal")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "42:closed", p.pendingName)
+}
+
+func TestDoCloseReopenIssueFor_ClosedIssueReopensIt(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 5, Title: "Old", State: "closed"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "5:open", p.pendingName)
+}
+
+func TestDoCloseReopenIssueFor_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// ghClient is nil
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 42, Title: "Fix bug", State: "open"})
+	assert.Nil(t, cmd, "should be no-op without a GitHub client")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCloseReopenIssue_WrongTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabBranches
+	p.tabItems[tabBranches] = []listItem{
+		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}},
+	}
+	p.tabCursor[tabBranches] = 0
+	_, cmd := p.doCloseReopenIssue()
+	assert.Nil(t, cmd)
+}
+
+func TestDoCloseReopenIssue_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+	_, cmd := p.doCloseReopenIssue()
+	assert.Nil(t, cmd)
+}
+
+func TestExecuteRightClickAction_Issue_CloseReopen(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 9, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionCloseReopenIssue)
+	assert.NotNil(t, cmd, "right-click close/reopen should show confirm modal")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "9:closed", p.pendingName)
+}
+
+func TestHandleKey_C_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.NotNil(t, cmd, "pressing 'c' on Issues tab should trigger close/reopen flow")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+}
+
+func TestHandleKey_C_NotIssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabPRs
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.Nil(t, cmd, "pressing 'c' outside Issues tab should be no-op")
+}
+
+func TestHandleKey_C_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// ghClient is nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.Nil(t, cmd, "pressing 'c' without ghClient should be no-op")
+}
+
+func TestHandleModalResult_IssueCloseReopen_Confirm(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+	p.pending = opIssueCloseReopen
+	p.pendingName = "42:closed"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "confirming should produce the close/reopen command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_IssueCloseReopen_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.pending = opIssueCloseReopen
+	p.pendingName = "42:closed"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancelling should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_IssueCloseReopen_BadName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.ctx = t.Context()
+	p.pending = opIssueCloseReopen
+	p.pendingName = "bad"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd, "malformed pending name should produce nil cmd")
+}
+
+func TestHandleIssueStateResult_CloseSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{number: 42, newState: "closed"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "closed", p.gh.allIssues[0].State)
+	assert.Equal(t, "closed", p.tabItems[tabIssues][0].issue.State)
+}
+
+func TestHandleIssueStateResult_ReopenSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 7, Title: "Old", State: "closed"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{number: 7, newState: "open"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "open", p.gh.allIssues[0].State)
+	assert.Equal(t, "open", p.tabItems[tabIssues][0].issue.State)
+}
+
+func TestHandleIssueStateResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{
+		number:   42,
+		newState: "closed",
+		err:      errors.New("network error"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	assert.Equal(t, "open", p.gh.allIssues[0].State, "state should be unchanged on error")
+}
+
+func TestCloseReopenIssueCmd_ReturnsResult(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.closeReopenIssueCmd(42, "closed")
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	res, ok := msg.(issueStateResultMsg)
+	assert.True(t, ok, "should return an issueStateResultMsg")
+	assert.Equal(t, 42, res.number)
+	assert.Equal(t, "closed", res.newState)
+	assert.NoError(t, res.err)
+}

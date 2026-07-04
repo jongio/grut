@@ -4,6 +4,7 @@ package gitinfo
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1789,9 +1790,123 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 	)
 }
 
-// ---------------------------------------------------------------------------
-// GitHub item rendering
-// ---------------------------------------------------------------------------
+// issueStateResultMsg carries the result of closing or reopening an issue.
+type issueStateResultMsg struct {
+	newState string // "open" or "closed"
+	err      error
+	number   int
+}
+
+// doCloseReopenIssue closes or reopens the issue under the cursor on the
+// Issues tab. Open issues are closed; closed issues are reopened.
+func (p *Panel) doCloseReopenIssue() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindIssue {
+		return p, nil
+	}
+	return p.doCloseReopenIssueFor(items[cursor].issue)
+}
+
+// doCloseReopenIssueFor prepares a confirmation modal to close or reopen the
+// given issue. The target state is derived from the issue's current state.
+func (p *Panel) doCloseReopenIssueFor(iss ghIssueItem) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || iss.Number == 0 {
+		return p, nil
+	}
+	target, verb := "closed", "Close"
+	if strings.EqualFold(iss.State, "closed") {
+		target, verb = "open", "Reopen"
+	}
+	p.clearPending()
+	p.pending = opIssueCloseReopen
+	// Encode the issue number and target state for the modal handler.
+	p.pendingName = fmt.Sprintf("%d:%s", iss.Number, target)
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("%s Issue #%d", verb, iss.Number),
+		iss.Title,
+	)
+}
+
+// handleIssueCloseReopenConfirm runs the async close/reopen once the user
+// confirms the modal. The pending name is "<number>:<targetState>".
+func (p *Panel) handleIssueCloseReopenConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	number, target, ok := parseIssueStateName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.closeReopenIssueCmd(number, target)
+}
+
+// parseIssueStateName splits a "<number>:<state>" pending name.
+func parseIssueStateName(name string) (number int, state string, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return 0, "", false
+	}
+	n, err := strconv.Atoi(name[:idx])
+	if err != nil {
+		return 0, "", false
+	}
+	return n, name[idx+1:], true
+}
+
+// closeReopenIssueCmd returns a tea.Cmd that closes or reopens an issue.
+func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		var err error
+		if targetState == "open" {
+			err = client.ReopenIssue(ctx, owner, repo, number)
+		} else {
+			err = client.CloseIssue(ctx, owner, repo, number)
+		}
+		return issueStateResultMsg{number: number, newState: targetState, err: err}
+	}
+}
+
+// handleIssueStateResult processes the async result of a close/reopen op.
+func (p *Panel) handleIssueStateResult(msg issueStateResultMsg) (panels.Panel, tea.Cmd) {
+	verb := "closed"
+	if msg.newState == "open" {
+		verb = "reopened"
+	}
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s failed: %s", msg.number, verb, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Update cached issue state.
+	for i := range p.gh.allIssues {
+		if p.gh.allIssues[i].Number == msg.number {
+			p.gh.allIssues[i].State = msg.newState
+			break
+		}
+	}
+	// Update the visible tab item too.
+	for i := range p.tabItems[tabIssues] {
+		if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+			p.tabItems[tabIssues][i].issue.State = msg.newState
+			break
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s", msg.number, verb),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
 func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	iss := item.issue
