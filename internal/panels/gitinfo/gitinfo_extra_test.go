@@ -1615,3 +1615,166 @@ func TestPRMessageTypes(t *testing.T) {
 	_ = panels.PRMergeFailedMsg{Number: 1, Err: errors.New("fail")}
 	_ = panels.PRMergedMsg{Number: 1, Strategy: "squash"}
 }
+
+// ---------------------------------------------------------------------------
+// State filter (#260): open / closed / all for Issues and PRs
+// ---------------------------------------------------------------------------
+
+func TestStateFilterKind_String(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "Open", stateFilterOpen.String())
+	assert.Equal(t, "Closed", stateFilterClosed.String())
+	assert.Equal(t, labelAll, stateFilterAll.String())
+}
+
+func TestStateFilterKind_APIValue(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "open", stateFilterOpen.apiValue())
+	assert.Equal(t, "closed", stateFilterClosed.apiValue())
+	assert.Equal(t, "all", stateFilterAll.apiValue())
+}
+
+func TestCycleIssueStateFilter_CyclesAndReloads(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	// Seed some state that should be reset on cycle.
+	p.gh.allIssues = []ghIssueItem{{Number: 1}}
+	p.tabItems[tabIssues] = []listItem{{kind: kindIssue}}
+	p.tabCursor[tabIssues] = 3
+	p.tabOffset[tabIssues] = 2
+
+	_, cmd := p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterClosed, p.gh.issueState)
+	assert.Nil(t, p.gh.allIssues, "cached issues should be cleared for a fresh fetch")
+	assert.Equal(t, 0, p.tabCursor[tabIssues])
+	assert.Equal(t, 0, p.tabOffset[tabIssues])
+	assert.True(t, p.tabPaging[tabIssues].loading)
+	assert.NotNil(t, cmd, "should return a reload command")
+
+	_, _ = p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterAll, p.gh.issueState)
+	_, _ = p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterOpen, p.gh.issueState, "should wrap back to open")
+}
+
+func TestCyclePRStateFilter_CyclesAndReloads(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.allPRs = []ghPRItem{{Number: 1}}
+	p.tabItems[tabPRs] = []listItem{{kind: kindPR}}
+	p.tabCursor[tabPRs] = 4
+	p.tabOffset[tabPRs] = 1
+
+	_, cmd := p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterClosed, p.gh.prState)
+	assert.Nil(t, p.gh.allPRs)
+	assert.Equal(t, 0, p.tabCursor[tabPRs])
+	assert.Equal(t, 0, p.tabOffset[tabPRs])
+	assert.True(t, p.tabPaging[tabPRs].loading)
+	assert.NotNil(t, cmd)
+
+	_, _ = p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterAll, p.gh.prState)
+	_, _ = p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterOpen, p.gh.prState)
+}
+
+func TestCycleStateFilter_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// client nil
+	_, cmd := p.cycleIssueStateFilter()
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
+	_, cmd = p.cyclePRStateFilter()
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.prState)
+}
+
+func TestLoadIssuesPage_UsesStateFilter(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.issueState = stateFilterClosed
+
+	cmd := p.loadIssuesPage(1, true)
+	_ = cmd()
+	assert.NotNil(t, mock.lastIssuesOpts)
+	assert.Equal(t, "closed", mock.lastIssuesOpts.State)
+}
+
+func TestLoadPRsPage_UsesStateFilter(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.prState = stateFilterAll
+
+	cmd := p.loadPRsPage(1, true)
+	_ = cmd()
+	assert.NotNil(t, mock.lastPRsOpts)
+	assert.Equal(t, "all", mock.lastPRsOpts.State)
+}
+
+func TestHandleKey_S_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.activeTab = tabIssues
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.NotNil(t, cmd, "pressing 'S' on Issues tab should reload")
+	assert.Equal(t, stateFilterClosed, p.gh.issueState)
+}
+
+func TestHandleKey_S_PRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.activeTab = tabPRs
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.NotNil(t, cmd, "pressing 'S' on PRs tab should reload")
+	assert.Equal(t, stateFilterClosed, p.gh.prState)
+}
+
+func TestHandleKey_S_OtherTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabActions
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.Nil(t, cmd, "pressing 'S' outside Issues/PRs should be a no-op")
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
+}
+
+func TestHandleKey_S_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// client nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
+}

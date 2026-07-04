@@ -304,6 +304,8 @@ type githubState struct {
 	cfg         config.GitHubConfig
 	issueFilter IssueFilterKind
 	prFilter    PRFilterKind
+	issueState  stateFilterKind
+	prState     stateFilterKind
 	repoPrivate bool
 	pageSize    int
 }
@@ -874,6 +876,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
 			panels.KeyBinding{Key: "W", Description: "Workflows tab", Action: "tab_workflows"},
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
+			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 		)
 	}
 	return bindings
@@ -1158,6 +1161,17 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.cyclePRFilter()
 		default:
 			return p.doFetch()
+		}
+	case "S":
+		switch p.activeTab {
+		case tabIssues:
+			if p.gh.client != nil {
+				return p.cycleIssueStateFilter()
+			}
+		case tabPRs:
+			if p.gh.client != nil {
+				return p.cyclePRStateFilter()
+			}
 		}
 	case "g":
 		p.moveToFirst()
@@ -2361,9 +2375,15 @@ func (p *Panel) renderTabBar(width int) string {
 	if p.gh.issueFilter != issueFilterAll {
 		issuesCount = p.gh.issueFilter.String()
 	}
+	if p.gh.issueState != stateFilterOpen {
+		issuesCount = p.gh.issueState.String() + " " + issuesCount
+	}
 	prsCount := p.ghTabCountStr(tabPRs)
 	if p.gh.prFilter != prFilterAll {
 		prsCount = p.gh.prFilter.String()
+	}
+	if p.gh.prState != stateFilterOpen {
+		prsCount = p.gh.prState.String() + " " + prsCount
 	}
 	ghTabs := []tabDef{
 		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},

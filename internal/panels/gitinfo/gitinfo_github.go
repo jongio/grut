@@ -242,6 +242,41 @@ func (f PRFilterKind) String() string {
 	}
 }
 
+// stateFilterKind identifies which item states (open/closed/all) are fetched
+// for the Issues and PRs tabs. Unlike the client-side quick-filters, this
+// controls the server-side State parameter, so closed and merged items are
+// only fetched when the filter allows it.
+type stateFilterKind int
+
+const (
+	stateFilterOpen stateFilterKind = iota
+	stateFilterClosed
+	stateFilterAll
+)
+
+func (s stateFilterKind) String() string {
+	switch s {
+	case stateFilterClosed:
+		return "Closed"
+	case stateFilterAll:
+		return labelAll
+	default:
+		return "Open"
+	}
+}
+
+// apiValue returns the value passed to the GitHub API State parameter.
+func (s stateFilterKind) apiValue() string {
+	switch s {
+	case stateFilterClosed:
+		return "closed"
+	case stateFilterAll:
+		return "all"
+	default:
+		return prStateOpen
+	}
+}
+
 // ghDataLoadedMsg carries the result of an async GitHub data load.
 type ghDataLoadedMsg struct {
 	err         error
@@ -661,9 +696,10 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.issueState.apiValue()
 	return func() tea.Msg {
 		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -713,9 +749,10 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.prState.apiValue()
 	return func() tea.Msg {
 		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -1123,6 +1160,36 @@ func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
 			Filter: filter,
 		}
 	}
+}
+
+// cycleIssueStateFilter advances the Issues state filter (open -> closed ->
+// all) and reloads from GitHub, since closed issues are not held locally.
+func (p *Panel) cycleIssueStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.issueState = (p.gh.issueState + 1) % 3
+	p.gh.allIssues = nil
+	p.tabItems[tabIssues] = nil
+	p.tabCursor[tabIssues] = 0
+	p.tabOffset[tabIssues] = 0
+	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadIssuesPage(1, true)
+}
+
+// cyclePRStateFilter advances the PRs state filter (open -> closed -> all) and
+// reloads from GitHub, since closed and merged PRs are not held locally.
+func (p *Panel) cyclePRStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.prState = (p.gh.prState + 1) % 3
+	p.gh.allPRs = nil
+	p.tabItems[tabPRs] = nil
+	p.tabCursor[tabPRs] = 0
+	p.tabOffset[tabPRs] = 0
+	p.tabPaging[tabPRs] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadPRsPage(1, true)
 }
 
 func (p *Panel) applyIssueFilter() {

@@ -2492,6 +2492,9 @@ type mockGHClientFull struct {
 	cancelErr  error
 	mergeErr   error
 	getPRCalls int
+
+	lastIssuesOpts *gh.IssueListByRepoOptions
+	lastPRsOpts    *gh.PullRequestListOptions
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2636,11 +2639,13 @@ func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*
 	return nil, nil
 }
 
-func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, _ *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+	m.lastIssuesOpts = opts
 	return m.issues, ghclient.PageResult{}, m.issuesErr
 }
 
-func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+	m.lastPRsOpts = opts
 	return m.prs, ghclient.PageResult{}, m.prsErr
 }
 
