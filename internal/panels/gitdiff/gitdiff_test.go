@@ -1114,3 +1114,96 @@ func TestRepoChangedMsg_ClearsState(t *testing.T) {
 	assert.Nil(t, d.err, "err should be nil")
 	assert.Nil(t, cmd, "no command should be returned")
 }
+
+// --- Diff context expansion ---
+
+func TestContextDefault(t *testing.T) {
+	p := New(nil, nil)
+	assert.Equal(t, defaultDiffContext, p.contextLines)
+}
+
+func TestKeyBindingsIncludeContext(t *testing.T) {
+	p := New(nil, nil)
+	actions := map[string]bool{}
+	for _, b := range p.KeyBindings() {
+		actions[b.Action] = true
+	}
+	assert.True(t, actions["context_adjust"], "expected context_adjust binding")
+	assert.True(t, actions["context_reset"], "expected context_reset binding")
+}
+
+// contextRecordingPanel wires a mock that records the last DiffOpts.Context
+// and returns a panel already showing a working-tree diff.
+func contextRecordingPanel(t *testing.T, captured *int) *GitDiff {
+	t.Helper()
+	mock := &mockGitClient{
+		DiffFunc: func(_ context.Context, opts git.DiffOpts) ([]git.FileDiff, error) {
+			*captured = opts.Context
+			return []git.FileDiff{sampleDiff()}, nil
+		},
+	}
+	p := New(mock, nil)
+	p.Init(context.Background())
+	p.SetSize(80, 24)
+	p.Focus()
+	_, cmd := p.Update(panels.FileSelectedMsg{Path: "file.go"})
+	require.NotNil(t, cmd)
+	p.Update(cmd())
+	return p
+}
+
+func TestIncreaseContextRefetches(t *testing.T) {
+	var captured int
+	p := contextRecordingPanel(t, &captured)
+	assert.Equal(t, defaultDiffContext, captured, "initial load uses default context")
+
+	_, cmd := p.Update(keyMsg("+"))
+	require.NotNil(t, cmd, "increasing context should trigger a reload")
+	assert.Equal(t, defaultDiffContext+contextStep, p.contextLines)
+	p.Update(cmd())
+	assert.Equal(t, defaultDiffContext+contextStep, captured, "reload should use the new context")
+}
+
+func TestDecreaseContextFloorsAtZero(t *testing.T) {
+	var captured int
+	p := contextRecordingPanel(t, &captured)
+
+	// Drop below zero: 3 -> 0 (floored), further presses are no-ops.
+	_, cmd := p.Update(keyMsg("-"))
+	require.NotNil(t, cmd)
+	p.Update(cmd())
+	assert.Equal(t, 0, p.contextLines)
+	assert.Equal(t, 0, captured)
+
+	_, cmd = p.Update(keyMsg("-"))
+	assert.Nil(t, cmd, "decreasing at zero should be a no-op")
+	assert.Equal(t, 0, p.contextLines)
+}
+
+func TestResetContext(t *testing.T) {
+	var captured int
+	p := contextRecordingPanel(t, &captured)
+
+	if _, cmd := p.Update(keyMsg("+")); cmd != nil {
+		p.Update(cmd())
+	}
+	assert.NotEqual(t, defaultDiffContext, p.contextLines)
+
+	_, cmd := p.Update(keyMsg("0"))
+	require.NotNil(t, cmd, "reset from a non-default value should reload")
+	p.Update(cmd())
+	assert.Equal(t, defaultDiffContext, p.contextLines)
+	assert.Equal(t, defaultDiffContext, captured)
+
+	// Reset again is a no-op at default.
+	_, cmd = p.Update(keyMsg("0"))
+	assert.Nil(t, cmd)
+}
+
+func TestContextValueShownInView(t *testing.T) {
+	p := newTestPanel(nil)
+	p.SetSize(80, 24)
+	p.SetDiffs([]git.FileDiff{sampleDiff()})
+	out := p.View(80, 24)
+	assert.Contains(t, out, "ctx 3", "view should show the current context value")
+}

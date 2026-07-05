@@ -60,6 +60,8 @@ type GitDiff struct {
 	reviewFindings []panels.AIReviewFinding // findings for the current file
 	panels.BasePanel
 	fileIdx int // current file index for multi-file navigation
+	// contextLines is the number of surrounding lines requested via -U<n>.
+	contextLines int
 	// Display state
 	scrollY int      // viewport scroll offset (lines)
 	mode    viewMode // inline or side-by-side
@@ -68,6 +70,8 @@ type GitDiff struct {
 	staged                bool // whether viewing staged (index) changes
 	loading               bool // true while async diff fetch is in progress
 	showReviewAnnotations bool // toggle for inline annotation display
+	// preserveOnLoad keeps scroll/file position across a context reload.
+	preserveOnLoad bool
 }
 
 // diffLoadedMsg is the result of an async diff fetch (F01: no blocking in Update).
@@ -86,9 +90,10 @@ var _ panels.Panel = (*GitDiff)(nil)
 // (fallback colors are used).
 func New(gitClient git.StatusReader, th *theme.Theme) *GitDiff {
 	return &GitDiff{
-		BasePanel: panels.BasePanel{PanelTitle: "gitdiff"},
-		gitClient: gitClient,
-		theme:     th,
+		BasePanel:    panels.BasePanel{PanelTitle: "gitdiff"},
+		gitClient:    gitClient,
+		theme:        th,
+		contextLines: defaultDiffContext,
 	}
 }
 
@@ -155,9 +160,16 @@ func (d *GitDiff) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			d.loading = false
 			d.diffs = msg.diffs
 			d.err = msg.err
-			d.fileIdx = 0
-			d.scrollY = 0
-			d.rebuildLines()
+			if d.preserveOnLoad {
+				// Context reload: keep the reader roughly where they were.
+				d.preserveOnLoad = false
+				d.rebuildLines()
+				d.clampScroll()
+			} else {
+				d.fileIdx = 0
+				d.scrollY = 0
+				d.rebuildLines()
+			}
 		}
 		return d, nil
 	case panels.PanelMouseRightClickMsg:
@@ -200,6 +212,8 @@ func (d *GitDiff) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	d.compareCommitA = ""
 	d.compareCommitB = ""
 	d.compareThree = false
+	d.contextLines = defaultDiffContext
+	d.preserveOnLoad = false
 	return d, nil
 }
 
@@ -230,10 +244,17 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 	d.hunkStarts = nil
 	d.fileStarts = nil
 	d.loading = true
+	return d.loadRefDiffCmd(path, commitA, commitB, threeDot)
+}
+
+// loadRefDiffCmd fetches a ref-comparison diff async without resetting
+// scroll or file position, so it can back both initial loads and reloads.
+func (d *GitDiff) loadRefDiffCmd(path, commitA, commitB string, threeDot bool) tea.Cmd {
 	d.diffGen++
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	contextLines := d.contextLines
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -248,6 +269,7 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 			CommitB:  commitB,
 			ThreeDot: threeDot,
 			Path:     path,
+			Context:  contextLines,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -282,8 +304,63 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		d.prevFile()
 	case "R":
 		d.toggleReviewAnnotations()
+	case "+", "=":
+		return d, d.increaseContext()
+	case "-", "_":
+		return d, d.decreaseContext()
+	case "0":
+		return d, d.resetContext()
 	}
 	return d, nil
+}
+
+// increaseContext widens the diff context by one step and reloads.
+func (d *GitDiff) increaseContext() tea.Cmd {
+	n := d.contextLines + contextStep
+	if n > maxDiffContext {
+		n = maxDiffContext
+	}
+	if n == d.contextLines {
+		return nil
+	}
+	d.contextLines = n
+	return d.reloadWithContext()
+}
+
+// decreaseContext narrows the diff context by one step (floor 0) and reloads.
+func (d *GitDiff) decreaseContext() tea.Cmd {
+	n := d.contextLines - contextStep
+	if n < 0 {
+		n = 0
+	}
+	if n == d.contextLines {
+		return nil
+	}
+	d.contextLines = n
+	return d.reloadWithContext()
+}
+
+// resetContext restores the default context and reloads if it changed.
+func (d *GitDiff) resetContext() tea.Cmd {
+	if d.contextLines == defaultDiffContext {
+		return nil
+	}
+	d.contextLines = defaultDiffContext
+	return d.reloadWithContext()
+}
+
+// reloadWithContext re-fetches the current diff with the current context
+// value, preserving scroll/file position. Returns nil when nothing is loaded.
+func (d *GitDiff) reloadWithContext() tea.Cmd {
+	if d.path == "" && !d.compareMode {
+		return nil
+	}
+	d.loading = true
+	d.preserveOnLoad = true
+	if d.compareMode {
+		return d.loadRefDiffCmd(d.path, d.compareCommitA, d.compareCommitB, d.compareThree)
+	}
+	return d.loadDiffCmd(d.path, d.staged)
 }
 
 // handleMouseWheel scrolls the diff viewport.
@@ -355,6 +432,8 @@ func (d *GitDiff) KeyBindings() []panels.KeyBinding {
 		{Key: "n/N", Description: "Next/previous hunk", Action: "hunk_nav"},
 		{Key: "[/]", Description: "Previous/next file", Action: "file_nav"},
 		{Key: "R", Description: "Toggle review annotations", Action: "toggle_review"},
+		{Key: "+/-", Description: "More/less diff context", Action: "context_adjust"},
+		{Key: "0", Description: "Reset diff context", Action: "context_reset"},
 	}
 }
 
@@ -386,6 +465,7 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	contextLines := d.contextLines
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -396,8 +476,9 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 			ctx = context.Background()
 		}
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
-			Staged: staged,
-			Path:   path,
+			Staged:  staged,
+			Path:    path,
+			Context: contextLines,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -674,9 +755,14 @@ func (d *GitDiff) renderViewport(_ int, height int) string {
 	}
 	d.viewportBuf = visible // retain backing array for next frame
 	content := strings.Join(visible, "\n")
-	// Add scroll indicator
+	// Add scroll indicator plus the current diff context value.
 	indicator := d.scrollIndicator(len(d.lines), height)
-	content += "\n" + d.dimStyle().Render(indicator)
+	status := indicator
+	if status != "" {
+		status += "   "
+	}
+	status += fmt.Sprintf("ctx %d", d.contextLines)
+	content += "\n" + d.dimStyle().Render(status)
 	return content
 }
 

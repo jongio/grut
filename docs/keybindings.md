@@ -179,6 +179,24 @@ Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, d
 
 ---
 
+## Git Diff
+
+Dedicated diff viewer panel.
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Scroll up/down |
+| `PgDn/PgUp` | Page down/up |
+| `g/G` | Jump to top/bottom |
+| `t` | Toggle inline/side-by-side view |
+| `n/N` | Next/previous hunk |
+| `[/]` | Previous/next file |
+| `R` | Toggle review annotations |
+| `+/-` | More/less diff context lines |
+| `0` | Reset diff context to default |
+
+---
+
 ## Edit Mode
 
 Active when editing a file inline (press e in Preview to enter).
