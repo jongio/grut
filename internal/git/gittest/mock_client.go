@@ -70,6 +70,7 @@ type MockClient struct {
 	RevertContinueFunc func(ctx context.Context) error
 	RevertAbortFunc    func(ctx context.Context) error
 	ResetFunc          func(ctx context.Context, ref string, mode git.ResetMode) error
+	WorktreeFileFunc   func(ctx context.Context, path string) ([]byte, error)
 }
 
 // Compile-time check that MockClient implements git.GitClient.
@@ -475,6 +476,14 @@ func (m *MockClient) DiscardFile(ctx context.Context, path string) error {
 		return m.DiscardFileFunc(ctx, path)
 	}
 	return nil
+}
+
+// WorktreeFile returns the mocked working-tree content for a path.
+func (m *MockClient) WorktreeFile(ctx context.Context, path string) ([]byte, error) {
+	if m.WorktreeFileFunc != nil {
+		return m.WorktreeFileFunc(ctx, path)
+	}
+	return nil, nil
 }
 
 func (m *MockClient) DiscardAllUnstaged(ctx context.Context) error {

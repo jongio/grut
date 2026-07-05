@@ -134,6 +134,7 @@ type GitClient interface {
 	StageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error
 	UnstageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error
 	DiscardFile(ctx context.Context, path string) error
+	WorktreeFile(ctx context.Context, path string) ([]byte, error)
 }
 
 // GitStatus is the git status panel. It implements [panels.Panel].
@@ -176,6 +177,10 @@ type GitStatus struct {
 	styleUnstaged      lipgloss.Style
 	styleUntracked     lipgloss.Style
 	styleDefault       lipgloss.Style
+	// Secret guard: scan working-tree content and filenames before staging.
+	secretGuardMode   string   // "warn" or "block"
+	pendingStagePaths []string // paths awaiting a warn-mode confirmation
+	secretGuard       bool     // whether the guard runs at all
 }
 
 // Compile-time interface check.
@@ -294,6 +299,8 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.rebuildRows()
 		p.rowsDirty = false
 		return p, nil
+	case stageScanMsg:
+		return p.handleStageScan(msg)
 	case stageResultMsg:
 		if msg.err != nil {
 			p.err = msg.err
@@ -666,10 +673,17 @@ const (
 	opRightClickPick  = "right_click_pick"
 	opFirstUseConfirm = "first_use_confirm"
 	opDiscard         = "discard"
+	opStageGuard      = "stage_guard"
 )
 
 // SetActionsCfg stores the actions configuration for right-click menus.
 func (p *GitStatus) SetActionsCfg(cfg config.ActionsConfig) { p.actionsCfg = cfg }
+
+// SetGitCfg applies git-related settings, including the pre-stage secret guard.
+func (p *GitStatus) SetGitCfg(cfg config.GitConfig) {
+	p.secretGuard = cfg.SecretGuard
+	p.secretGuardMode = cfg.SecretGuardMode
+}
 
 // handleMouseRightClick opens the context menu for the file at the clicked row.
 func (p *GitStatus) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panels.Panel, tea.Cmd) {
@@ -705,6 +719,7 @@ func (p *GitStatus) clearPending() {
 	p.pendingOp = ""
 	p.pendingName = ""
 	p.pendingPath = ""
+	p.pendingStagePaths = nil
 }
 
 // handleModalResult dispatches the result of an action-picker modal.
@@ -712,6 +727,7 @@ func (p *GitStatus) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, 
 	op := p.pendingOp
 	name := p.pendingName
 	path := p.pendingPath
+	stagePaths := p.pendingStagePaths
 	p.clearPending()
 	if !msg.Accept {
 		return p, nil
@@ -726,6 +742,11 @@ func (p *GitStatus) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, 
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	case opDiscard:
 		return p, p.discardCmd(path)
+	case opStageGuard:
+		if len(stagePaths) == 0 {
+			return p, nil
+		}
+		return p, p.stageCmd(stagePaths)
 	}
 	return p, nil
 }
@@ -1083,7 +1104,7 @@ func (p *GitStatus) stageAtCursor() (panels.Panel, tea.Cmd) {
 		if r.file == nil {
 			return p, nil
 		}
-		return p, p.stageCmd([]string{r.file.Path})
+		return p.stage([]string{r.file.Path})
 	case rowHunk:
 		if r.file == nil || r.hunkEntry == nil {
 			return p, nil
@@ -1091,7 +1112,7 @@ func (p *GitStatus) stageAtCursor() (panels.Panel, tea.Cmd) {
 		if r.section == sectionUnstaged {
 			return p, p.stageHunkCmd(r.file.Path, *r.hunkEntry)
 		}
-		return p, p.stageCmd([]string{r.file.Path})
+		return p.stage([]string{r.file.Path})
 	case rowDiffLine:
 		if r.file == nil || r.diffLine == nil {
 			return p, nil
@@ -1108,7 +1129,7 @@ func (p *GitStatus) stageAtCursor() (panels.Panel, tea.Cmd) {
 			}
 			return p, nil
 		}
-		return p, p.stageCmd([]string{r.file.Path})
+		return p.stage([]string{r.file.Path})
 	}
 	return p, nil
 }
@@ -1166,7 +1187,7 @@ func (p *GitStatus) stageAll() (panels.Panel, tea.Cmd) {
 	if len(paths) == 0 {
 		return p, nil
 	}
-	return p, p.stageCmd(paths)
+	return p.stage(paths)
 }
 
 // stageSectionFiles stages all files belonging to the given section.
@@ -1188,7 +1209,7 @@ func (p *GitStatus) stageSectionFiles(sec section) (panels.Panel, tea.Cmd) {
 	for i := range targets {
 		paths = append(paths, targets[i].Path)
 	}
-	return p, p.stageCmd(paths)
+	return p.stage(paths)
 }
 
 // unstageSectionFiles unstages all files belonging to the given section.
