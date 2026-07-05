@@ -1437,7 +1437,7 @@ func TestKeyBindings(t *testing.T) {
 	for _, b := range bindings {
 		actions[b.Action] = true
 	}
-	for _, expected := range []string{"cursor_down", "cursor_up", "detail", "page_down", "page_up", "go_top", "go_bottom", "copy_hash", "search"} {
+	for _, expected := range []string{"cursor_down", "cursor_up", "detail", "page_down", "page_up", "go_top", "go_bottom", "copy_hash", "search", "pickaxe"} {
 		if !actions[expected] {
 			t.Errorf("expected action %q in key bindings", expected)
 		}
@@ -1576,5 +1576,96 @@ func TestRepoChangedMsg_ResetsStateAndReloads(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("a reload command should be returned")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Pickaxe content search (server-side -S / -G)
+// ---------------------------------------------------------------------------
+
+func TestPickaxeEnterRunsServerSearch(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	// Enter pickaxe mode with "S".
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "S"})
+	if !p.pickaxeMode {
+		t.Fatal("expected pickaxeMode=true after S")
+	}
+
+	// Type a search term.
+	for _, ch := range "needle" {
+		p.Update(tea.KeyPressMsg{Code: ch})
+	}
+	if p.pickaxeTerm != "needle" {
+		t.Fatalf("expected pickaxeTerm=needle, got %q", p.pickaxeTerm)
+	}
+
+	// Confirm with Enter: runs the server-side search.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if p.pickaxeMode {
+		t.Error("expected pickaxeMode=false after Enter")
+	}
+	if cmd != nil {
+		cmd()
+	}
+	if mock.lastOpts.Pickaxe != "needle" {
+		t.Errorf("expected LogOpts.Pickaxe=needle, got %q", mock.lastOpts.Pickaxe)
+	}
+	if mock.lastOpts.PickaxeRegex {
+		t.Error("expected LogOpts.PickaxeRegex=false in text mode")
+	}
+}
+
+func TestPickaxeTabTogglesRegex(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "S"})
+	for _, ch := range "foo" {
+		p.Update(tea.KeyPressMsg{Code: ch})
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !p.pickaxeRegex {
+		t.Fatal("expected pickaxeRegex=true after Tab")
+	}
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		cmd()
+	}
+	if !mock.lastOpts.PickaxeRegex {
+		t.Error("expected LogOpts.PickaxeRegex=true after Tab toggle")
+	}
+}
+
+func TestPickaxeEscClears(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	// Run a pickaxe search first.
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "S"})
+	for _, ch := range "bar" {
+		p.Update(tea.KeyPressMsg{Code: ch})
+	}
+	if _, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		cmd()
+	}
+
+	// Esc clears the pickaxe term and reloads.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if p.pickaxeTerm != "" {
+		t.Errorf("expected pickaxeTerm cleared after Esc, got %q", p.pickaxeTerm)
+	}
+	if cmd != nil {
+		cmd()
+	}
+	if mock.lastOpts.Pickaxe != "" {
+		t.Errorf("expected LogOpts.Pickaxe empty after Esc reload, got %q", mock.lastOpts.Pickaxe)
 	}
 }
