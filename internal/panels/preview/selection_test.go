@@ -296,6 +296,25 @@ func TestKeyY_NoSelection_Noop(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
+func TestKeyY_NoSelection_CopiesFilePath(t *testing.T) {
+	p := newTestPreview([]string{"hello"})
+	p.filePath = `C:\repo\main.go`
+
+	_, cmd := p.Update(keyMsg("y"))
+
+	assert.NotNil(t, cmd, "should copy the file path when no text is selected")
+}
+
+func TestKeyY_GitHubModeDoesNotCopyFilePath(t *testing.T) {
+	p := newTestPreview([]string{"issue"})
+	p.filePath = `C:\repo\main.go`
+	p.ghMode = true
+
+	_, cmd := p.Update(keyMsg("y"))
+
+	assert.Nil(t, cmd)
+}
+
 func TestKeyEscape_ClearsSelection(t *testing.T) {
 	p := newTestPreview([]string{"hello"})
 	p.selAnchor = &selPoint{Line: 0, Col: 0}
