@@ -2615,6 +2615,7 @@ func (m *mockGHClientFull) MarkRead(_ context.Context, threadID string) error {
 	m.markReadID = threadID
 	return m.markReadErr
 }
+
 func (m *mockGHClientFull) RepoInfo(_ context.Context, _, _ string) (*gh.Repository, error) {
 	return nil, nil
 }
