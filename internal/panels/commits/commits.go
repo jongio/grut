@@ -57,28 +57,34 @@ type gitOps interface {
 }
 
 type panelColors struct {
-	Hash     string
-	Date     string
-	Author   string
-	Subject  string
-	Dim      string
-	CursorBg string
-	Refs     string
-	SearchBg string
-	SearchFg string
+	Hash       string
+	Date       string
+	Author     string
+	Subject    string
+	Dim        string
+	CursorBg   string
+	Refs       string
+	SearchBg   string
+	SearchFg   string
+	SigGood    string
+	SigBad     string
+	SigCaution string
 }
 
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
-		Hash:     "#D4B84A",
-		Date:     "#555555",
-		Author:   "#6B9E56",
-		Subject:  "#999999",
-		Dim:      "#555555",
-		CursorBg: "#2A2A2A",
-		Refs:     "#7A9EBF",
-		SearchBg: "#2A2A2A",
-		SearchFg: "#D4D4D4",
+		Hash:       "#D4B84A",
+		Date:       "#555555",
+		Author:     "#6B9E56",
+		Subject:    "#999999",
+		Dim:        "#555555",
+		CursorBg:   "#2A2A2A",
+		Refs:       "#7A9EBF",
+		SearchBg:   "#2A2A2A",
+		SearchFg:   "#D4D4D4",
+		SigGood:    "#6B9E56",
+		SigBad:     "#C05B5B",
+		SigCaution: "#D4B84A",
 	}
 	if th != nil {
 		c.Hash = th.Colors.NormalYellow
@@ -90,15 +96,21 @@ func initColors(th *theme.Theme) panelColors {
 		c.Refs = th.Colors.BrightBlue
 		c.SearchBg = th.Colors.SelectionBg
 		c.SearchFg = th.Colors.SelectionFg
+		c.SigGood = th.Colors.NormalGreen
+		c.SigBad = th.Colors.NormalRed
+		c.SigCaution = th.Colors.NormalYellow
 	}
 	return c
 }
 
 func newCommitLineStyles(c panelColors) commitrender.Styles {
 	return commitrender.Styles{
-		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
-		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
-		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		Hash:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Subject:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Cursor:     lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		SigGood:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigGood)),
+		SigBad:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigBad)),
+		SigCaution: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigCaution)),
 	}
 }
 
@@ -595,12 +607,13 @@ func (p *Panel) renderList(width, height int) string {
 			styles.Subject = styles.Subject.Bold(true)
 		}
 		lines = append(lines, commitrender.RenderLine(commitrender.Params{
-			Commit:     c,
-			Width:      width,
-			IsCursor:   i == p.cursor,
-			Styles:     styles,
-			IsSelected: isSelected,
-			SelectedBg: "#3B3F52", // subtler highlight for selected-but-not-cursor
+			Commit:        c,
+			Width:         width,
+			IsCursor:      i == p.cursor,
+			Styles:        styles,
+			IsSelected:    isSelected,
+			SelectedBg:    "#3B3F52", // subtler highlight for selected-but-not-cursor
+			ShowSignature: true,
 		}))
 	}
 	// Loading indicator.
@@ -956,6 +969,32 @@ func (p *Panel) deselectCommit() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Detail view
 // ---------------------------------------------------------------------------
+// signatureDetail renders a human-readable, colored description of a commit's
+// signature verification status for the detail view.
+func (p *Panel) signatureDetail(c git.Commit) string {
+	var label, color string
+	switch c.Signature {
+	case git.SigGood:
+		label, color = "verified", p.colors.SigGood
+	case git.SigBad:
+		label, color = "bad signature", p.colors.SigBad
+	case git.SigUnknown:
+		label, color = "unknown validity", p.colors.SigCaution
+	case git.SigExpired:
+		label, color = "expired", p.colors.SigCaution
+	case git.SigRevoked:
+		label, color = "revoked key", p.colors.SigCaution
+	case git.SigError:
+		label, color = "unverifiable", p.colors.SigCaution
+	default:
+		return ""
+	}
+	if c.Signer != "" {
+		label += " (" + panels.StripANSI(c.Signer) + ")"
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(label)
+}
+
 func (p *Panel) showDetail() tea.Cmd {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return nil
@@ -984,6 +1023,9 @@ func (p *Panel) showDetail() tea.Cmd {
 	if len(c.Parents) > 0 {
 		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
+	}
+	if c.Signature.Present() {
+		lines = append(lines, "Signed:  "+p.signatureDetail(c))
 	}
 	lines = append(lines, "")
 	lines = append(lines, "    "+panels.StripANSI(c.Subject))

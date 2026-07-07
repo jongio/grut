@@ -72,6 +72,8 @@ const (
 	ActionDownloadAssets   ActionID = "download_assets"
 	ActionCheckoutBranch   ActionID = "checkout_branch"
 	ActionMergePR          ActionID = "merge_pr"
+	ActionAssignSelf       ActionID = "assign_self"
+	ActionCloseReopenIssue ActionID = "close_reopen_issue"
 	ActionOpenInDefaultApp ActionID = "open_in_default_app"
 	ActionShowContextMenu  ActionID = "context_menu"
 	ActionPush             ActionID = "push"
@@ -93,8 +95,8 @@ var Registry = map[ItemType]ItemActions{
 	ItemWorktree:     {Default: ActionChangeDirectory, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenTerminal, ActionCopyPath}, Description: "change to this worktree's directory"},
 	ItemRemote:       {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL}, Description: "open this remote in your browser"},
 	ItemStashEntry:   {Default: ActionPromptAction, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionApply, ActionPop, ActionDrop}, Description: "choose a stash action (apply/pop/drop)"},
-	ItemIssue:        {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionCopyURL, ActionCopyNumber}, Description: "open this issue in your browser"},
-	ItemPR:           {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionMergePR, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch}, Description: "open this pull request in your browser"},
+	ItemIssue:        {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionAssignSelf, ActionCloseReopenIssue, ActionCopyURL, ActionCopyNumber}, Description: "open this issue in your browser"},
+	ItemPR:           {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionMergePR, ActionAssignSelf, ActionCopyURL, ActionCopyNumber, ActionCheckoutBranch}, Description: "open this pull request in your browser"},
 	ItemActionRun:    {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionRerun, ActionCopyURL}, Description: "open this workflow run in your browser"},
 	ItemWorkflow:     {Default: ActionDispatch, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionOpenInBrowser, ActionCopyURL}, Description: "dispatch this workflow"},
 	ItemRelease:      {Default: ActionOpenInBrowser, RightClick: ActionShowContextMenu, Alternatives: []ActionID{ActionDownloadAssets, ActionCopyURL, ActionCopyName}, Description: "open this release in your browser"},
@@ -161,6 +163,8 @@ var actionLabels = map[ActionID]string{
 	ActionDownloadAssets:   "download assets",
 	ActionCheckoutBranch:   "checkout branch",
 	ActionMergePR:          "merge PR",
+	ActionAssignSelf:       "assign to me",
+	ActionCloseReopenIssue: "close/reopen issue",
 	ActionShowContextMenu:  "context menu",
 	ActionPush:             "push",
 	ActionChangeDirectory:  "change directory",
