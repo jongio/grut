@@ -135,7 +135,7 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
-| `n` | Create issue (Issues tab) |
+| `n` | Create issue (Issues tab) / Create pull request (PRs tab) |
 | `N` | Notifications tab |
 | `Enter` | Open notification in browser (Notifications tab) |
 | `o` | Open in browser |
