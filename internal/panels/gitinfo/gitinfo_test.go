@@ -2496,26 +2496,59 @@ func TestRenderStashEntry_VeryNarrow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type mockGHClientFull struct {
-	user       *gh.User
-	userErr    error
-	issues     []*gh.Issue
-	issuesErr  error
-	prs        []*gh.PullRequest
-	prsErr     error
-	runs       []*gh.WorkflowRun
-	runsErr    error
-	prFiles    []*gh.CommitFile
-	prFilesErr error
-	prCommits  []*gh.RepositoryCommit
-	prCommErr  error
-	jobs       []*gh.WorkflowJob
-	jobsErr    error
-	jobLog     string
-	jobLogErr  error
-	rerunErr   error
-	cancelErr  error
-	mergeErr   error
-	getPRCalls int
+	user            *gh.User
+	userErr         error
+	issues          []*gh.Issue
+	issuesErr       error
+	prs             []*gh.PullRequest
+	prsErr          error
+	runs            []*gh.WorkflowRun
+	runsErr         error
+	prFiles         []*gh.CommitFile
+	prFilesErr      error
+	prCommits       []*gh.RepositoryCommit
+	prCommErr       error
+	jobs            []*gh.WorkflowJob
+	jobsErr         error
+	jobLog          string
+	jobLogErr       error
+	rerunErr        error
+	cancelErr       error
+	mergeErr        error
+	addAssigneesErr error
+	getPRCalls      int
+
+	lastIssuesOpts *gh.IssueListByRepoOptions
+	lastPRsOpts    *gh.PullRequestListOptions
+
+	notifications []*gh.Notification
+	notifErr      error
+	markReadErr   error
+	markReadCalls int
+	markReadID    string
+
+	reviewersErr          error
+	requestedReviewers    []string
+	requestReviewersCalls int
+
+	// New-issue create recording.
+	createIssueReq   *gh.IssueRequest
+	createIssueResp  *gh.Issue
+	createIssueErr   error
+	createIssueCalls int
+
+	// Comment recording.
+	commentCalls  int
+	commentNumber int
+	commentBody   string
+	commentErr    error
+
+	// Create-PR controls.
+	createdPR   *gh.PullRequest    // returned by CreatePR when createErr is nil
+	createErr   error              // returned by CreatePR
+	createReq   *gh.NewPullRequest // captured request passed to CreatePR
+	createCalls int                // number of times CreatePR was called
+	repoInfo    *gh.Repository     // returned by RepoInfo
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2534,19 +2567,28 @@ func (m *mockGHClientFull) GetIssueComments(_ context.Context, _, _ string, _ in
 	return nil, nil
 }
 
-func (m *mockGHClientFull) CreateIssue(_ context.Context, _, _ string, _ *gh.IssueRequest) (*gh.Issue, error) {
-	return nil, nil
+func (m *mockGHClientFull) CreateIssue(_ context.Context, _, _ string, req *gh.IssueRequest) (*gh.Issue, error) {
+	m.createIssueCalls++
+	m.createIssueReq = req
+	return m.createIssueResp, m.createIssueErr
 }
 
 func (m *mockGHClientFull) EditIssue(_ context.Context, _, _ string, _ int, _ *gh.IssueRequest) error {
 	return nil
 }
 
-func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, _ int, _ string) error {
-	return nil
+func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, number int, body string) error {
+	m.commentCalls++
+	m.commentNumber = number
+	m.commentBody = body
+	return m.commentErr
 }
 func (m *mockGHClientFull) CloseIssue(_ context.Context, _, _ string, _ int) error  { return nil }
 func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) error { return nil }
+func (m *mockGHClientFull) AddAssignees(_ context.Context, _, _ string, _ int, _ []string) error {
+	return m.addAssigneesErr
+}
+
 func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, error) {
 	return m.prs, m.prsErr
 }
@@ -2576,8 +2618,10 @@ func (m *mockGHClientFull) GetPRCommits(_ context.Context, _, _ string, _ int) (
 	return m.prCommits, m.prCommErr
 }
 
-func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, _ *gh.NewPullRequest) (*gh.PullRequest, error) {
-	return nil, nil
+func (m *mockGHClientFull) CreatePR(_ context.Context, _, _ string, req *gh.NewPullRequest) (*gh.PullRequest, error) {
+	m.createCalls++
+	m.createReq = req
+	return m.createdPR, m.createErr
 }
 
 func (m *mockGHClientFull) MergePR(_ context.Context, _, _ string, _ int, _ string, _ *gh.PullRequestOptions) error {
@@ -2596,8 +2640,10 @@ func (m *mockGHClientFull) SubmitReview(_ context.Context, _, _ string, _ int, _
 	return nil
 }
 
-func (m *mockGHClientFull) RequestReviewers(_ context.Context, _, _ string, _ int, _ []string) error {
-	return nil
+func (m *mockGHClientFull) RequestReviewers(_ context.Context, _, _ string, _ int, reviewers []string) error {
+	m.requestReviewersCalls++
+	m.requestedReviewers = reviewers
+	return m.reviewersErr
 }
 
 func (m *mockGHClientFull) ListWorkflowRuns(_ context.Context, _, _ string, _ *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, error) {
@@ -2625,11 +2671,17 @@ func (m *mockGHClientFull) CancelWorkflowRun(_ context.Context, _, _ string, _ i
 }
 
 func (m *mockGHClientFull) ListNotifications(_ context.Context, _ *gh.NotificationListOptions) ([]*gh.Notification, error) {
-	return nil, nil
+	return m.notifications, m.notifErr
 }
-func (m *mockGHClientFull) MarkRead(_ context.Context, _ string) error { return nil }
+
+func (m *mockGHClientFull) MarkRead(_ context.Context, threadID string) error {
+	m.markReadCalls++
+	m.markReadID = threadID
+	return m.markReadErr
+}
+
 func (m *mockGHClientFull) RepoInfo(_ context.Context, _, _ string) (*gh.Repository, error) {
-	return nil, nil
+	return m.repoInfo, nil
 }
 
 func (m *mockGHClientFull) ListWorkflows(_ context.Context, _, _ string, _ *gh.ListOptions) ([]*gh.Workflow, error) {
@@ -2660,11 +2712,13 @@ func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*
 	return nil, nil
 }
 
-func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, _ *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+	m.lastIssuesOpts = opts
 	return m.issues, ghclient.PageResult{}, m.issuesErr
 }
 
-func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+	m.lastPRsOpts = opts
 	return m.prs, ghclient.PageResult{}, m.prsErr
 }
 
@@ -3268,7 +3322,7 @@ func TestRenderTabBar_WithGHClient(t *testing.T) {
 	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
-	bar := panels.StripANSI(p.renderTabBar(80))
+	bar := panels.StripANSI(p.renderTabBar(120))
 	assert.Contains(t, bar, "Issues")
 	assert.Contains(t, bar, "PRs")
 	assert.Contains(t, bar, "Actions")
@@ -3393,7 +3447,7 @@ func TestView_WithGHClient(t *testing.T) {
 	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
-	view := panels.StripANSI(p.View(80, 20))
+	view := panels.StripANSI(p.View(120, 20))
 	assert.Contains(t, view, "Issues")
 	assert.Contains(t, view, "Bug report")
 }
@@ -3833,7 +3887,7 @@ func TestTabCyclesGitHubTabs(t *testing.T) {
 	// ModeGitHub starts on tabIssues (set by NewGitHub).
 	assert.Equal(t, tabIssues, p.activeTab)
 
-	expected := []tabID{tabPRs, tabActions, tabWorkflows, tabReleases, tabBranches, tabTags, tabIssues}
+	expected := []tabID{tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications, tabBranches, tabTags, tabIssues}
 	for _, want := range expected {
 		p.Update(tea.KeyPressMsg{Code: '\t'})
 		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Tab", want)
@@ -3845,7 +3899,7 @@ func TestShiftTabCyclesGitHubTabsBackward(t *testing.T) {
 	p.Focused = true
 	assert.Equal(t, tabIssues, p.activeTab)
 
-	expected := []tabID{tabTags, tabBranches, tabReleases, tabWorkflows, tabActions, tabPRs, tabIssues}
+	expected := []tabID{tabTags, tabBranches, tabNotifications, tabReleases, tabWorkflows, tabActions, tabPRs, tabIssues}
 	for _, want := range expected {
 		p.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Shift+Tab", want)
@@ -3869,7 +3923,7 @@ func TestVisibleTabsGitMode(t *testing.T) {
 func TestVisibleTabsGitHubMode(t *testing.T) {
 	p := newTestGitHubPanel(t, defaultMock())
 	tabs := p.visibleTabs()
-	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}, tabs)
+	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}, tabs)
 }
 
 // ---------------------------------------------------------------------------
@@ -4859,4 +4913,497 @@ func TestRightClickLabel_ANSIInjection(t *testing.T) {
 			assert.Contains(t, label, tt.want)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Create pull request from the PRs tab (issue #249)
+// ---------------------------------------------------------------------------
+
+// pushedFeatureBranches returns a branch set with "feature" as the current,
+// pushed local branch plus its remote counterpart and origin/main.
+func pushedFeatureBranches() []git.Branch {
+	return []git.Branch{
+		{Name: "feature", IsCurrent: true, Upstream: "origin/feature"},
+		{Name: "origin/feature", IsRemote: true},
+		{Name: "origin/main", IsRemote: true},
+	}
+}
+
+func TestDoCreatePR_PrefillsHeadAndBase(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd, "should open the head-branch input")
+	assert.Equal(t, opPRCreateHead, p.pending)
+	assert.Equal(t, "feature", p.prDraft.head, "head should prefill with current branch")
+	assert.Equal(t, "main", p.prDraft.base, "base should prefill with default branch")
+}
+
+func TestDoCreatePR_DefaultBranchFallback(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "" // unknown default → fall back to main
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	assert.Equal(t, branchMain, p.prDraft.base)
+}
+
+func TestDoCreatePR_NoCurrentBranchWarns(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	p.gitData.lastBranches = []git.Branch{{Name: "origin/main", IsRemote: true}}
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Equal(t, opNone, p.pending, "no modal flow should start")
+}
+
+func TestDoCreatePR_UnpushedBranchWarns(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+	// Current branch has no upstream and no matching remote branch.
+	p.gitData.lastBranches = []git.Branch{{Name: "feature", IsCurrent: true}}
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Push branch")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCreatePR_NilClientNoop(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock()) // no gh client wired
+	p.gh.client = nil
+	p.activeTab = tabPRs
+
+	_, cmd := p.doCreatePR()
+	assert.Nil(t, cmd, "no client should be a no-op")
+}
+
+func TestPRCreateFlow_EmptyTitleRejected(t *testing.T) {
+	ghMock := &mockGHClientFull{}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	p.doCreatePR()
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "feature"}) // head
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"})    // base
+	require.Equal(t, opPRCreateTitle, p.pending)
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   "}) // blank title
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "draft should reset on abort")
+	assert.Zero(t, ghMock.createCalls, "CreatePR must not be called with an empty title")
+}
+
+func TestPRCreateFlow_HeadEqualsBaseRejected(t *testing.T) {
+	ghMock := &mockGHClientFull{}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	p.doCreatePR()
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"}) // head edited to main
+	require.Equal(t, opPRCreateBase, p.pending)
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"}) // base == head
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "head and base")
+	assert.Equal(t, prCreateDraft{}, p.prDraft)
+	assert.Zero(t, ghMock.createCalls)
+}
+
+func TestPRCreateFlow_Success(t *testing.T) {
+	num := 42
+	createdPR := &gh.PullRequest{
+		Number: &num,
+		Title:  gh.Ptr("My new PR"),
+		State:  gh.Ptr(prStateOpen),
+		Head:   &gh.PullRequestBranch{Ref: gh.Ptr("feature")},
+		User:   ghUser("me"),
+	}
+	ghMock := &mockGHClientFull{createdPR: createdPR, prs: []*gh.PullRequest{createdPR}}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gh.prFilter = prFilterMine // start on a filtered view to prove it resets
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.doCreatePR()
+	require.NotNil(t, cmd)
+	require.Equal(t, opPRCreateHead, p.pending)
+
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "feature"})
+	require.Equal(t, opPRCreateBase, p.pending)
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "main"})
+	require.Equal(t, opPRCreateTitle, p.pending)
+	p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "My new PR"})
+	require.Equal(t, opPRCreateBody, p.pending)
+
+	_, createCmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "Closes #249"})
+	require.NotNil(t, createCmd)
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "draft should reset once the request fires")
+
+	msg := createCmd()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok, "expected prCreateResultMsg, got %T", msg)
+	require.NoError(t, res.err)
+	assert.Equal(t, 42, res.pr.Number)
+
+	// The request should carry the exact head, base, title, and body entered.
+	require.NotNil(t, ghMock.createReq)
+	assert.Equal(t, 1, ghMock.createCalls)
+	assert.Equal(t, "My new PR", ghMock.createReq.GetTitle())
+	assert.Equal(t, "feature", ghMock.createReq.GetHead())
+	assert.Equal(t, "main", ghMock.createReq.GetBase())
+	assert.Equal(t, "Closes #249", ghMock.createReq.GetBody())
+
+	// Handling the result inserts the PR, resets the filter, and queues reselect.
+	_, afterCmd := p.handlePRCreateResult(res)
+	require.NotNil(t, afterCmd)
+	assert.Equal(t, prFilterAll, p.gh.prFilter, "filter should reset so the new PR is visible")
+	require.NotEmpty(t, p.gh.allPRs)
+	assert.Equal(t, 42, p.gh.allPRs[0].Number, "new PR inserted at the front")
+	assert.Equal(t, 42, p.gh.pendingSelectPR, "reselect queued for the post-refresh load")
+	// The visible cursor should land on the new PR.
+	require.NotEmpty(t, p.tabItems[tabPRs])
+	assert.Equal(t, 42, p.tabItems[tabPRs][p.tabCursor[tabPRs]].pr.Number)
+}
+
+func TestCreatePRCmd_OmitsEmptyBody(t *testing.T) {
+	ghMock := &mockGHClientFull{createdPR: &gh.PullRequest{Number: gh.Ptr(1), Title: gh.Ptr("t"), State: gh.Ptr(prStateOpen), Head: &gh.PullRequestBranch{Ref: gh.Ptr("feature")}}}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.NoError(t, res.err)
+	require.NotNil(t, ghMock.createReq)
+	assert.Nil(t, ghMock.createReq.Body, "empty body should be omitted from the request")
+}
+
+func TestCreatePRCmd_ErrorPropagates(t *testing.T) {
+	ghMock := &mockGHClientFull{createErr: fmt.Errorf("api down")}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.Error(t, res.err)
+}
+
+func TestCreatePRCmd_NilResultIsError(t *testing.T) {
+	ghMock := &mockGHClientFull{} // createdPR nil, createErr nil
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.createPRCmd("feature", "main", "t", "")()
+	res, ok := msg.(prCreateResultMsg)
+	require.True(t, ok)
+	require.Error(t, res.err, "a nil PR with no error should surface as an error")
+}
+
+func TestHandlePRCreateResult_ErrorShowsToast(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.activeTab = tabPRs
+
+	_, cmd := p.handlePRCreateResult(prCreateResultMsg{err: fmt.Errorf("boom")})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok, "expected a toast, got %T", msg)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "boom")
+	assert.Empty(t, p.gh.allPRs, "no PR should be inserted on failure")
+}
+
+func TestHandleModalResultCancel_ResetsPRDraft(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.pending = opPRCreateTitle
+	p.prDraft = prCreateDraft{head: "feature", base: "main"}
+
+	p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Equal(t, prCreateDraft{}, p.prDraft, "cancel should clear the in-progress draft")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleGHDataLoaded_ConsumesPendingSelectPR(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.activeTab = tabPRs
+	p.gh.prFilter = prFilterAll
+	p.gh.pendingSelectPR = 7
+
+	p.Update(ghDataLoadedMsg{prs: []ghPRItem{
+		{Number: 9, State: prStateOpen},
+		{Number: 7, State: prStateOpen},
+	}})
+
+	require.Len(t, p.tabItems[tabPRs], 2)
+	assert.Equal(t, 7, p.tabItems[tabPRs][p.tabCursor[tabPRs]].pr.Number, "cursor should land on the queued PR")
+	assert.Zero(t, p.gh.pendingSelectPR, "pendingSelectPR should be consumed")
+}
+
+func TestHandleMetaLoaded_StoresDefaultBranch(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.Update(ghMetaLoadedMsg{user: "me", defaultBranch: "develop", repoPrivate: true})
+	assert.Equal(t, "develop", p.gh.defaultBranch)
+}
+
+func TestNKey_OnPRsTabStartsCreateFlow(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.Focused = true
+	p.activeTab = tabPRs
+	p.gh.defaultBranch = "main"
+	p.gitData.lastBranches = pushedFeatureBranches()
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'n'})
+	require.NotNil(t, cmd, "'n' on the PRs tab should open the create-PR flow")
+	assert.Equal(t, opPRCreateHead, p.pending)
+	assert.Equal(t, "feature", p.prDraft.head)
+}
+
+// GitHub notifications
+// ---------------------------------------------------------------------------
+
+func ghNotif(id, repo, title, typ, reason, apiURL string, unread bool) *gh.Notification {
+	return &gh.Notification{
+		ID:         &id,
+		Reason:     &reason,
+		Unread:     &unread,
+		UpdatedAt:  &gh.Timestamp{Time: time.Date(2024, time.January, 2, 15, 4, 0, 0, time.UTC)},
+		Repository: &gh.Repository{FullName: &repo},
+		Subject:    &gh.NotificationSubject{Title: &title, Type: &typ, URL: &apiURL},
+	}
+}
+
+func TestNotificationHTMLURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		apiURL string
+		repo   string
+		want   string
+	}{
+		{"issue", "https://api.github.com/repos/o/r/issues/1", "o/r", "https://github.com/o/r/issues/1"},
+		{"pull maps to pull", "https://api.github.com/repos/o/r/pulls/9", "o/r", "https://github.com/o/r/pull/9"},
+		{"commit maps to commit", "https://api.github.com/repos/o/r/commits/abc123", "o/r", "https://github.com/o/r/commit/abc123"},
+		{"release falls back to repo", "https://api.github.com/repos/o/r/releases/5", "o/r", "https://github.com/o/r"},
+		{"empty falls back to repo", "", "o/r", "https://github.com/o/r"},
+		{"non-api falls back to repo", "https://example.com/x", "o/r", "https://github.com/o/r"},
+		{"no repo no url", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, notificationHTMLURL(tt.apiURL, tt.repo))
+		})
+	}
+}
+
+func TestLoadNotifications_BuildsItems(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("1", "octo/repo", "Fix the bug", "Issue", "mention", "https://api.github.com/repos/octo/repo/issues/7", true),
+			ghNotif("2", "octo/repo", "Add feature", "PullRequest", "review_requested", "https://api.github.com/repos/octo/repo/pulls/8", true),
+		},
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.loadNotifications()()
+	loaded, ok := msg.(ghNotificationsLoadedMsg)
+	require.True(t, ok, "expected ghNotificationsLoadedMsg, got %T", msg)
+	require.NoError(t, loaded.err)
+	p.handleNotificationsLoaded(loaded)
+
+	items := p.tabItems[tabNotifications]
+	require.Len(t, items, 2)
+	assert.Equal(t, kindNotification, items[0].kind)
+	assert.Equal(t, "octo/repo", items[0].notif.RepoFullName)
+	assert.Equal(t, "Fix the bug", items[0].notif.Title)
+	assert.Equal(t, "Issue", items[0].notif.Type)
+	assert.Equal(t, "mention", items[0].notif.Reason)
+	assert.Equal(t, "https://github.com/octo/repo/issues/7", items[0].notif.HTMLURL)
+	assert.True(t, items[0].notif.Unread)
+	assert.Equal(t, "https://github.com/octo/repo/pull/8", items[1].notif.HTMLURL)
+	assert.False(t, p.gh.notifLoading)
+	assert.NoError(t, p.gh.notifErr)
+}
+
+func TestHandleNotificationsLoaded_Error(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.buildNotificationItems([]ghNotificationItem{{ThreadID: "x", Unread: true}})
+	require.Len(t, p.tabItems[tabNotifications], 1)
+
+	p.handleNotificationsLoaded(ghNotificationsLoadedMsg{err: fmt.Errorf("boom")})
+	assert.Error(t, p.gh.notifErr)
+	assert.Empty(t, p.tabItems[tabNotifications])
+	assert.False(t, p.gh.notifLoading)
+}
+
+func TestMarkNotificationRead_StateChange(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("thread-1", "octo/repo", "Fix the bug", "Issue", "mention", "https://api.github.com/repos/octo/repo/issues/7", true),
+		},
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	loaded := p.loadNotifications()().(ghNotificationsLoadedMsg)
+	p.handleNotificationsLoaded(loaded)
+	p.activeTab = tabNotifications
+	p.tabCursor[tabNotifications] = 0
+
+	_, cmd := p.doMarkNotificationRead()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(notificationReadResultMsg)
+	require.True(t, ok, "expected notificationReadResultMsg, got %T", msg)
+	require.NoError(t, result.err)
+	assert.Equal(t, 1, ghMock.markReadCalls)
+	assert.Equal(t, "thread-1", ghMock.markReadID)
+
+	// Handling the result greys the row (Unread=false).
+	assert.True(t, p.tabItems[tabNotifications][0].notif.Unread)
+	p.handleNotificationReadResult(result)
+	assert.False(t, p.tabItems[tabNotifications][0].notif.Unread, "row should be marked read")
+}
+
+func TestMarkNotificationRead_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("t1", "octo/repo", "Bug", "Issue", "mention", "", true),
+		},
+		markReadErr: fmt.Errorf("network down"),
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.handleNotificationsLoaded(p.loadNotifications()().(ghNotificationsLoadedMsg))
+	p.activeTab = tabNotifications
+
+	_, cmd := p.doMarkNotificationRead()
+	require.NotNil(t, cmd)
+	result := cmd().(notificationReadResultMsg)
+	require.Error(t, result.err)
+
+	// On error the row stays unread.
+	p.handleNotificationReadResult(result)
+	assert.True(t, p.tabItems[tabNotifications][0].notif.Unread, "row should stay unread on error")
+}
+
+func TestClampNotificationCursor(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+
+	// Cursor beyond the list is clamped to the last item.
+	p.tabCursor[tabNotifications] = 99
+	p.buildNotificationItems([]ghNotificationItem{
+		{ThreadID: "a", Unread: true},
+		{ThreadID: "b", Unread: true},
+	})
+	assert.Equal(t, 1, p.tabCursor[tabNotifications])
+
+	// Empty list clamps to 0 rather than a negative index.
+	p.tabCursor[tabNotifications] = 5
+	p.buildNotificationItems(nil)
+	assert.Equal(t, 0, p.tabCursor[tabNotifications])
+}
+
+func TestRenderNotification_Content(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "octo/repo", Title: "Fix the bug", Type: "Issue",
+		Reason: "mention", UpdatedAt: "Jan 2 15:04", Unread: true,
+	}}
+	line := p.renderNotification(item, 120, false)
+	assert.Contains(t, line, "octo/repo")
+	assert.Contains(t, line, "Fix the bug")
+	assert.Contains(t, line, "Issue")
+	assert.Contains(t, line, "mention")
+	assert.Contains(t, line, "Jan 2 15:04")
+	assert.Contains(t, line, "●", "unread notifications use a filled marker")
+}
+
+func TestRenderNotification_ReadMarker(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "octo/repo", Title: "Done", Unread: false,
+	}}
+	line := p.renderNotification(item, 120, false)
+	assert.Contains(t, line, "○", "read notifications use a hollow marker")
+}
+
+func TestRenderLine_Notification(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "o/r", Title: "Hi", Unread: true,
+	}}
+	line := p.renderLine(item, 120, false)
+	assert.Contains(t, line, "o/r")
+	assert.Contains(t, line, "Hi")
+}
+
+func TestNotificationsView_EmptyLoadingAndError(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabNotifications
+	p.tabItems[tabNotifications] = nil
+
+	// Empty state.
+	p.gh.notifLoading = false
+	p.gh.notifErr = nil
+	assert.Contains(t, p.View(80, 10), "No unread notifications")
+
+	// Error state.
+	p.gh.notifErr = fmt.Errorf("nope")
+	assert.Contains(t, p.View(80, 10), "Notifications unavailable")
+
+	// Loading state.
+	p.gh.notifErr = nil
+	p.gh.notifLoading = true
+	assert.Contains(t, p.View(80, 10), "Loading...")
+}
+
+func TestKeyBindings_IncludesNotifications(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	found := false
+	for _, b := range p.KeyBindings() {
+		if b.Action == "tab_notifications" {
+			found = true
+		}
+	}
+	assert.True(t, found, "KeyBindings should include tab_notifications when a GitHub client is present")
+}
+
+func TestKeyTabSwitch_N(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "N"})
+	assert.Equal(t, tabNotifications, p.activeTab)
+}
+
+func TestGhNotifCountStr_CountsUnread(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.buildNotificationItems([]ghNotificationItem{
+		{ThreadID: "a", Unread: true},
+		{ThreadID: "b", Unread: false},
+		{ThreadID: "c", Unread: true},
+	})
+	assert.Equal(t, "2", p.ghNotifCountStr())
 }

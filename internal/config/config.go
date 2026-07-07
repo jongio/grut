@@ -88,12 +88,15 @@ type GitConfig struct {
 	DefaultBranch           string   `toml:"default_branch"`
 	WorktreeMergeMethod     string   `toml:"worktree_merge_method"`
 	WorktreeOpenMode        string   `toml:"worktree_open_mode"`
+	SecretGuardMode         string   `toml:"secret_guard_mode"` // "warn" or "block"
 	RefreshFallbackInterval Duration `toml:"refresh_fallback_interval"`
 	AutoFetchInterval       Duration `toml:"auto_fetch_interval"`
 	MaxLogEntries           int      `toml:"max_log_entries"`
 	WorktreeFirst           bool     `toml:"worktree_first"`
 	ShowCommitGraph         bool     `toml:"show_commit_graph"`
 	SignCommits             bool     `toml:"sign_commits"`
+	SecretGuard             bool     `toml:"secret_guard"` // scan files for secrets before staging
+	DiffWordHighlight       bool     `toml:"diff_word_highlight"`
 }
 
 // GitHubConfig holds GitHub integration settings.
@@ -310,6 +313,11 @@ func DataDir() string {
 // configFilePath returns the full path to the user's config file.
 func configFilePath() string {
 	return filepath.Join(ConfigDir(), "config.toml")
+}
+
+// UserConfigFilePath returns the full path to the user's config file.
+func UserConfigFilePath() string {
+	return configFilePath()
 }
 
 // LoadDefaults returns a Config built solely from the embedded defaults

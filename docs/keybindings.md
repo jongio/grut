@@ -56,6 +56,7 @@ File Tree panel (panel 1).
 | Key | Action |
 |-----|--------|
 | `h/l` | Collapse/expand directory |
+| `H/L` | Collapse/expand all directories |
 | `o` | Open in external editor |
 | `.` | Toggle hidden files |
 | `f` | Toggle git filter |
@@ -68,6 +69,7 @@ File Tree panel (panel 1).
 | `c` | Copy file |
 | `p` | Paste file |
 | `space` | Toggle stage/unstage |
+| `I` | Add selected entry to .gitignore |
 | `J/K` | Scroll preview down/up |
 
 ---
@@ -89,6 +91,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `space` | Toggle select for bulk |
 | `enter/l` | Expand file diff |
 | `h` | Enter hunk mode |
+| `X` | Clean untracked files (preview and select) |
 | `Esc` | Exit hunk/line mode |
 
 ---
@@ -132,10 +135,19 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
+| `n` | Create issue (Issues tab) / Create pull request (PRs tab) |
+| `N` | Notifications tab |
+| `Enter` | Open notification in browser (Notifications tab) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
-| `m` | Merge PR (PRs tab) |
-| `r` | Rerun (Actions tab) |
+| `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
+| `M` | Copy issue or PR as a markdown link (Issues/PRs tabs) |
+| `A` | Assign to me (Issues/PRs tab) |
+| `R` | Request reviewers (PRs tab) |
+| `C` | Comment on issue/PR (Issues/PRs tab) |
+| `c` | Close/reopen issue (Issues tab) |
+| `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
+| `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |
 
@@ -151,6 +163,8 @@ Commits panel (panel 4).
 | `Esc` | Back to list |
 | `o` | Open in browser |
 | `y` | Copy SHA |
+| `a` | Filter the commit log by the selected commit's author |
+| `x` | Export the selected commit as a .patch file |
 | `A` | Amend last commit |
 | `r` | Reword last commit |
 | `/` | Search commits |
@@ -167,15 +181,35 @@ Preview panel (panel 5).
 | `f` | Toggle diff view |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
+| `L` | Go to line |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
 | `m` | Toggle markdown render |
 | `B` | Toggle blame |
 | `y/Ctrl+C` | Copy selection |
+| `Y` | Copy GitHub permalink |
 | `Esc` | Clear selection |
 
 Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.
+
+---
+
+## Diff Viewer
+
+Diff viewer panel for file, commit, branch, and PR diffs.
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Scroll up/down |
+| `d/u` | Page down/up |
+| `g/G` | Jump to top/bottom |
+| `t` | Toggle inline/side-by-side |
+| `n/N` | Next/previous hunk |
+| `[/]` | Previous/next file |
+| `w` | Toggle word-level diff |
+| `W` | Toggle ignore whitespace |
+| `R` | Toggle review annotations |
 
 ---
 

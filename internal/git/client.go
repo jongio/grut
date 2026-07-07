@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,13 @@ func (c *Client) InvalidateCache() {
 // All git commands go through this method. Arguments are validated,
 // context cancellation is respected, and stderr is captured for errors.
 func (c *Client) run(ctx context.Context, args ...string) (string, error) {
+	return c.runWithEnv(ctx, nil, args...)
+}
+
+// runWithEnv behaves like run but appends extraEnv to the child process
+// environment. It is used when a command needs a deterministic locale
+// (e.g. LC_ALL=C) so its human-readable output can be parsed reliably.
+func (c *Client) runWithEnv(ctx context.Context, extraEnv []string, args ...string) (string, error) {
 	// On Windows, file paths after "--" contain backslashes which
 	// ValidateArg rejects. Convert to forward slashes (git handles both)
 	// before validation, since exec.Command doesn't use a shell.
@@ -110,6 +118,9 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	}
 	cmd := exec.CommandContext(ctx, "git", normalized...)
 	cmd.Dir = c.repoDir
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	stdout := &limitedBuffer{max: maxGitOutputSize}
 	var stderr bytes.Buffer
 	cmd.Stdout = stdout

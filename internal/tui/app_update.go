@@ -430,6 +430,13 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.cwdEditing {
 		return m.handleCWDEditKey(msg)
 	}
+	// If the preview panel has an inline prompt open (e.g. go-to-line),
+	// route every key straight to it so digits and Enter/Esc are not
+	// intercepted by global bindings.
+	if m.previewInput {
+		cmd := m.engine.Update(msg)
+		return m, cmd
+	}
 	// If an async operation is running, Esc cancels it.
 	if msg.String() == "esc" && m.asyncCancel != nil {
 		return m.cancelAsyncOp()

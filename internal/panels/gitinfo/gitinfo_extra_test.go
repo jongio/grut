@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	gh "github.com/google/go-github/v88/github"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
@@ -1516,6 +1517,236 @@ func TestHandleModalResult_PRDeleteBranchAfterMerge_EmptyBranch(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Comment on issue/PR (issue #252) — distinct from inline review comments (#212)
+// ---------------------------------------------------------------------------
+
+// collectCmdMsgs runs a cmd and recursively expands tea.BatchMsg so tests can
+// inspect every message a batched command would emit.
+func collectCmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, collectCmdMsgs(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+func TestDoCommentOnItem_Issue(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.NotNil(t, cmd, "should open the composer")
+	assert.Equal(t, opIssuePRComment, p.pending)
+	assert.Equal(t, "issue:1", p.pendingName)
+}
+
+func TestDoCommentOnItem_PR(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, nil, samplePRs(), nil)
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabPRs
+	p.tabCursor[tabPRs] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.NotNil(t, cmd, "should open the composer")
+	assert.Equal(t, opIssuePRComment, p.pending)
+	assert.Equal(t, "PR:10", p.pendingName)
+}
+
+func TestDoCommentOnItem_NoClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = nil
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.doCommentOnItem()
+	assert.Nil(t, cmd, "no client should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCommentOnItem_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+
+	_, cmd := p.doCommentOnItem()
+	assert.Nil(t, cmd, "empty list should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+// TestHandleModalResult_IssuePRComment_EmptyBody verifies that submitting a
+// blank comment is rejected client-side and never calls the API.
+func TestHandleModalResult_IssuePRComment_EmptyBody(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "   \n  "})
+	assert.NotNil(t, cmd, "empty body should still surface a warning toast")
+	assert.Equal(t, opNone, p.pending, "pending state must be cleared")
+
+	// Draining the toast cmd must not hit the API.
+	for _, msg := range collectCmdMsgs(cmd) {
+		if toast, ok := msg.(notify.ShowToastMsg); ok {
+			assert.Equal(t, notify.Warn, toast.Level)
+		}
+	}
+	assert.Equal(t, 0, mock.commentCalls, "empty body must not call CommentOnIssue")
+}
+
+// TestHandleModalResult_IssuePRComment_Cancel verifies Escape cancels without
+// calling the API.
+func TestHandleModalResult_IssuePRComment_Cancel(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancel should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+	assert.Equal(t, 0, mock.commentCalls)
+}
+
+func TestHandleModalResult_IssuePRComment_BadPendingName(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.pending = opIssuePRComment
+	p.pendingName = "bad" // missing ":number"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "hi"})
+	assert.Nil(t, cmd)
+	assert.Equal(t, 0, mock.commentCalls)
+}
+
+// TestHandleModalResult_IssuePRComment_PostsAndRefreshes exercises the full
+// comment-then-refresh flow: submit a body, confirm CommentOnIssue is called
+// with the right args, then confirm the conversation preview is refreshed.
+func TestHandleModalResult_IssuePRComment_PostsAndRefreshes(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	populateGH(p, sampleIssues(), nil, nil)
+	p.gh.client = mock
+	p.ctx = t.Context()
+	p.activeTab = tabIssues
+	p.tabCursor[tabIssues] = 0
+	p.pending = opIssuePRComment
+	p.pendingName = "issue:1"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "  LGTM, shipping it  "})
+	assert.NotNil(t, cmd, "accepting a non-empty body should post the comment")
+	assert.Equal(t, opNone, p.pending)
+
+	// Run the post command; it should call the API with the trimmed body.
+	postMsg := cmd()
+	result, ok := postMsg.(commentResultMsg)
+	assert.True(t, ok, "post cmd should yield a commentResultMsg")
+	assert.NoError(t, result.err)
+	assert.Equal(t, 1, mock.commentCalls)
+	assert.Equal(t, 1, mock.commentNumber)
+	assert.Equal(t, "LGTM, shipping it", mock.commentBody, "body should be trimmed")
+
+	// Handling the result should show a success toast and refresh the preview.
+	_, resultCmd := p.handleCommentResult(result)
+	assert.NotNil(t, resultCmd)
+	var sawSuccess, sawRefresh bool
+	for _, msg := range collectCmdMsgs(resultCmd) {
+		switch m := msg.(type) {
+		case notify.ShowToastMsg:
+			if m.Level == notify.Success {
+				sawSuccess = true
+			}
+		case panels.IssueSelectedMsg:
+			sawRefresh = true
+		}
+	}
+	assert.True(t, sawSuccess, "should show a success toast")
+	assert.True(t, sawRefresh, "should refresh the conversation preview")
+}
+
+func TestHandleCommentResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+
+	_, cmd := p.handleCommentResult(commentResultMsg{
+		number: 42,
+		kind:   commentKindIssue,
+		err:    errors.New("network down"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	var sawError bool
+	for _, msg := range collectCmdMsgs(cmd) {
+		if toast, ok := msg.(notify.ShowToastMsg); ok && toast.Level == notify.Error {
+			sawError = true
+		}
+	}
+	assert.True(t, sawError, "failed comment should surface an error toast")
+}
+
+func TestCommentCmd_PostsBody(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.commentCmd(7, "hello world", commentKindPR)
+	msg := cmd()
+	result, ok := msg.(commentResultMsg)
+	assert.True(t, ok)
+	assert.NoError(t, result.err)
+	assert.Equal(t, 7, result.number)
+	assert.Equal(t, commentKindPR, result.kind)
+	assert.Equal(t, 1, mock.commentCalls)
+	assert.Equal(t, "hello world", mock.commentBody)
+}
+
+func TestCommentCmd_PropagatesError(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{commentErr: errors.New("403 forbidden")}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.commentCmd(7, "hello", commentKindIssue)
+	msg := cmd()
+	result, ok := msg.(commentResultMsg)
+	assert.True(t, ok)
+	assert.Error(t, result.err)
+}
+
+// ---------------------------------------------------------------------------
 // handlePRBranchDeleteResult
 // ---------------------------------------------------------------------------
 
@@ -1614,4 +1845,697 @@ func TestPRMessageTypes(t *testing.T) {
 	_ = panels.PRMergeRequestedMsg{Number: 1, Title: "test", HeadBranch: "main"}
 	_ = panels.PRMergeFailedMsg{Number: 1, Err: errors.New("fail")}
 	_ = panels.PRMergedMsg{Number: 1, Strategy: "squash"}
+}
+
+// ---------------------------------------------------------------------------
+// Close/reopen issue (#258)
+// ---------------------------------------------------------------------------
+
+func TestParseIssueStateName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		wantNumber int
+		wantState  string
+		wantOK     bool
+	}{
+		{"42:closed", 42, "closed", true},
+		{"5:open", 5, "open", true},
+		{"bad", 0, "", false},
+		{"42:", 0, "", false},
+		{":closed", 0, "", false},
+		{"abc:closed", 0, "", false},
+		{"", 0, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			n, s, ok := parseIssueStateName(tt.name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantNumber, n)
+			assert.Equal(t, tt.wantState, s)
+		})
+	}
+}
+
+func TestDoCloseReopenIssueFor_OpenIssueClosesIt(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 42, Title: "Fix bug", State: "open"})
+	assert.NotNil(t, cmd, "should show a confirm modal")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "42:closed", p.pendingName)
+}
+
+func TestDoCloseReopenIssueFor_ClosedIssueReopensIt(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 5, Title: "Old", State: "closed"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "5:open", p.pendingName)
+}
+
+func TestDoCloseReopenIssueFor_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// ghClient is nil
+	_, cmd := p.doCloseReopenIssueFor(ghIssueItem{Number: 42, Title: "Fix bug", State: "open"})
+	assert.Nil(t, cmd, "should be no-op without a GitHub client")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestDoCloseReopenIssue_WrongTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabBranches
+	p.tabItems[tabBranches] = []listItem{
+		{kind: kindLocalBranch, branch: git.Branch{Name: "main"}},
+	}
+	p.tabCursor[tabBranches] = 0
+	_, cmd := p.doCloseReopenIssue()
+	assert.Nil(t, cmd)
+}
+
+func TestDoCloseReopenIssue_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+	_, cmd := p.doCloseReopenIssue()
+	assert.Nil(t, cmd)
+}
+
+func TestExecuteRightClickAction_Issue_CloseReopen(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 9, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionCloseReopenIssue)
+	assert.NotNil(t, cmd, "right-click close/reopen should show confirm modal")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+	assert.Equal(t, "9:closed", p.pendingName)
+}
+
+func TestHandleKey_C_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.NotNil(t, cmd, "pressing 'c' on Issues tab should trigger close/reopen flow")
+	assert.Equal(t, opIssueCloseReopen, p.pending)
+}
+
+func TestHandleKey_C_NotIssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabPRs
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.Nil(t, cmd, "pressing 'c' outside Issues tab should be no-op")
+}
+
+func TestHandleKey_C_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// ghClient is nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'c'})
+	assert.Nil(t, cmd, "pressing 'c' without ghClient should be no-op")
+}
+
+func TestHandleModalResult_IssueCloseReopen_Confirm(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+	p.pending = opIssueCloseReopen
+	p.pendingName = "42:closed"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "confirming should produce the close/reopen command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_IssueCloseReopen_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.pending = opIssueCloseReopen
+	p.pendingName = "42:closed"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancelling should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_IssueCloseReopen_BadName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.ctx = t.Context()
+	p.pending = opIssueCloseReopen
+	p.pendingName = "bad"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd, "malformed pending name should produce nil cmd")
+}
+
+func TestHandleIssueStateResult_CloseSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{number: 42, newState: "closed"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "closed", p.gh.allIssues[0].State)
+	assert.Equal(t, "closed", p.tabItems[tabIssues][0].issue.State)
+}
+
+func TestHandleIssueStateResult_ReopenSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 7, Title: "Old", State: "closed"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{number: 7, newState: "open"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "open", p.gh.allIssues[0].State)
+	assert.Equal(t, "open", p.tabItems[tabIssues][0].issue.State)
+}
+
+func TestHandleIssueStateResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+
+	_, cmd := p.handleIssueStateResult(issueStateResultMsg{
+		number:   42,
+		newState: "closed",
+		err:      errors.New("network error"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	assert.Equal(t, "open", p.gh.allIssues[0].State, "state should be unchanged on error")
+}
+
+func TestCloseReopenIssueCmd_ReturnsResult(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.ctx = t.Context()
+
+	cmd := p.closeReopenIssueCmd(42, "closed")
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	res, ok := msg.(issueStateResultMsg)
+	assert.True(t, ok, "should return an issueStateResultMsg")
+	assert.Equal(t, 42, res.number)
+	assert.Equal(t, "closed", res.newState)
+	assert.NoError(t, res.err)
+}
+
+// ---------------------------------------------------------------------------
+// Assign to me (#259)
+// ---------------------------------------------------------------------------
+
+func TestParseAssignSelfName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		wantKind   string
+		wantNumber int
+		wantOK     bool
+	}{
+		{"issue:42", "issue", 42, true},
+		{"PR:7", "PR", 7, true},
+		{"bad", "", 0, false},
+		{"issue:", "", 0, false},
+		{":42", "", 0, false},
+		{"issue:abc", "", 0, false},
+		{"", "", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			kind, n, ok := parseAssignSelfName(tt.name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantKind, kind)
+			assert.Equal(t, tt.wantNumber, n)
+		})
+	}
+}
+
+func TestDoAssignSelf_Issue(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.doAssignSelf()
+	assert.NotNil(t, cmd, "should show a confirm modal")
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "issue:42", p.pendingName)
+}
+
+func TestDoAssignSelf_PR(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "Feature", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.doAssignSelf()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "PR:7", p.pendingName)
+}
+
+func TestDoAssignSelf_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+	_, cmd := p.doAssignSelf()
+	assert.Nil(t, cmd)
+}
+
+func TestDoAssignSelfFor_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// ghClient is nil
+	_, cmd := p.doAssignSelfFor("issue", 42)
+	assert.Nil(t, cmd)
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestExecuteRightClickAction_Issue_AssignSelf(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 9, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionAssignSelf)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "issue:9", p.pendingName)
+}
+
+func TestExecuteRightClickAction_PR_AssignSelf(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 15, Title: "Feature", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionAssignSelf)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "PR:15", p.pendingName)
+}
+
+func TestHandleKey_A_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.NotNil(t, cmd, "pressing 'A' on Issues tab should trigger assign flow")
+	assert.Equal(t, opAssignSelf, p.pending)
+}
+
+func TestHandleKey_A_PRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.NotNil(t, cmd, "pressing 'A' on PRs tab should trigger assign flow")
+	assert.Equal(t, opAssignSelf, p.pending)
+}
+
+func TestHandleKey_A_OtherTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabBranches
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.Nil(t, cmd, "pressing 'A' outside Issues/PRs tab should be no-op")
+}
+
+func TestHandleKey_A_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// ghClient is nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.Nil(t, cmd, "pressing 'A' without ghClient should be no-op")
+}
+
+func TestHandleModalResult_AssignSelf_Confirm(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+	p.pending = opAssignSelf
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "confirming should produce the assign command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_AssignSelf_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.pending = opAssignSelf
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancelling should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_AssignSelf_BadName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.ctx = t.Context()
+	p.pending = opAssignSelf
+	p.pendingName = "bad"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd, "malformed pending name should produce nil cmd")
+}
+
+func TestHandleAssignSelfResult_IssueSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{kind: "issue", number: 42, login: "octocat"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "octocat", p.gh.allIssues[0].Assignee)
+	assert.Equal(t, "octocat", p.tabItems[tabIssues][0].issue.Assignee)
+}
+
+func TestHandleAssignSelfResult_PRSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{kind: "PR", number: 7, login: "octocat"})
+	assert.NotNil(t, cmd, "PR assignment success should still toast + reload")
+}
+
+func TestHandleAssignSelfResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open", Assignee: ""}}
+
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{
+		kind:   "issue",
+		number: 42,
+		err:    errors.New("network error"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	assert.Equal(t, "", p.gh.allIssues[0].Assignee, "assignee should be unchanged on error")
+}
+
+func TestAssignSelfCmd_UsesCachedLogin(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("issue", 42)
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Equal(t, 42, res.number)
+	assert.Equal(t, "octocat", res.login)
+	assert.NoError(t, res.err)
+}
+
+func TestAssignSelfCmd_FetchesLoginWhenEmpty(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{user: &gh.User{Login: gh.Ptr("fetched-user")}}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "" // not cached
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("PR", 7)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Equal(t, "fetched-user", res.login)
+	assert.NoError(t, res.err)
+}
+
+func TestAssignSelfCmd_AddAssigneesError(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{addAssigneesErr: errors.New("forbidden")}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("issue", 42)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Error(t, res.err)
+}
+
+// ---------------------------------------------------------------------------
+// State filter (#260): open / closed / all for Issues and PRs
+// ---------------------------------------------------------------------------
+
+func TestStateFilterKind_String(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "Open", stateFilterOpen.String())
+	assert.Equal(t, "Closed", stateFilterClosed.String())
+	assert.Equal(t, labelAll, stateFilterAll.String())
+}
+
+func TestStateFilterKind_APIValue(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "open", stateFilterOpen.apiValue())
+	assert.Equal(t, "closed", stateFilterClosed.apiValue())
+	assert.Equal(t, "all", stateFilterAll.apiValue())
+}
+
+func TestCycleIssueStateFilter_CyclesAndReloads(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	// Seed some state that should be reset on cycle.
+	p.gh.allIssues = []ghIssueItem{{Number: 1}}
+	p.tabItems[tabIssues] = []listItem{{kind: kindIssue}}
+	p.tabCursor[tabIssues] = 3
+	p.tabOffset[tabIssues] = 2
+
+	_, cmd := p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterClosed, p.gh.issueState)
+	assert.Nil(t, p.gh.allIssues, "cached issues should be cleared for a fresh fetch")
+	assert.Equal(t, 0, p.tabCursor[tabIssues])
+	assert.Equal(t, 0, p.tabOffset[tabIssues])
+	assert.True(t, p.tabPaging[tabIssues].loading)
+	assert.NotNil(t, cmd, "should return a reload command")
+
+	_, _ = p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterAll, p.gh.issueState)
+	_, _ = p.cycleIssueStateFilter()
+	assert.Equal(t, stateFilterOpen, p.gh.issueState, "should wrap back to open")
+}
+
+func TestCyclePRStateFilter_CyclesAndReloads(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.allPRs = []ghPRItem{{Number: 1}}
+	p.tabItems[tabPRs] = []listItem{{kind: kindPR}}
+	p.tabCursor[tabPRs] = 4
+	p.tabOffset[tabPRs] = 1
+
+	_, cmd := p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterClosed, p.gh.prState)
+	assert.Nil(t, p.gh.allPRs)
+	assert.Equal(t, 0, p.tabCursor[tabPRs])
+	assert.Equal(t, 0, p.tabOffset[tabPRs])
+	assert.True(t, p.tabPaging[tabPRs].loading)
+	assert.NotNil(t, cmd)
+
+	_, _ = p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterAll, p.gh.prState)
+	_, _ = p.cyclePRStateFilter()
+	assert.Equal(t, stateFilterOpen, p.gh.prState)
+}
+
+func TestCycleStateFilter_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// client nil
+	_, cmd := p.cycleIssueStateFilter()
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
+	_, cmd = p.cyclePRStateFilter()
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.prState)
+}
+
+func TestLoadIssuesPage_UsesStateFilter(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.issueState = stateFilterClosed
+
+	cmd := p.loadIssuesPage(1, true)
+	_ = cmd()
+	assert.NotNil(t, mock.lastIssuesOpts)
+	assert.Equal(t, "closed", mock.lastIssuesOpts.State)
+}
+
+func TestLoadPRsPage_UsesStateFilter(t *testing.T) {
+	t.Parallel()
+	mock := &mockGHClientFull{}
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = mock
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.gh.prState = stateFilterAll
+
+	cmd := p.loadPRsPage(1, true)
+	_ = cmd()
+	assert.NotNil(t, mock.lastPRsOpts)
+	assert.Equal(t, "all", mock.lastPRsOpts.State)
+}
+
+func TestHandleKey_S_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.activeTab = tabIssues
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.NotNil(t, cmd, "pressing 'S' on Issues tab should reload")
+	assert.Equal(t, stateFilterClosed, p.gh.issueState)
+}
+
+func TestHandleKey_S_PRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.pageSize = 30
+	p.ctx = t.Context()
+	p.activeTab = tabPRs
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.NotNil(t, cmd, "pressing 'S' on PRs tab should reload")
+	assert.Equal(t, stateFilterClosed, p.gh.prState)
+}
+
+func TestHandleKey_S_OtherTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabActions
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.Nil(t, cmd, "pressing 'S' outside Issues/PRs should be a no-op")
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
+}
+
+func TestHandleKey_S_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// client nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'S', Text: "S"})
+	assert.Nil(t, cmd)
+	assert.Equal(t, stateFilterOpen, p.gh.issueState)
 }

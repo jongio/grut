@@ -1417,3 +1417,162 @@ func TestDiscardResultMsg_Error(t *testing.T) {
 	assert.NotNil(t, p.err)
 	assert.Nil(t, cmd, "should not reload on error")
 }
+
+// ---------------------------------------------------------------------------
+// Clean overlay (git clean preview + selective remove)
+// ---------------------------------------------------------------------------
+
+func cleanTestPanel(t *testing.T, mock *mockGitClient) *GitStatus {
+	t.Helper()
+	p := newTestPanel(t, mock)
+	p.Focus()
+	p.SetSize(80, 24)
+	return p
+}
+
+func TestCleanOverlayOpensAndPreviews(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	var previewOpts git.CleanOpts
+	mock.CleanPreviewFunc = func(_ context.Context, opts git.CleanOpts) ([]git.CleanCandidate, error) {
+		previewOpts = opts
+		cands := []git.CleanCandidate{{Path: "junk.txt"}, {Path: "build/"}}
+		if opts.IncludeIgnored {
+			cands = append(cands, git.CleanCandidate{Path: "debug.log", Ignored: true})
+		}
+		return cands, nil
+	}
+	p := cleanTestPanel(t, mock)
+
+	_, cmd := p.Update(keyMsg('X'))
+	require.True(t, p.cleanActive)
+	require.True(t, p.cleanLoading)
+	require.NotNil(t, cmd)
+	assert.False(t, previewOpts.IncludeIgnored)
+
+	p.Update(cmd())
+	assert.False(t, p.cleanLoading)
+	require.Len(t, p.cleanCandidates, 2)
+
+	out := p.View(80, 24)
+	assert.Contains(t, out, "Clean untracked files")
+	assert.Contains(t, out, "junk.txt")
+}
+
+func TestCleanIncludeIgnoredReloads(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	var previewOpts git.CleanOpts
+	mock.CleanPreviewFunc = func(_ context.Context, opts git.CleanOpts) ([]git.CleanCandidate, error) {
+		previewOpts = opts
+		cands := []git.CleanCandidate{{Path: "junk.txt"}}
+		if opts.IncludeIgnored {
+			cands = append(cands, git.CleanCandidate{Path: "debug.log", Ignored: true})
+		}
+		return cands, nil
+	}
+	p := cleanTestPanel(t, mock)
+	_, cmd := p.Update(keyMsg('X'))
+	p.Update(cmd())
+	require.Len(t, p.cleanCandidates, 1)
+
+	_, cmd = p.Update(keyMsg('i'))
+	require.True(t, p.cleanIncludeIgnored)
+	require.True(t, p.cleanLoading)
+	require.NotNil(t, cmd)
+	p.Update(cmd())
+	assert.True(t, previewOpts.IncludeIgnored)
+	require.Len(t, p.cleanCandidates, 2)
+}
+
+func TestCleanSelectConfirmAndRemove(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	mock.CleanPreviewFunc = func(_ context.Context, _ git.CleanOpts) ([]git.CleanCandidate, error) {
+		return []git.CleanCandidate{{Path: "junk.txt"}, {Path: "keep.txt"}}, nil
+	}
+	var cleanOpts git.CleanOpts
+	mock.CleanFunc = func(_ context.Context, opts git.CleanOpts) error {
+		cleanOpts = opts
+		return nil
+	}
+	p := cleanTestPanel(t, mock)
+	_, cmd := p.Update(keyMsg('X'))
+	p.Update(cmd())
+
+	// Select the first candidate (junk.txt) only.
+	p.Update(keyMsg(' '))
+	assert.True(t, p.cleanSelected["junk.txt"])
+
+	// Enter triggers a confirmation and sets the pending op.
+	_, cmd = p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.Equal(t, opClean, p.pendingOp)
+	require.NotNil(t, cmd)
+
+	// Accepting the modal removes only the selected path.
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	p.Update(cmd())
+	assert.Equal(t, []string{"junk.txt"}, cleanOpts.Paths)
+	assert.False(t, cleanOpts.IncludeIgnored)
+	assert.False(t, p.cleanActive, "overlay should close after removal")
+}
+
+func TestCleanIgnoredSelectionForcesIncludeIgnored(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	mock.CleanPreviewFunc = func(_ context.Context, _ git.CleanOpts) ([]git.CleanCandidate, error) {
+		return []git.CleanCandidate{{Path: "debug.log", Ignored: true}}, nil
+	}
+	var cleanOpts git.CleanOpts
+	mock.CleanFunc = func(_ context.Context, opts git.CleanOpts) error {
+		cleanOpts = opts
+		return nil
+	}
+	p := cleanTestPanel(t, mock)
+	p.cleanIncludeIgnored = true
+	_, cmd := p.Update(keyMsg('X'))
+	p.Update(cmd())
+
+	p.Update(keyMsg('a')) // select all
+	_, _ = p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, cmd = p.Update(notify.ModalResultMsg{Accept: true})
+	require.NotNil(t, cmd)
+	p.Update(cmd())
+	assert.Equal(t, []string{"debug.log"}, cleanOpts.Paths)
+	assert.True(t, cleanOpts.IncludeIgnored, "ignored selection must pass -x")
+}
+
+func TestCleanEnterWithNoSelectionDoesNotConfirm(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	mock.CleanPreviewFunc = func(_ context.Context, _ git.CleanOpts) ([]git.CleanCandidate, error) {
+		return []git.CleanCandidate{{Path: "junk.txt"}}, nil
+	}
+	p := cleanTestPanel(t, mock)
+	_, cmd := p.Update(keyMsg('X'))
+	p.Update(cmd())
+
+	_, cmd = p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.Equal(t, "", p.pendingOp, "empty selection must not arm a removal")
+	assert.NotNil(t, cmd, "should surface an informational toast")
+}
+
+func TestCleanEscCloses(t *testing.T) {
+	mock := newMockGitClient(mockGitClientOptions{})
+	mock.CleanPreviewFunc = func(_ context.Context, _ git.CleanOpts) ([]git.CleanCandidate, error) {
+		return []git.CleanCandidate{{Path: "junk.txt"}}, nil
+	}
+	p := cleanTestPanel(t, mock)
+	_, cmd := p.Update(keyMsg('X'))
+	p.Update(cmd())
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	assert.False(t, p.cleanActive)
+}
+
+func TestCleanKeyBindingRegistered(t *testing.T) {
+	mock := &mockGitClient{}
+	p := New(mock, nil)
+	found := false
+	for _, b := range p.KeyBindings() {
+		if b.Action == "clean" {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected a clean key binding")
+}

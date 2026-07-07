@@ -102,6 +102,8 @@ func (ms *modalState) handleKey(mgr *Manager, msg tea.KeyPressMsg) tea.Cmd {
 		return ms.handleActionPickerKey(mgr, key)
 	case ModalActionPickerWithCheckbox:
 		return ms.handleActionPickerWithCheckboxKey(mgr, key)
+	case ModalMultilineInput:
+		return ms.handleMultilineInputKey(mgr, key, msg)
 	}
 	return nil
 }
@@ -255,6 +257,64 @@ func (ms *modalState) handleInputKey(mgr *Manager, key string, msg tea.KeyPressM
 	}
 }
 
+// handleMultilineInputKey handles key input for a multi-line text composer.
+// Enter inserts a newline, Ctrl+D submits the composed value, and Esc
+// cancels. Backspace, arrow keys, and printable characters edit the text.
+func (ms *modalState) handleMultilineInputKey(mgr *Manager, key string, msg tea.KeyPressMsg) tea.Cmd {
+	switch key {
+	case "esc":
+		mgr.dismissModal()
+		return func() tea.Msg {
+			return ModalResultMsg{Accept: false}
+		}
+	case "ctrl+d":
+		value := ms.input
+		mgr.dismissModal()
+		return func() tea.Msg {
+			return ModalResultMsg{Accept: true, Value: value}
+		}
+	case "enter":
+		ms.insertText("\n")
+		return nil
+	case "backspace":
+		if ms.cursor > 0 {
+			runes := []rune(ms.input)
+			ms.input = string(runes[:ms.cursor-1]) + string(runes[ms.cursor:])
+			ms.cursor--
+		}
+		return nil
+	case "left":
+		if ms.cursor > 0 {
+			ms.cursor--
+		}
+		return nil
+	case "right":
+		if ms.cursor < len([]rune(ms.input)) {
+			ms.cursor++
+		}
+		return nil
+	default:
+		ms.insertText(msg.Text)
+		return nil
+	}
+}
+
+// insertText inserts text at the current cursor position and advances the
+// cursor. Empty text is a no-op.
+func (ms *modalState) insertText(text string) {
+	if text == "" {
+		return
+	}
+	runes := []rune(ms.input)
+	inserted := []rune(text)
+	newRunes := make([]rune, 0, len(runes)+len(inserted))
+	newRunes = append(newRunes, runes[:ms.cursor]...)
+	newRunes = append(newRunes, inserted...)
+	newRunes = append(newRunes, runes[ms.cursor:]...)
+	ms.input = string(newRunes)
+	ms.cursor += len(inserted)
+}
+
 // handleActionPickerKey handles key input for an action picker modal.
 func (ms *modalState) handleActionPickerKey(mgr *Manager, key string) tea.Cmd {
 	switch key {
@@ -356,7 +416,7 @@ func (ms *modalState) handleActionPickerWithCheckboxKey(mgr *Manager, key string
 // ModalResultMsg when a clickable element is activated.
 func (ms *modalState) handleMouseClick(mgr *Manager, mouseX, mouseY, screenWidth, screenHeight int) tea.Cmd {
 	// Input modals only support keyboard interaction.
-	if ms.kind == ModalInput {
+	if ms.kind == ModalInput || ms.kind == ModalMultilineInput {
 		return nil
 	}
 	// Compute the box width identically to view().
@@ -561,6 +621,11 @@ func (ms *modalState) view(width, height int) string {
 		content.WriteString(ms.renderConfirmButtons(cw))
 	case ModalInput:
 		content.WriteString(ms.renderInputField(cw))
+	case ModalMultilineInput:
+		content.WriteString(ms.renderMultilineInputField(cw))
+		content.WriteString("\n")
+		hintStyle := modalHintBase.Width(cw)
+		content.WriteString(hintStyle.Render("enter newline • ctrl+d submit • esc cancel"))
 	case ModalConfirmWithCheckbox:
 		content.WriteString(ms.renderCheckbox(cw))
 		content.WriteString("\n")
@@ -618,6 +683,23 @@ func (ms *modalState) renderInputField(width int) string {
 	return inputStyle.Render(display)
 }
 
+// renderMultilineInputField renders the text composer for a multi-line
+// input modal. The field keeps a minimum height so it reads as a composer
+// even when empty, and shows the placeholder until the user types.
+func (ms *modalState) renderMultilineInputField(width int) string {
+	const minLines = 4
+	display := ms.input
+	if display == "" && ms.placeholder != "" {
+		display = ms.placeholder
+	}
+	lines := strings.Split(display, "\n")
+	for len(lines) < minLines {
+		lines = append(lines, "")
+	}
+	inputStyle := modalInputBorder.Width(width - 4)
+	return inputStyle.Render(strings.Join(lines, "\n"))
+}
+
 // ShowConfirm returns a tea.Cmd that produces a ShowModalMsg for a
 // yes/no confirmation dialog.
 func ShowConfirm(title, message string) tea.Cmd {
@@ -651,6 +733,19 @@ func ShowInputWithValue(title, placeholder, value string) tea.Cmd {
 			Placeholder: placeholder,
 			Value:       value,
 			Kind:        ModalInput,
+		}
+	}
+}
+
+// ShowMultilineInput returns a tea.Cmd that produces a ShowModalMsg for a
+// multi-line text composer. Enter inserts a newline, Ctrl+D submits, and
+// Esc cancels.
+func ShowMultilineInput(title, placeholder string) tea.Cmd {
+	return func() tea.Msg {
+		return ShowModalMsg{
+			Title:       title,
+			Placeholder: placeholder,
+			Kind:        ModalMultilineInput,
 		}
 	}
 }
