@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -68,6 +69,8 @@ type GitDiff struct {
 	staged                bool // whether viewing staged (index) changes
 	loading               bool // true while async diff fetch is in progress
 	showReviewAnnotations bool // toggle for inline annotation display
+	ignoreWhitespace      bool // when true, pass -w to git diff to hide whitespace-only changes
+	wordHighlight         bool // toggle for intra-line (word-level) diff emphasis
 }
 
 // diffLoadedMsg is the result of an async diff fetch (F01: no blocking in Update).
@@ -95,6 +98,18 @@ func New(gitClient git.StatusReader, th *theme.Theme) *GitDiff {
 // SetActionsCfg stores the right-click context menu configuration.
 func (d *GitDiff) SetActionsCfg(cfg config.ActionsConfig) {
 	d.actionsCfg = cfg
+}
+
+// SetWordHighlight sets whether intra-line (word-level) emphasis is applied to
+// changed lines in the inline diff view. It is wired from the git config at
+// startup; the "w" key toggles it for the session.
+func (d *GitDiff) SetWordHighlight(enabled bool) {
+	if d.wordHighlight == enabled {
+		return
+	}
+	d.wordHighlight = enabled
+	d.rebuildLines()
+	d.clampScroll()
 }
 
 // Init implements panels.Panel.
@@ -234,6 +249,7 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	ignoreWS := d.ignoreWhitespace
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -244,10 +260,11 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 			ctx = context.Background()
 		}
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
-			CommitA:  commitA,
-			CommitB:  commitB,
-			ThreeDot: threeDot,
-			Path:     path,
+			CommitA:   commitA,
+			CommitB:   commitB,
+			ThreeDot:  threeDot,
+			Path:      path,
+			IgnoreAll: ignoreWS,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -282,8 +299,88 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		d.prevFile()
 	case "R":
 		d.toggleReviewAnnotations()
+	case "y":
+		return d.copyCurrentHunk()
+	case "w":
+		d.toggleWordHighlight()
+	case "W":
+		return d, d.toggleIgnoreWhitespace()
 	}
 	return d, nil
+}
+
+// copyCurrentHunk copies the raw unified-diff text of the hunk under the
+// current scroll position to the clipboard. It is a safe no-op (with a
+// warning toast) when no diff is loaded.
+func (d *GitDiff) copyCurrentHunk() (panels.Panel, tea.Cmd) {
+	hunk, ok := d.currentHunk()
+	if !ok {
+		return d, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No hunk to copy", Level: notify.Warn}
+		}
+	}
+	patch := hunkToPatch(hunk)
+	ctx := d.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return d, func() tea.Msg {
+		if err := panels.CopyToClipboard(ctx, patch); err != nil {
+			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Copied hunk to clipboard", Level: notify.Success}
+	}
+}
+
+// currentHunk returns the diff hunk under the current scroll position and
+// true, or a zero hunk and false when no diff is loaded. The hunk is located
+// by mapping d.scrollY through d.hunkStarts, which is built in the same
+// file-then-hunk order as the flattened hunk list below.
+func (d *GitDiff) currentHunk() (git.Hunk, bool) {
+	var flat []git.Hunk
+	for _, fd := range d.diffs {
+		flat = append(flat, fd.Hunks...)
+	}
+	if len(flat) == 0 {
+		return git.Hunk{}, false
+	}
+	idx := 0
+	for i, start := range d.hunkStarts {
+		if start <= d.scrollY {
+			idx = i
+		} else {
+			break
+		}
+	}
+	if idx >= len(flat) {
+		idx = len(flat) - 1
+	}
+	return flat[idx], true
+}
+
+// hunkToPatch renders a hunk as raw unified-diff text: the "@@" header
+// followed by each line prefixed with ' ', '+', or '-'.
+func hunkToPatch(h git.Hunk) string {
+	var b strings.Builder
+	b.WriteString(h.Header)
+	for _, ln := range h.Lines {
+		b.WriteByte('\n')
+		b.WriteString(diffLinePrefix(ln.Type))
+		b.WriteString(ln.Content)
+	}
+	return b.String()
+}
+
+// diffLinePrefix returns the single-character unified-diff prefix for a line.
+func diffLinePrefix(t git.DiffLineType) string {
+	switch t {
+	case git.DiffLineAdded:
+		return "+"
+	case git.DiffLineRemoved:
+		return "-"
+	default:
+		return " "
+	}
 }
 
 // handleMouseWheel scrolls the diff viewport.
@@ -340,7 +437,10 @@ func (d *GitDiff) Title() string {
 	}
 	base := filepath.Base(d.path)
 	if d.staged {
-		return base + " (staged)"
+		base += " (staged)"
+	}
+	if d.ignoreWhitespace {
+		base += " [ignore ws]"
 	}
 	return base
 }
@@ -354,7 +454,10 @@ func (d *GitDiff) KeyBindings() []panels.KeyBinding {
 		{Key: "t", Description: "Toggle inline/side-by-side", Action: "toggle_view"},
 		{Key: "n/N", Description: "Next/previous hunk", Action: "hunk_nav"},
 		{Key: "[/]", Description: "Previous/next file", Action: "file_nav"},
+		{Key: "y", Description: "Copy hunk to clipboard", Action: "copy_hunk"},
 		{Key: "R", Description: "Toggle review annotations", Action: "toggle_review"},
+		{Key: "w", Description: "Toggle word-level diff", Action: "toggle_word_diff"},
+		{Key: "W", Description: "Toggle ignore whitespace", Action: "toggle_whitespace"},
 	}
 }
 
@@ -386,6 +489,7 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 	gen := d.diffGen
 	gitClient := d.gitClient
 	ctx := d.ctx
+	ignoreWS := d.ignoreWhitespace
 	return func() tea.Msg {
 		result := diffLoadedMsg{path: path, generation: gen}
 		if gitClient == nil {
@@ -396,8 +500,9 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 			ctx = context.Background()
 		}
 		diffs, err := gitClient.Diff(ctx, git.DiffOpts{
-			Staged: staged,
-			Path:   path,
+			Staged:    staged,
+			Path:      path,
+			IgnoreAll: ignoreWS,
 		})
 		result.diffs = diffs
 		result.err = err
@@ -457,7 +562,11 @@ func (d *GitDiff) buildInlineLines() {
 		for _, hunk := range fd.Hunks {
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
-			for _, line := range hunk.Lines {
+			var emph map[int][]wordSeg
+			if d.wordHighlight {
+				emph = computeHunkWordEmphasis(hunk.Lines)
+			}
+			for li, line := range hunk.Lines {
 				if len(d.lines) >= maxRenderedLines {
 					d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 					return
@@ -465,9 +574,17 @@ func (d *GitDiff) buildInlineLines() {
 				var rendered string
 				switch line.Type {
 				case git.DiffLineAdded:
-					rendered = d.addedStyle().Render("+ " + line.Content)
+					if segs := emph[li]; len(segs) > 0 {
+						rendered = d.renderWordLine("+ ", d.addedStyle(), segs)
+					} else {
+						rendered = d.addedStyle().Render("+ " + line.Content)
+					}
 				case git.DiffLineRemoved:
-					rendered = d.removedStyle().Render("- " + line.Content)
+					if segs := emph[li]; len(segs) > 0 {
+						rendered = d.renderWordLine("- ", d.removedStyle(), segs)
+					} else {
+						rendered = d.removedStyle().Render("- " + line.Content)
+					}
 				default:
 					rendered = d.contextStyle().Render("  " + line.Content)
 				}
@@ -798,6 +915,30 @@ func (d *GitDiff) toggleReviewAnnotations() {
 	d.clampScroll()
 }
 
+// toggleIgnoreWhitespace flips ignore-whitespace mode and re-runs the current
+// diff so whitespace-only changes are hidden or shown. It works for
+// working-tree, staged, and ref-comparison (commit, branch, and PR) diffs.
+// The flag is stored on the panel, so it persists as the user navigates
+// between files in the same session view.
+func (d *GitDiff) toggleIgnoreWhitespace() tea.Cmd {
+	d.ignoreWhitespace = !d.ignoreWhitespace
+	if d.path == "" {
+		return nil
+	}
+	if d.compareMode {
+		return d.startRefDiffLoad(d.path, d.compareCommitA, d.compareCommitB, d.compareThree)
+	}
+	return d.startDiffLoad(d.path, d.staged)
+}
+
+// toggleWordHighlight toggles intra-line (word-level) emphasis for the session
+// and rebuilds lines. The startup default comes from git.diff_word_highlight.
+func (d *GitDiff) toggleWordHighlight() {
+	d.wordHighlight = !d.wordHighlight
+	d.rebuildLines()
+	d.clampScroll()
+}
+
 // filterFindingsForFile returns only findings whose File matches the
 // currently displayed path. If path is empty, no findings are returned.
 func (d *GitDiff) filterFindingsForFile(all []panels.AIReviewFinding) []panels.AIReviewFinding {
@@ -904,6 +1045,23 @@ func (d *GitDiff) contextStyle() lipgloss.Style {
 		return d.theme.Styles.DiffContext
 	}
 	return lipgloss.NewStyle().Foreground(panels.ColorOf(d.themeColors().DiffContext, "#999999"))
+}
+
+// renderWordLine renders a changed diff line with intra-line emphasis. The
+// prefix ("+ " or "- ") and unchanged segments use base; changed segments are
+// reversed so the emphasis reads on any theme without guessing colors.
+func (d *GitDiff) renderWordLine(prefix string, base lipgloss.Style, segs []wordSeg) string {
+	emph := base.Reverse(true)
+	var b strings.Builder
+	b.WriteString(base.Render(prefix))
+	for _, s := range segs {
+		if s.Changed {
+			b.WriteString(emph.Render(s.Text))
+		} else {
+			b.WriteString(base.Render(s.Text))
+		}
+	}
+	return b.String()
 }
 
 func (d *GitDiff) headerStyle() lipgloss.Style {

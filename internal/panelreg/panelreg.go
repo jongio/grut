@@ -49,6 +49,15 @@ func (d Deps) ApplyActionsCfg(p panels.Panel) panels.Panel {
 	return p
 }
 
+// ApplyGitCfg injects the git configuration into panels that support the
+// optional SetGitCfg method (for example the pre-stage secret guard).
+func (d Deps) ApplyGitCfg(p panels.Panel) panels.Panel {
+	if gc, ok := p.(interface{ SetGitCfg(config.GitConfig) }); ok {
+		gc.SetGitCfg(d.Config.Git)
+	}
+	return p
+}
+
 // Placeholder returns a placeholder panel for the given name, using the
 // theme from deps.
 func (d Deps) Placeholder(name string) panels.Panel {

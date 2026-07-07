@@ -22,6 +22,11 @@ type mockGitOps struct {
 	commits  []git.Commit
 	err      error
 	lastOpts git.LogOpts
+	patch    string
+	patchErr error
+	lastHash string
+	root     string
+	rootErr  error
 }
 
 func (m *mockGitOps) Log(_ context.Context, opts git.LogOpts) ([]git.Commit, error) {
@@ -40,6 +45,21 @@ func (m *mockGitOps) Log(_ context.Context, opts git.LogOpts) ([]git.Commit, err
 		end = len(m.commits)
 	}
 	return m.commits[start:end], nil
+}
+
+func (m *mockGitOps) FormatPatch(_ context.Context, hash string) (string, error) {
+	m.lastHash = hash
+	if m.patchErr != nil {
+		return "", m.patchErr
+	}
+	return m.patch, nil
+}
+
+func (m *mockGitOps) RepoRoot(_ context.Context) (string, error) {
+	if m.rootErr != nil {
+		return "", m.rootErr
+	}
+	return m.root, nil
 }
 
 // ---------------------------------------------------------------------------

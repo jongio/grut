@@ -522,6 +522,64 @@ func TestModalInputBackspace(t *testing.T) {
 	assert.Equal(t, "ab", result.Value)
 }
 
+func TestShowMultilineInput(t *testing.T) {
+	cmd := ShowMultilineInput("Comment on issue #1", "Fix the bug")
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	smm, ok := msg.(ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Comment on issue #1", smm.Title)
+	assert.Equal(t, "Fix the bug", smm.Placeholder)
+	assert.Equal(t, ModalMultilineInput, smm.Kind)
+}
+
+func TestModalMultilineInputSubmit(t *testing.T) {
+	m := NewManager()
+	m.Update(ShowModalMsg{
+		Title: "Comment",
+		Kind:  ModalMultilineInput,
+	})
+	require.True(t, m.HasModal())
+
+	m.Update(tea.KeyPressMsg{Code: -1, Text: "h"})
+	m.Update(tea.KeyPressMsg{Code: -1, Text: "i"})
+	// Enter inserts a newline instead of submitting.
+	enterCmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.Nil(t, enterCmd, "enter should insert a newline, not submit")
+	assert.True(t, m.HasModal(), "modal should stay open after enter")
+	m.Update(tea.KeyPressMsg{Code: -1, Text: "y"})
+
+	// Ctrl+D submits.
+	cmd := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	result, ok := msg.(ModalResultMsg)
+	require.True(t, ok)
+	assert.True(t, result.Accept)
+	assert.Equal(t, "hi\ny", result.Value)
+	assert.False(t, m.HasModal())
+}
+
+func TestModalMultilineInputEscape(t *testing.T) {
+	m := NewManager()
+	m.Update(ShowModalMsg{
+		Title: "Comment",
+		Kind:  ModalMultilineInput,
+	})
+
+	m.Update(tea.KeyPressMsg{Code: -1, Text: "a"})
+	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	result, ok := msg.(ModalResultMsg)
+	require.True(t, ok)
+	assert.False(t, result.Accept)
+	assert.False(t, m.HasModal())
+}
+
 func TestModalViewRendering(t *testing.T) {
 	m := NewManager()
 	m.Update(ShowModalMsg{

@@ -34,7 +34,7 @@ func TestSections_ExpectedSections(t *testing.T) {
 	for i, s := range secs {
 		ids[i] = s.ID
 	}
-	expected := []string{"global", "navigation", "filetree", "gitstatus", "gitinfo", "github", "commits", "preview", "edit_mode"}
+	expected := []string{"global", "navigation", "filetree", "gitstatus", "gitinfo", "github", "commits", "preview", "gitdiff", "edit_mode"}
 	assert.Equal(t, expected, ids)
 }
 
