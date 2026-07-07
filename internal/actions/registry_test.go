@@ -115,6 +115,13 @@ func TestAllActions_IssueAndPRIncludeAssignSelf(t *testing.T) {
 	assert.Equal(t, "assign to me", ActionLabel(ActionAssignSelf))
 }
 
+func TestAllActions_IssueIncludesCloseReopen(t *testing.T) {
+	got := AllActions(ItemIssue)
+	assert.Contains(t, got, ActionCloseReopenIssue,
+		"issue actions should include close/reopen")
+	assert.Equal(t, "close/reopen issue", ActionLabel(ActionCloseReopenIssue))
+}
+
 // ---------------------------------------------------------------------------
 // Description
 // ---------------------------------------------------------------------------

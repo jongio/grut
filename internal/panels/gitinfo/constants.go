@@ -27,6 +27,8 @@ const (
 	labelReflog    = "Reflog"
 	labelActions   = "Actions"
 	labelAll       = "All"
+
+	labelNotifications = "Notifications"
 )
 
 // Section names (lowercase, used in SetActiveTab and filter messages).
@@ -40,6 +42,8 @@ const (
 	sectionIssues    = "issues"
 	sectionPRs       = "prs"
 	sectionActions   = "actions"
+
+	sectionNotifications = "notifications"
 )
 
 // Git operation result keys used in opResultMsg.op.
