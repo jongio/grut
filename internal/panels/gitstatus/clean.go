@@ -106,7 +106,7 @@ func (p *GitStatus) handleCleanResult(msg cleanResultMsg) (panels.Panel, tea.Cmd
 // handleCleanKey processes keys while the cleanup overlay is open.
 func (p *GitStatus) handleCleanKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "escape", "q":
+	case "esc", keyEscape, "q":
 		p.closeCleanOverlay()
 		return p, nil
 	case "j", "down":
@@ -119,7 +119,7 @@ func (p *GitStatus) handleCleanKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) 
 			p.cleanCursor--
 			p.ensureCleanCursorVisible()
 		}
-	case " ", "space":
+	case " ", keySpace:
 		p.toggleCleanSelection()
 	case "a":
 		p.toggleSelectAllClean()

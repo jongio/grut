@@ -67,6 +67,12 @@ const (
 // unbounded memory growth during long sessions.
 const maxDiffCacheEntries = 50
 
+// Key name constants for KeyPressMsg.String() comparisons.
+const (
+	keyEscape = "escape"
+	keySpace  = "space"
+)
+
 // ---------------------------------------------------------------------------
 // Section groups
 // ---------------------------------------------------------------------------
@@ -417,7 +423,7 @@ func (p *GitStatus) KeyBindings() []panels.KeyBinding {
 		{Key: "h", Description: "Enter hunk mode", Action: "hunk_mode"},
 		{Key: "d", Description: "Discard unstaged changes", Action: "discard"},
 		{Key: "y", Description: "Copy hunk (or file path) to clipboard", Action: "copy"},
-		{Key: "space", Description: "Toggle select for bulk", Action: "toggle_select"},
+		{Key: keySpace, Description: "Toggle select for bulk", Action: "toggle_select"},
 		{Key: "a", Description: "Stage all", Action: "stage_all"},
 		{Key: "U", Description: "Unstage all", Action: "unstage_all"},
 		{Key: "R", Description: "Refresh status", Action: "refresh"},
@@ -912,7 +918,7 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.handleCleanKey(msg)
 	}
 	// Escape from hunk/line mode back to file mode.
-	if key == "esc" || key == "escape" {
+	if key == "esc" || key == keyEscape {
 		if p.mode != modeFile {
 			p.mode = modeFile
 			p.activeFile = ""
@@ -937,7 +943,7 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.stageAtCursor()
 	case "u":
 		return p.unstageAtCursor()
-	case " ", "space":
+	case " ", keySpace:
 		p.toggleSelection()
 	case "a":
 		return p.stageAll()

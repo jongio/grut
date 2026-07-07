@@ -347,6 +347,8 @@ var deadcodeAllowlist = []string{
 	"MockClient.RevertContinue",
 	"MockClient.RevertAbort",
 	"MockClient.Reset",
+	"MockClient.Clean",
+	"MockClient.CleanPreview",
 }
 
 // Default target when running `mage` with no args.
