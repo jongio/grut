@@ -590,6 +590,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "c", Description: "Copy selected to clipboard", Action: "copy"},
 		{Key: "x", Description: "Cut selected to clipboard", Action: "cut"},
 		{Key: "p", Description: "Paste from clipboard", Action: "paste"},
+		{Key: "I", Description: "Add to .gitignore", Action: "gitignore_add"},
 		{Key: "a", Description: "Create new file (alt)", Action: "new_file"},
 		{Key: "A", Description: "Create new directory", Action: "new_dir"},
 		{Key: "R", Description: "Rename file (alt)", Action: "rename"},
@@ -978,6 +979,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.copyToClipboard()
 	case "p":
 		return ft.pasteFromClipboard()
+	case "I":
+		return ft.addToGitignore()
 	case "v":
 		ft.listMode = !ft.listMode
 		ft.rebuildVisible()
