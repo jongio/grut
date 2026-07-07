@@ -4,6 +4,7 @@ package gitinfo
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -132,11 +133,39 @@ type prMergeResultMsg struct {
 	err        error
 }
 
+// commentResultMsg carries the result of posting a conversation-level comment
+// on an issue or PR.
+type commentResultMsg struct {
+	number int
+	kind   string
+	err    error
+}
+
+// prRequestReviewersResultMsg carries the result of a request-reviewers operation.
+type prRequestReviewersResultMsg struct {
+	err       error
+	reviewers []string
+	number    int
+}
+
 // prBranchDeleteResultMsg carries the result of deleting a branch after PR merge.
 type prBranchDeleteResultMsg struct {
 	branch    string
 	remoteErr error
 	localErr  error
+}
+
+// prCreateResultMsg carries the result of creating a pull request.
+type prCreateResultMsg struct {
+	pr  ghPRItem
+	err error
+}
+
+// issueCreateResultMsg carries the result of a create-issue operation.
+type issueCreateResultMsg struct {
+	err    error
+	title  string
+	number int
 }
 
 // workflowInputsFetchedMsg carries the result of fetching workflow_dispatch
@@ -242,22 +271,59 @@ func (f PRFilterKind) String() string {
 	}
 }
 
+// stateFilterKind identifies which item states (open/closed/all) are fetched
+// for the Issues and PRs tabs. Unlike the client-side quick-filters, this
+// controls the server-side State parameter, so closed and merged items are
+// only fetched when the filter allows it.
+type stateFilterKind int
+
+const (
+	stateFilterOpen stateFilterKind = iota
+	stateFilterClosed
+	stateFilterAll
+)
+
+func (s stateFilterKind) String() string {
+	switch s {
+	case stateFilterClosed:
+		return "Closed"
+	case stateFilterAll:
+		return labelAll
+	default:
+		return "Open"
+	}
+}
+
+// apiValue returns the value passed to the GitHub API State parameter.
+func (s stateFilterKind) apiValue() string {
+	switch s {
+	case stateFilterClosed:
+		return stateClosed
+	case stateFilterAll:
+		return "all"
+	default:
+		return prStateOpen
+	}
+}
+
 // ghDataLoadedMsg carries the result of an async GitHub data load.
 type ghDataLoadedMsg struct {
-	err         error
-	user        string
-	issues      []ghIssueItem
-	prs         []ghPRItem
-	actions     []ghActionItem
-	workflows   []ghWorkflowItem
-	releases    []ghReleaseItem
-	repoPrivate bool
+	err           error
+	user          string
+	defaultBranch string
+	issues        []ghIssueItem
+	prs           []ghPRItem
+	actions       []ghActionItem
+	workflows     []ghWorkflowItem
+	releases      []ghReleaseItem
+	repoPrivate   bool
 }
 
 // ghMetaLoadedMsg carries repo metadata and current user info.
 type ghMetaLoadedMsg struct {
-	user        string
-	repoPrivate bool
+	user          string
+	defaultBranch string
+	repoPrivate   bool
 }
 
 // ghIssuesPageMsg carries one page of issues from the GitHub API.
@@ -333,6 +399,7 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 		tabEntry{id: tabActions, name: labelActions, short: shortAct, count: p.actionsStatusIcon()},
 		tabEntry{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
 		tabEntry{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		tabEntry{id: tabNotifications, name: labelNotifications, short: "Ntf", count: p.ghNotifCountStr()},
 	)
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
@@ -397,6 +464,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 			slog.Warn("github: fetch repo info failed", "owner", owner, "repo", repo, "err", err)
 		} else if repoInfo != nil {
 			result.repoPrivate = repoInfo.GetPrivate()
+			result.defaultBranch = repoInfo.GetDefaultBranch()
 		}
 		// Get current user.
 		user, err := client.CurrentUser(ctx)
@@ -568,8 +636,17 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 	if msg.user != "" {
 		p.gh.user = msg.user
 	}
+	if msg.defaultBranch != "" {
+		p.gh.defaultBranch = msg.defaultBranch
+	}
 	p.gh.repoPrivate = msg.repoPrivate
 	p.buildGitHubItems(msg.issues, msg.prs, msg.actions, msg.workflows, msg.releases)
+	// If a create/merge flow requested a specific PR be reselected after this
+	// refresh, honor it now that the list has been rebuilt.
+	if p.gh.pendingSelectPR != 0 {
+		p.selectPRByNumber(p.gh.pendingSelectPR)
+		p.gh.pendingSelectPR = 0
+	}
 	// Determine if any workflow run is still in progress or queued.
 	wasWatching := p.actionsWatching
 	p.actionsWatching = false
@@ -641,6 +718,7 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 			slog.Warn("github: fetch repo info failed", "owner", owner, "repo", repo, "err", err)
 		} else if repoInfo != nil {
 			result.repoPrivate = repoInfo.GetPrivate()
+			result.defaultBranch = repoInfo.GetDefaultBranch()
 		}
 		user, err := client.CurrentUser(ctx)
 		if err != nil {
@@ -661,9 +739,10 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.issueState.apiValue()
 	return func() tea.Msg {
 		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -713,9 +792,10 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.prState.apiValue()
 	return func() tea.Msg {
 		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -867,6 +947,9 @@ func (p *Panel) handleMetaLoaded(msg ghMetaLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.user != "" {
 		p.gh.user = msg.user
 	}
+	if msg.defaultBranch != "" {
+		p.gh.defaultBranch = msg.defaultBranch
+	}
 	p.gh.repoPrivate = msg.repoPrivate
 	return p, nil
 }
@@ -893,6 +976,14 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 	if !msg.replace {
 		p.tabCursor[tabIssues] = savedCursor
 		p.tabOffset[tabIssues] = savedOffset
+	}
+	// After a full refresh, select the just-created issue if one is pending.
+	if msg.replace && p.gh.pendingSelectIssue != 0 {
+		found := p.selectIssueByNumber(p.gh.pendingSelectIssue)
+		p.gh.pendingSelectIssue = 0
+		if found {
+			return p, p.issueSelectedCmd()
+		}
 	}
 	return p, nil
 }
@@ -1125,6 +1216,36 @@ func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
 	}
 }
 
+// cycleIssueStateFilter advances the Issues state filter (open -> closed ->
+// all) and reloads from GitHub, since closed issues are not held locally.
+func (p *Panel) cycleIssueStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.issueState = (p.gh.issueState + 1) % 3
+	p.gh.allIssues = nil
+	p.tabItems[tabIssues] = nil
+	p.tabCursor[tabIssues] = 0
+	p.tabOffset[tabIssues] = 0
+	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadIssuesPage(1, true)
+}
+
+// cyclePRStateFilter advances the PRs state filter (open -> closed -> all) and
+// reloads from GitHub, since closed and merged PRs are not held locally.
+func (p *Panel) cyclePRStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.prState = (p.gh.prState + 1) % 3
+	p.gh.allPRs = nil
+	p.tabItems[tabPRs] = nil
+	p.tabCursor[tabPRs] = 0
+	p.tabOffset[tabPRs] = 0
+	p.tabPaging[tabPRs] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadPRsPage(1, true)
+}
+
 func (p *Panel) applyIssueFilter() {
 	p.tabItems[tabIssues] = nil
 	for _, iss := range p.gh.allIssues {
@@ -1148,6 +1269,91 @@ func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
 	default:
 		return true
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Issue creation
+// ---------------------------------------------------------------------------
+
+// parseIssueLabels splits a comma-separated labels string into a trimmed,
+// de-duplicated slice, dropping empty entries.
+func parseIssueLabels(raw string) []string {
+	seen := make(map[string]bool)
+	var labels []string
+	for _, part := range strings.Split(raw, ",") {
+		label := strings.TrimSpace(part)
+		if label == "" || seen[label] {
+			continue
+		}
+		seen[label] = true
+		labels = append(labels, label)
+	}
+	return labels
+}
+
+// createIssueCmd returns a tea.Cmd that creates a new issue asynchronously
+// and reports the outcome via issueCreateResultMsg.
+func (p *Panel) createIssueCmd(title, body string, labels []string) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return nil
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		req := &gh.IssueRequest{Title: gh.Ptr(title)}
+		if body != "" {
+			req.Body = gh.Ptr(body)
+		}
+		if len(labels) > 0 {
+			req.Labels = &labels
+		}
+		issue, err := client.CreateIssue(ctx, owner, repo, req)
+		if err != nil {
+			return issueCreateResultMsg{err: err, title: title}
+		}
+		return issueCreateResultMsg{number: issue.GetNumber(), title: issue.GetTitle()}
+	}
+}
+
+// handleIssueCreateResult processes the async result of creating an issue.
+// On success it refreshes the Issues list and queues selection of the new item.
+func (p *Panel) handleIssueCreateResult(msg issueCreateResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Create issue failed: " + errStr,
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Make sure the refreshed list is visible and reset pagination for a page-1 reload.
+	p.activeTab = tabIssues
+	p.gh.pendingSelectIssue = msg.number
+	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Created issue #%d", msg.number),
+				Level:   notify.Success,
+			}
+		},
+		p.loadIssuesPage(1, true),
+	)
+}
+
+// selectIssueByNumber moves the Issues-tab cursor to the issue with the given
+// number, if present in the current filtered view. Returns true when found.
+func (p *Panel) selectIssueByNumber(number int) bool {
+	for i, item := range p.tabItems[tabIssues] {
+		if item.kind == kindIssue && item.issue.Number == number {
+			p.tabCursor[tabIssues] = i
+			p.ensureCursorVisible()
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Panel) applyPRFilter() {
@@ -1749,6 +1955,88 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 	return p, tea.Batch(cmds...)
 }
 
+// commentKindIssue and commentKindPR label the target of a comment for the
+// pending-op name and result toast.
+const (
+	commentKindIssue = "issue"
+	commentKindPR    = "PR"
+)
+
+// doCommentOnItem opens a multi-line composer to post a conversation-level
+// comment on the selected issue or PR. This is distinct from inline diff
+// review comments; it uses the shared issue-comment endpoint.
+func (p *Panel) doCommentOnItem() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	if p.gh.client == nil {
+		return p, nil
+	}
+
+	var number int
+	var title, kind string
+	switch items[cursor].kind {
+	case kindIssue:
+		number = items[cursor].issue.Number
+		title = items[cursor].issue.Title
+		kind = commentKindIssue
+	case kindPR:
+		number = items[cursor].pr.Number
+		title = items[cursor].pr.Title
+		kind = commentKindPR
+	default:
+		return p, nil
+	}
+
+	p.clearPending()
+	p.pending = opIssuePRComment
+	p.pendingName = fmt.Sprintf("%s:%d", kind, number)
+
+	modalTitle := fmt.Sprintf("Comment on %s #%d: %s", kind, number, title)
+	return p, notify.ShowMultilineInput(modalTitle, "Write a comment...")
+}
+
+// commentCmd returns a tea.Cmd that posts the comment asynchronously.
+func (p *Panel) commentCmd(number int, body, kind string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		err := client.CommentOnIssue(ctx, owner, repo, number, body)
+		return commentResultMsg{number: number, kind: kind, err: err}
+	}
+}
+
+// handleCommentResult processes the async result of posting a comment. On
+// success it refreshes the conversation shown in the preview.
+func (p *Panel) handleCommentResult(msg commentResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Comment on %s #%d failed: %s", msg.kind, msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	toastMsg := fmt.Sprintf("Comment posted on %s #%d", msg.kind, msg.number)
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: toastMsg,
+				Level:   notify.Success,
+			}
+		},
+	}
+	if refresh := p.activeTabSelectionCmd(); refresh != nil {
+		cmds = append(cmds, refresh)
+	}
+	return p, tea.Batch(cmds...)
+}
+
 // handlePRBranchDeleteResult processes the result of a post-merge branch deletion.
 func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.Panel, tea.Cmd) {
 	if msg.remoteErr != nil && msg.localErr != nil {
@@ -1789,9 +2077,391 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 	)
 }
 
+// doRequestReviewers initiates the request-reviewers flow for the selected PR.
+// It opens a single-line input for one or more comma-separated reviewer logins.
+func (p *Panel) doRequestReviewers() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindPR {
+		return p, nil
+	}
+	pr := items[cursor].pr
+
+	// Guard: only request reviewers on open PRs.
+	if pr.State != prStateOpen {
+		stateLabel := pr.State
+		if stateLabel == "" {
+			stateLabel = stateUnknown
+		}
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Cannot request reviewers on PR #%d: state is %s", pr.Number, stateLabel),
+				Level:   notify.Warn,
+			}
+		}
+	}
+
+	if p.gh.client == nil {
+		return p, nil
+	}
+
+	p.clearPending()
+	p.pending = opPRRequestReviewers
+	p.pendingName = fmt.Sprintf("%d", pr.Number)
+
+	title := fmt.Sprintf("Request reviewers for PR #%d", pr.Number)
+	return p, notify.ShowInput(title, "logins, comma separated (e.g. octocat, hubot)")
+}
+
+// parseReviewerLogins splits a comma-separated string of GitHub logins into a
+// trimmed, de-duplicated slice, preserving first-seen order. A leading "@" on
+// any login is stripped and empty entries are dropped. De-duplication is
+// case-insensitive since GitHub logins are case-insensitive.
+func parseReviewerLogins(input string) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, part := range strings.Split(input, ",") {
+		login := strings.TrimSpace(part)
+		login = strings.TrimPrefix(login, "@")
+		login = strings.TrimSpace(login)
+		if login == "" {
+			continue
+		}
+		key := strings.ToLower(login)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, login)
+	}
+	return out
+}
+
+// requestReviewersCmd returns a tea.Cmd that requests reviewers asynchronously.
+func (p *Panel) requestReviewersCmd(number int, reviewers []string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		err := client.RequestReviewers(ctx, owner, repo, number, reviewers)
+		return prRequestReviewersResultMsg{number: number, reviewers: reviewers, err: err}
+	}
+}
+
+// handlePRRequestReviewersResult processes the async result of a
+// request-reviewers operation, showing a notification and refreshing PR detail.
+func (p *Panel) handlePRRequestReviewersResult(msg prRequestReviewersResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Request reviewers on PR #%d failed: %s", msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	toastMsg := fmt.Sprintf("Requested %s on PR #%d", strings.Join(msg.reviewers, ", "), msg.number)
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{Message: toastMsg, Level: notify.Success}
+		},
+	}
+	// Refresh PR detail so requested reviewers show in the preview.
+	if p.gh.client != nil {
+		cmds = append(cmds, p.loadPRDetails(msg.number))
+	}
+	return p, tea.Batch(cmds...)
+}
+
+// issueStateResultMsg carries the result of closing or reopening an issue.
+type issueStateResultMsg struct {
+	newState string // "open" or "closed"
+	err      error
+	number   int
+}
+
+// doCloseReopenIssue closes or reopens the issue under the cursor on the
+// Issues tab. Open issues are closed; closed issues are reopened.
+func (p *Panel) doCloseReopenIssue() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindIssue {
+		return p, nil
+	}
+	return p.doCloseReopenIssueFor(items[cursor].issue)
+}
+
+// doCloseReopenIssueFor prepares a confirmation modal to close or reopen the
+// given issue. The target state is derived from the issue's current state.
+func (p *Panel) doCloseReopenIssueFor(iss ghIssueItem) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || iss.Number == 0 {
+		return p, nil
+	}
+	target, verb := stateClosed, "Close"
+	if strings.EqualFold(iss.State, stateClosed) {
+		target, verb = prStateOpen, "Reopen"
+	}
+	p.clearPending()
+	p.pending = opIssueCloseReopen
+	// Encode the issue number and target state for the modal handler.
+	p.pendingName = fmt.Sprintf("%d:%s", iss.Number, target)
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("%s Issue #%d", verb, iss.Number),
+		iss.Title,
+	)
+}
+
+// handleIssueCloseReopenConfirm runs the async close/reopen once the user
+// confirms the modal. The pending name is "<number>:<targetState>".
+func (p *Panel) handleIssueCloseReopenConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	number, target, ok := parseIssueStateName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.closeReopenIssueCmd(number, target)
+}
+
+// parseIssueStateName splits a "<number>:<state>" pending name.
+func parseIssueStateName(name string) (number int, state string, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return 0, "", false
+	}
+	n, err := strconv.Atoi(name[:idx])
+	if err != nil {
+		return 0, "", false
+	}
+	return n, name[idx+1:], true
+}
+
+// closeReopenIssueCmd returns a tea.Cmd that closes or reopens an issue.
+func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		var err error
+		if targetState == prStateOpen {
+			err = client.ReopenIssue(ctx, owner, repo, number)
+		} else {
+			err = client.CloseIssue(ctx, owner, repo, number)
+		}
+		return issueStateResultMsg{number: number, newState: targetState, err: err}
+	}
+}
+
+// handleIssueStateResult processes the async result of a close/reopen op.
+func (p *Panel) handleIssueStateResult(msg issueStateResultMsg) (panels.Panel, tea.Cmd) {
+	verb := stateClosed
+	if msg.newState == prStateOpen {
+		verb = "reopened"
+	}
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s failed: %s", msg.number, verb, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Update cached issue state.
+	for i := range p.gh.allIssues {
+		if p.gh.allIssues[i].Number == msg.number {
+			p.gh.allIssues[i].State = msg.newState
+			break
+		}
+	}
+	// Update the visible tab item too.
+	for i := range p.tabItems[tabIssues] {
+		if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+			p.tabItems[tabIssues][i].issue.State = msg.newState
+			break
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s", msg.number, verb),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
 // ---------------------------------------------------------------------------
-// GitHub item rendering
+// GitHub PR creation
 // ---------------------------------------------------------------------------
+
+// doCreatePR starts the multi-step flow to open a pull request from the TUI.
+// Head is prefilled with the current local branch and base with the repo
+// default branch; both remain editable in the modal.
+func (p *Panel) doCreatePR() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	head := p.currentLocalBranch()
+	if head == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Cannot open PR: no current branch detected",
+				Level:   notify.Warn,
+			}
+		}
+	}
+	if !p.branchIsPushed(head) {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Push branch %q before opening a PR", head),
+				Level:   notify.Warn,
+			}
+		}
+	}
+	base := p.gh.defaultBranch
+	if base == "" {
+		base = branchMain
+	}
+	p.clearPending()
+	p.prDraft = prCreateDraft{head: head, base: base}
+	p.pending = opPRCreateHead
+	return p, notify.ShowInputWithValue("PR Head Branch", "head-branch", head)
+}
+
+// currentLocalBranch returns the name of the current local branch by scanning
+// the full branch list, which includes local branches even in GitHub mode.
+// It returns "" when no current local branch can be determined.
+func (p *Panel) currentLocalBranch() string {
+	for _, b := range p.gitData.lastBranches {
+		if !b.IsRemote && b.IsCurrent {
+			return b.Name
+		}
+	}
+	return ""
+}
+
+// remoteBranchName strips the leading remote name from a remote-tracking ref,
+// e.g. "origin/main" becomes "main".
+func remoteBranchName(name string) string {
+	if i := strings.IndexByte(name, '/'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+// branchIsPushed reports whether the named local branch appears to exist on a
+// remote: either it tracks an upstream, or a remote branch with a matching
+// short name is present in the branch list.
+func (p *Panel) branchIsPushed(name string) bool {
+	for _, b := range p.gitData.lastBranches {
+		if !b.IsRemote && b.Name == name && b.Upstream != "" {
+			return true
+		}
+		if b.IsRemote && remoteBranchName(b.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+// createPRCmd returns a tea.Cmd that opens the pull request asynchronously.
+func (p *Panel) createPRCmd(head, base, title, body string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		req := &gh.NewPullRequest{
+			Title: gh.Ptr(title),
+			Head:  gh.Ptr(head),
+			Base:  gh.Ptr(base),
+		}
+		if body != "" {
+			req.Body = gh.Ptr(body)
+		}
+		created, err := client.CreatePR(ctx, owner, repo, req)
+		if err != nil {
+			return prCreateResultMsg{err: err}
+		}
+		if created == nil {
+			return prCreateResultMsg{err: fmt.Errorf("no pull request returned")}
+		}
+		author := ""
+		if created.User != nil {
+			author = created.User.GetLogin()
+		}
+		state := created.GetState()
+		if created.GetDraft() {
+			state = stateDraft
+		}
+		return prCreateResultMsg{pr: ghPRItem{
+			Number:     created.GetNumber(),
+			Title:      created.GetTitle(),
+			State:      state,
+			HeadBranch: created.GetHead().GetRef(),
+			Author:     author,
+			HTMLURL:    created.GetHTMLURL(),
+		}}
+	}
+}
+
+// handlePRCreateResult processes the async result of opening a pull request.
+func (p *Panel) handlePRCreateResult(msg prCreateResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Create PR failed: " + errStr,
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Show all PRs so the new one is guaranteed visible, then insert it
+	// optimistically for immediate feedback ahead of the server refresh.
+	p.gh.prFilter = prFilterAll
+	exists := false
+	for i := range p.gh.allPRs {
+		if p.gh.allPRs[i].Number == msg.pr.Number {
+			p.gh.allPRs[i] = msg.pr
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		p.gh.allPRs = append([]ghPRItem{msg.pr}, p.gh.allPRs...)
+	}
+	p.applyPRFilter()
+	p.selectPRByNumber(msg.pr.Number)
+	// Refresh from the server and reselect the new PR once it arrives.
+	p.gh.pendingSelectPR = msg.pr.Number
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("PR #%d created", msg.pr.Number),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
+// selectPRByNumber moves the PRs-tab cursor to the PR with the given number,
+// if it is present in the currently visible list.
+func (p *Panel) selectPRByNumber(number int) {
+	if number == 0 {
+		return
+	}
+	for i, item := range p.tabItems[tabPRs] {
+		if item.kind == kindPR && item.pr.Number == number {
+			p.tabCursor[tabPRs] = i
+			if p.activeTab == tabPRs {
+				p.ensureCursorVisible()
+			}
+			return
+		}
+	}
+}
+
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
 func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	iss := item.issue
@@ -2113,4 +2783,137 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
+}
+
+// assignSelfResultMsg carries the result of assigning an issue or PR to the
+// current user.
+type assignSelfResultMsg struct {
+	kind   string // "issue" or "PR"
+	login  string
+	err    error
+	number int
+}
+
+// doAssignSelf assigns the item under the cursor (Issues or PRs tab) to the
+// current user.
+func (p *Panel) doAssignSelf() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	switch items[cursor].kind { //nolint:exhaustive // only issues and PRs are assignable
+	case kindIssue:
+		return p.doAssignSelfFor(assignKindIssue, items[cursor].issue.Number)
+	case kindPR:
+		return p.doAssignSelfFor(assignKindPR, items[cursor].pr.Number)
+	default:
+		return p, nil
+	}
+}
+
+// doAssignSelfFor prepares a confirmation modal to assign the given issue or
+// PR to the current user.
+func (p *Panel) doAssignSelfFor(kind string, number int) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || number == 0 {
+		return p, nil
+	}
+	p.clearPending()
+	p.pending = opAssignSelf
+	// Encode the kind and number for the modal handler.
+	p.pendingName = fmt.Sprintf("%s:%d", kind, number)
+	who := p.gh.user
+	if who == "" {
+		who = "yourself"
+	}
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("Assign %s #%d", kind, number),
+		fmt.Sprintf("Assign this %s to %s?", kind, who),
+	)
+}
+
+// handleAssignSelfConfirm runs the async assignment after modal confirmation.
+// The pending name is "<kind>:<number>".
+func (p *Panel) handleAssignSelfConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	kind, number, ok := parseAssignSelfName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.assignSelfCmd(kind, number)
+}
+
+// parseAssignSelfName splits a "<kind>:<number>" pending name.
+func parseAssignSelfName(name string) (kind string, number int, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(name[idx+1:])
+	if err != nil {
+		return "", 0, false
+	}
+	return name[:idx], n, true
+}
+
+// assignSelfCmd assigns the issue/PR to the current user asynchronously. If the
+// current user login is not cached, it is fetched first.
+func (p *Panel) assignSelfCmd(kind string, number int) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	login := p.gh.user
+	return func() tea.Msg {
+		who := login
+		if who == "" {
+			user, err := client.CurrentUser(ctx)
+			if err != nil {
+				return assignSelfResultMsg{kind: kind, number: number, err: err}
+			}
+			if user != nil && user.Login != nil {
+				who = *user.Login
+			}
+		}
+		if who == "" {
+			return assignSelfResultMsg{kind: kind, number: number, err: fmt.Errorf("could not determine current user")}
+		}
+		err := client.AddAssignees(ctx, owner, repo, number, []string{who})
+		return assignSelfResultMsg{kind: kind, number: number, login: who, err: err}
+	}
+}
+
+// handleAssignSelfResult processes the async result of an assign-to-me op.
+func (p *Panel) handleAssignSelfResult(msg assignSelfResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assign %s #%d failed: %s", msg.kind, msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Reflect assignment locally for issues (PR items do not display assignee).
+	if msg.kind == assignKindIssue {
+		for i := range p.gh.allIssues {
+			if p.gh.allIssues[i].Number == msg.number {
+				p.gh.allIssues[i].Assignee = msg.login
+				break
+			}
+		}
+		for i := range p.tabItems[tabIssues] {
+			if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+				p.tabItems[tabIssues][i].issue.Assignee = msg.login
+				break
+			}
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assigned %s #%d to %s", msg.kind, msg.number, msg.login),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
 }

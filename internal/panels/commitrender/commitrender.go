@@ -35,6 +35,11 @@ type Styles struct {
 	Ref     lipgloss.Style
 	Graph   lipgloss.Style
 	Cursor  lipgloss.Style
+	// Signature badge styles: verified (good), bad, and caution (unknown,
+	// expired, revoked, or uncheckable). Colors come from the theme.
+	SigGood    lipgloss.Style
+	SigBad     lipgloss.Style
+	SigCaution lipgloss.Style
 }
 
 // Params configures a single call to [RenderLine].
@@ -59,6 +64,10 @@ type Params struct {
 
 	// ShowDate makes the date column eligible for display if width allows.
 	ShowDate bool
+
+	// ShowSignature prefixes the subject with a signature verification badge
+	// when the commit carries a signature.
+	ShowSignature bool
 
 	// IsSelected highlights the row with a subtler background when true and
 	// IsCursor is false (used by the commits panel for the "selected commit"
@@ -118,8 +127,18 @@ func RenderLine(p Params) string {
 	rightSide := rb.String()
 	rightW := lipgloss.Width(rightSide)
 
+	// ---- signature badge (optional subject prefix) ----
+	var badge string
+	var badgeW int
+	if p.ShowSignature {
+		if glyph := SignatureGlyph(c.Signature); glyph != "" {
+			badge = signatureStyle(c.Signature, s).Render(glyph) + " "
+			badgeW = lipgloss.Width(badge)
+		}
+	}
+
 	// ---- subject + refs ----
-	subjectSpace := p.Width - graphW - len(columnGap) - rightW
+	subjectSpace := p.Width - graphW - len(columnGap) - rightW - badgeW
 	if subjectSpace < minSubjectWidth {
 		subjectSpace = minSubjectWidth
 	}
@@ -171,6 +190,9 @@ func RenderLine(p Params) string {
 		lb.WriteString(s.Graph.Render(p.GraphPrefix))
 		lb.WriteString(columnGap)
 	}
+	if badgeW > 0 {
+		lb.WriteString(badge)
+	}
 	lb.WriteString(styledSubject)
 	lb.WriteString(columnGap)
 	lb.WriteString(rightSide)
@@ -208,4 +230,34 @@ func styleSubjectWithRefs(text string, subjectStyle, refStyle lipgloss.Style) st
 		return subjectStyle.Render(text)
 	}
 	return subjectStyle.Render(text[:idx]) + refStyle.Render(text[idx:])
+}
+
+// SignatureGlyph returns the badge glyph for a signature status, following the
+// project icon guidelines: a check for a verified signature, a cross for a bad
+// signature, and a warning marker for unknown, expired, revoked, or
+// uncheckable signatures. It returns an empty string when there is no
+// signature.
+func SignatureGlyph(s git.SignatureStatus) string {
+	switch s {
+	case git.SigGood:
+		return "\u2713" // ✓
+	case git.SigBad:
+		return "\u2717" // ✗
+	case git.SigUnknown, git.SigExpired, git.SigRevoked, git.SigError:
+		return "\u26a0" // ⚠
+	default:
+		return ""
+	}
+}
+
+// signatureStyle selects the lipgloss style for a signature status.
+func signatureStyle(s git.SignatureStatus, st Styles) lipgloss.Style {
+	switch s {
+	case git.SigGood:
+		return st.SigGood
+	case git.SigBad:
+		return st.SigBad
+	default:
+		return st.SigCaution
+	}
 }

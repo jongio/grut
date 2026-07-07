@@ -8,6 +8,7 @@ package commits
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,31 +52,39 @@ const (
 // panel easy to mock in tests.
 type gitOps interface {
 	Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error)
+	FormatPatch(ctx context.Context, hash string) (string, error)
+	RepoRoot(ctx context.Context) (string, error)
 }
 
 type panelColors struct {
-	Hash     string
-	Date     string
-	Author   string
-	Subject  string
-	Dim      string
-	CursorBg string
-	Refs     string
-	SearchBg string
-	SearchFg string
+	Hash       string
+	Date       string
+	Author     string
+	Subject    string
+	Dim        string
+	CursorBg   string
+	Refs       string
+	SearchBg   string
+	SearchFg   string
+	SigGood    string
+	SigBad     string
+	SigCaution string
 }
 
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
-		Hash:     "#D4B84A",
-		Date:     "#555555",
-		Author:   "#6B9E56",
-		Subject:  "#999999",
-		Dim:      "#555555",
-		CursorBg: "#2A2A2A",
-		Refs:     "#7A9EBF",
-		SearchBg: "#2A2A2A",
-		SearchFg: "#D4D4D4",
+		Hash:       "#D4B84A",
+		Date:       "#555555",
+		Author:     "#6B9E56",
+		Subject:    "#999999",
+		Dim:        "#555555",
+		CursorBg:   "#2A2A2A",
+		Refs:       "#7A9EBF",
+		SearchBg:   "#2A2A2A",
+		SearchFg:   "#D4D4D4",
+		SigGood:    "#6B9E56",
+		SigBad:     "#C05B5B",
+		SigCaution: "#D4B84A",
 	}
 	if th != nil {
 		c.Hash = th.Colors.NormalYellow
@@ -87,28 +96,35 @@ func initColors(th *theme.Theme) panelColors {
 		c.Refs = th.Colors.BrightBlue
 		c.SearchBg = th.Colors.SelectionBg
 		c.SearchFg = th.Colors.SelectionFg
+		c.SigGood = th.Colors.NormalGreen
+		c.SigBad = th.Colors.NormalRed
+		c.SigCaution = th.Colors.NormalYellow
 	}
 	return c
 }
 
 func newCommitLineStyles(c panelColors) commitrender.Styles {
 	return commitrender.Styles{
-		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
-		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
-		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		Hash:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Subject:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Cursor:     lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		SigGood:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigGood)),
+		SigBad:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigBad)),
+		SigCaution: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigCaution)),
 	}
 }
 
 // Panel is the commits panel. It implements [panels.Panel].
 type Panel struct {
-	actionsCfg  config.ActionsConfig
-	gitClient   gitOps
-	ctx         context.Context
-	ref         string // current branch/ref to show commits for
-	refLabel    string // display label for the current ref
-	filterPath  string // path filter for file/folder kinds
-	filterLabel string // display label for filter
-	searchQuery string
+	actionsCfg   config.ActionsConfig
+	gitClient    gitOps
+	ctx          context.Context
+	ref          string // current branch/ref to show commits for
+	refLabel     string // display label for the current ref
+	filterPath   string // path filter for file/folder kinds
+	filterLabel  string // display label for filter
+	searchQuery  string
+	authorFilter string // active author filter (empty means no filter)
 	// Commit selection state (drives file-tree filtering).
 	selectedHash    string
 	selectedSubject string
@@ -295,26 +311,27 @@ func (p *Panel) SetSize(width, height int) {
 // Title implements panels.Panel.
 func (p *Panel) Title() string {
 	const title = "Commits"
-	if p.prCommitsMode {
-		return title + ": " + p.prLabel
-	}
-	if p.selectedHash != "" {
+	base := title
+	switch {
+	case p.prCommitsMode:
+		base = title + ": " + p.prLabel
+	case p.selectedHash != "":
 		short := p.selectedHash
 		if len(short) > git.ShortHashLen {
 			short = short[:git.ShortHashLen]
 		}
-		return title + ": " + short
+		base = title + ": " + short
+	case p.filterLabel != "":
+		base = title + ": " + p.filterLabel
+	case p.refLabel != "":
+		base = title + ": " + p.refLabel
+	case p.ref != "":
+		base = title + ": " + p.ref
 	}
-	if p.filterLabel != "" {
-		return title + ": " + p.filterLabel
+	if p.authorFilter != "" {
+		base += " [@" + p.authorFilter + "]"
 	}
-	if p.refLabel != "" {
-		return title + ": " + p.refLabel
-	}
-	if p.ref != "" {
-		return title + ": " + p.ref
-	}
-	return title
+	return base
 }
 
 // KeyBindings implements panels.Panel.
@@ -328,7 +345,9 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
+		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
 	}
@@ -350,7 +369,9 @@ func (p *Panel) handleCommitsLoaded(msg commitsLoadedMsg) (panels.Panel, tea.Cmd
 		p.offset = 0
 	}
 	if p.searchMode && p.searchQuery != "" {
-		p.applySearch()
+		p.applyFilters()
+	} else if p.authorFilter != "" {
+		p.applyFilters()
 	}
 	return p, nil
 }
@@ -485,6 +506,7 @@ func (p *Panel) resetState() {
 	p.offset = 0
 	p.searchMode = false
 	p.searchQuery = ""
+	p.authorFilter = ""
 	p.filteredIdx = nil
 	p.detailMode = false
 	p.detailLines = nil
@@ -591,12 +613,13 @@ func (p *Panel) renderList(width, height int) string {
 			styles.Subject = styles.Subject.Bold(true)
 		}
 		lines = append(lines, commitrender.RenderLine(commitrender.Params{
-			Commit:     c,
-			Width:      width,
-			IsCursor:   i == p.cursor,
-			Styles:     styles,
-			IsSelected: isSelected,
-			SelectedBg: "#3B3F52", // subtler highlight for selected-but-not-cursor
+			Commit:        c,
+			Width:         width,
+			IsCursor:      i == p.cursor,
+			Styles:        styles,
+			IsSelected:    isSelected,
+			SelectedBg:    "#3B3F52", // subtler highlight for selected-but-not-cursor
+			ShowSignature: true,
 		}))
 	}
 	// Loading indicator.
@@ -782,9 +805,13 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "x":
+		return p.exportPatch()
 	case "/":
 		p.searchMode = true
 		p.searchQuery = ""
+	case "a":
+		return p.toggleAuthorFilter()
 	case "A":
 		return p, func() tea.Msg { return panels.AmendRequestMsg{} }
 	case "r":
@@ -804,6 +831,11 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.selectedHash != "" {
 			return p.deselectCommit()
 		}
+		if p.authorFilter != "" {
+			p.authorFilter = ""
+			p.applyFilters()
+			return p, nil
+		}
 		if p.filter != filterNone {
 			p.clearFilter()
 			p.resetState()
@@ -820,19 +852,17 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "esc":
 		p.searchMode = false
 		p.searchQuery = ""
-		p.filteredIdx = nil
-		p.cursor = 0
-		p.offset = 0
+		p.applyFilters()
 	case "backspace":
 		if len(p.searchQuery) > 0 {
 			p.searchQuery = p.searchQuery[:len(p.searchQuery)-1]
-			p.applySearch()
+			p.applyFilters()
 		}
 	default:
 		ch := msg.String()
 		if len(ch) == 1 && ch[0] >= ' ' {
 			p.searchQuery += ch
-			p.applySearch()
+			p.applyFilters()
 		}
 	}
 	return p, nil
@@ -950,6 +980,32 @@ func (p *Panel) deselectCommit() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Detail view
 // ---------------------------------------------------------------------------
+// signatureDetail renders a human-readable, colored description of a commit's
+// signature verification status for the detail view.
+func (p *Panel) signatureDetail(c git.Commit) string {
+	var label, color string
+	switch c.Signature {
+	case git.SigGood:
+		label, color = "verified", p.colors.SigGood
+	case git.SigBad:
+		label, color = "bad signature", p.colors.SigBad
+	case git.SigUnknown:
+		label, color = "unknown validity", p.colors.SigCaution
+	case git.SigExpired:
+		label, color = "expired", p.colors.SigCaution
+	case git.SigRevoked:
+		label, color = "revoked key", p.colors.SigCaution
+	case git.SigError:
+		label, color = "unverifiable", p.colors.SigCaution
+	default:
+		return ""
+	}
+	if c.Signer != "" {
+		label += " (" + panels.StripANSI(c.Signer) + ")"
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(label)
+}
+
 func (p *Panel) showDetail() tea.Cmd {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return nil
@@ -978,6 +1034,9 @@ func (p *Panel) showDetail() tea.Cmd {
 	if len(c.Parents) > 0 {
 		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
+	}
+	if c.Signature.Present() {
+		lines = append(lines, "Signed:  "+p.signatureDetail(c))
 	}
 	lines = append(lines, "")
 	lines = append(lines, "    "+panels.StripANSI(c.Subject))
@@ -1026,10 +1085,98 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 }
 
 // ---------------------------------------------------------------------------
+// Patch export
+// ---------------------------------------------------------------------------
+
+// exportPatch writes the commit under the cursor to a single-commit patch
+// file at the repository root, named after the commit subject. The written
+// path is shown as a toast; any failure surfaces as an error toast.
+func (p *Panel) exportPatch() (panels.Panel, tea.Cmd) {
+	if p.cursor < 0 || p.cursor >= p.activeLen() {
+		return p, nil
+	}
+	c := p.commitAt(p.cursor)
+	if c.Hash == "" {
+		return p, nil
+	}
+
+	patch, err := p.gitClient.FormatPatch(p.ctx, c.Hash)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+	root, err := p.gitClient.RepoRoot(p.ctx)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	dest := filepath.Join(root, patchFileName(c.Subject))
+	if err := os.WriteFile(dest, []byte(patch), 0o600); err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Wrote " + dest,
+			Level:   notify.Success,
+		}
+	}
+}
+
+func patchErrorToast(err error) tea.Cmd {
+	msg := err.Error()
+	return func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Export failed: " + msg,
+			Level:   notify.Error,
+		}
+	}
+}
+
+// patchFileName builds a filesystem-safe patch file name from a commit
+// subject, mirroring the "NNNN-slug.patch" form that git format-patch uses.
+// A single commit is always sequence 0001.
+func patchFileName(subject string) string {
+	slug := slugify(subject)
+	if slug == "" {
+		slug = "patch"
+	}
+	const maxSlug = 50
+	if len(slug) > maxSlug {
+		slug = strings.Trim(slug[:maxSlug], "-")
+	}
+	return "0001-" + slug + ".patch"
+}
+
+// slugify lowercases s and replaces every run of non-alphanumeric characters
+// with a single dash, trimming leading and trailing dashes. The result is
+// safe to use as a file name on any platform.
+func slugify(s string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
-func (p *Panel) applySearch() {
-	if p.searchQuery == "" {
+// applyFilters recomputes filteredIdx from the active search query and author
+// filter. When neither is set, filteredIdx is cleared so the full commit list
+// shows. A commit must match both the search query and the author filter to be
+// included.
+func (p *Panel) applyFilters() {
+	if p.searchQuery == "" && p.authorFilter == "" {
 		p.filteredIdx = nil
 		p.cursor = 0
 		p.offset = 0
@@ -1038,14 +1185,46 @@ func (p *Panel) applySearch() {
 	query := strings.ToLower(p.searchQuery)
 	p.filteredIdx = p.filteredIdx[:0]
 	for i, c := range p.commits {
-		if containsFold(c.Subject, query) ||
-			containsFold(c.Author, query) ||
-			containsFold(c.ShortHash, query) {
-			p.filteredIdx = append(p.filteredIdx, i)
+		if p.authorFilter != "" && !strings.EqualFold(c.Author, p.authorFilter) {
+			continue
 		}
+		if query != "" &&
+			!containsFold(c.Subject, query) &&
+			!containsFold(c.Author, query) &&
+			!containsFold(c.ShortHash, query) {
+			continue
+		}
+		p.filteredIdx = append(p.filteredIdx, i)
 	}
 	p.cursor = 0
 	p.offset = 0
+}
+
+// toggleAuthorFilter filters the commit list to the author of the commit under
+// the cursor. Pressing it again on the same author clears the filter; pressing
+// it on a different author switches to that author.
+func (p *Panel) toggleAuthorFilter() (panels.Panel, tea.Cmd) {
+	if p.activeLen() == 0 {
+		return p, nil
+	}
+	author := p.commitAt(p.cursor).Author
+	if author == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No author to filter by", Level: notify.Info}
+		}
+	}
+	if strings.EqualFold(p.authorFilter, author) {
+		p.authorFilter = ""
+		p.applyFilters()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Author filter cleared", Level: notify.Info}
+		}
+	}
+	p.authorFilter = author
+	p.applyFilters()
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{Message: "Filtering by author: " + author, Level: notify.Success}
+	}
 }
 
 // containsFold reports whether s contains the already-lowered substr
