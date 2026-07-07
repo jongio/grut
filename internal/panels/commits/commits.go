@@ -116,14 +116,15 @@ func newCommitLineStyles(c panelColors) commitrender.Styles {
 
 // Panel is the commits panel. It implements [panels.Panel].
 type Panel struct {
-	actionsCfg  config.ActionsConfig
-	gitClient   gitOps
-	ctx         context.Context
-	ref         string // current branch/ref to show commits for
-	refLabel    string // display label for the current ref
-	filterPath  string // path filter for file/folder kinds
-	filterLabel string // display label for filter
-	searchQuery string
+	actionsCfg   config.ActionsConfig
+	gitClient    gitOps
+	ctx          context.Context
+	ref          string // current branch/ref to show commits for
+	refLabel     string // display label for the current ref
+	filterPath   string // path filter for file/folder kinds
+	filterLabel  string // display label for filter
+	searchQuery  string
+	authorFilter string // active author filter (empty means no filter)
 	// Commit selection state (drives file-tree filtering).
 	selectedHash    string
 	selectedSubject string
@@ -310,26 +311,27 @@ func (p *Panel) SetSize(width, height int) {
 // Title implements panels.Panel.
 func (p *Panel) Title() string {
 	const title = "Commits"
-	if p.prCommitsMode {
-		return title + ": " + p.prLabel
-	}
-	if p.selectedHash != "" {
+	base := title
+	switch {
+	case p.prCommitsMode:
+		base = title + ": " + p.prLabel
+	case p.selectedHash != "":
 		short := p.selectedHash
 		if len(short) > git.ShortHashLen {
 			short = short[:git.ShortHashLen]
 		}
-		return title + ": " + short
+		base = title + ": " + short
+	case p.filterLabel != "":
+		base = title + ": " + p.filterLabel
+	case p.refLabel != "":
+		base = title + ": " + p.refLabel
+	case p.ref != "":
+		base = title + ": " + p.ref
 	}
-	if p.filterLabel != "" {
-		return title + ": " + p.filterLabel
+	if p.authorFilter != "" {
+		base += " [@" + p.authorFilter + "]"
 	}
-	if p.refLabel != "" {
-		return title + ": " + p.refLabel
-	}
-	if p.ref != "" {
-		return title + ": " + p.ref
-	}
-	return title
+	return base
 }
 
 // KeyBindings implements panels.Panel.
@@ -345,6 +347,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
+		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
 	}
@@ -366,7 +369,9 @@ func (p *Panel) handleCommitsLoaded(msg commitsLoadedMsg) (panels.Panel, tea.Cmd
 		p.offset = 0
 	}
 	if p.searchMode && p.searchQuery != "" {
-		p.applySearch()
+		p.applyFilters()
+	} else if p.authorFilter != "" {
+		p.applyFilters()
 	}
 	return p, nil
 }
@@ -501,6 +506,7 @@ func (p *Panel) resetState() {
 	p.offset = 0
 	p.searchMode = false
 	p.searchQuery = ""
+	p.authorFilter = ""
 	p.filteredIdx = nil
 	p.detailMode = false
 	p.detailLines = nil
@@ -804,6 +810,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "/":
 		p.searchMode = true
 		p.searchQuery = ""
+	case "a":
+		return p.toggleAuthorFilter()
 	case "A":
 		return p, func() tea.Msg { return panels.AmendRequestMsg{} }
 	case "r":
@@ -823,6 +831,11 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.selectedHash != "" {
 			return p.deselectCommit()
 		}
+		if p.authorFilter != "" {
+			p.authorFilter = ""
+			p.applyFilters()
+			return p, nil
+		}
 		if p.filter != filterNone {
 			p.clearFilter()
 			p.resetState()
@@ -839,19 +852,17 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "esc":
 		p.searchMode = false
 		p.searchQuery = ""
-		p.filteredIdx = nil
-		p.cursor = 0
-		p.offset = 0
+		p.applyFilters()
 	case "backspace":
 		if len(p.searchQuery) > 0 {
 			p.searchQuery = p.searchQuery[:len(p.searchQuery)-1]
-			p.applySearch()
+			p.applyFilters()
 		}
 	default:
 		ch := msg.String()
 		if len(ch) == 1 && ch[0] >= ' ' {
 			p.searchQuery += ch
-			p.applySearch()
+			p.applyFilters()
 		}
 	}
 	return p, nil
@@ -1160,8 +1171,12 @@ func slugify(s string) string {
 // ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
-func (p *Panel) applySearch() {
-	if p.searchQuery == "" {
+// applyFilters recomputes filteredIdx from the active search query and author
+// filter. When neither is set, filteredIdx is cleared so the full commit list
+// shows. A commit must match both the search query and the author filter to be
+// included.
+func (p *Panel) applyFilters() {
+	if p.searchQuery == "" && p.authorFilter == "" {
 		p.filteredIdx = nil
 		p.cursor = 0
 		p.offset = 0
@@ -1170,14 +1185,46 @@ func (p *Panel) applySearch() {
 	query := strings.ToLower(p.searchQuery)
 	p.filteredIdx = p.filteredIdx[:0]
 	for i, c := range p.commits {
-		if containsFold(c.Subject, query) ||
-			containsFold(c.Author, query) ||
-			containsFold(c.ShortHash, query) {
-			p.filteredIdx = append(p.filteredIdx, i)
+		if p.authorFilter != "" && !strings.EqualFold(c.Author, p.authorFilter) {
+			continue
 		}
+		if query != "" &&
+			!containsFold(c.Subject, query) &&
+			!containsFold(c.Author, query) &&
+			!containsFold(c.ShortHash, query) {
+			continue
+		}
+		p.filteredIdx = append(p.filteredIdx, i)
 	}
 	p.cursor = 0
 	p.offset = 0
+}
+
+// toggleAuthorFilter filters the commit list to the author of the commit under
+// the cursor. Pressing it again on the same author clears the filter; pressing
+// it on a different author switches to that author.
+func (p *Panel) toggleAuthorFilter() (panels.Panel, tea.Cmd) {
+	if p.activeLen() == 0 {
+		return p, nil
+	}
+	author := p.commitAt(p.cursor).Author
+	if author == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No author to filter by", Level: notify.Info}
+		}
+	}
+	if strings.EqualFold(p.authorFilter, author) {
+		p.authorFilter = ""
+		p.applyFilters()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Author filter cleared", Level: notify.Info}
+		}
+	}
+	p.authorFilter = author
+	p.applyFilters()
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{Message: "Filtering by author: " + author, Level: notify.Success}
+	}
 }
 
 // containsFold reports whether s contains the already-lowered substr

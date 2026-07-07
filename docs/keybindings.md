@@ -158,6 +158,7 @@ Commits panel (panel 4).
 | `Esc` | Back to list |
 | `o` | Open in browser |
 | `y` | Copy SHA |
+| `a` | Filter the commit log by the selected commit's author |
 | `x` | Export the selected commit as a .patch file |
 | `A` | Amend last commit |
 | `r` | Reword last commit |
