@@ -73,6 +73,7 @@ const (
 	kindTag                          // local tag
 	kindRemoteTag                    // remote-only tag
 	kindReflogEntry                  // reflog entry
+	kindNotification                 // GitHub notification thread
 )
 
 // PanelMode controls which subset of tabs a gitinfo panel displays.
@@ -99,24 +100,26 @@ const (
 	tabActions
 	tabWorkflows
 	tabReleases
+	tabNotifications
 	tabCount // sentinel for array sizing
 )
 
 // listItem represents a single row in a tab's item list.
 type listItem struct {
-	tag       git.Tag         // tag data (valid when kind == kindTag/kindRemoteTag)
-	reflog    git.ReflogEntry // reflog data (valid when kind == kindReflogEntry)
-	issue     ghIssueItem     // issue data (valid when kind == kindIssue)
-	release   ghReleaseItem   // release data (valid when kind == kindRelease)
-	actionRun ghActionItem    // action run data (valid when kind == kindActionRun)
-	pr        ghPRItem        // PR data (valid when kind == kindPR)
-	stash     git.StashEntry  // stash data (valid when kind == kindStashEntry)
-	branch    git.Branch      // branch data (valid when kind == kindLocalBranch/kindRemoteBranch)
-	workflow  ghWorkflowItem  // workflow definition (valid when kind == kindWorkflow)
-	remote    git.Remote      // remote data (valid when kind == kindRemote)
-	text      string          // display text for sub-items (kind == kindRemoteSub)
-	hash      string          // hash for clipboard copy (extracted for click targeting)
-	worktree  git.Worktree    // worktree data (valid when kind == kindWorktree)
+	tag       git.Tag            // tag data (valid when kind == kindTag/kindRemoteTag)
+	reflog    git.ReflogEntry    // reflog data (valid when kind == kindReflogEntry)
+	issue     ghIssueItem        // issue data (valid when kind == kindIssue)
+	release   ghReleaseItem      // release data (valid when kind == kindRelease)
+	actionRun ghActionItem       // action run data (valid when kind == kindActionRun)
+	pr        ghPRItem           // PR data (valid when kind == kindPR)
+	stash     git.StashEntry     // stash data (valid when kind == kindStashEntry)
+	branch    git.Branch         // branch data (valid when kind == kindLocalBranch/kindRemoteBranch)
+	workflow  ghWorkflowItem     // workflow definition (valid when kind == kindWorkflow)
+	remote    git.Remote         // remote data (valid when kind == kindRemote)
+	text      string             // display text for sub-items (kind == kindRemoteSub)
+	hash      string             // hash for clipboard copy (extracted for click targeting)
+	worktree  git.Worktree       // worktree data (valid when kind == kindWorktree)
+	notif     ghNotificationItem // notification data (valid when kind == kindNotification)
 	kind      itemKind
 }
 
@@ -148,6 +151,8 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opAssignSelf                         // awaiting assign-to-me confirmation
+	opIssueCloseReopen                   // awaiting issue close/reopen confirmation
 )
 
 // ---------------------------------------------------------------------------
@@ -294,20 +299,22 @@ type gitState struct {
 // githubState holds all GitHub-related integration state: API client,
 // repository metadata, and cached issue / PR data.
 type githubState struct {
-	client      ghclient.Client
-	err         error
-	owner       string
-	repo        string
-	user        string
-	allIssues   []ghIssueItem
-	allPRs      []ghPRItem
-	cfg         config.GitHubConfig
-	issueFilter IssueFilterKind
-	prFilter    PRFilterKind
-	issueState  stateFilterKind
-	prState     stateFilterKind
-	repoPrivate bool
-	pageSize    int
+	client       ghclient.Client
+	err          error
+	owner        string
+	repo         string
+	user         string
+	allIssues    []ghIssueItem
+	allPRs       []ghPRItem
+	cfg          config.GitHubConfig
+	issueFilter  IssueFilterKind
+	prFilter     PRFilterKind
+	issueState   stateFilterKind
+	prState      stateFilterKind
+	repoPrivate  bool
+	pageSize     int
+	notifLoading bool  // true while notifications are being fetched
+	notifErr     error // last notification load error, if any
 }
 
 // ---------------------------------------------------------------------------
@@ -364,12 +371,12 @@ func (p *Panel) visibleTabs() []tabID {
 	case ModeGit:
 		return []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}
 	case ModeGitHub:
-		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}
+		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}
 	default: // ModeAll
 		if isGitTab(p.activeTab) {
 			return []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}
 		}
-		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}
+		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}
 	}
 }
 
@@ -415,6 +422,8 @@ func (p *Panel) SetActiveTab(name string) {
 		p.activeTab = tabWorkflows
 	case "releases":
 		p.activeTab = tabReleases
+	case sectionNotifications:
+		p.activeTab = tabNotifications
 	}
 }
 
@@ -514,6 +523,8 @@ func (p *Panel) startGitHubLoad() tea.Cmd {
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
 			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
 		}
+		p.gh.notifLoading = true
+		p.gh.notifErr = nil
 		cmds = append(
 			cmds,
 			p.loadGitHubMeta(),
@@ -522,6 +533,7 @@ func (p *Panel) startGitHubLoad() tea.Cmd {
 			p.loadActionsPage(1, true),
 			p.loadWorkflowsPage(1, true),
 			p.loadReleasesPage(1, true),
+			p.loadNotifications(),
 			p.githubPollTickCmd(),
 		)
 	}
@@ -558,6 +570,8 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	p.gh.err = nil
 	p.gh.allIssues = nil
 	p.gh.allPRs = nil
+	p.gh.notifErr = nil
+	p.gh.notifLoading = false
 	p.actionsWatching = false
 	p.actionsWatchFrame = 0
 	p.gh.repoPrivate = false
@@ -678,6 +692,10 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleWorkflowsPage(msg)
 	case ghReleasesPageMsg:
 		return p.handleReleasesPage(msg)
+	case ghNotificationsLoadedMsg:
+		return p.handleNotificationsLoaded(msg)
+	case notificationReadResultMsg:
+		return p.handleNotificationReadResult(msg)
 	case githubPollTickMsg:
 		// Reset pagination state for fresh page-1 loads.
 		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
@@ -690,6 +708,7 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.loadActionsPage(1, true),
 			p.loadWorkflowsPage(1, true),
 			p.loadReleasesPage(1, true),
+			p.loadNotifications(),
 			p.githubPollTickCmd(),
 		)
 	case actionsWatchTickMsg:
@@ -747,6 +766,10 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
+	case assignSelfResultMsg:
+		return p.handleAssignSelfResult(msg)
+	case issueStateResultMsg:
+		return p.handleIssueStateResult(msg)
 
 	// CRUD actions dispatched via keymap.
 	case panels.ItemCreateMsg:
@@ -793,7 +816,14 @@ func (p *Panel) View(width, height int) string {
 	items := p.tabItems[p.activeTab]
 	if len(items) == 0 {
 		label := "No items"
-		if p.activeTab >= tabIssues && p.gh.err != nil {
+		switch {
+		case p.activeTab == tabNotifications && p.gh.notifErr != nil:
+			label = "Notifications unavailable"
+		case p.activeTab == tabNotifications && p.gh.notifLoading:
+			label = "Loading..."
+		case p.activeTab == tabNotifications:
+			label = "No unread notifications"
+		case p.activeTab >= tabIssues && p.gh.err != nil:
 			label = "GitHub unavailable"
 		}
 		empty := lipgloss.NewStyle().
@@ -876,7 +906,11 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
 			panels.KeyBinding{Key: "W", Description: "Workflows tab", Action: "tab_workflows"},
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
+			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
+			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
+			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
+			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
 		)
 	}
 	return bindings
@@ -1081,6 +1115,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.activeTab == tabActions && p.gh.client != nil {
 			return p.doActionsRerun()
 		}
+		if p.activeTab == tabNotifications && p.gh.client != nil {
+			return p.doRefreshNotifications()
+		}
 		if p.mode != ModeGitHub {
 			p.activeTab = tabRemotes
 			return p, p.activeTabSelectionCmd()
@@ -1120,6 +1157,11 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.activeTab = tabActions
 			return p, p.activeTabSelectionCmd()
 		}
+	case "N":
+		if p.mode != ModeGit && p.gh.client != nil {
+			p.activeTab = tabNotifications
+			return p, p.activeTabSelectionCmd()
+		}
 	case "D":
 		if p.activeTab == tabWorkflows && p.gh.client != nil {
 			return p.doWorkflowDispatch()
@@ -1127,6 +1169,17 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "m":
 		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.doMergePR()
+		}
+		if p.activeTab == tabNotifications && p.gh.client != nil {
+			return p.doMarkNotificationRead()
+		}
+	case "A":
+		if (p.activeTab == tabIssues || p.activeTab == tabPRs) && p.gh.client != nil {
+			return p.doAssignSelf()
+		}
+	case "c":
+		if p.activeTab == tabIssues && p.gh.client != nil {
+			return p.doCloseReopenIssue()
 		}
 	case "pgdown":
 		p.pageDown()
@@ -1151,6 +1204,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "enter":
 		if p.activeTab == tabReflog {
 			return p.doReflogCheckout()
+		}
+		if p.activeTab == tabNotifications {
+			return p.doOpenInBrowser()
 		}
 		return p.doAction()
 	case "f":
@@ -1216,7 +1272,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				func() tea.Msg { return panels.ActionRunDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
-		case tabWorkflows, tabReleases:
+		case tabWorkflows, tabReleases, tabNotifications:
 			p.activeTab = defaultTab
 			return p, p.activeTabSelectionCmd()
 		case tabBranches, tabTags:
@@ -1348,6 +1404,8 @@ func (p *Panel) rightClickLabel(item listItem) string {
 		return panels.StripANSI(item.release.TagName) + " " + panels.StripANSI(item.release.Name)
 	case kindTag, kindRemoteTag:
 		return panels.StripANSI(item.tag.Name)
+	case kindNotification:
+		return panels.StripANSI(item.notif.Title)
 	default:
 		return panels.StripANSI(item.text)
 	}
@@ -1780,6 +1838,10 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p.copyAndToast(item.issue.HTMLURL)
 		case actions.ActionCopyNumber:
 			return p.copyAndToast(fmt.Sprintf("%d", item.issue.Number))
+		case actions.ActionAssignSelf:
+			return p.doAssignSelfFor(assignKindIssue, item.issue.Number)
+		case actions.ActionCloseReopenIssue:
+			return p.doCloseReopenIssueFor(item.issue)
 		}
 	case kindPR:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -1803,6 +1865,8 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 			return p, notify.ShowConfirm("Checkout PR Branch", fmt.Sprintf("Switch to branch %q?", ref))
 		case actions.ActionMergePR:
 			return p.doMergePR()
+		case actions.ActionAssignSelf:
+			return p.doAssignSelfFor(assignKindPR, item.pr.Number)
 		}
 	case kindActionRun:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -2039,6 +2103,12 @@ func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
 			url = raw + "/releases/tag/" + item.tag.Name
 			label = "tag " + item.tag.Name
 		}
+	case kindNotification:
+		url = item.notif.HTMLURL
+		label = "notification"
+		if item.notif.Title != "" {
+			label = panels.StripANSI(item.notif.Title)
+		}
 	}
 	if url == "" {
 		return p, func() tea.Msg {
@@ -2127,6 +2197,10 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opAssignSelf:
+		return p.handleAssignSelfConfirm(a)
+	case opIssueCloseReopen:
+		return p.handleIssueCloseReopenConfirm(a)
 	}
 	return p, nil
 }
@@ -2302,6 +2376,8 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 		return p.renderTag(item, width, isCursor)
 	case kindReflogEntry:
 		return p.renderReflogEntry(item, width, isCursor)
+	case kindNotification:
+		return p.renderNotification(item, width, isCursor)
 	}
 	return ""
 }
@@ -2391,6 +2467,7 @@ func (p *Panel) renderTabBar(width int) string {
 		{id: tabActions, name: labelActions, short: shortAct, count: actionsCount},
 		{id: tabWorkflows, name: "Workflows", short: "Wf", count: p.ghTabCountStr(tabWorkflows)},
 		{id: tabReleases, name: "Releases", short: "Rel", count: p.ghTabCountStr(tabReleases)},
+		{id: tabNotifications, name: labelNotifications, short: "Ntf", count: p.ghNotifCountStr()},
 	}
 	// In ModeGitHub, prepend Branches and Tags to the GitHub tab row.
 	if p.mode == ModeGitHub {

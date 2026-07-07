@@ -355,6 +355,10 @@ func TestConfigFilePath(t *testing.T) {
 	assert.True(t, strings.HasSuffix(path, "config.toml"))
 }
 
+func TestUserConfigFilePath(t *testing.T) {
+	assert.Equal(t, configFilePath(), UserConfigFilePath())
+}
+
 func TestWarnIfWorldReadableNoOp(t *testing.T) {
 	// On Windows this is a no-op; on Unix it should not panic.
 	// Just ensure it doesn't crash.

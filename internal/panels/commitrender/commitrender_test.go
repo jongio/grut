@@ -23,6 +23,47 @@ func plainStyles() Styles {
 	}
 }
 
+func TestSignatureGlyph(t *testing.T) {
+	assert.Equal(t, "\u2713", SignatureGlyph(git.SigGood))
+	assert.Equal(t, "\u2717", SignatureGlyph(git.SigBad))
+	assert.Equal(t, "\u26a0", SignatureGlyph(git.SigExpired))
+	assert.Equal(t, "\u26a0", SignatureGlyph(git.SigUnknown))
+	assert.Equal(t, "", SignatureGlyph(git.SigNone))
+}
+
+func TestRenderLine_SignatureBadge(t *testing.T) {
+	base := Params{
+		Commit: git.Commit{
+			ShortHash: "abc1234",
+			Subject:   "feat: add signing",
+			Date:      time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC),
+		},
+		Width:         80,
+		Styles:        plainStyles(),
+		ShowSignature: true,
+	}
+
+	// Verified commit shows the check glyph.
+	good := base
+	good.Commit.Signature = git.SigGood
+	line := RenderLine(good)
+	assert.Contains(t, line, "\u2713")
+	assert.Contains(t, line, "feat: add signing")
+	assert.Equal(t, 80, lipgloss.Width(line))
+
+	// Unsigned commit shows no badge.
+	none := base
+	none.Commit.Signature = git.SigNone
+	lineNone := RenderLine(none)
+	assert.NotContains(t, lineNone, "\u2713")
+	assert.Equal(t, 80, lipgloss.Width(lineNone))
+
+	// Badge disabled: no glyph even with a signature.
+	off := good
+	off.ShowSignature = false
+	assert.NotContains(t, RenderLine(off), "\u2713")
+}
+
 func TestRenderLine_BasicSubjectAndHash(t *testing.T) {
 	p := Params{
 		Commit: git.Commit{
