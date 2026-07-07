@@ -350,10 +350,14 @@ var deadcodeAllowlist = []string{
 	"MockClient.Reset",
 	"MockClient.Clean",
 	"MockClient.CleanPreview",
+	"MockClient.WorktreeFile",
 
 	// git — exported plain-text summary method on DiffStat (public package API;
 	// the preview renders a colored variant, so this is unused internally)
 	"DiffStat.Summary",
+
+	// secretscan — exported bool helper companion to Scan (public package API)
+	"HasFindings",
 }
 
 // Default target when running `mage` with no args.
