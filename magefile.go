@@ -240,6 +240,7 @@ var deadcodeAllowlist = []string{
 
 	// commits — test accessors + helpers
 	"Panel.showDetail",
+	"Panel.signatureDetail",
 	"relativeDate",
 
 	// filetree — test accessors
@@ -349,6 +350,10 @@ var deadcodeAllowlist = []string{
 	"MockClient.Reset",
 	"MockClient.Clean",
 	"MockClient.CleanPreview",
+
+	// git — exported plain-text summary method on DiffStat (public package API;
+	// the preview renders a colored variant, so this is unused internally)
+	"DiffStat.Summary",
 }
 
 // Default target when running `mage` with no args.

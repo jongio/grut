@@ -345,6 +345,7 @@ Environment:
 	rootCmd.AddCommand(newExtCmd())
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newReportCmd())
+	rootCmd.AddCommand(newConfigCmd())
 
 	// cleanup releases profiling resources. It is idempotent — safe to call
 	// multiple times (subsequent calls are no-ops).

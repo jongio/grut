@@ -94,6 +94,7 @@ type GitConfig struct {
 	WorktreeFirst           bool     `toml:"worktree_first"`
 	ShowCommitGraph         bool     `toml:"show_commit_graph"`
 	SignCommits             bool     `toml:"sign_commits"`
+	DiffWordHighlight       bool     `toml:"diff_word_highlight"`
 }
 
 // GitHubConfig holds GitHub integration settings.
@@ -310,6 +311,11 @@ func DataDir() string {
 // configFilePath returns the full path to the user's config file.
 func configFilePath() string {
 	return filepath.Join(ConfigDir(), "config.toml")
+}
+
+// UserConfigFilePath returns the full path to the user's config file.
+func UserConfigFilePath() string {
+	return configFilePath()
 }
 
 // LoadDefaults returns a Config built solely from the embedded defaults
