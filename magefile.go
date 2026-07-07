@@ -240,6 +240,7 @@ var deadcodeAllowlist = []string{
 
 	// commits — test accessors + helpers
 	"Panel.showDetail",
+	"Panel.signatureDetail",
 	"relativeDate",
 
 	// filetree — test accessors
