@@ -1638,6 +1638,7 @@ func TestParseIssueStateName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			n, s, ok := parseIssueStateName(tt.name)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantNumber, n)

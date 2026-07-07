@@ -1814,9 +1814,9 @@ func (p *Panel) doCloseReopenIssueFor(iss ghIssueItem) (panels.Panel, tea.Cmd) {
 	if p.gh.client == nil || iss.Number == 0 {
 		return p, nil
 	}
-	target, verb := "closed", "Close"
-	if strings.EqualFold(iss.State, "closed") {
-		target, verb = "open", "Reopen"
+	target, verb := stateClosed, "Close"
+	if strings.EqualFold(iss.State, stateClosed) {
+		target, verb = prStateOpen, "Reopen"
 	}
 	p.clearPending()
 	p.pending = opIssueCloseReopen
@@ -1858,7 +1858,7 @@ func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
 	ctx := p.ctx
 	return func() tea.Msg {
 		var err error
-		if targetState == "open" {
+		if targetState == prStateOpen {
 			err = client.ReopenIssue(ctx, owner, repo, number)
 		} else {
 			err = client.CloseIssue(ctx, owner, repo, number)
@@ -1869,8 +1869,8 @@ func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
 
 // handleIssueStateResult processes the async result of a close/reopen op.
 func (p *Panel) handleIssueStateResult(msg issueStateResultMsg) (panels.Panel, tea.Cmd) {
-	verb := "closed"
-	if msg.newState == "open" {
+	verb := stateClosed
+	if msg.newState == prStateOpen {
 		verb = "reopened"
 	}
 	if msg.err != nil {
