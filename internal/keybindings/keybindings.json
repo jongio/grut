@@ -42,6 +42,7 @@
       "description": "File Tree panel (panel 1).",
       "bindings": [
         { "key": "h/l", "action": "Collapse/expand directory" },
+        { "key": "H/L", "action": "Collapse/expand all directories" },
         { "key": "o", "action": "Open in external editor" },
         { "key": ".", "action": "Toggle hidden files" },
         { "key": "f", "action": "Toggle git filter" },
@@ -54,6 +55,7 @@
         { "key": "c", "action": "Copy file" },
         { "key": "p", "action": "Paste file" },
         { "key": "space", "action": "Toggle stage/unstage" },
+        { "key": "I", "action": "Add selected entry to .gitignore" },
         { "key": "J/K", "action": "Scroll preview down/up" }
       ]
     },
@@ -73,6 +75,7 @@
         { "key": "space", "action": "Toggle select for bulk" },
         { "key": "enter/l", "action": "Expand file diff" },
         { "key": "h", "action": "Enter hunk mode" },
+        { "key": "X", "action": "Clean untracked files (preview and select)" },
         { "key": "Esc", "action": "Exit hunk/line mode" }
       ]
     },
@@ -112,11 +115,19 @@
         { "key": "a", "action": "Actions tab" },
         { "key": "w", "action": "Workflows tab" },
         { "key": "l", "action": "Releases tab" },
+        { "key": "n", "action": "Create issue (Issues tab)" },
+        { "key": "N", "action": "Notifications tab" },
+        { "key": "Enter", "action": "Open notification in browser (Notifications tab)" },
         { "key": "o", "action": "Open in browser" },
         { "key": "y", "action": "Copy to clipboard" },
-        { "key": "m", "action": "Merge PR (PRs tab)" },
-        { "key": "c", "action": "Comment on issue/PR (Issues/PRs tab)" },
-        { "key": "r", "action": "Rerun (Actions tab)" },
+        { "key": "m", "action": "Merge PR (PRs tab) / Mark read (Notifications tab)" },
+        { "key": "M", "action": "Copy issue or PR as a markdown link (Issues/PRs tabs)" },
+        { "key": "A", "action": "Assign to me (Issues/PRs tab)" },
+        { "key": "R", "action": "Request reviewers (PRs tab)" },
+        { "key": "C", "action": "Comment on issue/PR (Issues/PRs tab)" },
+        { "key": "c", "action": "Close/reopen issue (Issues tab)" },
+        { "key": "S", "action": "Cycle state filter open/closed/all (Issues/PRs tab)" },
+        { "key": "r", "action": "Rerun (Actions tab) / Refresh (Notifications tab)" },
         { "key": "x", "action": "Cancel (Actions tab)" },
         { "key": "D", "action": "Dispatch workflow" }
       ]
@@ -130,6 +141,8 @@
         { "key": "Esc", "action": "Back to list" },
         { "key": "o", "action": "Open in browser" },
         { "key": "y", "action": "Copy SHA" },
+        { "key": "a", "action": "Filter the commit log by the selected commit's author" },
+        { "key": "x", "action": "Export the selected commit as a .patch file" },
         { "key": "A", "action": "Amend last commit" },
         { "key": "r", "action": "Reword last commit" },
         { "key": "/", "action": "Search commits" }
@@ -144,15 +157,33 @@
         { "key": "f", "action": "Toggle diff view" },
         { "key": "j/k", "action": "Scroll content" },
         { "key": "g/G", "action": "Jump to top/bottom" },
+        { "key": "L", "action": "Go to line" },
         { "key": "PgDn/PgUp", "action": "Page down/up" },
         { "key": "W", "action": "Toggle word wrap" },
         { "key": "n", "action": "Toggle line numbers" },
         { "key": "m", "action": "Toggle markdown render" },
         { "key": "B", "action": "Toggle blame" },
         { "key": "y/Ctrl+C", "action": "Copy selection" },
+        { "key": "Y", "action": "Copy GitHub permalink" },
         { "key": "Esc", "action": "Clear selection" }
       ],
       "note": "Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word."
+    },
+    {
+      "id": "gitdiff",
+      "title": "Diff Viewer",
+      "description": "Diff viewer panel for file, commit, branch, and PR diffs.",
+      "bindings": [
+        { "key": "j/k", "action": "Scroll up/down" },
+        { "key": "d/u", "action": "Page down/up" },
+        { "key": "g/G", "action": "Jump to top/bottom" },
+        { "key": "t", "action": "Toggle inline/side-by-side" },
+        { "key": "n/N", "action": "Next/previous hunk" },
+        { "key": "[/]", "action": "Previous/next file" },
+        { "key": "w", "action": "Toggle word-level diff" },
+        { "key": "W", "action": "Toggle ignore whitespace" },
+        { "key": "R", "action": "Toggle review annotations" }
+      ]
     },
     {
       "id": "edit_mode",

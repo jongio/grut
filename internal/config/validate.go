@@ -87,6 +87,8 @@ func Validate(cfg *Config) error {
 		cfg.Git.WorktreeMergeMethod, "merge", "rebase", "squash")
 	errs = appendEnumErr(errs, "git.worktree_open_mode",
 		cfg.Git.WorktreeOpenMode, "current", "new_terminal")
+	errs = appendEnumErr(errs, "git.secret_guard_mode",
+		cfg.Git.SecretGuardMode, "warn", "block")
 	if cfg.Git.RefreshFallbackInterval.Duration <= 0 {
 		errs = append(errs, fieldErr("git.refresh_fallback_interval", "must be a positive duration"))
 	}
