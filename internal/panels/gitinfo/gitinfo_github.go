@@ -334,6 +334,7 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 		tabEntry{id: tabActions, name: labelActions, short: shortAct, count: p.actionsStatusIcon()},
 		tabEntry{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
 		tabEntry{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		tabEntry{id: tabNotifications, name: labelNotifications, short: "Ntf", count: p.ghNotifCountStr()},
 	)
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))

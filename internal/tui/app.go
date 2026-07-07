@@ -80,6 +80,7 @@ type Model struct {
 	ready              bool   // true after first WindowSizeMsg
 	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
 	previewEditing     bool   // true when preview panel is in edit mode
+	previewInput       bool   // true when preview panel has an inline prompt open (e.g. go-to-line)
 }
 
 // New creates a new TUI model with the given panel manager, theme, keymap,
@@ -278,6 +279,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.EditModeExitedMsg:
 		m.previewEditing = false
 		return m.handleDefaultMsg(msg)
+
+	// Inline preview prompt tracking — the preview panel broadcasts these
+	// when it opens or closes an inline text prompt (e.g. go-to-line) so we
+	// route all keys to it and skip global bindings while it is open.
+	case panels.PreviewInputStartedMsg:
+		m.previewInput = true
+		return m, nil
+	case panels.PreviewInputEndedMsg:
+		m.previewInput = false
+		return m, nil
 
 	// Mouse events — may fall through to default broadcast.
 	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:

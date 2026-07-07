@@ -56,6 +56,55 @@ func TestParseLogOutput_MultipleCommits(t *testing.T) {
 	assert.Equal(t, []string{"hash1"}, commits[1].Parents)
 }
 
+func TestParseSignatureStatus(t *testing.T) {
+	cases := map[string]SignatureStatus{
+		"G": SigGood,
+		"U": SigUnknown,
+		"X": SigExpired,
+		"Y": SigExpired,
+		"R": SigRevoked,
+		"B": SigBad,
+		"E": SigError,
+		"N": SigNone,
+		"":  SigNone,
+		"?": SigNone,
+	}
+	for code, want := range cases {
+		assert.Equal(t, want, ParseSignatureStatus(code), "code %q", code)
+	}
+	assert.True(t, SigGood.Verified())
+	assert.False(t, SigBad.Verified())
+	assert.True(t, SigBad.Present())
+	assert.False(t, SigNone.Present())
+}
+
+func TestParseLogOutput_Signature(t *testing.T) {
+	const sep = "\x1e"
+	// 11-field record includes %G? and %GS trailing fields.
+	input := "hash1" + sep + "h1" + sep + "Dev" + sep + "dev@test.com" + sep +
+		"2024-03-01T12:00:00Z" + sep + "Signed commit" + sep + "" + sep + "" + sep + "" + sep +
+		"G" + sep + "Dev <dev@test.com>" + "\x1f\n"
+
+	commits, err := parseLogOutput(input, sep)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+	assert.Equal(t, SigGood, commits[0].Signature)
+	assert.Equal(t, "Dev <dev@test.com>", commits[0].Signer)
+}
+
+func TestParseLogOutput_NoSignatureFields(t *testing.T) {
+	const sep = "\x1e"
+	// A legacy 9-field record leaves signature empty and does not panic.
+	input := "hash1" + sep + "h1" + sep + "Dev" + sep + "dev@test.com" + sep +
+		"2024-03-01T12:00:00Z" + sep + "Unsigned" + sep + "" + sep + "" + sep + "" + "\x1f\n"
+
+	commits, err := parseLogOutput(input, sep)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+	assert.Equal(t, SigNone, commits[0].Signature)
+	assert.Empty(t, commits[0].Signer)
+}
+
 func TestParseLogOutput_Empty(t *testing.T) {
 	commits, err := parseLogOutput("", "\x1e")
 	require.NoError(t, err)

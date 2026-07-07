@@ -89,6 +89,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `space` | Toggle select for bulk |
 | `enter/l` | Expand file diff |
 | `h` | Enter hunk mode |
+| `X` | Clean untracked files (preview and select) |
 | `Esc` | Exit hunk/line mode |
 
 ---
@@ -132,11 +133,13 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
+| `N` | Notifications tab |
+| `Enter` | Open notification in browser (Notifications tab) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
-| `m` | Merge PR (PRs tab) |
+| `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
 | `c` | Close/reopen issue (Issues tab) |
-| `r` | Rerun (Actions tab) |
+| `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |
 
@@ -168,6 +171,7 @@ Preview panel (panel 5).
 | `f` | Toggle diff view |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
+| `L` | Go to line |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
