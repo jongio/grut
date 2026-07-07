@@ -57,6 +57,55 @@ type Branch struct {
 	IsCurrent bool
 }
 
+// SignatureStatus classifies the GPG/SSH signature verification state of a
+// commit, derived from git log's %G? placeholder.
+type SignatureStatus string
+
+const (
+	// SigNone means the commit carries no signature (git code "N").
+	SigNone SignatureStatus = ""
+	// SigGood is a valid signature from a trusted key (git code "G").
+	SigGood SignatureStatus = "good"
+	// SigUnknown is a good signature whose key validity is unknown (git code "U").
+	SigUnknown SignatureStatus = "unknown"
+	// SigExpired is a good signature that has expired, or was made by an
+	// expired key (git codes "X" and "Y").
+	SigExpired SignatureStatus = "expired"
+	// SigRevoked is a good signature made by a revoked key (git code "R").
+	SigRevoked SignatureStatus = "revoked"
+	// SigBad is a bad signature (git code "B").
+	SigBad SignatureStatus = "bad"
+	// SigError means the signature could not be checked, for example the
+	// public key is missing (git code "E").
+	SigError SignatureStatus = "error"
+)
+
+// Verified reports whether the signature is a good signature from a trusted key.
+func (s SignatureStatus) Verified() bool { return s == SigGood }
+
+// Present reports whether the commit carries any signature at all.
+func (s SignatureStatus) Present() bool { return s != SigNone }
+
+// ParseSignatureStatus maps a git %G? code to a SignatureStatus.
+func ParseSignatureStatus(code string) SignatureStatus {
+	switch code {
+	case "G":
+		return SigGood
+	case "U":
+		return SigUnknown
+	case "X", "Y":
+		return SigExpired
+	case "R":
+		return SigRevoked
+	case "B":
+		return SigBad
+	case "E":
+		return SigError
+	default: // "N" or empty
+		return SigNone
+	}
+}
+
 // Commit represents a parsed git log entry.
 type Commit struct {
 	Hash        string
@@ -66,8 +115,10 @@ type Commit struct {
 	Date        time.Time
 	Subject     string
 	Body        string
-	Parents     []string // Parent hashes for graph rendering
-	Refs        []string // Branch/tag refs
+	Parents     []string        // Parent hashes for graph rendering
+	Refs        []string        // Branch/tag refs
+	Signature   SignatureStatus // GPG/SSH signature verification state
+	Signer      string          // Signer identity when a signature is present
 }
 
 // DiffOpts configures a git diff operation.

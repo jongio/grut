@@ -65,6 +65,7 @@ max_log_entries = 500            # Maximum git log entries to display (≥ 1)
 sign_commits = false             # Sign commits with GPG
 secret_guard = true              # Scan files for secrets before staging
 secret_guard_mode = "warn"       # "warn" (confirm) or "block" (refuse)
+diff_word_highlight = true       # Highlight changed words within lines in the diff view (toggle with w)
 ```
 
 ---

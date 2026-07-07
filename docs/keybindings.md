@@ -89,6 +89,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `space` | Toggle select for bulk |
 | `enter/l` | Expand file diff |
 | `h` | Enter hunk mode |
+| `X` | Clean untracked files (preview and select) |
 | `Esc` | Exit hunk/line mode |
 
 ---
@@ -167,6 +168,7 @@ Preview panel (panel 5).
 | `f` | Toggle diff view |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
+| `L` | Go to line |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
