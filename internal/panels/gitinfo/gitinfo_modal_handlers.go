@@ -26,6 +26,8 @@ type modalArgs struct {
 	msg         notify.ModalResultMsg
 	name        string
 	pendingPath string
+	issueTitle  string // captured new-issue draft title (opIssueCreate* flow)
+	issueBody   string // captured new-issue draft body (opIssueCreate* flow)
 	git         gitOps
 	ctx         context.Context
 }
@@ -401,4 +403,141 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 			localErr:  localErr,
 		}
 	}
+}
+
+// prCreateAbort resets the in-progress draft and shows a warning toast. It is
+// used by the create-PR steps when validation fails.
+func (p *Panel) prCreateAbort(message string) (panels.Panel, tea.Cmd) {
+	p.prDraft = prCreateDraft{}
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{Message: message, Level: notify.Warn}
+	}
+}
+
+// handlePRCreateHead captures the head branch, then prompts for the base.
+func (p *Panel) handlePRCreateHead(a modalArgs) (panels.Panel, tea.Cmd) {
+	head := strings.TrimSpace(a.msg.Value)
+	if head == "" {
+		return p.prCreateAbort("Cannot open PR: head branch is required")
+	}
+	p.prDraft.head = head
+	p.pending = opPRCreateBase
+	return p, notify.ShowInputWithValue("PR Base Branch", "base-branch", p.prDraft.base)
+}
+
+// handlePRCreateBase captures the base branch, guards head==base, then prompts
+// for the title.
+func (p *Panel) handlePRCreateBase(a modalArgs) (panels.Panel, tea.Cmd) {
+	base := strings.TrimSpace(a.msg.Value)
+	if base == "" {
+		return p.prCreateAbort("Cannot open PR: base branch is required")
+	}
+	if base == p.prDraft.head {
+		return p.prCreateAbort(fmt.Sprintf("Cannot open PR: head and base are both %q", base))
+	}
+	p.prDraft.base = base
+	p.pending = opPRCreateTitle
+	return p, notify.ShowInput("PR Title", "title")
+}
+
+// handlePRCreateTitle captures the required title, then prompts for the
+// optional body.
+func (p *Panel) handlePRCreateTitle(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := strings.TrimSpace(a.msg.Value)
+	if title == "" {
+		return p.prCreateAbort("Cannot open PR: title is required")
+	}
+	p.prDraft.title = title
+	p.pending = opPRCreateBody
+	return p, notify.ShowInput("PR Body", "(optional)")
+}
+
+// handlePRCreateBody captures the optional body and fires the create request.
+func (p *Panel) handlePRCreateBody(a modalArgs) (panels.Panel, tea.Cmd) {
+	body := strings.TrimSpace(a.msg.Value)
+	head, base, title := p.prDraft.head, p.prDraft.base, p.prDraft.title
+	p.prDraft = prCreateDraft{}
+	if head == "" || base == "" || title == "" {
+		// Defensive: state was lost somehow; abort quietly with a warning.
+		return p.prCreateAbort("Cannot open PR: missing branch or title")
+	}
+	return p, p.createPRCmd(head, base, title, body)
+}
+
+// handleIssuePRComment posts the composed comment body to the selected issue
+// or PR. Empty bodies are rejected without hitting the API.
+// pendingName format: "kind:number" (e.g. "issue:252" or "PR:100").
+func (p *Panel) handleIssuePRComment(a modalArgs) (panels.Panel, tea.Cmd) {
+	parts := strings.SplitN(a.name, ":", 2)
+	if len(parts) < 2 {
+		return p, nil
+	}
+	kind := parts[0]
+	number, _ := strconv.Atoi(parts[1])
+	if number == 0 {
+		return p, nil
+	}
+
+	body := strings.TrimSpace(a.msg.Value)
+	if body == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Comment cannot be empty",
+				Level:   notify.Warn,
+			}
+		}
+	}
+
+	return p, p.commentCmd(number, body, kind)
+}
+
+// handleIssueCreateTitle is step 1 of the new-issue flow. It validates the
+// title and advances to the body step. An empty title is rejected with an
+// inline message and the title prompt is re-shown so the flow stays recoverable.
+func (p *Panel) handleIssueCreateTitle(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := strings.TrimSpace(a.msg.Value)
+	if title == "" {
+		p.pending = opIssueCreateTitle
+		return p, tea.Batch(
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Issue title is required", Level: notify.Warn}
+			},
+			notify.ShowInput("New Issue — Title (required)", "Title cannot be empty"),
+		)
+	}
+	p.gh.issueDraftTitle = title
+	p.pending = opIssueCreateBody
+	return p, notify.ShowInput("New Issue — Body", "Optional description (leave empty to skip)")
+}
+
+// handleIssueCreateBody is step 2 of the new-issue flow. It records the body
+// and advances to the optional labels step.
+func (p *Panel) handleIssueCreateBody(a modalArgs) (panels.Panel, tea.Cmd) {
+	p.gh.issueDraftTitle = a.issueTitle
+	p.gh.issueDraftBody = strings.TrimSpace(a.msg.Value)
+	p.pending = opIssueCreateLabels
+	return p, notify.ShowInput("New Issue — Labels", "comma,separated (optional)")
+}
+
+// handleIssueCreateLabels is step 3 of the new-issue flow. It parses the
+// optional labels and creates the issue.
+func (p *Panel) handleIssueCreateLabels(a modalArgs) (panels.Panel, tea.Cmd) {
+	title := a.issueTitle
+	if title == "" {
+		return p, nil
+	}
+	return p, p.createIssueCmd(title, a.issueBody, parseIssueLabels(a.msg.Value))
+}
+
+func (p *Panel) handlePRRequestReviewers(a modalArgs) (panels.Panel, tea.Cmd) {
+	// User submitted reviewer logins. Empty input cancels.
+	reviewers := parseReviewerLogins(a.msg.Value)
+	if len(reviewers) == 0 {
+		return p, nil
+	}
+	prNumber, err := strconv.Atoi(a.name)
+	if err != nil || prNumber == 0 {
+		return p, nil
+	}
+	return p, p.requestReviewersCmd(prNumber, reviewers)
 }

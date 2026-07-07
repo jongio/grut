@@ -25,8 +25,10 @@ func (c *Client) Log(ctx context.Context, opts LogOpts) ([]Commit, error) {
 		"%aI", // author date ISO 8601
 		"%s",  // subject
 		bodyFormat,
-		"%P", // parent hashes
-		"%D", // ref names
+		"%P",  // parent hashes
+		"%D",  // ref names
+		"%G?", // signature verification status
+		"%GS", // signer identity
 	}, FieldSep) + RecordEnd
 
 	args := []string{"log", "--format=" + format}
@@ -60,6 +62,18 @@ func (c *Client) Log(ctx context.Context, opts LogOpts) ([]Commit, error) {
 			return nil, fmt.Errorf("log grep: %w", err)
 		}
 		args = append(args, "--grep="+opts.Grep)
+	}
+	if opts.Pickaxe != "" {
+		if err := ValidateArg(opts.Pickaxe); err != nil {
+			return nil, fmt.Errorf("log pickaxe: %w", err)
+		}
+		// Concatenated as a single argument (-S<term> / -G<term>) so the
+		// term can never be parsed as a separate option (CWE-88).
+		if opts.PickaxeRegex {
+			args = append(args, "-G"+opts.Pickaxe)
+		} else {
+			args = append(args, "-S"+opts.Pickaxe)
+		}
 	}
 	if opts.All {
 		args = append(args, "--all")
@@ -131,6 +145,15 @@ func parseLogOutput(output, sep string) ([]Commit, error) { //nolint:unparam // 
 			}
 		}
 
+		// Signature fields are appended after the ref names. Older callers
+		// (and unit tests) may pass records without them, so read defensively.
+		var sig SignatureStatus
+		var signer string
+		if len(fields) >= 11 {
+			sig = ParseSignatureStatus(strings.TrimSpace(fields[9]))
+			signer = strings.TrimSpace(fields[10])
+		}
+
 		commits = append(commits, Commit{
 			Hash:        strings.TrimSpace(fields[0]),
 			ShortHash:   strings.TrimSpace(fields[1]),
@@ -141,6 +164,8 @@ func parseLogOutput(output, sep string) ([]Commit, error) { //nolint:unparam // 
 			Body:        strings.TrimSpace(fields[6]),
 			Parents:     parents,
 			Refs:        refs,
+			Signature:   sig,
+			Signer:      signer,
 		})
 	}
 	return commits, nil

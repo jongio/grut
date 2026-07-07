@@ -778,7 +778,7 @@ func TestKeyBindings(t *testing.T) {
 	bindings := p.KeyBindings()
 
 	assert.NotEmpty(t, bindings)
-	assert.Len(t, bindings, 13)
+	assert.Len(t, bindings, 15)
 
 	// Verify all expected bindings are present
 	actions := make([]string, len(bindings))
@@ -794,12 +794,14 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "page_up")
 	assert.Contains(t, actions, "goto_top")
 	assert.Contains(t, actions, "goto_bottom")
+	assert.Contains(t, actions, "goto_line")
 	assert.Contains(t, actions, "toggle_wrap")
 	assert.Contains(t, actions, "toggle_line_numbers")
 	assert.Contains(t, actions, "toggle_markdown_render")
 	assert.Contains(t, actions, "toggle_blame")
 	assert.Contains(t, actions, "toggle_diff_mode")
 	assert.Contains(t, actions, "copy_selection")
+	assert.Contains(t, actions, "copy_permalink")
 }
 
 func TestKeysIgnoredWhenBlurred(t *testing.T) {

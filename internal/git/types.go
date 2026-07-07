@@ -57,6 +57,55 @@ type Branch struct {
 	IsCurrent bool
 }
 
+// SignatureStatus classifies the GPG/SSH signature verification state of a
+// commit, derived from git log's %G? placeholder.
+type SignatureStatus string
+
+const (
+	// SigNone means the commit carries no signature (git code "N").
+	SigNone SignatureStatus = ""
+	// SigGood is a valid signature from a trusted key (git code "G").
+	SigGood SignatureStatus = "good"
+	// SigUnknown is a good signature whose key validity is unknown (git code "U").
+	SigUnknown SignatureStatus = "unknown"
+	// SigExpired is a good signature that has expired, or was made by an
+	// expired key (git codes "X" and "Y").
+	SigExpired SignatureStatus = "expired"
+	// SigRevoked is a good signature made by a revoked key (git code "R").
+	SigRevoked SignatureStatus = "revoked"
+	// SigBad is a bad signature (git code "B").
+	SigBad SignatureStatus = "bad"
+	// SigError means the signature could not be checked, for example the
+	// public key is missing (git code "E").
+	SigError SignatureStatus = "error"
+)
+
+// Verified reports whether the signature is a good signature from a trusted key.
+func (s SignatureStatus) Verified() bool { return s == SigGood }
+
+// Present reports whether the commit carries any signature at all.
+func (s SignatureStatus) Present() bool { return s != SigNone }
+
+// ParseSignatureStatus maps a git %G? code to a SignatureStatus.
+func ParseSignatureStatus(code string) SignatureStatus {
+	switch code {
+	case "G":
+		return SigGood
+	case "U":
+		return SigUnknown
+	case "X", "Y":
+		return SigExpired
+	case "R":
+		return SigRevoked
+	case "B":
+		return SigBad
+	case "E":
+		return SigError
+	default: // "N" or empty
+		return SigNone
+	}
+}
+
 // Commit represents a parsed git log entry.
 type Commit struct {
 	Hash        string
@@ -66,8 +115,10 @@ type Commit struct {
 	Date        time.Time
 	Subject     string
 	Body        string
-	Parents     []string // Parent hashes for graph rendering
-	Refs        []string // Branch/tag refs
+	Parents     []string        // Parent hashes for graph rendering
+	Refs        []string        // Branch/tag refs
+	Signature   SignatureStatus // GPG/SSH signature verification state
+	Signer      string          // Signer identity when a signature is present
 }
 
 // DiffOpts configures a git diff operation.
@@ -121,17 +172,22 @@ type DiffLine struct {
 
 // LogOpts configures a git log operation.
 type LogOpts struct {
-	Since    string // Show commits after this date
-	Until    string // Show commits before this date
-	Author   string // Filter by author
-	Grep     string // Filter by commit message
-	Path     string // Filter by path
-	Ref      string // Starting ref (default HEAD)
-	MaxCount int    // Max number of commits to return
-	Skip     int    // Number of commits to skip (for pagination)
-	All      bool   // Show all refs
-	Graph    bool   // Include graph data
-	OmitBody bool   // Skip commit body text for list-only views
+	Since  string // Show commits after this date
+	Until  string // Show commits before this date
+	Author string // Filter by author
+	Grep   string // Filter by commit message
+	// Pickaxe narrows the log to commits that change the number of
+	// occurrences of this string (git -S), or, when PickaxeRegex is set,
+	// commits whose diff matches this expression (git -G).
+	Pickaxe      string
+	PickaxeRegex bool
+	Path         string // Filter by path
+	Ref          string // Starting ref (default HEAD)
+	MaxCount     int    // Max number of commits to return
+	Skip         int    // Number of commits to skip (for pagination)
+	All          bool   // Show all refs
+	Graph        bool   // Include graph data
+	OmitBody     bool   // Skip commit body text for list-only views
 }
 
 // CommitOpts configures a git commit operation.

@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/git/gittest"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 	"github.com/stretchr/testify/assert"
@@ -1206,4 +1207,65 @@ func TestContextValueShownInView(t *testing.T) {
 	p.SetDiffs([]git.FileDiff{sampleDiff()})
 	out := p.View(80, 24)
 	assert.Contains(t, out, "ctx 3", "view should show the current context value")
+}
+
+// --- Copy hunk ---
+
+func TestHunkToPatch(t *testing.T) {
+	h := git.Hunk{
+		Header: "@@ -1,3 +1,3 @@",
+		Lines: []git.DiffLine{
+			{Type: git.DiffLineContext, Content: "ctx"},
+			{Type: git.DiffLineRemoved, Content: "old"},
+			{Type: git.DiffLineAdded, Content: "new"},
+		},
+	}
+	want := "@@ -1,3 +1,3 @@\n ctx\n-old\n+new"
+	assert.Equal(t, want, hunkToPatch(h))
+}
+
+func TestCurrentHunk_MapsScrollToEnclosingHunk(t *testing.T) {
+	p := newTestPanel(nil)
+	p.SetDiffs([]git.FileDiff{sampleMultiHunkDiff()})
+	require.Len(t, p.hunkStarts, 2, "sample has two hunks")
+
+	// At or before the first hunk start → first hunk.
+	p.scrollY = 0
+	h, ok := p.currentHunk()
+	require.True(t, ok)
+	assert.Equal(t, "@@ -1,3 +1,3 @@", h.Header)
+
+	// At the second hunk's start line → second hunk.
+	p.scrollY = p.hunkStarts[1]
+	h, ok = p.currentHunk()
+	require.True(t, ok)
+	assert.Equal(t, "@@ -20,2 +20,3 @@", h.Header)
+
+	// Scrolled past the end → clamps to the last hunk.
+	p.scrollY = 10000
+	h, ok = p.currentHunk()
+	require.True(t, ok)
+	assert.Equal(t, "@@ -20,2 +20,3 @@", h.Header)
+}
+
+func TestCurrentHunk_NoDiff(t *testing.T) {
+	p := newTestPanel(nil)
+	_, ok := p.currentHunk()
+	assert.False(t, ok, "no diff loaded → no current hunk")
+}
+
+func TestCopyCurrentHunk_NoDiff_Warns(t *testing.T) {
+	p := newTestPanel(nil)
+	_, cmd := p.copyCurrentHunk()
+	require.NotNil(t, cmd)
+	toast, ok := cmd().(notify.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg")
+	assert.Equal(t, notify.Warn, toast.Level)
+}
+
+func TestCopyCurrentHunk_WithDiff_ReturnsCommand(t *testing.T) {
+	p := newTestPanel(nil)
+	p.SetDiffs([]git.FileDiff{sampleMultiHunkDiff()})
+	_, cmd := p.copyCurrentHunk()
+	require.NotNil(t, cmd, "a copy command should be returned when a diff is loaded")
 }
