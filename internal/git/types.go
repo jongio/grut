@@ -172,17 +172,22 @@ type DiffLine struct {
 
 // LogOpts configures a git log operation.
 type LogOpts struct {
-	Since    string // Show commits after this date
-	Until    string // Show commits before this date
-	Author   string // Filter by author
-	Grep     string // Filter by commit message
-	Path     string // Filter by path
-	Ref      string // Starting ref (default HEAD)
-	MaxCount int    // Max number of commits to return
-	Skip     int    // Number of commits to skip (for pagination)
-	All      bool   // Show all refs
-	Graph    bool   // Include graph data
-	OmitBody bool   // Skip commit body text for list-only views
+	Since  string // Show commits after this date
+	Until  string // Show commits before this date
+	Author string // Filter by author
+	Grep   string // Filter by commit message
+	// Pickaxe narrows the log to commits that change the number of
+	// occurrences of this string (git -S), or, when PickaxeRegex is set,
+	// commits whose diff matches this expression (git -G).
+	Pickaxe      string
+	PickaxeRegex bool
+	Path         string // Filter by path
+	Ref          string // Starting ref (default HEAD)
+	MaxCount     int    // Max number of commits to return
+	Skip         int    // Number of commits to skip (for pagination)
+	All          bool   // Show all refs
+	Graph        bool   // Include graph data
+	OmitBody     bool   // Skip commit body text for list-only views
 }
 
 // CommitOpts configures a git commit operation.

@@ -148,6 +148,11 @@ type Panel struct {
 	allLoaded    bool
 	// Search state.
 	searchMode bool
+	// Pickaxe content-search state (server-side git -S / -G). pickaxeTerm
+	// doubles as the editable input buffer and the applied filter.
+	pickaxeMode  bool
+	pickaxeTerm  string
+	pickaxeRegex bool
 	// Detail view state.
 	detailMode bool
 	// PR-commits mode: shows commits in a pull request.
@@ -193,12 +198,16 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 	if (p.filter == filterFile || p.filter == filterFolder) && p.filterPath != "" {
 		pathFilter = p.filterPath
 	}
+	pickaxe := p.pickaxeTerm
+	pickaxeRegex := p.pickaxeRegex
 	return func() tea.Msg {
 		commits, err := client.Log(ctx, git.LogOpts{
-			Ref:      ref,
-			MaxCount: pageSize,
-			Skip:     skip,
-			Path:     pathFilter,
+			Ref:          ref,
+			MaxCount:     pageSize,
+			Skip:         skip,
+			Path:         pathFilter,
+			Pickaxe:      pickaxe,
+			PickaxeRegex: pickaxeRegex,
 		})
 		if err != nil {
 			return notify.ShowToastMsg{
@@ -347,6 +356,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
+		{Key: "S", Description: "Search commit content (pickaxe)", Action: "pickaxe"},
 		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
@@ -506,6 +516,8 @@ func (p *Panel) resetState() {
 	p.offset = 0
 	p.searchMode = false
 	p.searchQuery = ""
+	p.pickaxeMode = false
+	p.pickaxeTerm = ""
 	p.authorFilter = ""
 	p.filteredIdx = nil
 	p.detailMode = false
@@ -627,16 +639,23 @@ func (p *Panel) renderList(width, height int) string {
 		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim))
 		lines = append(lines, commitrender.TruncateOrPad(loadingStyle.Render("  Loading more commits..."), width))
 	}
-	// Search bar at bottom if in search mode.
-	if p.searchMode {
-		searchLine := p.renderSearchBar(width)
+	// Bottom status bar: pickaxe content-search takes precedence over the
+	// client-side subject search when both are relevant.
+	var barLine string
+	switch {
+	case p.pickaxeMode || p.pickaxeTerm != "":
+		barLine = p.renderPickaxeBar(width)
+	case p.searchMode:
+		barLine = p.renderSearchBar(width)
+	}
+	if barLine != "" {
 		if len(lines) >= height {
-			lines[height-1] = searchLine
+			lines[height-1] = barLine
 		} else {
 			for len(lines) < height-1 {
 				lines = append(lines, strings.Repeat(" ", width))
 			}
-			lines = append(lines, searchLine)
+			lines = append(lines, barLine)
 		}
 	}
 	// Pad remaining height.
@@ -656,6 +675,24 @@ func (p *Panel) renderSearchBar(width int) string {
 		prompt += fmt.Sprintf("  [%d matches]", matchCount)
 	}
 	return searchStyle.Width(width).Render(prompt)
+}
+
+func (p *Panel) renderPickaxeBar(width int) string {
+	barStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(p.colors.SearchBg)).
+		Foreground(lipgloss.Color(p.colors.SearchFg))
+	mode := "text"
+	if p.pickaxeRegex {
+		mode = "regex"
+	}
+	prompt := " pickaxe(" + mode + "): " + p.pickaxeTerm
+	switch {
+	case p.pickaxeMode:
+		prompt += "  (Tab: regex, Enter: search, Esc: clear)"
+	case p.pickaxeTerm != "":
+		prompt += fmt.Sprintf("  [%d results]", len(p.commits))
+	}
+	return barStyle.Width(width).Render(prompt)
 }
 
 func (p *Panel) renderDetail(width, height int) string {
@@ -782,6 +819,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.focused {
 		return p, nil
 	}
+	if p.pickaxeMode {
+		return p.handlePickaxeKey(msg)
+	}
 	if p.searchMode {
 		return p.handleSearchKey(msg)
 	}
@@ -810,6 +850,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "/":
 		p.searchMode = true
 		p.searchQuery = ""
+	case "S":
+		p.pickaxeMode = true
 	case "a":
 		return p.toggleAuthorFilter()
 	case "A":
@@ -824,7 +866,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p, func() tea.Msg { return panels.RewordRequestMsg{OldMessage: msg} }
 		}
 	case "esc": //nolint:goconst // inline string is more readable here
-		// Progressive reset: PR-commits mode → selected commit → filter → nothing.
+		// Progressive reset: pickaxe → PR-commits mode → selected commit → filter → nothing.
+		if p.pickaxeTerm != "" {
+			p.pickaxeTerm = ""
+			p.resetState()
+			return p, p.loadCommitsCmd(0, false)
+		}
 		if p.prCommitsMode {
 			return p.exitPRCommitsMode()
 		}
@@ -863,6 +910,40 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if len(ch) == 1 && ch[0] >= ' ' {
 			p.searchQuery += ch
 			p.applyFilters()
+		}
+	}
+	return p, nil
+}
+
+func (p *Panel) handlePickaxeKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		// Run the content search server-side. Empty term clears the filter.
+		p.pickaxeMode = false
+		p.cursor = 0
+		p.offset = 0
+		p.allLoaded = false
+		return p, p.loadCommitsCmd(0, false)
+	case "esc":
+		hadTerm := p.pickaxeTerm != ""
+		p.pickaxeMode = false
+		p.pickaxeTerm = ""
+		if hadTerm {
+			p.cursor = 0
+			p.offset = 0
+			p.allLoaded = false
+			return p, p.loadCommitsCmd(0, false)
+		}
+	case "tab":
+		p.pickaxeRegex = !p.pickaxeRegex
+	case "backspace":
+		if len(p.pickaxeTerm) > 0 {
+			p.pickaxeTerm = p.pickaxeTerm[:len(p.pickaxeTerm)-1]
+		}
+	default:
+		ch := msg.String()
+		if len(ch) == 1 && ch[0] >= ' ' {
+			p.pickaxeTerm += ch
 		}
 	}
 	return p, nil

@@ -63,6 +63,18 @@ func (c *Client) Log(ctx context.Context, opts LogOpts) ([]Commit, error) {
 		}
 		args = append(args, "--grep="+opts.Grep)
 	}
+	if opts.Pickaxe != "" {
+		if err := ValidateArg(opts.Pickaxe); err != nil {
+			return nil, fmt.Errorf("log pickaxe: %w", err)
+		}
+		// Concatenated as a single argument (-S<term> / -G<term>) so the
+		// term can never be parsed as a separate option (CWE-88).
+		if opts.PickaxeRegex {
+			args = append(args, "-G"+opts.Pickaxe)
+		} else {
+			args = append(args, "-S"+opts.Pickaxe)
+		}
+	}
 	if opts.All {
 		args = append(args, "--all")
 	}
