@@ -94,6 +94,7 @@ type GitConfig struct {
 	WorktreeFirst           bool     `toml:"worktree_first"`
 	ShowCommitGraph         bool     `toml:"show_commit_graph"`
 	SignCommits             bool     `toml:"sign_commits"`
+	DiffWordHighlight       bool     `toml:"diff_word_highlight"`
 }
 
 // GitHubConfig holds GitHub integration settings.

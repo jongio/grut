@@ -63,6 +63,7 @@ auto_fetch_interval = "5m"       # Automatic fetch interval
 show_commit_graph = true         # Display commit graph in git log
 max_log_entries = 500            # Maximum git log entries to display (≥ 1)
 sign_commits = false             # Sign commits with GPG
+diff_word_highlight = true       # Highlight changed words within lines in the diff view (toggle with w)
 ```
 
 ---
