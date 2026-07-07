@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 )
 
 // ghCLITimeout is the maximum time to wait for the `gh` CLI to return an
@@ -24,7 +24,10 @@ func NewClient(ctx context.Context) (*clientImpl, error) {
 	if err != nil {
 		return nil, err
 	}
-	ghClient := gh.NewClient(nil).WithAuthToken(token)
+	ghClient, err := gh.NewClient(gh.WithAuthToken(token))
+	if err != nil {
+		return nil, fmt.Errorf("create github client: %w", err)
+	}
 	return &clientImpl{gh: ghClient, cache: newCache()}, nil
 }
 

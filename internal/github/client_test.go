@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	gh "github.com/google/go-github/v68/github"
+	gh "github.com/google/go-github/v88/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +21,18 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
+// urlRewriteTransport redirects all outgoing requests to the test server,
+// preserving the request path so existing mock handlers keep matching.
+type urlRewriteTransport struct {
+	base *url.URL
+}
+
+func (t *urlRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.URL.Scheme = t.base.Scheme
+	req.URL.Host = t.base.Host
+	return http.DefaultTransport.RoundTrip(req)
+}
+
 // setupMockClient creates a clientImpl backed by an httptest server.
 // The server is cleaned up automatically via t.Cleanup.
 func setupMockClient(t *testing.T, handler http.HandlerFunc) (*clientImpl, *httptest.Server) {
@@ -28,12 +40,12 @@ func setupMockClient(t *testing.T, handler http.HandlerFunc) (*clientImpl, *http
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	ghClient := gh.NewClient(nil).WithAuthToken("test-token")
 	baseURL, err := url.Parse(server.URL + "/")
 	require.NoError(t, err)
-	ghClient.BaseURL = baseURL
-	// Point upload URL at the mock too so PR diff etc. work.
-	ghClient.UploadURL = baseURL
+
+	httpClient := &http.Client{Transport: &urlRewriteTransport{base: baseURL}}
+	ghClient, err := gh.NewClient(gh.WithHTTPClient(httpClient), gh.WithAuthToken("test-token"))
+	require.NoError(t, err)
 
 	return &clientImpl{gh: ghClient, cache: newCache()}, server
 }
