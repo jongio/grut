@@ -38,56 +38,56 @@ func TestTokenizeWord(t *testing.T) {
 }
 
 func TestDiffWordsIdentical(t *testing.T) {
-	old, new := diffWords("same line here", "same line here")
+	oldSegs, newSegs := diffWords("same line here", "same line here")
 	// No tokens changed; the reconstructed text is preserved on both sides.
-	assert.Equal(t, "same line here", segFull(old))
-	assert.Equal(t, "same line here", segFull(new))
-	assert.Empty(t, segText(old, true))
-	assert.Empty(t, segText(new, true))
+	assert.Equal(t, "same line here", segFull(oldSegs))
+	assert.Equal(t, "same line here", segFull(newSegs))
+	assert.Empty(t, segText(oldSegs, true))
+	assert.Empty(t, segText(newSegs, true))
 }
 
 func TestDiffWordsSingleWordChange(t *testing.T) {
-	old, new := diffWords("alpha beta gamma", "alpha delta gamma")
+	oldSegs, newSegs := diffWords("alpha beta gamma", "alpha delta gamma")
 	// Full text is preserved on each side.
-	assert.Equal(t, "alpha beta gamma", segFull(old))
-	assert.Equal(t, "alpha delta gamma", segFull(new))
+	assert.Equal(t, "alpha beta gamma", segFull(oldSegs))
+	assert.Equal(t, "alpha delta gamma", segFull(newSegs))
 	// Only the differing word is flagged; the shared words are not.
-	assert.Equal(t, "beta", segText(old, true))
-	assert.Equal(t, "delta", segText(new, true))
-	assert.Contains(t, segText(old, false), "alpha")
-	assert.Contains(t, segText(old, false), "gamma")
+	assert.Equal(t, "beta", segText(oldSegs, true))
+	assert.Equal(t, "delta", segText(newSegs, true))
+	assert.Contains(t, segText(oldSegs, false), "alpha")
+	assert.Contains(t, segText(oldSegs, false), "gamma")
 }
 
 func TestDiffWordsPrefixAndSuffix(t *testing.T) {
-	old, new := diffWords("func foo(a int)", "func foo(a, b int)")
-	assert.Equal(t, "func foo(a int)", segFull(old))
-	assert.Equal(t, "func foo(a, b int)", segFull(new))
+	oldSegs, newSegs := diffWords("func foo(a int)", "func foo(a, b int)")
+	assert.Equal(t, "func foo(a int)", segFull(oldSegs))
+	assert.Equal(t, "func foo(a, b int)", segFull(newSegs))
 	// The addition is only flagged on the new side.
-	assert.Empty(t, segText(old, true))
-	assert.NotEmpty(t, segText(new, true))
+	assert.Empty(t, segText(oldSegs, true))
+	assert.NotEmpty(t, segText(newSegs, true))
 }
 
 func TestDiffWordsFullReplacement(t *testing.T) {
-	old, new := diffWords("aaa", "bbb")
-	assert.Equal(t, "aaa", segText(old, true))
-	assert.Equal(t, "bbb", segText(new, true))
+	oldSegs, newSegs := diffWords("aaa", "bbb")
+	assert.Equal(t, "aaa", segText(oldSegs, true))
+	assert.Equal(t, "bbb", segText(newSegs, true))
 }
 
 func TestDiffWordsEmptyReturnsNil(t *testing.T) {
-	old, new := diffWords("", "added")
-	assert.Nil(t, old)
-	assert.Nil(t, new)
+	oldSegs, newSegs := diffWords("", "added")
+	assert.Nil(t, oldSegs)
+	assert.Nil(t, newSegs)
 
-	old, new = diffWords("removed", "")
-	assert.Nil(t, old)
-	assert.Nil(t, new)
+	oldSegs, newSegs = diffWords("removed", "")
+	assert.Nil(t, oldSegs)
+	assert.Nil(t, newSegs)
 }
 
 func TestDiffWordsOverCapFallsBack(t *testing.T) {
 	long := strings.Repeat("a ", maxWordTokens+10) // > maxWordTokens tokens
-	old, new := diffWords(long, long+"x")
-	assert.Nil(t, old, "over-cap lines should fall back to plain rendering")
-	assert.Nil(t, new)
+	oldSegs, newSegs := diffWords(long, long+"x")
+	assert.Nil(t, oldSegs, "over-cap lines should fall back to plain rendering")
+	assert.Nil(t, newSegs)
 }
 
 func TestComputeHunkWordEmphasisPairsChanges(t *testing.T) {
