@@ -73,4 +73,7 @@ const (
 	// ModalActionPickerWithCheckbox displays a selectable list of actions
 	// with a "remember this choice" checkbox.
 	ModalActionPickerWithCheckbox
+	// ModalMultilineInput displays a multi-line text composer. Enter inserts
+	// a newline, Ctrl+D submits, and Esc cancels.
+	ModalMultilineInput
 )

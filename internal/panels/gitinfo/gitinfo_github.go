@@ -133,6 +133,14 @@ type prMergeResultMsg struct {
 	err        error
 }
 
+// commentResultMsg carries the result of posting a conversation-level comment
+// on an issue or PR.
+type commentResultMsg struct {
+	number int
+	kind   string
+	err    error
+}
+
 // prRequestReviewersResultMsg carries the result of a request-reviewers operation.
 type prRequestReviewersResultMsg struct {
 	err       error
@@ -1922,6 +1930,88 @@ func (p *Panel) handlePRMergeResult(msg prMergeResultMsg) (panels.Panel, tea.Cmd
 		))
 	}
 
+	return p, tea.Batch(cmds...)
+}
+
+// commentKindIssue and commentKindPR label the target of a comment for the
+// pending-op name and result toast.
+const (
+	commentKindIssue = "issue"
+	commentKindPR    = "PR"
+)
+
+// doCommentOnItem opens a multi-line composer to post a conversation-level
+// comment on the selected issue or PR. This is distinct from inline diff
+// review comments; it uses the shared issue-comment endpoint.
+func (p *Panel) doCommentOnItem() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	if p.gh.client == nil {
+		return p, nil
+	}
+
+	var number int
+	var title, kind string
+	switch items[cursor].kind {
+	case kindIssue:
+		number = items[cursor].issue.Number
+		title = items[cursor].issue.Title
+		kind = commentKindIssue
+	case kindPR:
+		number = items[cursor].pr.Number
+		title = items[cursor].pr.Title
+		kind = commentKindPR
+	default:
+		return p, nil
+	}
+
+	p.clearPending()
+	p.pending = opIssuePRComment
+	p.pendingName = fmt.Sprintf("%s:%d", kind, number)
+
+	modalTitle := fmt.Sprintf("Comment on %s #%d: %s", kind, number, title)
+	return p, notify.ShowMultilineInput(modalTitle, "Write a comment...")
+}
+
+// commentCmd returns a tea.Cmd that posts the comment asynchronously.
+func (p *Panel) commentCmd(number int, body, kind string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		err := client.CommentOnIssue(ctx, owner, repo, number, body)
+		return commentResultMsg{number: number, kind: kind, err: err}
+	}
+}
+
+// handleCommentResult processes the async result of posting a comment. On
+// success it refreshes the conversation shown in the preview.
+func (p *Panel) handleCommentResult(msg commentResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Comment on %s #%d failed: %s", msg.kind, msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	toastMsg := fmt.Sprintf("Comment posted on %s #%d", msg.kind, msg.number)
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: toastMsg,
+				Level:   notify.Success,
+			}
+		},
+	}
+	if refresh := p.activeTabSelectionCmd(); refresh != nil {
+		cmds = append(cmds, refresh)
+	}
 	return p, tea.Batch(cmds...)
 }
 

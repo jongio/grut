@@ -151,6 +151,7 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opIssuePRComment                     // awaiting comment body for an issue or PR
 	opIssueCreateTitle                   // awaiting new issue title (step 1)
 	opIssueCreateBody                    // awaiting new issue body (step 2)
 	opIssueCreateLabels                  // awaiting new issue labels (step 3)
@@ -772,6 +773,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 
 	case prMergeResultMsg:
 		return p.handlePRMergeResult(msg)
+	case commentResultMsg:
+		return p.handleCommentResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
 	case issueCreateResultMsg:
@@ -920,6 +923,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
 			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
+			panels.KeyBinding{Key: "C", Description: "Comment on issue/PR", Action: "item_comment"},
 			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
@@ -1186,6 +1190,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		if p.activeTab == tabNotifications && p.gh.client != nil {
 			return p.doMarkNotificationRead()
+		}
+	case "C":
+		if (p.activeTab == tabIssues || p.activeTab == tabPRs) && p.gh.client != nil {
+			return p.doCommentOnItem()
 		}
 	case "R":
 		if p.activeTab == tabPRs && p.gh.client != nil {
@@ -2269,6 +2277,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opIssuePRComment:
+		return p.handleIssuePRComment(a)
 	case opIssueCreateTitle:
 		return p.handleIssueCreateTitle(a)
 	case opIssueCreateBody:

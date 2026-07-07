@@ -144,6 +144,7 @@ GitHub panel (panel 3).
 | `M` | Copy issue or PR as a markdown link (Issues/PRs tabs) |
 | `A` | Assign to me (Issues/PRs tab) |
 | `R` | Request reviewers (PRs tab) |
+| `C` | Comment on issue/PR (Issues/PRs tab) |
 | `c` | Close/reopen issue (Issues tab) |
 | `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
 | `r` | Rerun (Actions tab) / Refresh (Notifications tab) |

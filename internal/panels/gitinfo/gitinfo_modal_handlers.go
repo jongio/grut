@@ -405,6 +405,33 @@ func (p *Panel) handlePRDeleteBranchAfterMerge(a modalArgs) (panels.Panel, tea.C
 	}
 }
 
+// handleIssuePRComment posts the composed comment body to the selected issue
+// or PR. Empty bodies are rejected without hitting the API.
+// pendingName format: "kind:number" (e.g. "issue:252" or "PR:100").
+func (p *Panel) handleIssuePRComment(a modalArgs) (panels.Panel, tea.Cmd) {
+	parts := strings.SplitN(a.name, ":", 2)
+	if len(parts) < 2 {
+		return p, nil
+	}
+	kind := parts[0]
+	number, _ := strconv.Atoi(parts[1])
+	if number == 0 {
+		return p, nil
+	}
+
+	body := strings.TrimSpace(a.msg.Value)
+	if body == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Comment cannot be empty",
+				Level:   notify.Warn,
+			}
+		}
+	}
+
+	return p, p.commentCmd(number, body, kind)
+}
+
 // handleIssueCreateTitle is step 1 of the new-issue flow. It validates the
 // title and advances to the body step. An empty title is rejected with an
 // inline message and the title prompt is re-shown so the flow stays recoverable.
