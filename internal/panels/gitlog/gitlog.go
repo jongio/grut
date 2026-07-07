@@ -39,42 +39,51 @@ const loadMoreThreshold = 50
 const debounceInterval = 200 * time.Millisecond
 
 type panelColors struct {
-	Hash     string
-	Date     string
-	Author   string
-	Refs     string
-	Subject  string
-	Dim      string
-	CursorBg string
-	Graph    string
-	SearchBg string
-	SearchFg string
+	Hash       string
+	Date       string
+	Author     string
+	Refs       string
+	Subject    string
+	Dim        string
+	CursorBg   string
+	Graph      string
+	SearchBg   string
+	SearchFg   string
+	SigGood    string
+	SigBad     string
+	SigCaution string
 }
 
 func newCommitLineStyles(c panelColors) commitrender.Styles {
 	return commitrender.Styles{
-		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
-		Date:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Date)),
-		Author:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.Author)),
-		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
-		Ref:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.Refs)).Bold(true),
-		Graph:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.Graph)),
-		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		Hash:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Date:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.Date)),
+		Author:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.Author)),
+		Subject:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Ref:        lipgloss.NewStyle().Foreground(lipgloss.Color(c.Refs)).Bold(true),
+		Graph:      lipgloss.NewStyle().Foreground(lipgloss.Color(c.Graph)),
+		Cursor:     lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		SigGood:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigGood)),
+		SigBad:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigBad)),
+		SigCaution: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigCaution)),
 	}
 }
 
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
-		Hash:     "#D4B84A",
-		Date:     colorDim,
-		Author:   "#6B9E56",
-		Refs:     "#7A9EBF",
-		Subject:  "#999999",
-		Dim:      colorDim,
-		CursorBg: "#2A2A2A",
-		Graph:    colorDim,
-		SearchBg: "#2A2A2A",
-		SearchFg: "#D4D4D4",
+		Hash:       "#D4B84A",
+		Date:       colorDim,
+		Author:     "#6B9E56",
+		Refs:       "#7A9EBF",
+		Subject:    "#999999",
+		Dim:        colorDim,
+		CursorBg:   "#2A2A2A",
+		Graph:      colorDim,
+		SearchBg:   "#2A2A2A",
+		SearchFg:   "#D4D4D4",
+		SigGood:    "#6B9E56",
+		SigBad:     "#C05B5B",
+		SigCaution: "#D4B84A",
 	}
 	if th != nil {
 		c.Hash = th.Colors.NormalYellow
@@ -87,6 +96,9 @@ func initColors(th *theme.Theme) panelColors {
 		c.Graph = th.Colors.BrightBlack
 		c.SearchBg = th.Colors.SelectionBg
 		c.SearchFg = th.Colors.SelectionFg
+		c.SigGood = th.Colors.NormalGreen
+		c.SigBad = th.Colors.NormalRed
+		c.SigCaution = th.Colors.NormalYellow
 	}
 	return c
 }
@@ -433,14 +445,15 @@ func (p *Panel) renderLog(width, height int) string {
 		d := dl[i]
 		if d.commitIdx >= 0 && d.commitIdx < len(p.commits) {
 			lines = append(lines, commitrender.RenderLine(commitrender.Params{
-				Commit:      p.commits[d.commitIdx],
-				Width:       width,
-				IsCursor:    i == cursorDL,
-				GraphPrefix: d.text,
-				Styles:      p.clStyles,
-				ShowRefs:    true,
-				ShowAuthor:  true,
-				ShowDate:    true,
+				Commit:        p.commits[d.commitIdx],
+				Width:         width,
+				IsCursor:      i == cursorDL,
+				GraphPrefix:   d.text,
+				Styles:        p.clStyles,
+				ShowRefs:      true,
+				ShowAuthor:    true,
+				ShowDate:      true,
+				ShowSignature: true,
 			}))
 		} else {
 			// Connector line — just show the graph portion.
