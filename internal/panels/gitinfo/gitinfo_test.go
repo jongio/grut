@@ -2506,6 +2506,12 @@ type mockGHClientFull struct {
 	reviewersErr          error
 	requestedReviewers    []string
 	requestReviewersCalls int
+
+	// New-issue create recording.
+	createIssueReq   *gh.IssueRequest
+	createIssueResp  *gh.Issue
+	createIssueErr   error
+	createIssueCalls int
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2524,8 +2530,10 @@ func (m *mockGHClientFull) GetIssueComments(_ context.Context, _, _ string, _ in
 	return nil, nil
 }
 
-func (m *mockGHClientFull) CreateIssue(_ context.Context, _, _ string, _ *gh.IssueRequest) (*gh.Issue, error) {
-	return nil, nil
+func (m *mockGHClientFull) CreateIssue(_ context.Context, _, _ string, req *gh.IssueRequest) (*gh.Issue, error) {
+	m.createIssueCalls++
+	m.createIssueReq = req
+	return m.createIssueResp, m.createIssueErr
 }
 
 func (m *mockGHClientFull) EditIssue(_ context.Context, _, _ string, _ int, _ *gh.IssueRequest) error {
