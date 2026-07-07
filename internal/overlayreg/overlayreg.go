@@ -63,22 +63,25 @@ func (f *Factory) NewSettingsPanel(
 // Supported modes: "files", "commands", "directories".
 // The bindings parameter is used for the "commands" mode source.
 func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.Panel {
-	var sources []fuzzyfinder.Source
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	sources := []fuzzyfinder.Source{
+		fuzzyfinder.NewFileSource(cwd),
+		fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth),
+		fuzzyfinder.NewCommandSource(bindings),
+		fuzzyfinder.NewBookmarkSource(f.bookmarkMgr),
+		fuzzyfinder.NewGitChangedSource(cwd),
+	}
+	defaultCategories := []string{fuzzyfinder.DefaultCategoryFile()}
 	switch mode {
 	case "files":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewFileSource(cwd))
+		defaultCategories = []string{fuzzyfinder.DefaultCategoryFile()}
 	case "commands":
-		sources = append(sources, fuzzyfinder.NewCommandSource(bindings))
+		defaultCategories = []string{fuzzyfinder.DefaultCategoryCommand()}
 	case "directories":
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		sources = append(sources, fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth))
+		defaultCategories = []string{fuzzyfinder.DefaultCategoryDirectory()}
 	}
-	return fuzzyfinder.New(f.theme, sources...)
+	return fuzzyfinder.NewWithDefaultCategories(f.theme, defaultCategories, sources...)
 }

@@ -3,6 +3,7 @@ package fuzzyfinder
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -228,6 +229,39 @@ func TestCommandSourceEmpty(t *testing.T) {
 	assert.Empty(t, items)
 }
 
+func TestGitChangedSourceListsStatusFiles(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test User")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("one\n"), 0o644))
+	runGit(t, dir, "add", "tracked.txt")
+	runGit(t, dir, "commit", "-m", "initial")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("two\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644))
+
+	items := NewGitChangedSource(dir).Items()
+	texts := make([]string, len(items))
+	for i, item := range items {
+		texts[i] = item.Text
+		assert.Equal(t, categoryGitChanged, item.Category)
+	}
+
+	assert.Contains(t, texts, "tracked.txt")
+	assert.Contains(t, texts, "new.txt")
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+}
+
 // ---------------------------------------------------------------------------
 // FuzzyFinder construction tests
 // ---------------------------------------------------------------------------
@@ -250,6 +284,74 @@ func TestNewWithMultipleSources(t *testing.T) {
 
 	ff := New(nil, files, cmds)
 	assert.Equal(t, 2, ff.matchCount(), "should combine items from all sources")
+}
+
+func TestDefaultCategoriesKeepNoPrefixBehavior(t *testing.T) {
+	files := &staticSource{name: "files", items: []Item{
+		{Text: "main.go", Category: categoryFile, Value: "main.go"},
+	}}
+	cmds := &staticSource{name: "commands", items: []Item{
+		{Text: "quit", Category: categoryCommand, Value: "quit"},
+	}}
+
+	ff := NewWithDefaultCategories(nil, []string{categoryFile}, files, cmds)
+
+	assert.Equal(t, 1, ff.matchCount())
+	assert.Equal(t, "main.go", ff.selectedItem().Text)
+}
+
+func TestSourcePrefixFiltersItems(t *testing.T) {
+	src := &staticSource{name: "mixed", items: []Item{
+		{Text: "main.go", Category: categoryFile, Value: "main.go"},
+		{Text: "internal", Category: categoryDirectory, Value: "internal"},
+		{Text: "commit", Category: categoryCommand, Value: "commit"},
+		{Text: "src", Category: categoryBookmark, Value: "src"},
+		{Text: "README.md", Category: categoryGitChanged, Value: "README.md"},
+	}}
+	ff := NewWithDefaultCategories(nil, []string{categoryFile}, src)
+
+	for _, tc := range []struct {
+		query string
+		want  string
+	}{
+		{"f:main", "main.go"},
+		{"d:int", "internal"},
+		{"c:com", "commit"},
+		{"b:src", "src"},
+		{"g:read", "README.md"},
+	} {
+		ff.query = tc.query
+		ff.filter()
+		require.Equal(t, 1, ff.matchCount(), tc.query)
+		assert.Equal(t, tc.want, ff.selectedItem().Text)
+	}
+}
+
+func TestUnknownSourcePrefixIsQueryText(t *testing.T) {
+	src := &staticSource{name: "files", items: []Item{
+		{Text: "x:main.go", Category: categoryFile, Value: "x:main.go"},
+		{Text: "main.go", Category: categoryFile, Value: "main.go"},
+	}}
+	ff := NewWithDefaultCategories(nil, []string{categoryFile}, src)
+
+	ff.query = "x:main"
+	ff.filter()
+
+	require.Equal(t, 1, ff.matchCount())
+	assert.Equal(t, "x:main.go", ff.selectedItem().Text)
+}
+
+func TestSourceFilterStatusLine(t *testing.T) {
+	src := &staticSource{name: "mixed", items: []Item{
+		{Text: "main.go", Category: categoryFile, Value: "main.go"},
+		{Text: "commit", Category: categoryCommand, Value: "commit"},
+	}}
+	ff := NewWithDefaultCategories(nil, []string{categoryFile}, src)
+	ff.query = "c:com"
+	ff.filter()
+
+	view := ff.View(40, 5)
+	assert.Contains(t, view, "commands")
 }
 
 func TestNewEmptySource(t *testing.T) {

@@ -81,6 +81,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `s` | Stage file/hunk/line |
 | `u` | Unstage file/hunk/line |
 | `d` | Discard unstaged changes |
+| `y` | Copy the current diff hunk (or file path) to the clipboard |
 | `c` | Commit staged changes |
 | `p` | Pull from remote |
 | `a` | Stage all |
@@ -88,6 +89,7 @@ Active when the file tree is in git filter mode (press f to cycle).
 | `space` | Toggle select for bulk |
 | `enter/l` | Expand file diff |
 | `h` | Enter hunk mode |
+| `X` | Clean untracked files (preview and select) |
 | `Esc` | Exit hunk/line mode |
 
 ---
@@ -131,10 +133,16 @@ GitHub panel (panel 3).
 | `a` | Actions tab |
 | `w` | Workflows tab |
 | `l` | Releases tab |
+| `N` | Notifications tab |
+| `Enter` | Open notification in browser (Notifications tab) |
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
-| `m` | Merge PR (PRs tab) |
-| `r` | Rerun (Actions tab) |
+| `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
+| `M` | Copy issue or PR as a markdown link (Issues/PRs tabs) |
+| `A` | Assign to me (Issues/PRs tab) |
+| `c` | Close/reopen issue (Issues tab) |
+| `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
+| `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |
 
@@ -151,6 +159,7 @@ Commits panel (panel 4).
 | `o` | Open in browser |
 | `y` | Copy SHA |
 | `a` | Filter the commit log by the selected commit's author |
+| `x` | Export the selected commit as a .patch file |
 | `A` | Amend last commit |
 | `r` | Reword last commit |
 | `/` | Search commits |
@@ -167,6 +176,7 @@ Preview panel (panel 5).
 | `f` | Toggle diff view |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
+| `L` | Go to line |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |

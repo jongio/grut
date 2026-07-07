@@ -4,6 +4,7 @@ package gitinfo
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -242,6 +243,41 @@ func (f PRFilterKind) String() string {
 	}
 }
 
+// stateFilterKind identifies which item states (open/closed/all) are fetched
+// for the Issues and PRs tabs. Unlike the client-side quick-filters, this
+// controls the server-side State parameter, so closed and merged items are
+// only fetched when the filter allows it.
+type stateFilterKind int
+
+const (
+	stateFilterOpen stateFilterKind = iota
+	stateFilterClosed
+	stateFilterAll
+)
+
+func (s stateFilterKind) String() string {
+	switch s {
+	case stateFilterClosed:
+		return "Closed"
+	case stateFilterAll:
+		return labelAll
+	default:
+		return "Open"
+	}
+}
+
+// apiValue returns the value passed to the GitHub API State parameter.
+func (s stateFilterKind) apiValue() string {
+	switch s {
+	case stateFilterClosed:
+		return stateClosed
+	case stateFilterAll:
+		return "all"
+	default:
+		return prStateOpen
+	}
+}
+
 // ghDataLoadedMsg carries the result of an async GitHub data load.
 type ghDataLoadedMsg struct {
 	err         error
@@ -333,6 +369,7 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 		tabEntry{id: tabActions, name: labelActions, short: shortAct, count: p.actionsStatusIcon()},
 		tabEntry{id: tabWorkflows, name: "Workflows", short: "Wf", count: fmt.Sprintf("%d", len(p.tabItems[tabWorkflows]))},
 		tabEntry{id: tabReleases, name: "Releases", short: "Rel", count: fmt.Sprintf("%d", len(p.tabItems[tabReleases]))},
+		tabEntry{id: tabNotifications, name: labelNotifications, short: "Ntf", count: p.ghNotifCountStr()},
 	)
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
@@ -661,9 +698,10 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.issueState.apiValue()
 	return func() tea.Msg {
 		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -713,9 +751,10 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
+	state := p.gh.prState.apiValue()
 	return func() tea.Msg {
 		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
-			State:       prStateOpen,
+			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
 		if err != nil {
@@ -1123,6 +1162,36 @@ func (p *Panel) cyclePRFilter() (panels.Panel, tea.Cmd) {
 			Filter: filter,
 		}
 	}
+}
+
+// cycleIssueStateFilter advances the Issues state filter (open -> closed ->
+// all) and reloads from GitHub, since closed issues are not held locally.
+func (p *Panel) cycleIssueStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.issueState = (p.gh.issueState + 1) % 3
+	p.gh.allIssues = nil
+	p.tabItems[tabIssues] = nil
+	p.tabCursor[tabIssues] = 0
+	p.tabOffset[tabIssues] = 0
+	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadIssuesPage(1, true)
+}
+
+// cyclePRStateFilter advances the PRs state filter (open -> closed -> all) and
+// reloads from GitHub, since closed and merged PRs are not held locally.
+func (p *Panel) cyclePRStateFilter() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil {
+		return p, nil
+	}
+	p.gh.prState = (p.gh.prState + 1) % 3
+	p.gh.allPRs = nil
+	p.tabItems[tabPRs] = nil
+	p.tabCursor[tabPRs] = 0
+	p.tabOffset[tabPRs] = 0
+	p.tabPaging[tabPRs] = tabPagination{loading: true, nextPage: 1}
+	return p, p.loadPRsPage(1, true)
 }
 
 func (p *Panel) applyIssueFilter() {
@@ -1789,9 +1858,123 @@ func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.
 	)
 }
 
-// ---------------------------------------------------------------------------
-// GitHub item rendering
-// ---------------------------------------------------------------------------
+// issueStateResultMsg carries the result of closing or reopening an issue.
+type issueStateResultMsg struct {
+	newState string // "open" or "closed"
+	err      error
+	number   int
+}
+
+// doCloseReopenIssue closes or reopens the issue under the cursor on the
+// Issues tab. Open issues are closed; closed issues are reopened.
+func (p *Panel) doCloseReopenIssue() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindIssue {
+		return p, nil
+	}
+	return p.doCloseReopenIssueFor(items[cursor].issue)
+}
+
+// doCloseReopenIssueFor prepares a confirmation modal to close or reopen the
+// given issue. The target state is derived from the issue's current state.
+func (p *Panel) doCloseReopenIssueFor(iss ghIssueItem) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || iss.Number == 0 {
+		return p, nil
+	}
+	target, verb := stateClosed, "Close"
+	if strings.EqualFold(iss.State, stateClosed) {
+		target, verb = prStateOpen, "Reopen"
+	}
+	p.clearPending()
+	p.pending = opIssueCloseReopen
+	// Encode the issue number and target state for the modal handler.
+	p.pendingName = fmt.Sprintf("%d:%s", iss.Number, target)
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("%s Issue #%d", verb, iss.Number),
+		iss.Title,
+	)
+}
+
+// handleIssueCloseReopenConfirm runs the async close/reopen once the user
+// confirms the modal. The pending name is "<number>:<targetState>".
+func (p *Panel) handleIssueCloseReopenConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	number, target, ok := parseIssueStateName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.closeReopenIssueCmd(number, target)
+}
+
+// parseIssueStateName splits a "<number>:<state>" pending name.
+func parseIssueStateName(name string) (number int, state string, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return 0, "", false
+	}
+	n, err := strconv.Atoi(name[:idx])
+	if err != nil {
+		return 0, "", false
+	}
+	return n, name[idx+1:], true
+}
+
+// closeReopenIssueCmd returns a tea.Cmd that closes or reopens an issue.
+func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		var err error
+		if targetState == prStateOpen {
+			err = client.ReopenIssue(ctx, owner, repo, number)
+		} else {
+			err = client.CloseIssue(ctx, owner, repo, number)
+		}
+		return issueStateResultMsg{number: number, newState: targetState, err: err}
+	}
+}
+
+// handleIssueStateResult processes the async result of a close/reopen op.
+func (p *Panel) handleIssueStateResult(msg issueStateResultMsg) (panels.Panel, tea.Cmd) {
+	verb := stateClosed
+	if msg.newState == prStateOpen {
+		verb = "reopened"
+	}
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s failed: %s", msg.number, verb, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Update cached issue state.
+	for i := range p.gh.allIssues {
+		if p.gh.allIssues[i].Number == msg.number {
+			p.gh.allIssues[i].State = msg.newState
+			break
+		}
+	}
+	// Update the visible tab item too.
+	for i := range p.tabItems[tabIssues] {
+		if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+			p.tabItems[tabIssues][i].issue.State = msg.newState
+			break
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Issue #%d %s", msg.number, verb),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
+}
+
 // renderIssue renders a GitHub issue line: "  #42 Fix auth token...   bug"
 func (p *Panel) renderIssue(item listItem, width int, isCursor bool) string {
 	iss := item.issue
@@ -2113,4 +2296,137 @@ func (p *Panel) renderRelease(item listItem, width int, isCursor bool) string {
 		style = style.Background(lipgloss.Color(p.colors.CursorBg))
 	}
 	return style.Render(line)
+}
+
+// assignSelfResultMsg carries the result of assigning an issue or PR to the
+// current user.
+type assignSelfResultMsg struct {
+	kind   string // "issue" or "PR"
+	login  string
+	err    error
+	number int
+}
+
+// doAssignSelf assigns the item under the cursor (Issues or PRs tab) to the
+// current user.
+func (p *Panel) doAssignSelf() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	switch items[cursor].kind { //nolint:exhaustive // only issues and PRs are assignable
+	case kindIssue:
+		return p.doAssignSelfFor(assignKindIssue, items[cursor].issue.Number)
+	case kindPR:
+		return p.doAssignSelfFor(assignKindPR, items[cursor].pr.Number)
+	default:
+		return p, nil
+	}
+}
+
+// doAssignSelfFor prepares a confirmation modal to assign the given issue or
+// PR to the current user.
+func (p *Panel) doAssignSelfFor(kind string, number int) (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || number == 0 {
+		return p, nil
+	}
+	p.clearPending()
+	p.pending = opAssignSelf
+	// Encode the kind and number for the modal handler.
+	p.pendingName = fmt.Sprintf("%s:%d", kind, number)
+	who := p.gh.user
+	if who == "" {
+		who = "yourself"
+	}
+	return p, notify.ShowConfirm(
+		fmt.Sprintf("Assign %s #%d", kind, number),
+		fmt.Sprintf("Assign this %s to %s?", kind, who),
+	)
+}
+
+// handleAssignSelfConfirm runs the async assignment after modal confirmation.
+// The pending name is "<kind>:<number>".
+func (p *Panel) handleAssignSelfConfirm(a modalArgs) (panels.Panel, tea.Cmd) {
+	kind, number, ok := parseAssignSelfName(a.name)
+	if !ok {
+		return p, nil
+	}
+	return p, p.assignSelfCmd(kind, number)
+}
+
+// parseAssignSelfName splits a "<kind>:<number>" pending name.
+func parseAssignSelfName(name string) (kind string, number int, ok bool) {
+	idx := strings.LastIndex(name, ":")
+	if idx <= 0 || idx == len(name)-1 {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(name[idx+1:])
+	if err != nil {
+		return "", 0, false
+	}
+	return name[:idx], n, true
+}
+
+// assignSelfCmd assigns the issue/PR to the current user asynchronously. If the
+// current user login is not cached, it is fetched first.
+func (p *Panel) assignSelfCmd(kind string, number int) tea.Cmd {
+	client := p.gh.client
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	login := p.gh.user
+	return func() tea.Msg {
+		who := login
+		if who == "" {
+			user, err := client.CurrentUser(ctx)
+			if err != nil {
+				return assignSelfResultMsg{kind: kind, number: number, err: err}
+			}
+			if user != nil && user.Login != nil {
+				who = *user.Login
+			}
+		}
+		if who == "" {
+			return assignSelfResultMsg{kind: kind, number: number, err: fmt.Errorf("could not determine current user")}
+		}
+		err := client.AddAssignees(ctx, owner, repo, number, []string{who})
+		return assignSelfResultMsg{kind: kind, number: number, login: who, err: err}
+	}
+}
+
+// handleAssignSelfResult processes the async result of an assign-to-me op.
+func (p *Panel) handleAssignSelfResult(msg assignSelfResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assign %s #%d failed: %s", msg.kind, msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+	// Reflect assignment locally for issues (PR items do not display assignee).
+	if msg.kind == assignKindIssue {
+		for i := range p.gh.allIssues {
+			if p.gh.allIssues[i].Number == msg.number {
+				p.gh.allIssues[i].Assignee = msg.login
+				break
+			}
+		}
+		for i := range p.tabItems[tabIssues] {
+			if p.tabItems[tabIssues][i].kind == kindIssue && p.tabItems[tabIssues][i].issue.Number == msg.number {
+				p.tabItems[tabIssues][i].issue.Assignee = msg.login
+				break
+			}
+		}
+	}
+	return p, tea.Batch(
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Assigned %s #%d to %s", msg.kind, msg.number, msg.login),
+				Level:   notify.Success,
+			}
+		},
+		p.loadGitHubData(),
+	)
 }

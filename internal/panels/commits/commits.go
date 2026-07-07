@@ -8,6 +8,7 @@ package commits
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,31 +52,39 @@ const (
 // panel easy to mock in tests.
 type gitOps interface {
 	Log(ctx context.Context, opts git.LogOpts) ([]git.Commit, error)
+	FormatPatch(ctx context.Context, hash string) (string, error)
+	RepoRoot(ctx context.Context) (string, error)
 }
 
 type panelColors struct {
-	Hash     string
-	Date     string
-	Author   string
-	Subject  string
-	Dim      string
-	CursorBg string
-	Refs     string
-	SearchBg string
-	SearchFg string
+	Hash       string
+	Date       string
+	Author     string
+	Subject    string
+	Dim        string
+	CursorBg   string
+	Refs       string
+	SearchBg   string
+	SearchFg   string
+	SigGood    string
+	SigBad     string
+	SigCaution string
 }
 
 func initColors(th *theme.Theme) panelColors {
 	c := panelColors{
-		Hash:     "#D4B84A",
-		Date:     "#555555",
-		Author:   "#6B9E56",
-		Subject:  "#999999",
-		Dim:      "#555555",
-		CursorBg: "#2A2A2A",
-		Refs:     "#7A9EBF",
-		SearchBg: "#2A2A2A",
-		SearchFg: "#D4D4D4",
+		Hash:       "#D4B84A",
+		Date:       "#555555",
+		Author:     "#6B9E56",
+		Subject:    "#999999",
+		Dim:        "#555555",
+		CursorBg:   "#2A2A2A",
+		Refs:       "#7A9EBF",
+		SearchBg:   "#2A2A2A",
+		SearchFg:   "#D4D4D4",
+		SigGood:    "#6B9E56",
+		SigBad:     "#C05B5B",
+		SigCaution: "#D4B84A",
 	}
 	if th != nil {
 		c.Hash = th.Colors.NormalYellow
@@ -87,15 +96,21 @@ func initColors(th *theme.Theme) panelColors {
 		c.Refs = th.Colors.BrightBlue
 		c.SearchBg = th.Colors.SelectionBg
 		c.SearchFg = th.Colors.SelectionFg
+		c.SigGood = th.Colors.NormalGreen
+		c.SigBad = th.Colors.NormalRed
+		c.SigCaution = th.Colors.NormalYellow
 	}
 	return c
 }
 
 func newCommitLineStyles(c panelColors) commitrender.Styles {
 	return commitrender.Styles{
-		Hash:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
-		Subject: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
-		Cursor:  lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		Hash:       lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hash)),
+		Subject:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Subject)),
+		Cursor:     lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg)),
+		SigGood:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigGood)),
+		SigBad:     lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigBad)),
+		SigCaution: lipgloss.NewStyle().Foreground(lipgloss.Color(c.SigCaution)),
 	}
 }
 
@@ -330,6 +345,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
 		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
@@ -597,12 +613,13 @@ func (p *Panel) renderList(width, height int) string {
 			styles.Subject = styles.Subject.Bold(true)
 		}
 		lines = append(lines, commitrender.RenderLine(commitrender.Params{
-			Commit:     c,
-			Width:      width,
-			IsCursor:   i == p.cursor,
-			Styles:     styles,
-			IsSelected: isSelected,
-			SelectedBg: "#3B3F52", // subtler highlight for selected-but-not-cursor
+			Commit:        c,
+			Width:         width,
+			IsCursor:      i == p.cursor,
+			Styles:        styles,
+			IsSelected:    isSelected,
+			SelectedBg:    "#3B3F52", // subtler highlight for selected-but-not-cursor
+			ShowSignature: true,
 		}))
 	}
 	// Loading indicator.
@@ -788,6 +805,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "x":
+		return p.exportPatch()
 	case "/":
 		p.searchMode = true
 		p.searchQuery = ""
@@ -961,6 +980,32 @@ func (p *Panel) deselectCommit() (panels.Panel, tea.Cmd) {
 // ---------------------------------------------------------------------------
 // Detail view
 // ---------------------------------------------------------------------------
+// signatureDetail renders a human-readable, colored description of a commit's
+// signature verification status for the detail view.
+func (p *Panel) signatureDetail(c git.Commit) string {
+	var label, color string
+	switch c.Signature {
+	case git.SigGood:
+		label, color = "verified", p.colors.SigGood
+	case git.SigBad:
+		label, color = "bad signature", p.colors.SigBad
+	case git.SigUnknown:
+		label, color = "unknown validity", p.colors.SigCaution
+	case git.SigExpired:
+		label, color = "expired", p.colors.SigCaution
+	case git.SigRevoked:
+		label, color = "revoked key", p.colors.SigCaution
+	case git.SigError:
+		label, color = "unverifiable", p.colors.SigCaution
+	default:
+		return ""
+	}
+	if c.Signer != "" {
+		label += " (" + panels.StripANSI(c.Signer) + ")"
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(label)
+}
+
 func (p *Panel) showDetail() tea.Cmd {
 	if p.cursor < 0 || p.cursor >= p.activeLen() {
 		return nil
@@ -989,6 +1034,9 @@ func (p *Panel) showDetail() tea.Cmd {
 	if len(c.Parents) > 0 {
 		parentHash := lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Hash))
 		lines = append(lines, "Parents: "+parentHash.Render(strings.Join(c.Parents, " ")))
+	}
+	if c.Signature.Present() {
+		lines = append(lines, "Signed:  "+p.signatureDetail(c))
 	}
 	lines = append(lines, "")
 	lines = append(lines, "    "+panels.StripANSI(c.Subject))
@@ -1034,6 +1082,90 @@ func (p *Panel) copyHash() (panels.Panel, tea.Cmd) {
 			Level:   notify.Success,
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Patch export
+// ---------------------------------------------------------------------------
+
+// exportPatch writes the commit under the cursor to a single-commit patch
+// file at the repository root, named after the commit subject. The written
+// path is shown as a toast; any failure surfaces as an error toast.
+func (p *Panel) exportPatch() (panels.Panel, tea.Cmd) {
+	if p.cursor < 0 || p.cursor >= p.activeLen() {
+		return p, nil
+	}
+	c := p.commitAt(p.cursor)
+	if c.Hash == "" {
+		return p, nil
+	}
+
+	patch, err := p.gitClient.FormatPatch(p.ctx, c.Hash)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+	root, err := p.gitClient.RepoRoot(p.ctx)
+	if err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	dest := filepath.Join(root, patchFileName(c.Subject))
+	if err := os.WriteFile(dest, []byte(patch), 0o600); err != nil {
+		return p, patchErrorToast(err)
+	}
+
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Wrote " + dest,
+			Level:   notify.Success,
+		}
+	}
+}
+
+func patchErrorToast(err error) tea.Cmd {
+	msg := err.Error()
+	return func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "Export failed: " + msg,
+			Level:   notify.Error,
+		}
+	}
+}
+
+// patchFileName builds a filesystem-safe patch file name from a commit
+// subject, mirroring the "NNNN-slug.patch" form that git format-patch uses.
+// A single commit is always sequence 0001.
+func patchFileName(subject string) string {
+	slug := slugify(subject)
+	if slug == "" {
+		slug = "patch"
+	}
+	const maxSlug = 50
+	if len(slug) > maxSlug {
+		slug = strings.Trim(slug[:maxSlug], "-")
+	}
+	return "0001-" + slug + ".patch"
+}
+
+// slugify lowercases s and replaces every run of non-alphanumeric characters
+// with a single dash, trimming leading and trailing dashes. The result is
+// safe to use as a file name on any platform.
+func slugify(s string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // ---------------------------------------------------------------------------
