@@ -269,7 +269,7 @@ func (s stateFilterKind) String() string {
 func (s stateFilterKind) apiValue() string {
 	switch s {
 	case stateFilterClosed:
-		return "closed"
+		return stateClosed
 	case stateFilterAll:
 		return "all"
 	default:

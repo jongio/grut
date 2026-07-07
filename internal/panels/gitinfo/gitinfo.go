@@ -1163,7 +1163,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doFetch()
 		}
 	case "S":
-		switch p.activeTab {
+		switch p.activeTab { //nolint:exhaustive // only relevant cases handled
 		case tabIssues:
 			if p.gh.client != nil {
 				return p.cycleIssueStateFilter()
