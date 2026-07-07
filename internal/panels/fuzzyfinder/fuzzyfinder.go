@@ -145,15 +145,15 @@ func (ff *FuzzyFinder) parseSourceFilter() (string, map[string]bool, string) {
 func categoriesForPrefix(prefix byte) (map[string]bool, string, bool) {
 	switch prefix {
 	case 'f', 'F':
-		return categorySet(categoryFile), "files", true
+		return categorySet(categoryFile), sourceNameFiles, true
 	case 'd', 'D':
-		return categorySet(categoryDirectory), "directories", true
+		return categorySet(categoryDirectory), sourceNameDirectories, true
 	case 'c', 'C':
-		return categorySet(categoryCommand), "commands", true
+		return categorySet(categoryCommand), sourceNameCommands, true
 	case 'b', 'B':
-		return categorySet(categoryBookmark), "bookmarks", true
+		return categorySet(categoryBookmark), sourceNameBookmarks, true
 	case 'g', 'G':
-		return categorySet(categoryGitChanged), "git changed", true
+		return categorySet(categoryGitChanged), sourceNameGitChanged, true
 	default:
 		return nil, "", false
 	}
@@ -173,15 +173,15 @@ func sourceLabelForCategories(categories map[string]bool) string {
 	}
 	switch {
 	case categories[categoryFile]:
-		return "files"
+		return sourceNameFiles
 	case categories[categoryDirectory]:
-		return "directories"
+		return sourceNameDirectories
 	case categories[categoryCommand]:
-		return "commands"
+		return sourceNameCommands
 	case categories[categoryBookmark]:
-		return "bookmarks"
+		return sourceNameBookmarks
 	case categories[categoryGitChanged]:
-		return "git changed"
+		return sourceNameGitChanged
 	default:
 		return ""
 	}

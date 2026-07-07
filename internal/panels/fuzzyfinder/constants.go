@@ -10,6 +10,15 @@ const (
 	dirGit             = ".git"
 )
 
+// Source names, returned by Source.Name and used as prefix labels.
+const (
+	sourceNameFiles       = "files"
+	sourceNameDirectories = "directories"
+	sourceNameCommands    = "commands"
+	sourceNameBookmarks   = "bookmarks"
+	sourceNameGitChanged  = "git changed"
+)
+
 // DefaultCategoryFile returns the file category name for overlay factories.
 func DefaultCategoryFile() string { return categoryFile }
 

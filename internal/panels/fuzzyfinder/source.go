@@ -184,7 +184,7 @@ func NewFileSource(root string) *FileSource {
 }
 
 // Name implements Source.
-func (fs *FileSource) Name() string { return "files" }
+func (fs *FileSource) Name() string { return sourceNameFiles }
 
 // Items implements Source. It checks the global cache first and falls back
 // to walking the directory tree rooted at fs.root, filtering entries via
@@ -267,7 +267,7 @@ func NewDirectorySource(root string, maxDepth int) *DirectorySource {
 }
 
 // Name implements Source.
-func (ds *DirectorySource) Name() string { return "directories" }
+func (ds *DirectorySource) Name() string { return sourceNameDirectories }
 
 // Items implements Source. It walks the directory tree rooted at ds.root
 // and returns subdirectories as searchable items, skipping hidden and
@@ -358,7 +358,7 @@ func NewBookmarkSource(manager *bm.Manager) *BookmarkSource {
 }
 
 // Name implements Source.
-func (bs *BookmarkSource) Name() string { return "bookmarks" }
+func (bs *BookmarkSource) Name() string { return sourceNameBookmarks }
 
 // Items implements Source.
 func (bs *BookmarkSource) Items() []Item {
@@ -397,7 +397,7 @@ func NewGitChangedSource(root string) *GitChangedSource {
 }
 
 // Name implements Source.
-func (gs *GitChangedSource) Name() string { return "git changed" }
+func (gs *GitChangedSource) Name() string { return sourceNameGitChanged }
 
 // Items implements Source.
 func (gs *GitChangedSource) Items() []Item {
@@ -441,7 +441,7 @@ func NewCommandSource(bindings []keymap.Binding) *CommandSource {
 }
 
 // Name implements Source.
-func (cs *CommandSource) Name() string { return "commands" }
+func (cs *CommandSource) Name() string { return sourceNameCommands }
 
 // Items implements Source. It returns deduplicated command bindings
 // as searchable items, with the action as text and the key combination
