@@ -181,6 +181,15 @@ func (c *clientImpl) ReopenIssue(ctx context.Context, owner, repo string, number
 	return c.EditIssue(ctx, owner, repo, number, req)
 }
 
+func (c *clientImpl) AddAssignees(ctx context.Context, owner, repo string, number int, assignees []string) error {
+	_, _, err := c.gh.Issues.AddAssignees(ctx, owner, repo, number, assignees)
+	if err != nil {
+		return fmt.Errorf("add assignees to #%d: %w", number, err)
+	}
+	c.cache.Invalidate(fmt.Sprintf("issue:%s/%s:%d", owner, repo, number))
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // PRReader
 // ---------------------------------------------------------------------------

@@ -11,6 +11,6 @@ func init() {
 		if err != nil {
 			return deps.Placeholder("gitstatus")
 		}
-		return deps.ApplyActionsCfg(New(client, deps.Theme))
+		return deps.ApplyGitCfg(deps.ApplyActionsCfg(New(client, deps.Theme)))
 	})
 }

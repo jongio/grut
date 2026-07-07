@@ -830,6 +830,16 @@ type EditModeExitedMsg struct {
 	Path string
 }
 
+// PreviewInputStartedMsg notifies the app that the preview panel opened an
+// inline text prompt (for example, the go-to-line prompt). While a prompt is
+// open the app routes all key presses directly to the preview so digits and
+// Enter/Esc are not intercepted by global bindings.
+type PreviewInputStartedMsg struct{}
+
+// PreviewInputEndedMsg notifies the app that the preview panel closed its
+// inline text prompt, so normal key routing should resume.
+type PreviewInputEndedMsg struct{}
+
 // ---------------------------------------------------------------------------
 // Overlay panel messages
 // ---------------------------------------------------------------------------
