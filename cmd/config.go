@@ -7,8 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type configLoadFunc func() (*config.Config, error)
-type configPathFunc func() string
+type (
+	configLoadFunc func() (*config.Config, error)
+	configPathFunc func() string
+)
 
 func newConfigCmd() *cobra.Command {
 	return newConfigCmdWithDeps(config.Load, config.UserConfigFilePath)
@@ -16,7 +18,7 @@ func newConfigCmd() *cobra.Command {
 
 func newConfigCmdWithDeps(load configLoadFunc, path configPathFunc) *cobra.Command {
 	configCmd := &cobra.Command{
-		Use:   "config",
+		Use:   cmdConfig,
 		Short: "Inspect grut configuration",
 	}
 	configCmd.AddCommand(newConfigCheckCmd(load, path))
