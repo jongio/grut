@@ -151,6 +151,7 @@ const (
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
+	opPRRequestReviewers                 // awaiting reviewer logins input
 	opAssignSelf                         // awaiting assign-to-me confirmation
 	opIssueCloseReopen                   // awaiting issue close/reopen confirmation
 )
@@ -766,6 +767,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
+	case prRequestReviewersResultMsg:
+		return p.handlePRRequestReviewersResult(msg)
 	case assignSelfResultMsg:
 		return p.handleAssignSelfResult(msg)
 	case issueStateResultMsg:
@@ -906,6 +909,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "a", Description: "Actions tab", Action: "tab_actions"},
 			panels.KeyBinding{Key: "W", Description: "Workflows tab", Action: "tab_workflows"},
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
+			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
@@ -1173,6 +1177,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		if p.activeTab == tabNotifications && p.gh.client != nil {
 			return p.doMarkNotificationRead()
+		}
+	case "R":
+		if p.activeTab == tabPRs && p.gh.client != nil {
+			return p.doRequestReviewers()
 		}
 	case "M":
 		if p.activeTab == tabIssues || p.activeTab == tabPRs {
@@ -2240,6 +2248,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRMergeConfirm(a)
 	case opPRDeleteBranchAfterMerge:
 		return p.handlePRDeleteBranchAfterMerge(a)
+	case opPRRequestReviewers:
+		return p.handlePRRequestReviewers(a)
 	case opAssignSelf:
 		return p.handleAssignSelfConfirm(a)
 	case opIssueCloseReopen:

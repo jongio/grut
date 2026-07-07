@@ -2502,6 +2502,10 @@ type mockGHClientFull struct {
 	markReadErr   error
 	markReadCalls int
 	markReadID    string
+
+	reviewersErr          error
+	requestedReviewers    []string
+	requestReviewersCalls int
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2586,8 +2590,10 @@ func (m *mockGHClientFull) SubmitReview(_ context.Context, _, _ string, _ int, _
 	return nil
 }
 
-func (m *mockGHClientFull) RequestReviewers(_ context.Context, _, _ string, _ int, _ []string) error {
-	return nil
+func (m *mockGHClientFull) RequestReviewers(_ context.Context, _, _ string, _ int, reviewers []string) error {
+	m.requestReviewersCalls++
+	m.requestedReviewers = reviewers
+	return m.reviewersErr
 }
 
 func (m *mockGHClientFull) ListWorkflowRuns(_ context.Context, _, _ string, _ *gh.ListWorkflowRunsOptions) ([]*gh.WorkflowRun, error) {
