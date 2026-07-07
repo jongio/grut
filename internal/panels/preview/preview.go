@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -59,6 +60,10 @@ type Preview struct {
 	renderMarkdown bool
 	// Blame mode
 	blameMode bool
+	// Go-to-line prompt state. When active, the panel captures key presses
+	// as a line-number entry and scrolls to the entered line on Enter.
+	gotoLineActive bool
+	gotoLineInput  string
 	// GitHub content mode – when a GitHub item (issue/PR/action run) is
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
@@ -462,6 +467,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if p.editMode {
 			return handleEditKeyPress(p, msg)
 		}
+		// Go-to-line prompt captures all input until it is committed or cancelled.
+		if p.gotoLineActive {
+			return p.handleGotoLineKey(msg)
+		}
 		switch msg.String() {
 		case "e":
 			// Edit is only allowed in file mode (not diff) and for local files.
@@ -485,6 +494,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollY = 0
 		case "G":
 			p.scrollToBottom()
+		case "L":
+			return p, p.openGotoLine()
 		case "W":
 			p.wordWrap = !p.wordWrap
 		case "n":
@@ -510,7 +521,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			}
 		case "Y":
 			return p.copyPermalink()
-		case "escape", "esc":
+		case keyEscape, keyEsc:
 			if p.hasSelection() {
 				p.clearSelection()
 			}
@@ -519,8 +530,83 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	return p, nil
 }
 
-// View implements panels.Panel. It renders the preview content into the
-// given width×height area.
+// openGotoLine activates the go-to-line prompt when there is scrollable file
+// or diff content. It returns a command that tells the app to route all key
+// presses to the preview until the prompt closes. It is a no-op (returns nil)
+// for GitHub content, blame, binary, or oversized views where line numbers do
+// not apply.
+func (p *Preview) openGotoLine() tea.Cmd {
+	if p.ghMode || p.blameMode || p.isBinary || p.isLarge || p.contentLineCount() == 0 {
+		return nil
+	}
+	p.gotoLineActive = true
+	p.gotoLineInput = ""
+	return func() tea.Msg { return panels.PreviewInputStartedMsg{} }
+}
+
+// closeGotoLine deactivates the prompt and clears the entered text. It returns
+// a command that tells the app to resume normal key routing.
+func (p *Preview) closeGotoLine() tea.Cmd {
+	p.gotoLineActive = false
+	p.gotoLineInput = ""
+	return func() tea.Msg { return panels.PreviewInputEndedMsg{} }
+}
+
+// handleGotoLineKey processes a key press while the go-to-line prompt is open.
+// Digits are appended to the entry, Backspace removes the last digit, Enter
+// commits (scrolls to the clamped line), and Esc cancels with no change.
+// Non-numeric input is ignored so the view never changes unexpectedly.
+func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
+	switch msg.String() {
+	case keyEscape, keyEsc:
+		return p, p.closeGotoLine()
+	case "enter":
+		p.commitGotoLine()
+		return p, p.closeGotoLine()
+	case "backspace":
+		if r := []rune(p.gotoLineInput); len(r) > 0 {
+			p.gotoLineInput = string(r[:len(r)-1])
+		}
+		return p, nil
+	default:
+		if s := msg.String(); len(s) == 1 && s[0] >= '0' && s[0] <= '9' {
+			// Cap the length to avoid overflow and nonsensical input.
+			if len(p.gotoLineInput) < 9 {
+				p.gotoLineInput += s
+			}
+		}
+		return p, nil
+	}
+}
+
+// commitGotoLine parses the entered text and scrolls to that line. Empty or
+// non-numeric input is rejected without changing the view.
+func (p *Preview) commitGotoLine() {
+	n, err := strconv.Atoi(strings.TrimSpace(p.gotoLineInput))
+	if err != nil {
+		return
+	}
+	p.gotoLine(n)
+}
+
+// gotoLine scrolls so that line n (1-based) is centered in the viewport when
+// there is room. Out-of-range values are clamped to the first or last line.
+func (p *Preview) gotoLine(n int) {
+	total := p.contentLineCount()
+	if total == 0 {
+		return
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > total {
+		n = total
+	}
+	// Center the target line; clampScroll keeps the offset in valid bounds.
+	p.scrollY = (n - 1) - p.viewportHeight()/2
+	p.clampScroll()
+}
+
 func (p *Preview) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
@@ -629,6 +715,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
 		{Key: "g", Description: "Go to top", Action: "goto_top"},
 		{Key: "G", Description: "Go to bottom", Action: "goto_bottom"},
+		{Key: "L", Description: "Go to line", Action: "goto_line"},
 		{Key: "W", Description: "Toggle word wrap", Action: "toggle_wrap"},
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
@@ -787,8 +874,43 @@ func (p *Preview) loadContextDiffCmd(path string, dc *panels.DiffContext) tea.Cm
 		if err != nil || len(diffs) == 0 {
 			return diffLoadedMsg{path: path}
 		}
-		return diffLoadedMsg{path: path, lines: renderDiffLines(diffs, tc)}
+		lines := renderDiffLines(diffs, tc)
+		// Prepend an at-a-glance summary of the whole change (all files in the
+		// range), so commit and PR diffs show how big the change is without
+		// scrolling. The extra fetch is best-effort; on error the diff still
+		// renders without a summary.
+		if all, serr := gc.Diff(ctx, git.DiffOpts{
+			CommitA:  commitA,
+			CommitB:  commitB,
+			ThreeDot: threeDot,
+		}); serr == nil {
+			if summary := diffStatSummaryLine(git.Stat(all), tc); summary != "" {
+				lines = append([]string{summary, ""}, lines...)
+			}
+		}
+		return diffLoadedMsg{path: path, lines: lines}
 	}
+}
+
+// diffStatSummaryLine renders a compact, styled one-line change summary such as
+// "5 files changed, +128 -34". Insertions are colored like additions and
+// deletions like removals; the file count uses the diff header color. It
+// returns an empty string when there are no changes.
+func diffStatSummaryLine(s git.DiffStat, tc theme.Colors) string {
+	if s.IsZero() {
+		return ""
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffHeader, "#7A9EBF"))
+	addStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffAdded, "#6B9E56"))
+	delStyle := lipgloss.NewStyle().Foreground(panels.ColorOf(tc.DiffRemoved, "#C44B4B"))
+	noun := "files"
+	if s.FilesChanged == 1 {
+		noun = "file"
+	}
+	label := labelStyle.Render(fmt.Sprintf("%d %s changed, ", s.FilesChanged, noun))
+	ins := addStyle.Render(fmt.Sprintf("+%d", s.Insertions))
+	del := delStyle.Render(fmt.Sprintf("-%d", s.Deletions))
+	return label + ins + " " + del
 }
 
 // renderDiffLines converts parsed diff hunks to styled display lines.
@@ -1167,8 +1289,11 @@ func (p *Preview) renderContent(width, height int) string {
 		}
 	}
 	content := strings.Join(rendered, "\n")
-	// Add scroll indicator
+	// Add scroll indicator, or the go-to-line prompt when it is active.
 	scrollInfo := p.scrollIndicator(totalLines, height)
+	if p.gotoLineActive {
+		scrollInfo = "Go to line: " + p.gotoLineInput
+	}
 	scrollLine := ansi.Truncate(p.newDimStyle().Render(scrollInfo), width, "")
 	content += "\n" + scrollLine
 	return content
