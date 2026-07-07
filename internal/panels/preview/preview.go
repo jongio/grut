@@ -519,7 +519,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			if p.hasSelection() {
 				return p.copySelection()
 			}
-		case "escape", "esc":
+		case keyEscape, keyEsc:
 			if p.hasSelection() {
 				p.clearSelection()
 			}
@@ -556,7 +556,7 @@ func (p *Preview) closeGotoLine() tea.Cmd {
 // Non-numeric input is ignored so the view never changes unexpectedly.
 func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	switch msg.String() {
-	case "escape", "esc":
+	case keyEscape, keyEsc:
 		return p, p.closeGotoLine()
 	case "enter":
 		p.commitGotoLine()
