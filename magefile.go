@@ -347,6 +347,10 @@ var deadcodeAllowlist = []string{
 	"MockClient.RevertContinue",
 	"MockClient.RevertAbort",
 	"MockClient.Reset",
+	"MockClient.WorktreeFile",
+
+	// secretscan — exported bool helper companion to Scan (public package API)
+	"HasFindings",
 }
 
 // Default target when running `mage` with no args.
