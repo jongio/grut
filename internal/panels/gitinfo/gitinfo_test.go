@@ -2472,26 +2472,36 @@ func TestRenderStashEntry_VeryNarrow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type mockGHClientFull struct {
-	user       *gh.User
-	userErr    error
-	issues     []*gh.Issue
-	issuesErr  error
-	prs        []*gh.PullRequest
-	prsErr     error
-	runs       []*gh.WorkflowRun
-	runsErr    error
-	prFiles    []*gh.CommitFile
-	prFilesErr error
-	prCommits  []*gh.RepositoryCommit
-	prCommErr  error
-	jobs       []*gh.WorkflowJob
-	jobsErr    error
-	jobLog     string
-	jobLogErr  error
-	rerunErr   error
-	cancelErr  error
-	mergeErr   error
-	getPRCalls int
+	user            *gh.User
+	userErr         error
+	issues          []*gh.Issue
+	issuesErr       error
+	prs             []*gh.PullRequest
+	prsErr          error
+	runs            []*gh.WorkflowRun
+	runsErr         error
+	prFiles         []*gh.CommitFile
+	prFilesErr      error
+	prCommits       []*gh.RepositoryCommit
+	prCommErr       error
+	jobs            []*gh.WorkflowJob
+	jobsErr         error
+	jobLog          string
+	jobLogErr       error
+	rerunErr        error
+	cancelErr       error
+	mergeErr        error
+	addAssigneesErr error
+	getPRCalls      int
+
+	lastIssuesOpts *gh.IssueListByRepoOptions
+	lastPRsOpts    *gh.PullRequestListOptions
+
+	notifications []*gh.Notification
+	notifErr      error
+	markReadErr   error
+	markReadCalls int
+	markReadID    string
 
 	reviewersErr          error
 	requestedReviewers    []string
@@ -2527,6 +2537,10 @@ func (m *mockGHClientFull) CommentOnIssue(_ context.Context, _, _ string, _ int,
 }
 func (m *mockGHClientFull) CloseIssue(_ context.Context, _, _ string, _ int) error  { return nil }
 func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) error { return nil }
+func (m *mockGHClientFull) AddAssignees(_ context.Context, _, _ string, _ int, _ []string) error {
+	return m.addAssigneesErr
+}
+
 func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, error) {
 	return m.prs, m.prsErr
 }
@@ -2607,9 +2621,15 @@ func (m *mockGHClientFull) CancelWorkflowRun(_ context.Context, _, _ string, _ i
 }
 
 func (m *mockGHClientFull) ListNotifications(_ context.Context, _ *gh.NotificationListOptions) ([]*gh.Notification, error) {
-	return nil, nil
+	return m.notifications, m.notifErr
 }
-func (m *mockGHClientFull) MarkRead(_ context.Context, _ string) error { return nil }
+
+func (m *mockGHClientFull) MarkRead(_ context.Context, threadID string) error {
+	m.markReadCalls++
+	m.markReadID = threadID
+	return m.markReadErr
+}
+
 func (m *mockGHClientFull) RepoInfo(_ context.Context, _, _ string) (*gh.Repository, error) {
 	return nil, nil
 }
@@ -2642,11 +2662,13 @@ func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*
 	return nil, nil
 }
 
-func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, _ *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {
+	m.lastIssuesOpts = opts
 	return m.issues, ghclient.PageResult{}, m.issuesErr
 }
 
-func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+func (m *mockGHClientFull) ListPRsPage(_ context.Context, _, _ string, opts *gh.PullRequestListOptions) ([]*gh.PullRequest, ghclient.PageResult, error) {
+	m.lastPRsOpts = opts
 	return m.prs, ghclient.PageResult{}, m.prsErr
 }
 
@@ -3250,7 +3272,7 @@ func TestRenderTabBar_WithGHClient(t *testing.T) {
 	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
-	bar := panels.StripANSI(p.renderTabBar(80))
+	bar := panels.StripANSI(p.renderTabBar(120))
 	assert.Contains(t, bar, "Issues")
 	assert.Contains(t, bar, "PRs")
 	assert.Contains(t, bar, "Actions")
@@ -3375,7 +3397,7 @@ func TestView_WithGHClient(t *testing.T) {
 	p := newGHPanelWithClient(t, defaultMock(), ghMock)
 	populateGH(p, sampleIssues(), samplePRs(), sampleActions())
 
-	view := panels.StripANSI(p.View(80, 20))
+	view := panels.StripANSI(p.View(120, 20))
 	assert.Contains(t, view, "Issues")
 	assert.Contains(t, view, "Bug report")
 }
@@ -3815,7 +3837,7 @@ func TestTabCyclesGitHubTabs(t *testing.T) {
 	// ModeGitHub starts on tabIssues (set by NewGitHub).
 	assert.Equal(t, tabIssues, p.activeTab)
 
-	expected := []tabID{tabPRs, tabActions, tabWorkflows, tabReleases, tabBranches, tabTags, tabIssues}
+	expected := []tabID{tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications, tabBranches, tabTags, tabIssues}
 	for _, want := range expected {
 		p.Update(tea.KeyPressMsg{Code: '\t'})
 		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Tab", want)
@@ -3827,7 +3849,7 @@ func TestShiftTabCyclesGitHubTabsBackward(t *testing.T) {
 	p.Focused = true
 	assert.Equal(t, tabIssues, p.activeTab)
 
-	expected := []tabID{tabTags, tabBranches, tabReleases, tabWorkflows, tabActions, tabPRs, tabIssues}
+	expected := []tabID{tabTags, tabBranches, tabNotifications, tabReleases, tabWorkflows, tabActions, tabPRs, tabIssues}
 	for _, want := range expected {
 		p.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 		assert.Equal(t, want, p.activeTab, "expected tab %d after pressing Shift+Tab", want)
@@ -3851,7 +3873,7 @@ func TestVisibleTabsGitMode(t *testing.T) {
 func TestVisibleTabsGitHubMode(t *testing.T) {
 	p := newTestGitHubPanel(t, defaultMock())
 	tabs := p.visibleTabs()
-	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}, tabs)
+	assert.Equal(t, []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}, tabs)
 }
 
 // ---------------------------------------------------------------------------
@@ -4841,4 +4863,229 @@ func TestRightClickLabel_ANSIInjection(t *testing.T) {
 			assert.Contains(t, label, tt.want)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// GitHub notifications
+// ---------------------------------------------------------------------------
+
+func ghNotif(id, repo, title, typ, reason, apiURL string, unread bool) *gh.Notification {
+	return &gh.Notification{
+		ID:         &id,
+		Reason:     &reason,
+		Unread:     &unread,
+		UpdatedAt:  &gh.Timestamp{Time: time.Date(2024, time.January, 2, 15, 4, 0, 0, time.UTC)},
+		Repository: &gh.Repository{FullName: &repo},
+		Subject:    &gh.NotificationSubject{Title: &title, Type: &typ, URL: &apiURL},
+	}
+}
+
+func TestNotificationHTMLURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		apiURL string
+		repo   string
+		want   string
+	}{
+		{"issue", "https://api.github.com/repos/o/r/issues/1", "o/r", "https://github.com/o/r/issues/1"},
+		{"pull maps to pull", "https://api.github.com/repos/o/r/pulls/9", "o/r", "https://github.com/o/r/pull/9"},
+		{"commit maps to commit", "https://api.github.com/repos/o/r/commits/abc123", "o/r", "https://github.com/o/r/commit/abc123"},
+		{"release falls back to repo", "https://api.github.com/repos/o/r/releases/5", "o/r", "https://github.com/o/r"},
+		{"empty falls back to repo", "", "o/r", "https://github.com/o/r"},
+		{"non-api falls back to repo", "https://example.com/x", "o/r", "https://github.com/o/r"},
+		{"no repo no url", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, notificationHTMLURL(tt.apiURL, tt.repo))
+		})
+	}
+}
+
+func TestLoadNotifications_BuildsItems(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("1", "octo/repo", "Fix the bug", "Issue", "mention", "https://api.github.com/repos/octo/repo/issues/7", true),
+			ghNotif("2", "octo/repo", "Add feature", "PullRequest", "review_requested", "https://api.github.com/repos/octo/repo/pulls/8", true),
+		},
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+
+	msg := p.loadNotifications()()
+	loaded, ok := msg.(ghNotificationsLoadedMsg)
+	require.True(t, ok, "expected ghNotificationsLoadedMsg, got %T", msg)
+	require.NoError(t, loaded.err)
+	p.handleNotificationsLoaded(loaded)
+
+	items := p.tabItems[tabNotifications]
+	require.Len(t, items, 2)
+	assert.Equal(t, kindNotification, items[0].kind)
+	assert.Equal(t, "octo/repo", items[0].notif.RepoFullName)
+	assert.Equal(t, "Fix the bug", items[0].notif.Title)
+	assert.Equal(t, "Issue", items[0].notif.Type)
+	assert.Equal(t, "mention", items[0].notif.Reason)
+	assert.Equal(t, "https://github.com/octo/repo/issues/7", items[0].notif.HTMLURL)
+	assert.True(t, items[0].notif.Unread)
+	assert.Equal(t, "https://github.com/octo/repo/pull/8", items[1].notif.HTMLURL)
+	assert.False(t, p.gh.notifLoading)
+	assert.NoError(t, p.gh.notifErr)
+}
+
+func TestHandleNotificationsLoaded_Error(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.buildNotificationItems([]ghNotificationItem{{ThreadID: "x", Unread: true}})
+	require.Len(t, p.tabItems[tabNotifications], 1)
+
+	p.handleNotificationsLoaded(ghNotificationsLoadedMsg{err: fmt.Errorf("boom")})
+	assert.Error(t, p.gh.notifErr)
+	assert.Empty(t, p.tabItems[tabNotifications])
+	assert.False(t, p.gh.notifLoading)
+}
+
+func TestMarkNotificationRead_StateChange(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("thread-1", "octo/repo", "Fix the bug", "Issue", "mention", "https://api.github.com/repos/octo/repo/issues/7", true),
+		},
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	loaded := p.loadNotifications()().(ghNotificationsLoadedMsg)
+	p.handleNotificationsLoaded(loaded)
+	p.activeTab = tabNotifications
+	p.tabCursor[tabNotifications] = 0
+
+	_, cmd := p.doMarkNotificationRead()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	result, ok := msg.(notificationReadResultMsg)
+	require.True(t, ok, "expected notificationReadResultMsg, got %T", msg)
+	require.NoError(t, result.err)
+	assert.Equal(t, 1, ghMock.markReadCalls)
+	assert.Equal(t, "thread-1", ghMock.markReadID)
+
+	// Handling the result greys the row (Unread=false).
+	assert.True(t, p.tabItems[tabNotifications][0].notif.Unread)
+	p.handleNotificationReadResult(result)
+	assert.False(t, p.tabItems[tabNotifications][0].notif.Unread, "row should be marked read")
+}
+
+func TestMarkNotificationRead_Error(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		notifications: []*gh.Notification{
+			ghNotif("t1", "octo/repo", "Bug", "Issue", "mention", "", true),
+		},
+		markReadErr: fmt.Errorf("network down"),
+	}
+	p := newGHPanelWithClient(t, defaultMock(), ghMock)
+	p.handleNotificationsLoaded(p.loadNotifications()().(ghNotificationsLoadedMsg))
+	p.activeTab = tabNotifications
+
+	_, cmd := p.doMarkNotificationRead()
+	require.NotNil(t, cmd)
+	result := cmd().(notificationReadResultMsg)
+	require.Error(t, result.err)
+
+	// On error the row stays unread.
+	p.handleNotificationReadResult(result)
+	assert.True(t, p.tabItems[tabNotifications][0].notif.Unread, "row should stay unread on error")
+}
+
+func TestClampNotificationCursor(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+
+	// Cursor beyond the list is clamped to the last item.
+	p.tabCursor[tabNotifications] = 99
+	p.buildNotificationItems([]ghNotificationItem{
+		{ThreadID: "a", Unread: true},
+		{ThreadID: "b", Unread: true},
+	})
+	assert.Equal(t, 1, p.tabCursor[tabNotifications])
+
+	// Empty list clamps to 0 rather than a negative index.
+	p.tabCursor[tabNotifications] = 5
+	p.buildNotificationItems(nil)
+	assert.Equal(t, 0, p.tabCursor[tabNotifications])
+}
+
+func TestRenderNotification_Content(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "octo/repo", Title: "Fix the bug", Type: "Issue",
+		Reason: "mention", UpdatedAt: "Jan 2 15:04", Unread: true,
+	}}
+	line := p.renderNotification(item, 120, false)
+	assert.Contains(t, line, "octo/repo")
+	assert.Contains(t, line, "Fix the bug")
+	assert.Contains(t, line, "Issue")
+	assert.Contains(t, line, "mention")
+	assert.Contains(t, line, "Jan 2 15:04")
+	assert.Contains(t, line, "●", "unread notifications use a filled marker")
+}
+
+func TestRenderNotification_ReadMarker(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "octo/repo", Title: "Done", Unread: false,
+	}}
+	line := p.renderNotification(item, 120, false)
+	assert.Contains(t, line, "○", "read notifications use a hollow marker")
+}
+
+func TestRenderLine_Notification(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	item := listItem{kind: kindNotification, notif: ghNotificationItem{
+		RepoFullName: "o/r", Title: "Hi", Unread: true,
+	}}
+	line := p.renderLine(item, 120, false)
+	assert.Contains(t, line, "o/r")
+	assert.Contains(t, line, "Hi")
+}
+
+func TestNotificationsView_EmptyLoadingAndError(t *testing.T) {
+	p := newTestGitHubPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabNotifications
+	p.tabItems[tabNotifications] = nil
+
+	// Empty state.
+	p.gh.notifLoading = false
+	p.gh.notifErr = nil
+	assert.Contains(t, p.View(80, 10), "No unread notifications")
+
+	// Error state.
+	p.gh.notifErr = fmt.Errorf("nope")
+	assert.Contains(t, p.View(80, 10), "Notifications unavailable")
+
+	// Loading state.
+	p.gh.notifErr = nil
+	p.gh.notifLoading = true
+	assert.Contains(t, p.View(80, 10), "Loading...")
+}
+
+func TestKeyBindings_IncludesNotifications(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	found := false
+	for _, b := range p.KeyBindings() {
+		if b.Action == "tab_notifications" {
+			found = true
+		}
+	}
+	assert.True(t, found, "KeyBindings should include tab_notifications when a GitHub client is present")
+}
+
+func TestKeyTabSwitch_N(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.Focused = true
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "N"})
+	assert.Equal(t, tabNotifications, p.activeTab)
+}
+
+func TestGhNotifCountStr_CountsUnread(t *testing.T) {
+	p := newGHPanelWithClient(t, defaultMock(), &mockGHClientFull{})
+	p.buildNotificationItems([]ghNotificationItem{
+		{ThreadID: "a", Unread: true},
+		{ThreadID: "b", Unread: false},
+		{ThreadID: "c", Unread: true},
+	})
+	assert.Equal(t, "2", p.ghNotifCountStr())
 }
