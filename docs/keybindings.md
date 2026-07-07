@@ -138,6 +138,7 @@ GitHub panel (panel 3).
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
 | `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
+| `M` | Copy issue or PR as a markdown link (Issues/PRs tabs) |
 | `A` | Assign to me (Issues/PRs tab) |
 | `c` | Close/reopen issue (Issues tab) |
 | `S` | Cycle state filter open/closed/all (Issues/PRs tab) |

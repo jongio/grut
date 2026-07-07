@@ -911,6 +911,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
 			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
+			panels.KeyBinding{Key: "M", Description: "Copy issue/PR as markdown link", Action: "copy_markdown_link"},
 		)
 	}
 	return bindings
@@ -1172,6 +1173,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		if p.activeTab == tabNotifications && p.gh.client != nil {
 			return p.doMarkNotificationRead()
+		}
+	case "M":
+		if p.activeTab == tabIssues || p.activeTab == tabPRs {
+			return p.copyMarkdownLink()
 		}
 	case "A":
 		if (p.activeTab == tabIssues || p.activeTab == tabPRs) && p.gh.client != nil {
@@ -1949,6 +1954,44 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Copied: " + copied, Level: notify.Success}
 	}
+}
+
+// copyMarkdownLink copies the selected issue or pull request to the clipboard
+// as a markdown link of the form "[#<number> <title>](<url>)".
+func (p *Panel) copyMarkdownLink() (panels.Panel, tea.Cmd) {
+	items := p.tabItems[p.activeTab]
+	cursor := p.tabCursor[p.activeTab]
+	if cursor < 0 || cursor >= len(items) {
+		return p, nil
+	}
+	item := items[cursor]
+
+	var link string
+	switch item.kind { //nolint:exhaustive // only issues and PRs support markdown links
+	case kindIssue:
+		link = markdownLink(item.issue.Number, item.issue.Title, item.issue.HTMLURL)
+	case kindPR:
+		link = markdownLink(item.pr.Number, item.pr.Title, item.pr.HTMLURL)
+	default:
+		return p, nil
+	}
+	if link == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No link available", Level: notify.Warn}
+		}
+	}
+	return p.copyAndToast(link)
+}
+
+// markdownLink formats a GitHub issue or pull request as a markdown link of
+// the form "[#<number> <title>](<url>)". The title is stripped of any ANSI
+// styling and surrounding whitespace so the link is clean when pasted.
+func markdownLink(number int, title, url string) string {
+	if url == "" {
+		return ""
+	}
+	title = strings.TrimSpace(panels.StripANSI(title))
+	return fmt.Sprintf("[#%d %s](%s)", number, title, url)
 }
 
 // openRepoInBrowser opens the repository's GitHub page in the default browser.
