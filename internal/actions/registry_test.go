@@ -107,6 +107,13 @@ func TestAllActionsUnknownType(t *testing.T) {
 	assert.Nil(t, AllActions("nonexistent"))
 }
 
+func TestAllActions_IssueIncludesCloseReopen(t *testing.T) {
+	got := AllActions(ItemIssue)
+	assert.Contains(t, got, ActionCloseReopenIssue,
+		"issue actions should include close/reopen")
+	assert.Equal(t, "close/reopen issue", ActionLabel(ActionCloseReopenIssue))
+}
+
 // ---------------------------------------------------------------------------
 // Description
 // ---------------------------------------------------------------------------
