@@ -212,6 +212,8 @@ Diff viewer panel for file, commit, branch, and PR diffs.
 | `W` | Toggle ignore whitespace |
 | `y` | Copy the current hunk to the clipboard |
 | `R` | Toggle review annotations |
+| `+/-` | More/less diff context lines |
+| `0` | Reset diff context to default |
 
 ---
 
