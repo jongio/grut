@@ -140,6 +140,7 @@ GitHub panel (panel 3).
 | `m` | Merge PR (PRs tab) / Mark read (Notifications tab) |
 | `A` | Assign to me (Issues/PRs tab) |
 | `c` | Close/reopen issue (Issues tab) |
+| `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
 | `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `D` | Dispatch workflow |

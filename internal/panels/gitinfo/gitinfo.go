@@ -309,6 +309,8 @@ type githubState struct {
 	cfg          config.GitHubConfig
 	issueFilter  IssueFilterKind
 	prFilter     PRFilterKind
+	issueState   stateFilterKind
+	prState      stateFilterKind
 	repoPrivate  bool
 	pageSize     int
 	notifLoading bool  // true while notifications are being fetched
@@ -906,6 +908,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "L", Description: "Releases tab", Action: "tab_releases"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
+			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
 			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
 		)
@@ -1214,6 +1217,17 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.cyclePRFilter()
 		default:
 			return p.doFetch()
+		}
+	case "S":
+		switch p.activeTab { //nolint:exhaustive // only relevant cases handled
+		case tabIssues:
+			if p.gh.client != nil {
+				return p.cycleIssueStateFilter()
+			}
+		case tabPRs:
+			if p.gh.client != nil {
+				return p.cyclePRStateFilter()
+			}
 		}
 	case "g":
 		p.moveToFirst()
@@ -2437,9 +2451,15 @@ func (p *Panel) renderTabBar(width int) string {
 	if p.gh.issueFilter != issueFilterAll {
 		issuesCount = p.gh.issueFilter.String()
 	}
+	if p.gh.issueState != stateFilterOpen {
+		issuesCount = p.gh.issueState.String() + " " + issuesCount
+	}
 	prsCount := p.ghTabCountStr(tabPRs)
 	if p.gh.prFilter != prFilterAll {
 		prsCount = p.gh.prFilter.String()
+	}
+	if p.gh.prState != stateFilterOpen {
+		prsCount = p.gh.prState.String() + " " + prsCount
 	}
 	ghTabs := []tabDef{
 		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
