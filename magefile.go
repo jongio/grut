@@ -348,6 +348,10 @@ var deadcodeAllowlist = []string{
 	"MockClient.RevertContinue",
 	"MockClient.RevertAbort",
 	"MockClient.Reset",
+
+	// git — exported plain-text summary method on DiffStat (public package API;
+	// the preview renders a colored variant, so this is unused internally)
+	"DiffStat.Summary",
 }
 
 // Default target when running `mage` with no args.
