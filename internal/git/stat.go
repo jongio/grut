@@ -23,6 +23,8 @@ func Stat(diffs []FileDiff) DiffStat {
 					s.Insertions++
 				case DiffLineRemoved:
 					s.Deletions++
+				default:
+					// Context and other line types don't affect the counts.
 				}
 			}
 		}
