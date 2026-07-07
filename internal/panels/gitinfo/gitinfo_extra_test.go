@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	gh "github.com/google/go-github/v88/github"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
@@ -1848,4 +1849,300 @@ func TestCloseReopenIssueCmd_ReturnsResult(t *testing.T) {
 	assert.Equal(t, 42, res.number)
 	assert.Equal(t, "closed", res.newState)
 	assert.NoError(t, res.err)
+}
+
+// ---------------------------------------------------------------------------
+// Assign to me (#259)
+// ---------------------------------------------------------------------------
+
+func TestParseAssignSelfName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		wantKind   string
+		wantNumber int
+		wantOK     bool
+	}{
+		{"issue:42", "issue", 42, true},
+		{"PR:7", "PR", 7, true},
+		{"bad", "", 0, false},
+		{"issue:", "", 0, false},
+		{":42", "", 0, false},
+		{"issue:abc", "", 0, false},
+		{"", "", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			kind, n, ok := parseAssignSelfName(tt.name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantKind, kind)
+			assert.Equal(t, tt.wantNumber, n)
+		})
+	}
+}
+
+func TestDoAssignSelf_Issue(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.doAssignSelf()
+	assert.NotNil(t, cmd, "should show a confirm modal")
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "issue:42", p.pendingName)
+}
+
+func TestDoAssignSelf_PR(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "Feature", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.doAssignSelf()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "PR:7", p.pendingName)
+}
+
+func TestDoAssignSelf_EmptyCursor(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{}
+	_, cmd := p.doAssignSelf()
+	assert.Nil(t, cmd)
+}
+
+func TestDoAssignSelfFor_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	// ghClient is nil
+	_, cmd := p.doAssignSelfFor("issue", 42)
+	assert.Nil(t, cmd)
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestExecuteRightClickAction_Issue_AssignSelf(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 9, Title: "Bug", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionAssignSelf)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "issue:9", p.pendingName)
+}
+
+func TestExecuteRightClickAction_PR_AssignSelf(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 15, Title: "Feature", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+	_, cmd := p.executeRightClickAction(actions.ActionAssignSelf)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, opAssignSelf, p.pending)
+	assert.Equal(t, "PR:15", p.pendingName)
+}
+
+func TestHandleKey_A_IssuesTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabIssues
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: ghIssueItem{Number: 42, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabIssues] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.NotNil(t, cmd, "pressing 'A' on Issues tab should trigger assign flow")
+	assert.Equal(t, opAssignSelf, p.pending)
+}
+
+func TestHandleKey_A_PRsTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.gh.user = "octocat"
+	p.activeTab = tabPRs
+	p.tabItems[tabPRs] = []listItem{
+		{kind: kindPR, pr: ghPRItem{Number: 7, Title: "Test", State: "open"}},
+	}
+	p.tabCursor[tabPRs] = 0
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.NotNil(t, cmd, "pressing 'A' on PRs tab should trigger assign flow")
+	assert.Equal(t, opAssignSelf, p.pending)
+}
+
+func TestHandleKey_A_OtherTab(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.gh.client = &mockGHClientFull{}
+	p.activeTab = tabBranches
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.Nil(t, cmd, "pressing 'A' outside Issues/PRs tab should be no-op")
+}
+
+func TestHandleKey_A_NoGHClient(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.Focused = true
+	p.activeTab = tabIssues
+	// ghClient is nil
+
+	_, cmd := p.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	assert.Nil(t, cmd, "pressing 'A' without ghClient should be no-op")
+}
+
+func TestHandleModalResult_AssignSelf_Confirm(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+	p.pending = opAssignSelf
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.NotNil(t, cmd, "confirming should produce the assign command")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_AssignSelf_Cancel(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.pending = opAssignSelf
+	p.pendingName = "issue:42"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: false})
+	assert.Nil(t, cmd, "cancelling should be a no-op")
+	assert.Equal(t, opNone, p.pending)
+}
+
+func TestHandleModalResult_AssignSelf_BadName(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.ctx = t.Context()
+	p.pending = opAssignSelf
+	p.pendingName = "bad"
+
+	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true})
+	assert.Nil(t, cmd, "malformed pending name should produce nil cmd")
+}
+
+func TestHandleAssignSelfResult_IssueSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open"}}
+	p.tabItems[tabIssues] = []listItem{
+		{kind: kindIssue, issue: p.gh.allIssues[0]},
+	}
+
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{kind: "issue", number: 42, login: "octocat"})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "octocat", p.gh.allIssues[0].Assignee)
+	assert.Equal(t, "octocat", p.tabItems[tabIssues][0].issue.Assignee)
+}
+
+func TestHandleAssignSelfResult_PRSuccess(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{kind: "PR", number: 7, login: "octocat"})
+	assert.NotNil(t, cmd, "PR assignment success should still toast + reload")
+}
+
+func TestHandleAssignSelfResult_Error(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.allIssues = []ghIssueItem{{Number: 42, Title: "Bug", State: "open", Assignee: ""}}
+
+	_, cmd := p.handleAssignSelfResult(assignSelfResultMsg{
+		kind:   "issue",
+		number: 42,
+		err:    errors.New("network error"),
+	})
+	assert.NotNil(t, cmd, "should produce an error toast")
+	assert.Equal(t, "", p.gh.allIssues[0].Assignee, "assignee should be unchanged on error")
+}
+
+func TestAssignSelfCmd_UsesCachedLogin(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("issue", 42)
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Equal(t, 42, res.number)
+	assert.Equal(t, "octocat", res.login)
+	assert.NoError(t, res.err)
+}
+
+func TestAssignSelfCmd_FetchesLoginWhenEmpty(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{user: &gh.User{Login: gh.Ptr("fetched-user")}}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "" // not cached
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("PR", 7)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Equal(t, "fetched-user", res.login)
+	assert.NoError(t, res.err)
+}
+
+func TestAssignSelfCmd_AddAssigneesError(t *testing.T) {
+	t.Parallel()
+	p := newTestPanel(t, defaultMock())
+	p.gh.client = &mockGHClientFull{addAssigneesErr: errors.New("forbidden")}
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.gh.user = "octocat"
+	p.ctx = t.Context()
+
+	cmd := p.assignSelfCmd("issue", 42)
+	msg := cmd()
+	res, ok := msg.(assignSelfResultMsg)
+	assert.True(t, ok)
+	assert.Error(t, res.err)
 }

@@ -27,6 +27,7 @@ type IssueWriter interface {
 	CommentOnIssue(ctx context.Context, owner, repo string, number int, body string) error
 	CloseIssue(ctx context.Context, owner, repo string, number int) error
 	ReopenIssue(ctx context.Context, owner, repo string, number int) error
+	AddAssignees(ctx context.Context, owner, repo string, number int, assignees []string) error
 }
 
 // PRReader provides read-only access to GitHub pull requests.

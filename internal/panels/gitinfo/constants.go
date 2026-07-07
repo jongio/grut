@@ -89,6 +89,12 @@ const (
 	stateClosed  = "closed"
 )
 
+// Assignable item kind labels used in assign-to-me toasts and result messages.
+const (
+	assignKindIssue = "issue"
+	assignKindPR    = "PR"
+)
+
 // Workflow state strings.
 const (
 	stateActive             = "active"
