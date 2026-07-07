@@ -67,6 +67,12 @@ const (
 // unbounded memory growth during long sessions.
 const maxDiffCacheEntries = 50
 
+// Key name constants for KeyPressMsg.String() comparisons.
+const (
+	keyEscape = "escape"
+	keySpace  = "space"
+)
+
 // ---------------------------------------------------------------------------
 // Section groups
 // ---------------------------------------------------------------------------
@@ -134,6 +140,8 @@ type GitClient interface {
 	StageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error
 	UnstageLine(ctx context.Context, path string, hunk git.Hunk, lineIdx int) error
 	DiscardFile(ctx context.Context, path string) error
+	CleanPreview(ctx context.Context, opts git.CleanOpts) ([]git.CleanCandidate, error)
+	Clean(ctx context.Context, opts git.CleanOpts) error
 }
 
 // GitStatus is the git status panel. It implements [panels.Panel].
@@ -176,6 +184,14 @@ type GitStatus struct {
 	styleUnstaged      lipgloss.Style
 	styleUntracked     lipgloss.Style
 	styleDefault       lipgloss.Style
+	// Clean overlay state: preview of untracked files and their selection.
+	cleanCandidates     []git.CleanCandidate
+	cleanSelected       map[string]bool
+	cleanCursor         int
+	cleanOffset         int
+	cleanActive         bool
+	cleanLoading        bool
+	cleanIncludeIgnored bool
 }
 
 // Compile-time interface check.
@@ -190,6 +206,7 @@ func New(client GitClient, th *theme.Theme) *GitStatus {
 		selected:      make(map[string]bool),
 		expandedFiles: make(map[string]bool),
 		diffCache:     make(map[string][]git.Hunk),
+		cleanSelected: make(map[string]bool),
 		theme:         th,
 		colors:        colors,
 	}
@@ -313,6 +330,10 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.invalidateDiffCaches()
 		p.loading = true
 		return p, p.loadStatusCmd()
+	case cleanPreviewLoadedMsg:
+		return p.handleCleanPreviewLoaded(msg)
+	case cleanResultMsg:
+		return p.handleCleanResult(msg)
 	case panels.RefreshGitStatusMsg:
 		p.loading = true
 		return p, p.loadStatusCmd()
@@ -338,6 +359,9 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 func (p *GitStatus) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
+	}
+	if p.cleanActive {
+		return p.renderCleanOverlay(width, height)
 	}
 	// Rebuild rows only when the underlying data has changed.
 	if p.rowsDirty {
@@ -399,10 +423,11 @@ func (p *GitStatus) KeyBindings() []panels.KeyBinding {
 		{Key: "h", Description: "Enter hunk mode", Action: "hunk_mode"},
 		{Key: "d", Description: "Discard unstaged changes", Action: "discard"},
 		{Key: "y", Description: "Copy hunk (or file path) to clipboard", Action: "copy"},
-		{Key: "space", Description: "Toggle select for bulk", Action: "toggle_select"},
+		{Key: keySpace, Description: "Toggle select for bulk", Action: "toggle_select"},
 		{Key: "a", Description: "Stage all", Action: "stage_all"},
 		{Key: "U", Description: "Unstage all", Action: "unstage_all"},
 		{Key: "R", Description: "Refresh status", Action: "refresh"},
+		{Key: "X", Description: "Clean untracked files (preview and select)", Action: "clean"},
 		{Key: "Esc", Description: "Exit hunk/line mode", Action: "escape"},
 	}
 }
@@ -666,6 +691,7 @@ const (
 	opRightClickPick  = "right_click_pick"
 	opFirstUseConfirm = "first_use_confirm"
 	opDiscard         = "discard"
+	opClean           = "clean"
 )
 
 // SetActionsCfg stores the actions configuration for right-click menus.
@@ -726,6 +752,8 @@ func (p *GitStatus) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, 
 		return p.executeRightClickAction(actions.ActionID(msg.Value))
 	case opDiscard:
 		return p, p.discardCmd(path)
+	case opClean:
+		return p, p.cleanSelectedCmd()
 	}
 	return p, nil
 }
@@ -886,8 +914,11 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	}
 	key := msg.String()
+	if p.cleanActive {
+		return p.handleCleanKey(msg)
+	}
 	// Escape from hunk/line mode back to file mode.
-	if key == "esc" || key == "escape" {
+	if key == "esc" || key == keyEscape {
 		if p.mode != modeFile {
 			p.mode = modeFile
 			p.activeFile = ""
@@ -912,7 +943,7 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.stageAtCursor()
 	case "u":
 		return p.unstageAtCursor()
-	case " ", "space":
+	case " ", keySpace:
 		p.toggleSelection()
 	case "a":
 		return p.stageAll()
@@ -928,6 +959,8 @@ func (p *GitStatus) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.diffCache = make(map[string][]git.Hunk)
 		p.mode = modeFile
 		return p, p.loadStatusCmd()
+	case "X":
+		return p.openCleanOverlay()
 	}
 	return p, nil
 }

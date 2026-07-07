@@ -348,6 +348,8 @@ var deadcodeAllowlist = []string{
 	"MockClient.RevertContinue",
 	"MockClient.RevertAbort",
 	"MockClient.Reset",
+	"MockClient.Clean",
+	"MockClient.CleanPreview",
 
 	// git — exported plain-text summary method on DiffStat (public package API;
 	// the preview renders a colored variant, so this is unused internally)
