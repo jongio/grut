@@ -19,7 +19,9 @@ import (
 
 // Key name constants for KeyPressMsg.String() comparisons.
 const (
-	keyDown = "down"
+	keyDown   = "down"
+	keyEsc    = "esc"
+	keyEscape = "escape"
 
 	// clipboardTimeout bounds how long clipboard subprocess calls may block.
 	clipboardTimeout = 2 * time.Second
@@ -241,7 +243,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	key := msg.String()
 	switch key {
 	// --- Mode transitions ---
-	case "escape", "esc":
+	case keyEscape, keyEsc:
 		if p.editBuf != nil && p.editBuf.Dirty() {
 			return p, dirtyGuardCmd(p, "exit")
 		}

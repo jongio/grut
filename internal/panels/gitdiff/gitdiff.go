@@ -69,6 +69,7 @@ type GitDiff struct {
 	loading               bool // true while async diff fetch is in progress
 	showReviewAnnotations bool // toggle for inline annotation display
 	ignoreWhitespace      bool // when true, pass -w to git diff to hide whitespace-only changes
+	wordHighlight         bool // toggle for intra-line (word-level) diff emphasis
 }
 
 // diffLoadedMsg is the result of an async diff fetch (F01: no blocking in Update).
@@ -96,6 +97,18 @@ func New(gitClient git.StatusReader, th *theme.Theme) *GitDiff {
 // SetActionsCfg stores the right-click context menu configuration.
 func (d *GitDiff) SetActionsCfg(cfg config.ActionsConfig) {
 	d.actionsCfg = cfg
+}
+
+// SetWordHighlight sets whether intra-line (word-level) emphasis is applied to
+// changed lines in the inline diff view. It is wired from the git config at
+// startup; the "w" key toggles it for the session.
+func (d *GitDiff) SetWordHighlight(enabled bool) {
+	if d.wordHighlight == enabled {
+		return
+	}
+	d.wordHighlight = enabled
+	d.rebuildLines()
+	d.clampScroll()
 }
 
 // Init implements panels.Panel.
@@ -286,6 +299,8 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "R":
 		d.toggleReviewAnnotations()
 	case "w":
+		d.toggleWordHighlight()
+	case "W":
 		return d, d.toggleIgnoreWhitespace()
 	}
 	return d, nil
@@ -363,7 +378,8 @@ func (d *GitDiff) KeyBindings() []panels.KeyBinding {
 		{Key: "n/N", Description: "Next/previous hunk", Action: "hunk_nav"},
 		{Key: "[/]", Description: "Previous/next file", Action: "file_nav"},
 		{Key: "R", Description: "Toggle review annotations", Action: "toggle_review"},
-		{Key: "w", Description: "Toggle ignore whitespace", Action: "toggle_whitespace"},
+		{Key: "w", Description: "Toggle word-level diff", Action: "toggle_word_diff"},
+		{Key: "W", Description: "Toggle ignore whitespace", Action: "toggle_whitespace"},
 	}
 }
 
@@ -468,7 +484,11 @@ func (d *GitDiff) buildInlineLines() {
 		for _, hunk := range fd.Hunks {
 			d.hunkStarts = append(d.hunkStarts, len(d.lines))
 			d.lines = append(d.lines, d.headerStyle().Render(hunk.Header))
-			for _, line := range hunk.Lines {
+			var emph map[int][]wordSeg
+			if d.wordHighlight {
+				emph = computeHunkWordEmphasis(hunk.Lines)
+			}
+			for li, line := range hunk.Lines {
 				if len(d.lines) >= maxRenderedLines {
 					d.lines = append(d.lines, d.dimStyle().Render("[Diff truncated — too large to display]"))
 					return
@@ -476,9 +496,17 @@ func (d *GitDiff) buildInlineLines() {
 				var rendered string
 				switch line.Type {
 				case git.DiffLineAdded:
-					rendered = d.addedStyle().Render("+ " + line.Content)
+					if segs := emph[li]; len(segs) > 0 {
+						rendered = d.renderWordLine("+ ", d.addedStyle(), segs)
+					} else {
+						rendered = d.addedStyle().Render("+ " + line.Content)
+					}
 				case git.DiffLineRemoved:
-					rendered = d.removedStyle().Render("- " + line.Content)
+					if segs := emph[li]; len(segs) > 0 {
+						rendered = d.renderWordLine("- ", d.removedStyle(), segs)
+					} else {
+						rendered = d.removedStyle().Render("- " + line.Content)
+					}
 				default:
 					rendered = d.contextStyle().Render("  " + line.Content)
 				}
@@ -825,6 +853,14 @@ func (d *GitDiff) toggleIgnoreWhitespace() tea.Cmd {
 	return d.startDiffLoad(d.path, d.staged)
 }
 
+// toggleWordHighlight toggles intra-line (word-level) emphasis for the session
+// and rebuilds lines. The startup default comes from git.diff_word_highlight.
+func (d *GitDiff) toggleWordHighlight() {
+	d.wordHighlight = !d.wordHighlight
+	d.rebuildLines()
+	d.clampScroll()
+}
+
 // filterFindingsForFile returns only findings whose File matches the
 // currently displayed path. If path is empty, no findings are returned.
 func (d *GitDiff) filterFindingsForFile(all []panels.AIReviewFinding) []panels.AIReviewFinding {
@@ -931,6 +967,23 @@ func (d *GitDiff) contextStyle() lipgloss.Style {
 		return d.theme.Styles.DiffContext
 	}
 	return lipgloss.NewStyle().Foreground(panels.ColorOf(d.themeColors().DiffContext, "#999999"))
+}
+
+// renderWordLine renders a changed diff line with intra-line emphasis. The
+// prefix ("+ " or "- ") and unchanged segments use base; changed segments are
+// reversed so the emphasis reads on any theme without guessing colors.
+func (d *GitDiff) renderWordLine(prefix string, base lipgloss.Style, segs []wordSeg) string {
+	emph := base.Reverse(true)
+	var b strings.Builder
+	b.WriteString(base.Render(prefix))
+	for _, s := range segs {
+		if s.Changed {
+			b.WriteString(emph.Render(s.Text))
+		} else {
+			b.WriteString(base.Render(s.Text))
+		}
+	}
+	return b.String()
 }
 
 func (d *GitDiff) headerStyle() lipgloss.Style {

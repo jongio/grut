@@ -48,14 +48,14 @@ func TestToggleIgnoreWhitespaceSetsDiffOpt(t *testing.T) {
 	assert.False(t, lastOpts().IgnoreAll, "ignore-whitespace should be off by default")
 
 	// Toggle on: re-runs the diff with IgnoreAll set.
-	_, cmd = p.Update(keyMsg("w"))
+	_, cmd = p.Update(keyMsg("W"))
 	require.NotNil(t, cmd, "toggling whitespace should re-run the diff")
 	assert.True(t, p.ignoreWhitespace)
 	p.Update(cmd())
 	assert.True(t, lastOpts().IgnoreAll, "IgnoreAll should be set when active")
 
 	// Toggle off: re-runs the diff without IgnoreAll.
-	_, cmd = p.Update(keyMsg("w"))
+	_, cmd = p.Update(keyMsg("W"))
 	require.NotNil(t, cmd)
 	assert.False(t, p.ignoreWhitespace)
 	p.Update(cmd())
@@ -75,7 +75,7 @@ func TestToggleIgnoreWhitespaceInCompareMode(t *testing.T) {
 	p.Update(cmd())
 	require.True(t, p.compareMode)
 
-	_, cmd = p.Update(keyMsg("w"))
+	_, cmd = p.Update(keyMsg("W"))
 	require.NotNil(t, cmd)
 	p.Update(cmd())
 
@@ -91,7 +91,7 @@ func TestToggleIgnoreWhitespaceNoPathIsNoOp(t *testing.T) {
 	p.Init(context.Background())
 	p.Focus()
 
-	_, cmd := p.Update(keyMsg("w"))
+	_, cmd := p.Update(keyMsg("W"))
 	assert.True(t, p.ignoreWhitespace, "flag should still flip without a path")
 	assert.Nil(t, cmd, "no diff should be issued when no file is selected")
 }
