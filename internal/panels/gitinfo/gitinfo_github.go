@@ -1809,9 +1809,9 @@ func (p *Panel) doAssignSelf() (panels.Panel, tea.Cmd) {
 	}
 	switch items[cursor].kind { //nolint:exhaustive // only issues and PRs are assignable
 	case kindIssue:
-		return p.doAssignSelfFor("issue", items[cursor].issue.Number)
+		return p.doAssignSelfFor(assignKindIssue, items[cursor].issue.Number)
 	case kindPR:
-		return p.doAssignSelfFor("PR", items[cursor].pr.Number)
+		return p.doAssignSelfFor(assignKindPR, items[cursor].pr.Number)
 	default:
 		return p, nil
 	}
@@ -1898,7 +1898,7 @@ func (p *Panel) handleAssignSelfResult(msg assignSelfResultMsg) (panels.Panel, t
 		}
 	}
 	// Reflect assignment locally for issues (PR items do not display assignee).
-	if msg.kind == "issue" {
+	if msg.kind == assignKindIssue {
 		for i := range p.gh.allIssues {
 			if p.gh.allIssues[i].Number == msg.number {
 				p.gh.allIssues[i].Assignee = msg.login

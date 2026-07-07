@@ -1775,7 +1775,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionCopyNumber:
 			return p.copyAndToast(fmt.Sprintf("%d", item.issue.Number))
 		case actions.ActionAssignSelf:
-			return p.doAssignSelfFor("issue", item.issue.Number)
+			return p.doAssignSelfFor(assignKindIssue, item.issue.Number)
 		}
 	case kindPR:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -1800,7 +1800,7 @@ func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, 
 		case actions.ActionMergePR:
 			return p.doMergePR()
 		case actions.ActionAssignSelf:
-			return p.doAssignSelfFor("PR", item.pr.Number)
+			return p.doAssignSelfFor(assignKindPR, item.pr.Number)
 		}
 	case kindActionRun:
 		switch action { //nolint:exhaustive // only relevant cases handled

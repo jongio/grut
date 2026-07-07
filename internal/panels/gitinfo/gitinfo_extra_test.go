@@ -1639,6 +1639,7 @@ func TestParseAssignSelfName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			kind, n, ok := parseAssignSelfName(tt.name)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantKind, kind)

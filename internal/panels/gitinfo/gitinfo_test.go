@@ -2527,6 +2527,7 @@ func (m *mockGHClientFull) ReopenIssue(_ context.Context, _, _ string, _ int) er
 func (m *mockGHClientFull) AddAssignees(_ context.Context, _, _ string, _ int, _ []string) error {
 	return m.addAssigneesErr
 }
+
 func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullRequestListOptions) ([]*gh.PullRequest, error) {
 	return m.prs, m.prsErr
 }
