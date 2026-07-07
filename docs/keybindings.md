@@ -56,6 +56,7 @@ File Tree panel (panel 1).
 | Key | Action |
 |-----|--------|
 | `h/l` | Collapse/expand directory |
+| `H/L` | Collapse/expand all directories |
 | `o` | Open in external editor |
 | `.` | Toggle hidden files |
 | `f` | Toggle git filter |
