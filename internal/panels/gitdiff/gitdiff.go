@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -298,12 +299,88 @@ func (d *GitDiff) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		d.prevFile()
 	case "R":
 		d.toggleReviewAnnotations()
+	case "y":
+		return d.copyCurrentHunk()
 	case "w":
 		d.toggleWordHighlight()
 	case "W":
 		return d, d.toggleIgnoreWhitespace()
 	}
 	return d, nil
+}
+
+// copyCurrentHunk copies the raw unified-diff text of the hunk under the
+// current scroll position to the clipboard. It is a safe no-op (with a
+// warning toast) when no diff is loaded.
+func (d *GitDiff) copyCurrentHunk() (panels.Panel, tea.Cmd) {
+	hunk, ok := d.currentHunk()
+	if !ok {
+		return d, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No hunk to copy", Level: notify.Warn}
+		}
+	}
+	patch := hunkToPatch(hunk)
+	ctx := d.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return d, func() tea.Msg {
+		if err := panels.CopyToClipboard(ctx, patch); err != nil {
+			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Copied hunk to clipboard", Level: notify.Success}
+	}
+}
+
+// currentHunk returns the diff hunk under the current scroll position and
+// true, or a zero hunk and false when no diff is loaded. The hunk is located
+// by mapping d.scrollY through d.hunkStarts, which is built in the same
+// file-then-hunk order as the flattened hunk list below.
+func (d *GitDiff) currentHunk() (git.Hunk, bool) {
+	var flat []git.Hunk
+	for _, fd := range d.diffs {
+		flat = append(flat, fd.Hunks...)
+	}
+	if len(flat) == 0 {
+		return git.Hunk{}, false
+	}
+	idx := 0
+	for i, start := range d.hunkStarts {
+		if start <= d.scrollY {
+			idx = i
+		} else {
+			break
+		}
+	}
+	if idx >= len(flat) {
+		idx = len(flat) - 1
+	}
+	return flat[idx], true
+}
+
+// hunkToPatch renders a hunk as raw unified-diff text: the "@@" header
+// followed by each line prefixed with ' ', '+', or '-'.
+func hunkToPatch(h git.Hunk) string {
+	var b strings.Builder
+	b.WriteString(h.Header)
+	for _, ln := range h.Lines {
+		b.WriteByte('\n')
+		b.WriteString(diffLinePrefix(ln.Type))
+		b.WriteString(ln.Content)
+	}
+	return b.String()
+}
+
+// diffLinePrefix returns the single-character unified-diff prefix for a line.
+func diffLinePrefix(t git.DiffLineType) string {
+	switch t {
+	case git.DiffLineAdded:
+		return "+"
+	case git.DiffLineRemoved:
+		return "-"
+	default:
+		return " "
+	}
 }
 
 // handleMouseWheel scrolls the diff viewport.
@@ -377,6 +454,7 @@ func (d *GitDiff) KeyBindings() []panels.KeyBinding {
 		{Key: "t", Description: "Toggle inline/side-by-side", Action: "toggle_view"},
 		{Key: "n/N", Description: "Next/previous hunk", Action: "hunk_nav"},
 		{Key: "[/]", Description: "Previous/next file", Action: "file_nav"},
+		{Key: "y", Description: "Copy hunk to clipboard", Action: "copy_hunk"},
 		{Key: "R", Description: "Toggle review annotations", Action: "toggle_review"},
 		{Key: "w", Description: "Toggle word-level diff", Action: "toggle_word_diff"},
 		{Key: "W", Description: "Toggle ignore whitespace", Action: "toggle_whitespace"},

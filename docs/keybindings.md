@@ -209,6 +209,7 @@ Diff viewer panel for file, commit, branch, and PR diffs.
 | `[/]` | Previous/next file |
 | `w` | Toggle word-level diff |
 | `W` | Toggle ignore whitespace |
+| `y` | Copy the current hunk to the clipboard |
 | `R` | Toggle review annotations |
 
 ---
