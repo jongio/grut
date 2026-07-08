@@ -112,3 +112,46 @@ func (p *Preview) copyPermalink() (panels.Panel, tea.Cmd) {
 		return notify.ShowToastMsg{Message: "Copied GitHub permalink", Level: notify.Info}
 	}
 }
+
+func buildLocalLocation(root, path string, startLine, endLine int) string {
+	location := filepath.ToSlash(filepath.Clean(path))
+	if root != "" {
+		if rel, err := filepath.Rel(root, path); err == nil {
+			rel = filepath.ToSlash(rel)
+			if rel != ".." && !strings.HasPrefix(rel, "../") {
+				location = rel
+			}
+		}
+	}
+	switch {
+	case startLine <= 0:
+		return location
+	case endLine > startLine:
+		return fmt.Sprintf("%s:%d-%d", location, startLine, endLine)
+	default:
+		return fmt.Sprintf("%s:%d", location, startLine)
+	}
+}
+
+func (p *Preview) copyLocalLocation() (panels.Panel, tea.Cmd) {
+	if p.ghMode || p.filePath == "" {
+		return p, nil
+	}
+	path := p.filePath
+	gc := p.gitClient
+	startLine, endLine := p.permalinkLineRange()
+	return p, func() tea.Msg {
+		ctx := context.Background()
+		root := ""
+		if gc != nil {
+			if repoRoot, err := gc.RepoRoot(ctx); err == nil {
+				root = repoRoot
+			}
+		}
+		location := buildLocalLocation(root, path, startLine, endLine)
+		if err := panels.CopyToClipboard(ctx, location); err != nil {
+			return notify.ShowToastMsg{Message: "Copy failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Copied file location", Level: notify.Info}
+	}
+}
