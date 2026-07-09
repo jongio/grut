@@ -1457,7 +1457,7 @@ func TestKeyBindings(t *testing.T) {
 	for _, b := range bindings {
 		actions[b.Action] = true
 	}
-	for _, expected := range []string{"cursor_down", "cursor_up", "detail", "page_down", "page_up", "go_top", "go_bottom", "copy_hash", "search", "pickaxe"} {
+	for _, expected := range []string{"cursor_down", "cursor_up", "detail", "page_down", "page_up", "go_top", "go_bottom", "copy_hash", "search", "pickaxe", "grep"} {
 		if !actions[expected] {
 			t.Errorf("expected action %q in key bindings", expected)
 		}
@@ -1687,5 +1687,80 @@ func TestPickaxeEscClears(t *testing.T) {
 	}
 	if mock.lastOpts.Pickaxe != "" {
 		t.Errorf("expected LogOpts.Pickaxe empty after Esc reload, got %q", mock.lastOpts.Pickaxe)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Message grep search (server-side --grep)
+// ---------------------------------------------------------------------------
+
+func TestGrepEnterRunsServerSearch(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	// Enter grep mode with "M".
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "M"})
+	if !p.grepMode {
+		t.Fatal("expected grepMode=true after M")
+	}
+
+	// Type a search term.
+	for _, ch := range "hotfix" {
+		p.Update(tea.KeyPressMsg{Code: ch})
+	}
+	if p.grepTerm != "hotfix" {
+		t.Fatalf("expected grepTerm=%q, got %q", "hotfix", p.grepTerm)
+	}
+	// Render the input bar (grepMode branch of renderGrepBar).
+	_ = p.View(80, 20)
+
+	// Confirm with Enter: runs the server-side search.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if p.grepMode {
+		t.Error("expected grepMode=false after Enter")
+	}
+	if cmd != nil {
+		cmd()
+	}
+	if mock.lastOpts.Grep != "hotfix" {
+		t.Errorf("expected LogOpts.Grep=%q, got %q", "hotfix", mock.lastOpts.Grep)
+	}
+	if mock.lastOpts.Pickaxe != "" {
+		t.Errorf("expected LogOpts.Pickaxe empty for a message search, got %q", mock.lastOpts.Pickaxe)
+	}
+	// Render the applied-filter bar (grepTerm != "" branch of renderGrepBar).
+	_ = p.View(80, 20)
+}
+
+func TestGrepEscClears(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	// Run a grep search first.
+	p.Update(tea.KeyPressMsg{Code: -1, Text: "M"})
+	for _, ch := range "bug" {
+		p.Update(tea.KeyPressMsg{Code: ch})
+	}
+	if _, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		cmd()
+	}
+	if mock.lastOpts.Grep != "bug" {
+		t.Fatalf("expected LogOpts.Grep=bug after search, got %q", mock.lastOpts.Grep)
+	}
+
+	// Esc clears the grep term and reloads the full list.
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if p.grepTerm != "" {
+		t.Errorf("expected grepTerm cleared after Esc, got %q", p.grepTerm)
+	}
+	if cmd != nil {
+		cmd()
+	}
+	if mock.lastOpts.Grep != "" {
+		t.Errorf("expected LogOpts.Grep empty after Esc reload, got %q", mock.lastOpts.Grep)
 	}
 }

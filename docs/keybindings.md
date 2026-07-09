@@ -170,6 +170,7 @@ Commits panel (panel 4).
 | `r` | Reword last commit |
 | `/` | Search commits |
 | `S` | Search commit content (pickaxe) |
+| `M` | Search commit messages (grep) |
 
 ---
 
