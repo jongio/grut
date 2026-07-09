@@ -169,12 +169,13 @@ type GitStatus struct {
 	hunkCursor int      // active hunk index within expanded file
 	lineCursor int      // active line index within active hunk
 	// Generation counters to discard stale async results (CWE-362).
-	statusGen uint64 // incremented on each status load request
-	diffGen   uint64 // incremented on each diff load request
-	loading   bool   // true while an async status load is in flight
-	rowsDirty bool   // true when rows need rebuilding before next render
-	theme     *theme.Theme
-	colors    panelColors
+	statusGen     uint64 // incremented on each status load request
+	diffGen       uint64 // incremented on each diff load request
+	loading       bool   // true while an async status load is in flight
+	reloadPending bool   // a refresh arrived while loading; coalesce into one reload
+	rowsDirty     bool   // true when rows need rebuilding before next render
+	theme         *theme.Theme
+	colors        panelColors
 	// Cached lipgloss styles for hot-path rendering (avoid per-row allocations).
 	styleSectionHeader lipgloss.Style
 	styleHunkHeader    lipgloss.Style
@@ -287,14 +288,23 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, nil
 		}
 		p.loading = false
+		var cmd tea.Cmd
 		if msg.err != nil {
 			p.err = msg.err
-			return p, nil
+		} else {
+			p.files = msg.files
+			p.rebuildRows()
+			p.rowsDirty = false
+			cmd = p.emitStatusChanged()
 		}
-		p.files = msg.files
-		p.rebuildRows()
-		p.rowsDirty = false
-		return p, p.emitStatusChanged()
+		// A refresh that arrived while this load was in flight was coalesced;
+		// run exactly one more load now so the view reflects the latest state.
+		if p.reloadPending {
+			p.reloadPending = false
+			p.loading = true
+			return p, tea.Batch(cmd, p.loadStatusCmd())
+		}
+		return p, cmd
 	case diffLoadedMsg:
 		// Discard stale diff results.
 		if msg.generation != p.diffGen {
@@ -342,6 +352,14 @@ func (p *GitStatus) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case cleanResultMsg:
 		return p.handleCleanResult(msg)
 	case panels.RefreshGitStatusMsg:
+		// Coalesce refreshes that arrive while a load is already in flight so
+		// bursts of filesystem events cannot fan out into many overlapping
+		// `git status` subprocesses. The pending reload runs when the current
+		// load completes (see statusLoadedMsg).
+		if p.loading {
+			p.reloadPending = true
+			return p, nil
+		}
 		p.loading = true
 		return p, p.loadStatusCmd()
 	case panels.RepoChangedMsg:

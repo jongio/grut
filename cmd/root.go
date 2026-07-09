@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/jongio/grut/internal/bookmarks"
 	"github.com/jongio/grut/internal/chat"
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/diag"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
@@ -238,6 +240,15 @@ Environment:
 			if chatModel != nil {
 				model = model.WithChat(chatModel)
 			}
+
+			// Start the always-on resource watchdog for the lifetime of the
+			// TUI. It samples goroutine and heap usage on an interval and
+			// records a diagnostic (with a goroutine stack dump) to the data
+			// directory if either grows abnormally, so runaway resource use is
+			// captured even without GRUT_LOG enabled.
+			watchdogCtx, stopWatchdog := context.WithCancel(context.Background())
+			go diag.New().Run(watchdogCtx)
+			defer stopWatchdog()
 
 			p := tea.NewProgram(model)
 			if _, err := p.Run(); err != nil {
