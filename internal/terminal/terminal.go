@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
+
+	"github.com/jongio/grut/internal/proctree"
 )
 
 // maxLineBytes caps the length of a single output line to prevent memory
@@ -75,7 +77,12 @@ func New(ctx context.Context, shell string, maxLines int) (*Terminal, error) {
 	if maxLines <= 0 {
 		maxLines = 10000
 	}
-	cmd := exec.CommandContext(ctx, shell)
+	// proctree.Command places the shell in a containment group (Job Object on
+	// Windows, process group on Unix) and sets a bounded WaitDelay, so the
+	// entire shell subtree is terminated on ctx cancellation or Close and a
+	// long-running child cannot keep the output pipes (and reader goroutines)
+	// alive forever (CWE-269).
+	cmd := proctree.Command(ctx, shell)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("creating stdin pipe: %w", err)
@@ -96,6 +103,9 @@ func New(ctx context.Context, shell string, maxLines int) (*Terminal, error) {
 		_ = stderr.Close()
 		return nil, fmt.Errorf("starting shell %q: %w", shell, err)
 	}
+	// Assign the started shell to its containment group so descendants are
+	// terminated together with it (no-op on Unix; Job Object on Windows).
+	proctree.AfterStart(cmd)
 	t := &Terminal{
 		cmd:      cmd,
 		stdin:    stdin,
@@ -160,13 +170,16 @@ func (t *Terminal) LinesWindow(offsetFromBottom, height int) ([]string, int) {
 	return cp, total
 }
 
-// Close closes stdin, kills the process if still running, and waits for
+// Close closes stdin, kills the process tree if still running, and waits for
 // the done channel to be closed.
 func (t *Terminal) Close() error {
 	// Close stdin first to signal the shell to exit.
 	_ = t.stdin.Close()
-	// Kill the process if it's still running.
+	// Kill the whole shell subtree if it's still running. Killing the tree
+	// (not just the direct child) closes the output pipes held by any
+	// descendant, which unblocks the reader goroutines so <-t.done can return.
 	if t.cmd.Process != nil {
+		proctree.Kill(t.cmd)
 		_ = t.cmd.Process.Kill()
 	}
 	// Wait for the process to finish and goroutines to clean up.

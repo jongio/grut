@@ -5,10 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	stdpath "path"
 	"path/filepath"
 	"strings"
+
+	"github.com/jongio/grut/internal/proctree"
 )
 
 // StageHunk stages a single hunk from an unstaged file by building a patch
@@ -218,7 +219,7 @@ func (c *Client) runWithStdin(ctx context.Context, stdin []byte, args ...string)
 		return fmt.Errorf("invalid git argument: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := proctree.Command(ctx, "git", args...)
 	cmd.Dir = c.repoDir
 	cmd.Stdin = bytes.NewReader(stdin)
 
@@ -228,7 +229,7 @@ func (c *Client) runWithStdin(ctx context.Context, stdin []byte, args ...string)
 
 	slog.Debug("git exec (stdin)", "args", args, "dir", c.repoDir, "stdinLen", len(stdin))
 
-	if err := cmd.Run(); err != nil {
+	if err := proctree.Run(cmd); err != nil {
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
 			return fmt.Errorf("git %s: %w", args[0], err)
