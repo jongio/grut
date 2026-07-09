@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 )
 
 // ghCLITimeout is the maximum time to wait for the `gh` CLI to return an

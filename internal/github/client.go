@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 )
 
 // clientImpl implements the Client interface using the google/go-github SDK.

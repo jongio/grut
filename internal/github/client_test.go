@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1324,7 +1324,7 @@ func TestClient_ListReleasesPage(t *testing.T) {
 	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/repos/owner/repo/releases", r.URL.Path)
 		releases := []*gh.RepositoryRelease{
-			{ID: ptr(int64(1)), TagName: ptr("v1.0.0")},
+			{ID: 1, TagName: "v1.0.0"},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Link", `<https://api.github.com/repos/owner/repo/releases?page=2>; rel="next"`)
@@ -1345,7 +1345,7 @@ func TestClient_ListReleasesPage_Cached(t *testing.T) {
 	client, _ := setupMockClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		respondJSON(w, http.StatusOK, []*gh.RepositoryRelease{
-			{ID: ptr(int64(1)), TagName: ptr("v1.0.0")},
+			{ID: 1, TagName: "v1.0.0"},
 		})
 	})
 
