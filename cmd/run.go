@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/jongio/grut/internal/config"
@@ -18,6 +20,7 @@ func newRunCmd() *cobra.Command {
 		describeFlag string
 		dryRunFlag   bool
 		noConfirm    bool
+		jsonFlag     bool
 	)
 
 	runCmd := &cobra.Command{
@@ -59,6 +62,9 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 			// Handle --list.
 			if listFlag {
 				all := engine.List()
+				if jsonFlag {
+					return printShortcutListJSON(cmd, all)
+				}
 				if len(all) == 0 {
 					_, _ = fmt.Fprintln(w, "No shortcuts available.")
 					return nil
@@ -81,6 +87,9 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 				if !ok {
 					return fmt.Errorf("unknown shortcut %q", describeFlag)
 				}
+				if jsonFlag {
+					return printShortcutJSON(cmd, s)
+				}
 				printShortcutDetails(cmd, s)
 				return nil
 			}
@@ -88,6 +97,9 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 			// Normal execution requires a shortcut name.
 			if len(args) == 0 {
 				return fmt.Errorf("shortcut name required (use --list to see available shortcuts)")
+			}
+			if jsonFlag && !dryRunFlag {
+				return fmt.Errorf("--json can only be used with --list, --describe, or --dry-run")
 			}
 
 			name := args[0]
@@ -98,6 +110,9 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 				steps, err := engine.Plan(name, scArgs)
 				if err != nil {
 					return fmt.Errorf("plan shortcut %q: %w", name, err)
+				}
+				if jsonFlag {
+					return printShortcutPlanJSON(cmd, name, steps)
 				}
 				fmt.Fprintf(w, "Dry run for %q:\n\n", name)
 				for i, step := range steps {
@@ -165,8 +180,128 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 	runCmd.Flags().StringVar(&describeFlag, "describe", "", "Show details for a shortcut")
 	runCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show execution plan without running")
 	runCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Skip confirmation prompts")
+	runCmd.Flags().BoolVar(&jsonFlag, "json", false, "Print machine-readable JSON for list, describe, or dry-run")
 
 	return runCmd
+}
+
+type shortcutSummaryJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	Builtin     bool   `json:"builtin"`
+	Confirm     bool   `json:"confirm"`
+}
+
+type shortcutDetailJSON struct {
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Source      string             `json:"source"`
+	Args        []shortcutArgJSON  `json:"args"`
+	Steps       []shortcutStepJSON `json:"steps"`
+	Builtin     bool               `json:"builtin"`
+	Confirm     bool               `json:"confirm"`
+}
+
+type shortcutArgJSON struct {
+	Name     string `json:"name"`
+	Prompt   string `json:"prompt"`
+	Default  string `json:"default"`
+	Required bool   `json:"required"`
+}
+
+type shortcutStepJSON struct {
+	Op       string            `json:"op"`
+	Params   map[string]string `json:"params,omitempty"`
+	OnFail   string            `json:"on_fail"`
+	AIAssist bool              `json:"ai_assist"`
+}
+
+type shortcutPlanJSON struct {
+	Name  string             `json:"name"`
+	Steps []shortcutStepJSON `json:"steps"`
+}
+
+func printShortcutListJSON(cmd *cobra.Command, shortcuts []shortcuts.Shortcut) error {
+	summaries := make([]shortcutSummaryJSON, 0, len(shortcuts))
+	for _, s := range shortcuts {
+		summaries = append(summaries, shortcutSummaryJSON{
+			Name:        s.Name,
+			Description: s.Description,
+			Source:      shortcutSource(s),
+			Builtin:     s.Builtin,
+			Confirm:     s.Confirm,
+		})
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Name < summaries[j].Name
+	})
+	return writeJSON(cmd, summaries)
+}
+
+func printShortcutJSON(cmd *cobra.Command, s shortcuts.Shortcut) error {
+	return writeJSON(cmd, shortcutDetail(s))
+}
+
+func printShortcutPlanJSON(cmd *cobra.Command, name string, steps []shortcuts.Step) error {
+	out := shortcutPlanJSON{
+		Name:  name,
+		Steps: make([]shortcutStepJSON, 0, len(steps)),
+	}
+	for _, step := range steps {
+		out.Steps = append(out.Steps, shortcutStep(step))
+	}
+	return writeJSON(cmd, out)
+}
+
+func shortcutDetail(s shortcuts.Shortcut) shortcutDetailJSON {
+	detail := shortcutDetailJSON{
+		Name:        s.Name,
+		Description: s.Description,
+		Source:      shortcutSource(s),
+		Builtin:     s.Builtin,
+		Confirm:     s.Confirm,
+		Args:        make([]shortcutArgJSON, 0, len(s.Args)),
+		Steps:       make([]shortcutStepJSON, 0, len(s.Steps)),
+	}
+	for _, arg := range s.Args {
+		detail.Args = append(detail.Args, shortcutArgJSON{
+			Name:     arg.Name,
+			Prompt:   arg.Prompt,
+			Default:  arg.Default,
+			Required: arg.Required,
+		})
+	}
+	for _, step := range s.Steps {
+		detail.Steps = append(detail.Steps, shortcutStep(step))
+	}
+	return detail
+}
+
+func shortcutStep(step shortcuts.Step) shortcutStepJSON {
+	params := make(map[string]string, len(step.Params))
+	for key, value := range step.Params {
+		params[key] = value
+	}
+	return shortcutStepJSON{
+		Op:       step.Op,
+		Params:   params,
+		OnFail:   stepOnFail(step),
+		AIAssist: step.AIAssist,
+	}
+}
+
+func shortcutSource(s shortcuts.Shortcut) string {
+	if s.Builtin {
+		return "builtin"
+	}
+	return "custom"
+}
+
+func writeJSON(cmd *cobra.Command, value any) error {
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(value)
 }
 
 // registerCustomShortcuts converts config CustomShortcut definitions into
