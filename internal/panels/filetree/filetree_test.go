@@ -1789,6 +1789,41 @@ func TestFileSelectedMsg_EmittedFromFile(t *testing.T) {
 	assert.True(t, ok, "expected FileSelectedMsg for file, got %T", msg)
 }
 
+func TestEmitCursorFileSelectedAtLine_SetsLine(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+
+	fileIdx := -1
+	for i, n := range ft.visible {
+		if !n.isDir {
+			fileIdx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, fileIdx, 0, "should have at least one file in visible")
+
+	ft.viewport.cursor = fileIdx
+	cmd := ft.emitCursorFileSelectedAtLine(42)
+	require.NotNil(t, cmd)
+
+	fsm, ok := cmd().(panels.FileSelectedMsg)
+	require.True(t, ok, "expected FileSelectedMsg, got %T", cmd())
+	assert.Equal(t, 42, fsm.Line, "line should be threaded onto FileSelectedMsg")
+}
+
+func TestRevealFileMsg_ThreadsLine(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+
+	_, cmd := ft.Update(panels.RevealFileMsg{Path: filepath.Join(dir, "main.go"), Line: 7})
+	require.NotNil(t, cmd, "revealing a file should produce a command")
+
+	fsm, ok := cmd().(panels.FileSelectedMsg)
+	require.True(t, ok, "expected FileSelectedMsg, got %T", cmd())
+	assert.Equal(t, filepath.Join(dir, "main.go"), fsm.Path)
+	assert.Equal(t, 7, fsm.Line, "reveal should carry the requested line")
+}
+
 // ---------------------------------------------------------------------------
 // Additional coverage: Mouse click handling
 // ---------------------------------------------------------------------------

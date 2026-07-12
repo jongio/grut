@@ -64,6 +64,12 @@ type Preview struct {
 	// as a line-number entry and scrolls to the entered line on Enter.
 	gotoLineActive bool
 	gotoLineInput  string
+	// pendingGotoLine holds a 1-based line to scroll to once the current
+	// file finishes loading. Set from FileSelectedMsg.Line (e.g. the CLI
+	// opening "file.go:42") and applied in the fileLoadedMsg handler, since
+	// the file content is not available synchronously when the file is
+	// selected. Zero means no pending jump.
+	pendingGotoLine int
 	// GitHub content mode – when a GitHub item (issue/PR/action run) is
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
@@ -263,6 +269,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.blameMode = false
 		p.blameLines = nil
 		p.diffLines = nil
+		p.pendingGotoLine = msg.Line
 		cmds := []tea.Cmd{p.loadFileCmd(msg.Path)}
 		if p.gitClient != nil {
 			cmds = append(cmds, p.loadContextDiffCmd(msg.Path, p.diffContext))
@@ -276,6 +283,13 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.err = msg.err
 			p.isBinary = msg.isBinary
 			p.isLarge = msg.isLarge
+			// Apply a pending line jump requested before the content was
+			// available (e.g. the CLI opening "file.go:42"). gotoLine clamps
+			// and no-ops on binary/large files where line counts are 0.
+			if p.pendingGotoLine > 0 {
+				p.gotoLine(p.pendingGotoLine)
+				p.pendingGotoLine = 0
+			}
 		}
 		return p, nil
 	case diffLoadedMsg:

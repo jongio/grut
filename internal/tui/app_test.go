@@ -59,6 +59,21 @@ func TestModelViewBeforeResize(t *testing.T) {
 	assert.True(t, view.AltScreen)
 }
 
+func TestInitWithInitialFileFocusesPreview(t *testing.T) {
+	m := newTestModel(t).WithInitialFile("internal/git/client.go", 42)
+	cmd := m.Init()
+	require.NotNil(t, cmd)
+	assert.Equal(t, "preview", m.engine.FocusedName(),
+		"an initial file argument should focus the preview panel at startup")
+}
+
+func TestInitWithoutInitialFileFocusesFiletree(t *testing.T) {
+	m := newTestModel(t)
+	m.Init()
+	assert.Equal(t, "filetree", m.engine.FocusedName(),
+		"without a file argument the filetree keeps default focus")
+}
+
 func TestModelViewAfterResize(t *testing.T) {
 	m := newTestModel(t)
 

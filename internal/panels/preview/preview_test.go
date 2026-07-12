@@ -1701,3 +1701,45 @@ func TestActionRunSelectedMsg_ANSIInjection(t *testing.T) {
 	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in workflow name should be stripped")
 	assert.Contains(t, p.ghTitle, "CI ")
 }
+
+func TestFileSelectedLineScrollsPreviewOnLoad(t *testing.T) {
+	dir := t.TempDir()
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = strings.Repeat("x", 20)
+	}
+	path := writeFile(t, dir, "long.txt", strings.Join(lines, "\n"))
+
+	cfg := defaultCfg()
+	cfg.SyntaxHighlighting = false
+	p := New(cfg, defaultEditorCfg(), nil)
+	p.SetSize(60, 20)
+
+	// Select the file with a target line, then drive the async load to
+	// completion, mirroring the Bubble Tea runtime loop.
+	_, cmd := p.Update(panels.FileSelectedMsg{Path: path, Line: 60})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	require.NotNil(t, msg)
+	p.Update(msg)
+
+	assert.Positive(t, p.scrollY, "preview should scroll to the requested line once loaded")
+	assert.Zero(t, p.pendingGotoLine, "pending line resets after it is applied")
+}
+
+func TestFileSelectedWithoutLineStaysAtTop(t *testing.T) {
+	dir := t.TempDir()
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = strings.Repeat("x", 20)
+	}
+	path := writeFile(t, dir, "long.txt", strings.Join(lines, "\n"))
+
+	cfg := defaultCfg()
+	cfg.SyntaxHighlighting = false
+	p := New(cfg, defaultEditorCfg(), nil)
+	p.SetSize(60, 20)
+
+	loadFile(t, p, path)
+	assert.Zero(t, p.scrollY, "selecting without a line should leave the preview at the top")
+}

@@ -58,8 +58,9 @@ func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
 	memstatsDone := make(chan struct{})
 
 	rootCmd = &cobra.Command{
-		Use:   "grut",
+		Use:   "grut [path]",
 		Short: "AI-native terminal file explorer, git client, and agent orchestrator",
+		Args:  cobra.MaximumNArgs(1),
 		Long: `grut is an AI-native terminal file explorer, git client, and agent orchestrator
 built for developers who work alongside AI coding agents.
 
@@ -95,6 +96,25 @@ Environment:
 					return fmt.Errorf("chdir to demo: %w", err)
 				}
 				fmt.Fprintf(os.Stderr, "Demo project created at %s\n", dir)
+			}
+
+			// Handle a positional file or directory argument. A directory roots
+			// grut there; a file (optionally suffixed with ":line") roots grut at
+			// the file's directory, selects the file, and scrolls to the line.
+			// A path that does not exist is ignored, so grut opens in the current
+			// directory as it did before path arguments were supported. Resolved
+			// before stderr is redirected so a chdir error reaches the console.
+			var initialFile string
+			var initialLine int
+			if len(args) > 0 {
+				target := resolveStartupTarget(args[0], os.Stat)
+				if target.chdir != "" {
+					if err := os.Chdir(target.chdir); err != nil {
+						return fmt.Errorf("chdir to %s: %w", target.chdir, err)
+					}
+				}
+				initialFile = target.file
+				initialLine = target.line
 			}
 
 			// Capture original stderr BEFORE redirection so error messages
@@ -235,7 +255,8 @@ Environment:
 				WithUndoManager(undoMgr).
 				WithGitClient(gitClient).
 				WithConfig(cfg).
-				WithSessionManager(sessMgr)
+				WithSessionManager(sessMgr).
+				WithInitialFile(initialFile, initialLine)
 
 			if chatModel != nil {
 				model = model.WithChat(chatModel)

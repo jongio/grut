@@ -49,6 +49,7 @@ type DiffContext struct {
 type FileSelectedMsg struct {
 	Path        string
 	DiffContext *DiffContext // nil = working tree diff (backward compatible)
+	Line        int          // 1-based line to scroll the preview to (0 = none)
 }
 
 // RevealFileMsg requests the filetree to expand parent directories and
@@ -56,6 +57,7 @@ type FileSelectedMsg struct {
 // when the user selects a file, so the file tree highlights it.
 type RevealFileMsg struct {
 	Path string
+	Line int // 1-based line to scroll the preview to after selecting (0 = none)
 }
 
 // ToggleFuzzyFinderMsg is sent to show or hide the fuzzy finder overlay.
