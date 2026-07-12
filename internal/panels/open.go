@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -186,4 +187,39 @@ func OpenInTerminal(ctx context.Context, dir string) error {
 		return fmt.Errorf("no terminal emulator found")
 	}
 	return StartDetachedFn(cmd)
+}
+
+// RevealInFileManager opens the OS file manager with the given path selected
+// (highlighted) inside its parent directory. On Windows it uses explorer
+// /select, on macOS it uses open -R, and on Linux it uses the freedesktop
+// D-Bus FileManager1.ShowItems interface when available, otherwise it opens the
+// parent directory with xdg-open.
+func RevealInFileManager(ctx context.Context, path string) error {
+	if err := ValidateEditorPath(path); err != nil {
+		return err
+	}
+	switch runtime.GOOS {
+	case "windows":
+		// explorer highlights the item when passed /select,<path>. It exits
+		// with a non-zero status even on success, but StartDetachedFn ignores
+		// the reaped exit status so that does not surface as an error.
+		return StartDetachedFn(exec.CommandContext(ctx, "explorer", "/select,"+path))
+	case "darwin":
+		return StartDetachedFn(exec.CommandContext(ctx, "open", "-R", path))
+	default:
+		if _, err := exec.LookPath("dbus-send"); err == nil {
+			fileURI := (&url.URL{Scheme: "file", Path: path}).String()
+			return StartDetachedFn(exec.CommandContext(
+				ctx, "dbus-send",
+				"--session",
+				"--dest=org.freedesktop.FileManager1",
+				"--type=method_call",
+				"/org/freedesktop/FileManager1",
+				"org.freedesktop.FileManager1.ShowItems",
+				"array:string:"+fileURI,
+				"string:",
+			))
+		}
+		return StartDetachedFn(exec.CommandContext(ctx, "xdg-open", filepath.Dir(path)))
+	}
 }

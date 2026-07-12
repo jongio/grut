@@ -586,6 +586,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
 		{Key: "e/F2", Description: "Rename file", Action: "item_edit"},
 		{Key: "o", Description: "Open in editor", Action: "item_open"},
+		{Key: "M", Description: "Reveal in file manager", Action: "reveal_in_file_manager"},
 		{Key: "y", Description: "Copy file path", Action: "item_copy"},
 		{Key: "c", Description: "Copy selected to clipboard", Action: "copy"},
 		{Key: "x", Description: "Cut selected to clipboard", Action: "cut"},
@@ -973,6 +974,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.openInEditor()
 	case "O":
 		return ft.openInDefaultApp()
+	case "M":
+		return ft.revealInFileManager()
 	case "y":
 		return ft.copyPath()
 	case "c":

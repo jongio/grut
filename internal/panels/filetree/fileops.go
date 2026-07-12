@@ -472,6 +472,31 @@ func (ft *FileTree) openInEditor() (panels.Panel, tea.Cmd) {
 	}
 }
 
+// revealInFileManager reveals the item under the cursor in the OS file manager,
+// highlighting it within its parent directory. Unlike openInDefaultApp, it works
+// on both files and directories.
+func (ft *FileTree) revealInFileManager() (panels.Panel, tea.Cmd) {
+	n := ft.cursorNode()
+	if n == nil {
+		return ft, nil
+	}
+	itemPath := n.path
+	itemName := n.name
+	ctx := ft.safeCtx()
+	return ft, func() (msg tea.Msg) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in revealInFileManager cmd", "recover", r, "file", itemPath, "stack", string(debug.Stack()))
+				msg = notify.ShowToastMsg{Message: "Reveal crashed: " + fmt.Sprint(r), Level: notify.Error}
+			}
+		}()
+		if err := panels.RevealInFileManager(ctx, itemPath); err != nil {
+			return notify.ShowToastMsg{Message: "Reveal failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Revealed " + itemName, Level: notify.Info}
+	}
+}
+
 // copyPath copies the path of the item under the cursor to the OS clipboard.
 func (ft *FileTree) copyPath() (panels.Panel, tea.Cmd) {
 	n := ft.cursorNode()
