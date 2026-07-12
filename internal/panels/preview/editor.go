@@ -22,6 +22,8 @@ const (
 	keyDown   = "down"
 	keyEsc    = "esc"
 	keyEscape = "escape"
+	keyEnter  = "enter"
+	keyEnd    = "end"
 
 	// clipboardTimeout bounds how long clipboard subprocess calls may block.
 	clipboardTimeout = 2 * time.Second
@@ -283,7 +285,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 			ensureCursorVisible(p)
 		}
 
-	case "enter":
+	case keyEnter:
 		if p.editBuf != nil {
 			p.editBuf.SplitLine(p.cursorLine, p.cursorCol, p.editCfg.AutoIndent)
 			p.cursorLine++
@@ -551,7 +553,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 		clearEditSelection(p)
 		p.cursorCol = 0
 
-	case "end", "ctrl+e": //nolint:goconst // key name, not a magic string
+	case keyEnd, "ctrl+e":
 		clearEditSelection(p)
 		if p.editBuf != nil {
 			line := p.editBuf.Line(p.cursorLine)
