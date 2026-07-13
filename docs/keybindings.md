@@ -192,6 +192,7 @@ Preview panel (panel 5).
 | `B` | Toggle blame |
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
+| `O` | Open file on GitHub |
 | `Esc` | Clear selection |
 
 Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.

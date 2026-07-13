@@ -112,3 +112,41 @@ func (p *Preview) copyPermalink() (panels.Panel, tea.Cmd) {
 		return notify.ShowToastMsg{Message: "Copied GitHub permalink", Level: notify.Info}
 	}
 }
+
+// openOnGitHub builds a github.com permalink for the current file and line
+// (or selected range) and opens it in the default browser. It is a no-op with
+// a clear message when the preview is not showing an on-disk file or when the
+// repository has no github remote.
+func (p *Preview) openOnGitHub() (panels.Panel, tea.Cmd) {
+	if p.ghMode || p.filePath == "" {
+		return p, nil
+	}
+	path := p.filePath
+	gc := p.gitClient
+	startLine, endLine := p.permalinkLineRange()
+	return p, func() tea.Msg {
+		ctx := context.Background()
+		if gc == nil {
+			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+		}
+		root, err := gc.RepoRoot(ctx)
+		if err != nil || root == "" {
+			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+		}
+		relPath := path
+		if rel, err := filepath.Rel(root, path); err == nil {
+			relPath = filepath.ToSlash(rel)
+		}
+		if strings.HasPrefix(relPath, "..") {
+			return notify.ShowToastMsg{Message: "File is outside the repository", Level: notify.Warn}
+		}
+		link := buildPermalink(gitRemoteURL(ctx, root), gitHeadSHA(ctx, root), relPath, startLine, endLine)
+		if link == "" {
+			return notify.ShowToastMsg{Message: "No github remote to open", Level: notify.Warn}
+		}
+		if err := panels.OpenInBrowser(ctx, link); err != nil {
+			return notify.ShowToastMsg{Message: "Open failed: " + err.Error(), Level: notify.Error}
+		}
+		return notify.ShowToastMsg{Message: "Opened file on GitHub", Level: notify.Info}
+	}
+}

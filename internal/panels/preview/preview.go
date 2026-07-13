@@ -522,6 +522,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p.copyFilePath()
 		case "Y":
 			return p.copyPermalink()
+		case "O":
+			return p.openOnGitHub()
 		case keyEscape, keyEsc:
 			if p.hasSelection() {
 				p.clearSelection()
@@ -723,6 +725,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "B", Description: "Toggle blame", Action: "toggle_blame"},
 		{Key: "y/Ctrl+C", Description: "Copy selection or file path", Action: "copy_selection"},
 		{Key: "Y", Description: "Copy GitHub permalink", Action: "copy_permalink"},
+		{Key: "O", Description: "Open file on GitHub", Action: "open_on_github"},
 	}
 }
 
