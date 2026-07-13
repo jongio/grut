@@ -162,7 +162,7 @@ Commits panel (panel 4).
 |-----|--------|
 | `Enter` | View commit detail |
 | `Esc` | Back to list |
-| `o` | Open in browser |
+| `o` | Open commit on GitHub |
 | `y` | Copy SHA |
 | `a` | Filter the commit log by the selected commit's author |
 | `x` | Export the selected commit as a .patch file |
