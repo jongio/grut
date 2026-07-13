@@ -27,6 +27,7 @@ Always active regardless of focused panel.
 | `/` | Fuzzy finder |
 | `:` | Command palette |
 | `~` | Change directory |
+| `T` | Find TODO/FIXME markers |
 | `ctrl+space` | Toggle AI chat |
 | `ctrl+z` | Undo last git action |
 | `ctrl+y` | Redo |

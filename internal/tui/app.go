@@ -366,6 +366,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("commands"), nil
 	case "change_directory":
 		return m.openFuzzyFinder("directories"), nil
+	case "todo_finder":
+		return m.openFuzzyFinder("todos"), nil
 	case "help":
 		return m.toggleHelp()
 	case "welcome":

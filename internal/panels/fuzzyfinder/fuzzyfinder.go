@@ -154,6 +154,8 @@ func categoriesForPrefix(prefix byte) (map[string]bool, string, bool) {
 		return categorySet(categoryBookmark), sourceNameBookmarks, true
 	case 'g', 'G':
 		return categorySet(categoryGitChanged), sourceNameGitChanged, true
+	case 't', 'T':
+		return categorySet(categoryTodo), sourceNameTodos, true
 	default:
 		return nil, "", false
 	}
@@ -182,6 +184,8 @@ func sourceLabelForCategories(categories map[string]bool) string {
 		return sourceNameBookmarks
 	case categories[categoryGitChanged]:
 		return sourceNameGitChanged
+	case categories[categoryTodo]:
+		return sourceNameTodos
 	default:
 		return ""
 	}
@@ -399,7 +403,7 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 				if !ok {
 					return nil
 				}
-				return panels.FileSelectedMsg{Path: path}
+				return panels.FileSelectedMsg{Path: path, Line: item.Line}
 			}
 		},
 		func() tea.Msg {
