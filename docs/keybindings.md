@@ -219,6 +219,20 @@ Diff viewer panel for file, commit, branch, and PR diffs.
 
 ---
 
+## Help Overlay
+
+Active when the help overlay is open.
+
+| Key | Action |
+|-----|--------|
+| `/` | Filter shortcuts by section, key, or action |
+| `j/k` | Scroll help content |
+| `Enter` | Keep the current filter and leave filter input |
+| `Esc` | Clear filter, or close help when no filter is active |
+| `?` | Close help |
+
+---
+
 ## Edit Mode
 
 Active when editing a file inline (press e in Preview to enter).

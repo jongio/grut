@@ -243,7 +243,7 @@ func TestKeyBindings(t *testing.T) {
 	p := New(nil)
 	bindings := p.KeyBindings()
 	assert.NotEmpty(t, bindings)
-	assert.Len(t, bindings, 4)
+	assert.Len(t, bindings, 5)
 
 	keys := make(map[string]bool)
 	for _, b := range bindings {
@@ -251,8 +251,40 @@ func TestKeyBindings(t *testing.T) {
 	}
 	assert.True(t, keys["j/↓"])
 	assert.True(t, keys["k/↑"])
+	assert.True(t, keys["/"])
 	assert.True(t, keys["?"])
 	assert.True(t, keys["escape"])
+}
+
+func TestFilter_NarrowsHelpContent(t *testing.T) {
+	p := newTestPanel(t)
+
+	p.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	p.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+	p.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	p.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	p.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+
+	view := p.View(80, 80)
+	assert.Contains(t, view, "Filter: push")
+	assert.Contains(t, view, "Push to remote")
+	assert.NotContains(t, view, "Toggle AI chat")
+}
+
+func TestFilter_EscapeClearsBeforeClose(t *testing.T) {
+	p := newTestPanel(t)
+
+	p.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	p.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.Nil(t, cmd)
+	assert.Empty(t, p.filterQuery)
+	assert.False(t, p.filterMode)
+
+	_, cmd = p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	require.NotNil(t, cmd)
+	_, ok := cmd().(panels.ToggleHelpMsg)
+	assert.True(t, ok)
 }
 
 // ---------------------------------------------------------------------------
