@@ -55,3 +55,100 @@ func TestRootRegistersConfigCheck(t *testing.T) {
 	require.NotNil(t, checkCmd)
 	assert.Equal(t, "check", checkCmd.Name())
 }
+
+func TestRootRegistersConfigGet(t *testing.T) {
+	root, cleanup := newRootCommand()
+	defer cleanup()
+
+	getCmd, _, err := root.Find([]string{"config", "get"})
+	require.NoError(t, err)
+	require.NotNil(t, getCmd)
+	assert.Equal(t, "get", getCmd.Name())
+}
+
+// getConfigWithValues returns a loader that yields a config carrying known
+// values the get tests assert against.
+func getConfigWithValues() configLoadFunc {
+	return func() (*config.Config, error) {
+		cfg := &config.Config{}
+		cfg.Git.DefaultBranch = "trunk"
+		cfg.Preview.Width = 42
+		return cfg, nil
+	}
+}
+
+func runConfigGet(t *testing.T, load configLoadFunc, key string) (string, error) {
+	t.Helper()
+	cmd := newConfigGetCmd(load)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{key})
+	err := cmd.Execute()
+	return out.String(), err
+}
+
+func TestConfigGetScalar(t *testing.T) {
+	out, err := runConfigGet(t, getConfigWithValues(), "git.default_branch")
+
+	require.NoError(t, err)
+	assert.Equal(t, "trunk\n", out)
+}
+
+func TestConfigGetNestedScalar(t *testing.T) {
+	out, err := runConfigGet(t, getConfigWithValues(), "preview.width")
+
+	require.NoError(t, err)
+	assert.Equal(t, "42\n", out)
+}
+
+func TestConfigGetSection(t *testing.T) {
+	out, err := runConfigGet(t, getConfigWithValues(), "preview")
+
+	require.NoError(t, err)
+	assert.Contains(t, out, "width = 42")
+	assert.Contains(t, out, "position =")
+}
+
+func TestConfigGetUnknownTopLevelKey(t *testing.T) {
+	out, err := runConfigGet(t, getConfigWithValues(), "nope")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown config key: nope")
+	assert.Empty(t, out)
+}
+
+func TestConfigGetUnknownNestedKey(t *testing.T) {
+	out, err := runConfigGet(t, getConfigWithValues(), "preview.nope")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown config key: preview.nope")
+	assert.Empty(t, out)
+}
+
+func TestConfigGetDescendIntoScalar(t *testing.T) {
+	// Treating a scalar leaf as a section must fail rather than panic.
+	out, err := runConfigGet(t, getConfigWithValues(), "git.default_branch.extra")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown config key: git.default_branch.extra")
+	assert.Empty(t, out)
+}
+
+func TestConfigGetLoadError(t *testing.T) {
+	load := func() (*config.Config, error) { return nil, errors.New("boom") }
+	out, err := runConfigGet(t, load, "git.default_branch")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "loading config")
+	assert.Contains(t, err.Error(), "boom")
+	assert.Empty(t, out)
+}
+
+func TestWriteConfigValueSlice(t *testing.T) {
+	var out bytes.Buffer
+	err := writeConfigValue(&out, []any{"one", "two", "three"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "one\ntwo\nthree\n", out.String())
+}
