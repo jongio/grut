@@ -160,6 +160,7 @@ func (m *mockGitClient) BranchCreate(_ context.Context, _, _ string) error      
 func (m *mockGitClient) BranchDelete(_ context.Context, _ string, _ bool) error { return nil }
 func (m *mockGitClient) BranchRename(_ context.Context, _, _ string) error      { return nil }
 func (m *mockGitClient) Checkout(_ context.Context, _ string) error             { return nil }
+func (m *mockGitClient) HeadSHA(_ context.Context) (string, error)              { return "", nil }
 func (m *mockGitClient) Push(_ context.Context, _ git.PushOpts) error           { return nil }
 func (m *mockGitClient) Pull(_ context.Context, _ git.PullOpts) error           { return nil }
 func (m *mockGitClient) Fetch(_ context.Context, _ git.FetchOpts) error         { return nil }

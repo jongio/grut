@@ -310,6 +310,14 @@ type RewordRequestMsg struct {
 	OldMessage string
 }
 
+// RevertRequestMsg is sent to revert the commit under the cursor in the commits
+// panel. The app shows a confirmation modal, then creates a revert commit. Hash
+// is the full commit hash; Subject is shown in the confirmation prompt.
+type RevertRequestMsg struct {
+	Hash    string
+	Subject string
+}
+
 // AsyncOpStartMsg is emitted when an async git operation begins. The root
 // model uses it to display a loading indicator in the status bar.
 type AsyncOpStartMsg struct {

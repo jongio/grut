@@ -367,6 +367,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
+		{Key: "v", Description: "Revert commit", Action: "revert"},
 	}
 }
 
@@ -894,6 +895,14 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				msg = c.Subject + "\n\n" + c.Body
 			}
 			return p, func() tea.Msg { return panels.RewordRequestMsg{OldMessage: msg} }
+		}
+	case "v":
+		c := p.commitAt(p.cursor)
+		if c.Hash != "" {
+			hash, subject := c.Hash, c.Subject
+			return p, func() tea.Msg {
+				return panels.RevertRequestMsg{Hash: hash, Subject: subject}
+			}
 		}
 	case "esc": //nolint:goconst // inline string is more readable here
 		// Progressive reset: pickaxe → PR-commits mode → selected commit → filter → nothing.

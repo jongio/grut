@@ -49,6 +49,30 @@ func TestClient_Revert(t *testing.T) {
 	assert.Contains(t, commits[0].Subject, "Revert")
 }
 
+func TestClient_HeadSHA(t *testing.T) {
+	t.Parallel()
+
+	dir := initTestRepo(t)
+	ctx := context.Background()
+	client, err := NewClient(dir)
+	require.NoError(t, err)
+
+	head, err := client.HeadSHA(ctx)
+	require.NoError(t, err)
+	assert.Len(t, head, 40, "HeadSHA should return a full 40-char hash")
+	assert.NotContains(t, head, "\n", "HeadSHA should be trimmed")
+
+	// After a new commit HEAD moves to a different hash.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "next.txt"), []byte("next\n"), 0o644))
+	require.NoError(t, client.Stage(ctx, []string{"next.txt"}))
+	_, err = client.Commit(ctx, "second commit", CommitOpts{})
+	require.NoError(t, err)
+
+	head2, err := client.HeadSHA(ctx)
+	require.NoError(t, err)
+	assert.NotEqual(t, head, head2, "HeadSHA should reflect the new HEAD")
+}
+
 func TestClient_RevertValidation(t *testing.T) {
 	t.Parallel()
 

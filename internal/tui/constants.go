@@ -16,3 +16,7 @@ const (
 
 // metaKeyMessage is the metadata key used when recording undo actions.
 const metaKeyMessage = "message"
+
+// metaKeyHash is the metadata key used to record the reverted commit hash so
+// the revert can be undone or redone.
+const metaKeyHash = "hash"
