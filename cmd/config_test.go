@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
@@ -54,4 +56,45 @@ func TestRootRegistersConfigCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, checkCmd)
 	assert.Equal(t, "check", checkCmd.Name())
+}
+
+func TestConfigDefaultsPrintsEmbeddedTOML(t *testing.T) {
+	cmd := newConfigDefaultsCmd(func() []byte {
+		return []byte("[general]\ndefault_layout = \"git\"\n")
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Equal(t, "[general]\ndefault_layout = \"git\"\n", out.String())
+}
+
+func TestConfigDefaultsWritesOutputFile(t *testing.T) {
+	cmd := newConfigDefaultsCmd(func() []byte {
+		return []byte("[theme]\nname = \"default\"\n")
+	})
+	outPath := filepath.Join(t.TempDir(), "nested", "config.toml")
+	cmd.SetArgs([]string{"--output", outPath})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, "[theme]\nname = \"default\"\n", string(data))
+	assert.Contains(t, out.String(), "Wrote default config")
+}
+
+func TestRootRegistersConfigDefaults(t *testing.T) {
+	root, cleanup := newRootCommand()
+	defer cleanup()
+
+	defaultsCmd, _, err := root.Find([]string{"config", "defaults"})
+	require.NoError(t, err)
+	require.NotNil(t, defaultsCmd)
+	assert.Equal(t, "defaults", defaultsCmd.Name())
 }
