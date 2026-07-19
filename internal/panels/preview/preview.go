@@ -288,11 +288,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = false
-		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, ansi.Strip(msg.Title))
-		p.ghContent = msg.Body
-		if p.ghContent == "" {
-			p.ghContent = "*No description provided.*"
-		}
+		safeTitle := ansi.Strip(msg.Title)
+		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, safeTitle)
+		p.ghContent = renderIssuePreviewContent(msg, safeTitle)
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(p.ghContent, p.width)
 		return p, nil
@@ -1096,6 +1094,52 @@ func buildMetadataLines(path string, info os.FileInfo) []string {
 		"Mode: " + info.Mode().String(),
 		"Modified: " + info.ModTime().Format(time.RFC3339),
 	}
+}
+
+func renderIssuePreviewContent(msg panels.IssueSelectedMsg, safeTitle string) string {
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "# Issue #%d\n\n**%s**", msg.Number, safeTitle)
+	if meta := issueMetadataLines(msg); len(meta) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(strings.Join(meta, "\n"))
+	}
+	body := msg.Body
+	if body == "" {
+		body = "*No description provided.*"
+	}
+	b.WriteString("\n\n---\n\n")
+	b.WriteString(body)
+	return b.String()
+}
+
+func issueMetadataLines(msg panels.IssueSelectedMsg) []string {
+	var lines []string
+	if state := strings.TrimSpace(ansi.Strip(msg.State)); state != "" {
+		lines = append(lines, "State: "+state)
+	}
+	if author := strings.TrimSpace(ansi.Strip(msg.Author)); author != "" {
+		lines = append(lines, "Author: @"+author)
+	}
+	if assignee := strings.TrimSpace(ansi.Strip(msg.Assignee)); assignee != "" {
+		lines = append(lines, "Assignee: @"+assignee)
+	}
+	if labels := cleanIssueLabels(msg.Labels); len(labels) > 0 {
+		lines = append(lines, "Labels: "+strings.Join(labels, ", "))
+	}
+	return lines
+}
+
+func cleanIssueLabels(labels []string) []string {
+	clean := make([]string, 0, len(labels))
+	for _, label := range labels {
+		label = strings.TrimSpace(ansi.Strip(label))
+		if label == "" {
+			continue
+		}
+		label = strings.ReplaceAll(label, "`", "'")
+		clean = append(clean, "`"+label+"`")
+	}
+	return clean
 }
 
 // --- Scrolling ---
