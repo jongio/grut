@@ -360,6 +360,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "o", Description: "Open commit on GitHub", Action: "open_on_github"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
 		{Key: "S", Description: "Search commit content (pickaxe)", Action: "pickaxe"},
@@ -873,6 +874,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "o":
+		return p.openCommitOnGitHub()
 	case "x":
 		return p.exportPatch()
 	case "/":
