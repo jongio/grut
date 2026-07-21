@@ -59,6 +59,7 @@ File Tree panel (panel 1).
 | `h/l` | Collapse/expand directory |
 | `H/L` | Collapse/expand all directories |
 | `o` | Open in external editor |
+| `B` | Open on GitHub |
 | `.` | Toggle hidden files |
 | `f` | Toggle git filter |
 | `v` | Toggle tree/list view |
@@ -185,6 +186,7 @@ Preview panel (panel 5).
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `L` | Go to line |
+| `t` | Jump to markdown heading |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
@@ -192,6 +194,7 @@ Preview panel (panel 5).
 | `B` | Toggle blame |
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
+| `Ctrl+G` | Create secret gist |
 | `Esc` | Clear selection |
 
 Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.
