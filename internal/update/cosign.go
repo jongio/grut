@@ -32,6 +32,9 @@ const (
 
 	// maxCosignArtifactSize limits cosign artifact downloads to 256 KiB.
 	maxCosignArtifactSize int64 = 256 << 10
+
+	// pemTypeCertificate is the PEM block type for X.509 certificates.
+	pemTypeCertificate = "CERTIFICATE"
 )
 
 // Fulcio OIDC extension OIDs per the Sigstore Fulcio certificate specification.
@@ -160,7 +163,7 @@ func parseSigstoreBundle(data []byte) ([]byte, []byte, error) {
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
+		Type:  pemTypeCertificate,
 		Bytes: derBytes,
 	})
 

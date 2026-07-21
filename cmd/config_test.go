@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/keymap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +42,32 @@ func TestConfigCheckFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "config check failed")
 	assert.Contains(t, err.Error(), "preview.width")
 	assert.Contains(t, out.String(), `C:\Users\me\AppData\Roaming\grut\config.toml`)
+}
+
+func TestConfigCheckReportsKeybindingConflicts(t *testing.T) {
+	cmd := newConfigCheckCmdWithKeymap(
+		func() (*config.Config, error) {
+			return &config.Config{General: config.GeneralConfig{KeybindingScheme: "custom"}}, nil
+		},
+		func() string { return `C:\Users\me\AppData\Roaming\grut\config.toml` },
+		func(string) (*keymap.Keymap, error) {
+			return keymap.NewKeymapFromBindings([]keymap.Binding{
+				{Key: "x", Mode: keymap.ModePanel, Action: "one"},
+				{Key: "x", Mode: keymap.ModePanel, Action: "two"},
+			}), nil
+		},
+	)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "keybinding conflict")
+	assert.Contains(t, out.String(), "Keybinding conflicts")
+	assert.Contains(t, out.String(), `key "x"`)
+	assert.Contains(t, out.String(), "one")
+	assert.Contains(t, out.String(), "two")
 }
 
 func TestRootRegistersConfigCheck(t *testing.T) {
