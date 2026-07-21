@@ -52,6 +52,7 @@ type GitDiff struct {
 	compareThree   bool   // use three-dot notation
 	// Diff data
 	diffs []git.FileDiff // all file diffs returned by git
+	stats diffStats      // summary counts for the current diff set
 	// Pre-rendered content (rebuilt on data/mode/size change)
 	lines       []string // rendered lines with ANSI styling
 	hunkStarts  []int    // line indices where hunks begin (for n/N)
@@ -213,6 +214,7 @@ func (d *GitDiff) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 		d.gitClient = client
 	}
 	d.diffs = nil
+	d.stats = diffStats{}
 	d.lines = nil
 	d.hunkStarts = nil
 	d.fileStarts = nil
@@ -240,6 +242,7 @@ func (d *GitDiff) startDiffLoad(path string, staged bool) tea.Cmd {
 	d.fileIdx = 0
 	d.err = nil
 	d.diffs = nil
+	d.stats = diffStats{}
 	d.lines = nil
 	d.hunkStarts = nil
 	d.fileStarts = nil
@@ -255,6 +258,7 @@ func (d *GitDiff) startRefDiffLoad(path, commitA, commitB string, threeDot bool)
 	d.fileIdx = 0
 	d.err = nil
 	d.diffs = nil
+	d.stats = diffStats{}
 	d.lines = nil
 	d.hunkStarts = nil
 	d.fileStarts = nil
@@ -597,6 +601,7 @@ func (d *GitDiff) loadDiffCmd(path string, staged bool) tea.Cmd {
 // and fileStarts for navigation. Slice resets are handled by the
 // individual build functions to allow direct calls from benchmarks.
 func (d *GitDiff) rebuildLines() {
+	d.stats = diffStatsFor(d.diffs)
 	if len(d.diffs) == 0 {
 		d.lines = d.lines[:0]
 		d.hunkStarts = d.hunkStarts[:0]
@@ -878,9 +883,69 @@ func (d *GitDiff) renderViewport(_ int, height int) string {
 	if status != "" {
 		status += "   "
 	}
+	if summary := d.stats.String(); summary != "" {
+		status += summary + "   "
+	}
 	status += fmt.Sprintf("ctx %d", d.contextLines)
 	content += "\n" + d.dimStyle().Render(status)
 	return content
+}
+
+type diffStats struct {
+	files     int
+	hunks     int
+	additions int
+	deletions int
+	binaries  int
+}
+
+func diffStatsFor(diffs []git.FileDiff) diffStats {
+	stats := diffStats{files: len(diffs)}
+	for _, fd := range diffs {
+		if fd.IsBinary {
+			stats.binaries++
+		}
+		for _, hunk := range fd.Hunks {
+			stats.hunks++
+			for _, line := range hunk.Lines {
+				switch line.Type {
+				case git.DiffLineAdded:
+					stats.additions++
+				case git.DiffLineRemoved:
+					stats.deletions++
+				case git.DiffLineContext:
+				}
+			}
+		}
+	}
+	return stats
+}
+
+func (s diffStats) String() string {
+	if s.files == 0 {
+		return ""
+	}
+	parts := []string{
+		pluralCount(s.files, "file"),
+		pluralCount(s.hunks, "hunk"),
+		fmt.Sprintf("+%d -%d", s.additions, s.deletions),
+	}
+	if s.binaries > 0 {
+		parts = append(parts, pluralCount(s.binaries, "binary"))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func pluralCount(n int, singular string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	switch singular {
+	case "binary":
+		return fmt.Sprintf("%d binaries", n)
+	default:
+		return fmt.Sprintf("%d %ss", n, singular)
+	}
 }
 
 // fileHeader formats the file header line for a FileDiff.
