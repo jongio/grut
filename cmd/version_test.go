@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/jongio/grut/internal/config"
@@ -13,17 +15,15 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestVersionCmd_OutputContainsAppVersion(t *testing.T) {
-	// The version command uses fmt.Println which writes to os.Stdout, not
-	// cmd.OutOrStdout(). We verify it runs without error and check the
-	// version string is set correctly via the root command's Version field.
 	root, cleanup := buildRootCommand()
 	defer cleanup()
+	var out bytes.Buffer
+	root.SetOut(&out)
 	root.SetArgs([]string{"version"})
 
 	err := root.Execute()
 	require.NoError(t, err)
-	// The root command's Version field is what --version and the version
-	// subcommand use. Verify it's set correctly.
+	assert.Contains(t, out.String(), config.AppVersion)
 	assert.Equal(t, config.AppVersion, root.Version)
 }
 
@@ -41,6 +41,28 @@ func TestVersionCmd_StructureHasCorrectUse(t *testing.T) {
 	cmd := newVersionCmd()
 	assert.Equal(t, cmdVersion, cmd.Use, "Use should match cmdVersion constant")
 	assert.Equal(t, "version", cmd.Use)
+}
+
+func TestVersionCmd_JSONOutput(t *testing.T) {
+	cmd := newVersionCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--json"})
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var got versionInfo
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	assert.Equal(t, config.AppVersion, got.Version)
+}
+
+func TestVersionCmd_JSONFlagRegistered(t *testing.T) {
+	cmd := newVersionCmd()
+	flag := cmd.Flags().Lookup("json")
+	require.NotNil(t, flag)
+	assert.Equal(t, "bool", flag.Value.Type())
+	assert.Equal(t, "false", flag.DefValue)
 }
 
 func TestVersionCmd_HasRunNotRunE(t *testing.T) {
