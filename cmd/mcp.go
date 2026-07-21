@@ -72,11 +72,13 @@ Use --socket to serve over a Unix domain socket (future).`,
 	return cmd
 }
 
+const mcpToolsUse = "tools"
+
 func newMCPToolsCmd() *cobra.Command {
 	var jsonOut bool
 
 	cmd := &cobra.Command{
-		Use:   "tools",
+		Use:   mcpToolsUse,
 		Short: "List grut MCP tools",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tools := grut_mcp.ToolInventory()
