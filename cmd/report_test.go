@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jongio/grut/internal/crashlog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -146,6 +149,7 @@ func TestNewReportCmd_FlagsRegistered(t *testing.T) {
 		{"show", "string"},
 		{"clear", "bool"},
 		{"no-browser", "bool"},
+		{"json", "bool"},
 	}
 
 	for _, tt := range tests {
@@ -190,6 +194,53 @@ func TestRunReport_ShowFlag_NonexistentID(t *testing.T) {
 	cmd.SetArgs([]string{"--show", "nonexistent-id-12345"})
 	err := cmd.Execute()
 	assert.Error(t, err)
+}
+
+func TestRunReport_JSONWithoutListReturnsError(t *testing.T) {
+	cmd := newReportCmd()
+	cmd.SetArgs([]string{"--json"})
+
+	err := cmd.Execute()
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--json can only be used with --list")
+}
+
+func TestWriteCrashReportListJSON_Empty(t *testing.T) {
+	var out bytes.Buffer
+
+	err := writeCrashReportListJSON(&out, nil)
+
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, out.String())
+}
+
+func TestWriteCrashReportListJSON_SummaryFields(t *testing.T) {
+	when := time.Date(2026, 7, 11, 18, 30, 0, 0, time.UTC)
+	reports := []*crashlog.CrashReport{{
+		ID:         "crash-1",
+		Timestamp:  when,
+		Version:    "1.2.3",
+		GoVersion:  "go1.26.5",
+		OS:         "windows",
+		Arch:       "amd64",
+		Terminal:   "Windows Terminal",
+		PanicValue: "nil pointer",
+		Context:    "preview render",
+		StackTrace: "full stack stays out of the summary",
+	}}
+	var out bytes.Buffer
+
+	err := writeCrashReportListJSON(&out, reports)
+
+	require.NoError(t, err)
+	var got []crashReportSummary
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, "crash-1", got[0].ID)
+	assert.Equal(t, "2026-07-11T18:30:00Z", got[0].Timestamp)
+	assert.Equal(t, "nil pointer", got[0].PanicValue)
+	assert.Equal(t, "preview render", got[0].Context)
 }
 
 func TestRunReport_LatestDefault_NoReports(t *testing.T) {
