@@ -284,9 +284,12 @@ func TestMemProfile_WritesFile(t *testing.T) {
 func TestNewRootCommand_UseAndShort(t *testing.T) {
 	cmd, cleanup := newRootCommand()
 	defer cleanup()
-	assert.Equal(t, "grut", cmd.Use)
+	assert.Equal(t, "grut [path]", cmd.Use)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
+	// The root command accepts at most one positional path argument.
+	assert.NoError(t, cmd.Args(cmd, []string{"somefile.go"}))
+	assert.Error(t, cmd.Args(cmd, []string{"a", "b"}))
 }
 
 // ---------------------------------------------------------------------------

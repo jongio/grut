@@ -452,7 +452,7 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return ft, tea.Batch(cmds...)
 	case panels.RevealFileMsg:
 		ft.revealFile(msg.Path)
-		return ft, ft.emitCursorFileSelected()
+		return ft, ft.emitCursorFileSelectedAtLine(msg.Line)
 	case panels.CommitSelectedMsg:
 		return ft.handleCommitSelected(msg)
 	case panels.CommitDeselectedMsg:
@@ -1157,6 +1157,13 @@ func (ft *FileTree) moveCursorUp() {
 // In branch-files mode, it emits ShowDiffMsg with ref comparison context so
 // the diff panel shows the branch comparison instead of working tree diff.
 func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
+	return ft.emitCursorFileSelectedAtLine(0)
+}
+
+// emitCursorFileSelectedAtLine emits a FileSelectedMsg for the file under the
+// cursor, carrying an optional 1-based line for the preview to scroll to.
+// A line of 0 leaves the preview at the top, matching normal selection.
+func (ft *FileTree) emitCursorFileSelectedAtLine(line int) tea.Cmd {
 	if ft.viewport.cursor < 0 || ft.viewport.cursor >= len(ft.visible) {
 		return nil
 	}
@@ -1201,7 +1208,7 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 		relPath = filepath.ToSlash(relPath)
 		baseRef := ft.filter.branchBaseRef
 		return tea.Batch(
-			func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc} },
+			func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc, Line: line} },
 			func() tea.Msg {
 				return panels.ShowDiffMsg{
 					Path:     relPath,
@@ -1212,7 +1219,7 @@ func (ft *FileTree) emitCursorFileSelected() tea.Cmd {
 			},
 		)
 	}
-	return func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc} }
+	return func() tea.Msg { return panels.FileSelectedMsg{Path: path, DiffContext: dc, Line: line} }
 }
 
 func (ft *FileTree) goToTop() {

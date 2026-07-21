@@ -70,10 +70,12 @@ type Model struct {
 	pendingRevertSubject string // reverted commit subject for the confirm prompt
 	currentBranch        string // cached git branch name for status bar
 	cwdEditValue         string // editable path text
+	initialFile          string // file to open + focus in preview at startup (empty = none)
 	branchAhead          int    // commits ahead of upstream (needs push)
 	branchBehind         int    // commits behind upstream (needs pull)
 	width                int
 	height               int
+	initialLine          int    // 1-based line to scroll the preview to at startup (0 = none)
 	cwdEditCursor        int    // cursor position (rune index) within cwdEditValue
 	branchInfoGen        uint64 // generation counter - invalidates stale branchLoadedMsg
 	bookmarksShown       bool   // whether bookmark overlay is visible
@@ -139,6 +141,16 @@ func (m Model) WithChat(c *chat.Model) Model {
 	return m
 }
 
+// WithInitialFile returns a copy of the model configured to open the given
+// file in the preview panel at startup, focusing the preview and scrolling
+// to the given 1-based line (0 = top). Used when grut is launched with a
+// file path argument, e.g. "grut main.go:42". An empty path is a no-op.
+func (m Model) WithInitialFile(path string, line int) Model {
+	m.initialFile = path
+	m.initialLine = line
+	return m
+}
+
 // branchLoadedMsg carries the initial branch name and tracking info for the status bar.
 type branchLoadedMsg struct {
 	Name       string
@@ -154,6 +166,18 @@ type gitDirtyMsg struct{ dirty bool }
 // auto-fetch timer if configured.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.engine.Init(m.ctx)}
+	// Open a file passed on the command line (e.g. "grut main.go:42"):
+	// focus the preview panel and ask the filetree to reveal + select the
+	// file, carrying the optional line so the preview scrolls to it once the
+	// content loads. engine.Init has already focused the default panel above,
+	// so this FocusByName call takes precedence for the initial view.
+	if m.initialFile != "" {
+		m.engine.FocusByName("preview")
+		file, line := m.initialFile, m.initialLine
+		cmds = append(cmds, func() tea.Msg {
+			return panels.RevealFileMsg{Path: file, Line: line}
+		})
+	}
 	if tick := m.autoFetchTickCmd(); tick != nil {
 		cmds = append(cmds, tick)
 	}

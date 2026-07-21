@@ -57,6 +57,7 @@ type FileSelectedMsg struct {
 // when the user selects a file, so the file tree highlights it.
 type RevealFileMsg struct {
 	Path string
+	Line int // 1-based line to scroll the preview to after selecting (0 = none)
 }
 
 // ToggleFuzzyFinderMsg is sent to show or hide the fuzzy finder overlay.
