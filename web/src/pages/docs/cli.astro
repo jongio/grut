@@ -22,6 +22,8 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <KeybindingTable bindings={[
     { key: '--no-ai', action: 'Disable AI features for this operation' },
     { key: '--demo', action: 'Launch with a demo project to explore grüt' },
+    { key: '--layout <name>', action: 'Start with a layout: explorer, git, review, agent, or full' },
+    { key: '--reset-welcome', action: 'Reset first-run state so the welcome screen shows on next launch' },
     { key: '-h, --help', action: 'Show help information' },
     { key: '-v, --version', action: 'Show version information' },
   ]} />
@@ -29,6 +31,8 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <h2>Environment Variables</h2>
   <KeybindingTable bindings={[
     { key: 'GRUT_LOG', action: 'Path to a log file (enables debug logging)' },
+    { key: 'GRUT_NERD_FONT', action: 'Set to 1 to force Nerd Font icons in any terminal' },
+    { key: 'GRUT_FORCE_TERMINAL', action: 'Set to any non-empty value to bypass the MinTTY/MSYS check on Windows' },
   ]} />
   <pre><code># Enable debug logging
 export GRUT_LOG=/tmp/grut-debug.log
@@ -47,18 +51,96 @@ grut</code></pre>
   </p>
   <pre><code>grut update</code></pre>
 
+  <h3>status</h3>
+  <p>Print a summary of the working tree status. Add <code>--json</code> for scriptable output.</p>
+  <pre><code>grut status
+grut status --json</code></pre>
+
+  <h3>config</h3>
+  <p>Inspect grüt configuration.</p>
+  <pre><code># Validate the active config
+grut config check
+
+# Print one resolved value by dotted key
+grut config get git.default_branch
+
+# Print the full default config as TOML
+grut config defaults</code></pre>
+  <KeybindingTable bindings={[
+    { key: 'check', action: 'Validate the active configuration' },
+    { key: 'get <key>', action: 'Print a single resolved config value' },
+    { key: 'defaults', action: 'Print the default configuration as TOML' },
+  ]} />
+
+  <h3>theme</h3>
+  <p>Inspect grüt themes.</p>
+  <pre><code># List available themes
+grut theme list</code></pre>
+
+  <h3>keys</h3>
+  <p>Print keybindings from the command line.</p>
+  <pre><code>grut keys
+grut keys --filter commit
+grut keys --json</code></pre>
+  <KeybindingTable bindings={[
+    { key: '--filter <text>', action: 'Only show sections, keys, or actions matching the text' },
+    { key: '--json', action: 'Print keybindings as JSON' },
+  ]} />
+
+  <h3>clean</h3>
+  <p>
+    Remove grüt's transient session and diagnostic data. Without
+    <code>--force</code> it only previews what would be removed.
+  </p>
+  <pre><code># Preview what would be removed
+grut clean
+
+# Delete the transient data
+grut clean --force</code></pre>
+
+  <h3>completion</h3>
+  <p>Generate shell completion scripts for bash, zsh, fish, or PowerShell.</p>
+  <pre><code>grut completion bash
+grut completion zsh
+grut completion fish
+grut completion powershell</code></pre>
+
+  <h3>report</h3>
+  <p>View crash reports and file GitHub issues for them.</p>
+  <pre><code># List all crash reports
+grut report --list
+
+# Show a specific report by ID
+grut report --show &lt;id&gt;
+
+# Open a GitHub issue for the most recent crash
+grut report --latest
+
+# Clear all crash reports
+grut report --clear</code></pre>
+  <KeybindingTable bindings={[
+    { key: '--list', action: 'List all crash reports' },
+    { key: '--show <id>', action: 'Show a specific crash report by ID' },
+    { key: '--latest', action: 'Open a GitHub issue for the most recent crash' },
+    { key: '--clear', action: 'Clear all crash reports' },
+    { key: '--no-browser', action: 'Print the issue URL instead of opening the browser' },
+    { key: '--json', action: 'Print list output as JSON' },
+  ]} />
+
   <h3>mcp</h3>
   <p>
     Run grüt as an MCP (Model Context Protocol) server, communicating via
-    stdin/stdout JSON-RPC.
+    stdin/stdout JSON-RPC. Use <code>grut mcp tools</code> to list the tools
+    the server exposes.
   </p>
   <pre><code># Standard MCP mode (stdin/stdout)
 grut mcp
 
-# TUI + MCP mode (socket transport)
-grut mcp --socket</code></pre>
+# List the MCP tools grüt exposes
+grut mcp tools</code></pre>
   <KeybindingTable bindings={[
-    { key: '--socket', action: 'Use socket transport for TUI+MCP mode' },
+    { key: 'tools', action: 'List the MCP tools grüt exposes' },
+    { key: '--socket <path>', action: 'Serve over a Unix socket (not yet implemented)' },
   ]} />
 
   <h3>run</h3>
@@ -134,7 +216,7 @@ grut --demo
 grut update
 
 # Use as an MCP server in your AI toolchain
-grut mcp --socket</code></pre>
+grut mcp</code></pre>
 </Docs>
 
 <style>
