@@ -22,6 +22,13 @@ import (
 //go:embed defaults.toml
 var defaultsTOML []byte
 
+// DefaultsTOML returns the embedded default configuration as TOML bytes.
+func DefaultsTOML() []byte {
+	out := make([]byte, len(defaultsTOML))
+	copy(out, defaultsTOML)
+	return out
+}
+
 // Config is the top-level configuration for grut.
 type Config struct {
 	Actions    ActionsConfig    `toml:"actions"`
