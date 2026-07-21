@@ -2,7 +2,10 @@ package panels
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -304,5 +307,83 @@ func TestOpenInTerminal_AcceptsValidDirectory(t *testing.T) {
 		assert.NotContains(t, err.Error(), "forbidden character")
 		assert.NotContains(t, err.Error(), "must not be empty")
 		assert.NotContains(t, err.Error(), "null byte")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Security + command construction: RevealInFileManager
+// ---------------------------------------------------------------------------
+
+func TestRevealInFileManager_RejectsEmpty(t *testing.T) {
+	err := RevealInFileManager(context.Background(), "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be empty")
+}
+
+func TestRevealInFileManager_RejectsNullByte(t *testing.T) {
+	err := RevealInFileManager(context.Background(), "/tmp/file\x00malicious")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "null byte")
+}
+
+func TestRevealInFileManager_RejectsShellMetachars(t *testing.T) {
+	dangerous := []struct {
+		name string
+		path string
+	}{
+		{"semicolon", "/tmp/file;rm -rf /"},
+		{"pipe", "/tmp/file|cat /etc/passwd"},
+		{"backtick", "/tmp/`whoami`"},
+		{"dollar", "/tmp/$HOME"},
+	}
+	for _, tt := range dangerous {
+		t.Run(tt.name, func(t *testing.T) {
+			err := RevealInFileManager(context.Background(), tt.path)
+			require.Error(t, err, "path %q should be rejected", tt.path)
+			assert.Contains(t, err.Error(), "forbidden character")
+		})
+	}
+}
+
+func TestRevealInFileManager_BuildsPlatformCommand(t *testing.T) {
+	var captured *exec.Cmd
+	orig := StartDetachedFn
+	StartDetachedFn = func(cmd *exec.Cmd) error {
+		captured = cmd
+		return nil
+	}
+	t.Cleanup(func() { StartDetachedFn = orig })
+
+	f, err := os.CreateTemp(t.TempDir(), "reveal-*")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	path := f.Name()
+
+	require.NoError(t, RevealInFileManager(context.Background(), path))
+	require.NotNil(t, captured, "StartDetachedFn should have been called")
+	require.NotEmpty(t, captured.Args)
+
+	switch runtime.GOOS {
+	case "windows":
+		assert.Equal(t, "explorer", captured.Args[0])
+		require.Len(t, captured.Args, 2)
+		assert.Equal(t, "/select,"+path, captured.Args[1])
+	case "darwin":
+		assert.Equal(t, "open", captured.Args[0])
+		require.Len(t, captured.Args, 3)
+		assert.Equal(t, "-R", captured.Args[1])
+		assert.Equal(t, path, captured.Args[2])
+	default:
+		switch captured.Args[0] {
+		case "dbus-send":
+			wantURI := "array:string:" + (&url.URL{Scheme: "file", Path: path}).String()
+			assert.Contains(t, captured.Args, "org.freedesktop.FileManager1.ShowItems")
+			assert.Contains(t, captured.Args, wantURI)
+		case "xdg-open":
+			require.Len(t, captured.Args, 2)
+			assert.Equal(t, filepath.Dir(path), captured.Args[1])
+		default:
+			t.Fatalf("unexpected linux reveal command: %q", captured.Args[0])
+		}
 	}
 }

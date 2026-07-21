@@ -38,6 +38,7 @@ type BranchManager interface {
 	BranchDelete(ctx context.Context, name string, force bool) error
 	BranchRename(ctx context.Context, oldName, newName string) error
 	Checkout(ctx context.Context, ref string) error
+	HeadSHA(ctx context.Context) (string, error)
 }
 
 // RemoteOps provides remote operations.

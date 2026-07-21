@@ -2,6 +2,8 @@ package preview
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -324,6 +326,10 @@ func TestBinaryFileDetection(t *testing.T) {
 	view := p.View(60, 20)
 	assert.Contains(t, view, "Binary file")
 	assert.Contains(t, view, "image.png")
+	assert.Contains(t, view, "Type: image/png")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(p.lines, "\n"), "SHA-256: "+fmt.Sprintf("%x", sha256.Sum256(data)))
 }
 
 func TestLargeFileRejection(t *testing.T) {
@@ -362,6 +368,7 @@ func TestLargeFileShowsMetadata(t *testing.T) {
 	assert.Contains(t, view, "200 B")
 	assert.Contains(t, view, "Mode:")
 	assert.Contains(t, view, "Modified:")
+	assert.NotContains(t, view, "SHA-256:")
 }
 
 func TestMaxFileSizeZeroDisablesCheck(t *testing.T) {
@@ -795,6 +802,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "goto_top")
 	assert.Contains(t, actions, "goto_bottom")
 	assert.Contains(t, actions, "goto_line")
+	assert.Contains(t, actions, "goto_heading")
 	assert.Contains(t, actions, "toggle_wrap")
 	assert.Contains(t, actions, "toggle_line_numbers")
 	assert.Contains(t, actions, "toggle_markdown_render")
@@ -803,6 +811,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "copy_selection")
 	assert.Contains(t, actions, "copy_permalink")
 	assert.Contains(t, actions, "open_on_github")
+	assert.Contains(t, actions, "create_gist")
 }
 
 func TestKeysIgnoredWhenBlurred(t *testing.T) {
@@ -981,14 +990,22 @@ func TestIssueSelectedMsg(t *testing.T) {
 	p.SetSize(80, 30)
 
 	_, cmd := p.Update(panels.IssueSelectedMsg{
-		Number: 42,
-		Title:  "Fix authentication bug",
-		Body:   "The login flow is broken.\n\nSteps to reproduce...",
-		State:  "open",
+		Number:   42,
+		Title:    "Fix authentication bug",
+		Body:     "The login flow is broken.\n\nSteps to reproduce...",
+		State:    "open",
+		Author:   "octocat",
+		Assignee: "hubot",
+		Labels:   []string{"bug", "needs triage"},
 	})
 
 	assert.True(t, p.ghMode)
 	assert.Equal(t, "#42 Fix authentication bug", p.ghTitle)
+	assert.Contains(t, p.ghContent, "# Issue #42")
+	assert.Contains(t, p.ghContent, "State: open")
+	assert.Contains(t, p.ghContent, "Author: @octocat")
+	assert.Contains(t, p.ghContent, "Assignee: @hubot")
+	assert.Contains(t, p.ghContent, "Labels: `bug`, `needs triage`")
 	assert.Contains(t, p.ghContent, "The login flow is broken.")
 	assert.Equal(t, 0, p.scrollY)
 	assert.NotNil(t, p.lines)
@@ -1009,7 +1026,7 @@ func TestIssueSelectedMsg_EmptyBody(t *testing.T) {
 	})
 
 	assert.True(t, p.ghMode)
-	assert.Equal(t, "*No description provided.*", p.ghContent)
+	assert.Contains(t, p.ghContent, "*No description provided.*")
 }
 
 func TestIssueDeselectedMsg(t *testing.T) {
@@ -1663,13 +1680,22 @@ func TestIssueSelectedMsg_ANSIInjection(t *testing.T) {
 	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.SetSize(80, 30)
 	msg := panels.IssueSelectedMsg{
-		Number: 42,
-		Title:  "Bug: \x1b[31mRED\x1b[0m injection",
-		Body:   "body text",
+		Number:   42,
+		Title:    "Bug: \x1b[31mRED\x1b[0m injection",
+		Body:     "body text",
+		State:    "\x1b[31mopen\x1b[0m",
+		Author:   "\x1b[31moctocat\x1b[0m",
+		Assignee: "\x1b[31mhubot\x1b[0m",
+		Labels:   []string{"\x1b[31mbug\x1b[0m"},
 	}
 	p.Update(msg)
 	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in issue title should be stripped")
 	assert.Contains(t, p.ghTitle, "#42 Bug: RED injection")
+	assert.NotContains(t, p.ghContent, "\x1b", "ANSI in issue metadata should be stripped")
+	assert.Contains(t, p.ghContent, "State: open")
+	assert.Contains(t, p.ghContent, "Author: @octocat")
+	assert.Contains(t, p.ghContent, "Assignee: @hubot")
+	assert.Contains(t, p.ghContent, "Labels: `bug`")
 }
 
 func TestPRSelectedMsg_ANSIInjection(t *testing.T) {
@@ -1701,4 +1727,46 @@ func TestActionRunSelectedMsg_ANSIInjection(t *testing.T) {
 	p.Update(msg)
 	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in workflow name should be stripped")
 	assert.Contains(t, p.ghTitle, "CI ")
+}
+
+func TestFileSelectedLineScrollsPreviewOnLoad(t *testing.T) {
+	dir := t.TempDir()
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = strings.Repeat("x", 20)
+	}
+	path := writeFile(t, dir, "long.txt", strings.Join(lines, "\n"))
+
+	cfg := defaultCfg()
+	cfg.SyntaxHighlighting = false
+	p := New(cfg, defaultEditorCfg(), nil)
+	p.SetSize(60, 20)
+
+	// Select the file with a target line, then drive the async load to
+	// completion, mirroring the Bubble Tea runtime loop.
+	_, cmd := p.Update(panels.FileSelectedMsg{Path: path, Line: 60})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	require.NotNil(t, msg)
+	p.Update(msg)
+
+	assert.Positive(t, p.scrollY, "preview should scroll to the requested line once loaded")
+	assert.Zero(t, p.pendingGotoLine, "pending line resets after it is applied")
+}
+
+func TestFileSelectedWithoutLineStaysAtTop(t *testing.T) {
+	dir := t.TempDir()
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = strings.Repeat("x", 20)
+	}
+	path := writeFile(t, dir, "long.txt", strings.Join(lines, "\n"))
+
+	cfg := defaultCfg()
+	cfg.SyntaxHighlighting = false
+	p := New(cfg, defaultEditorCfg(), nil)
+	p.SetSize(60, 20)
+
+	loadFile(t, p, path)
+	assert.Zero(t, p.scrollY, "selecting without a line should leave the preview at the top")
 }

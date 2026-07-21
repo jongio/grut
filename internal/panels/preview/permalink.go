@@ -15,6 +15,8 @@ import (
 	"github.com/jongio/grut/internal/panels"
 )
 
+const msgNoGitRepo = "No git repository"
+
 // buildPermalink constructs a github.com blob permalink for relPath pinned to
 // the given commit sha, with a line anchor. startLine and endLine are 1-based;
 // when endLine <= startLine a single-line anchor (#L{start}) is used, otherwise
@@ -89,11 +91,11 @@ func (p *Preview) copyPermalink() (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
 		ctx := context.Background()
 		if gc == nil {
-			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+			return notify.ShowToastMsg{Message: msgNoGitRepo, Level: notify.Warn}
 		}
 		root, err := gc.RepoRoot(ctx)
 		if err != nil || root == "" {
-			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+			return notify.ShowToastMsg{Message: msgNoGitRepo, Level: notify.Warn}
 		}
 		relPath := path
 		if rel, err := filepath.Rel(root, path); err == nil {
@@ -127,11 +129,11 @@ func (p *Preview) openOnGitHub() (panels.Panel, tea.Cmd) {
 	return p, func() tea.Msg {
 		ctx := context.Background()
 		if gc == nil {
-			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+			return notify.ShowToastMsg{Message: msgNoGitRepo, Level: notify.Warn}
 		}
 		root, err := gc.RepoRoot(ctx)
 		if err != nil || root == "" {
-			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
+			return notify.ShowToastMsg{Message: msgNoGitRepo, Level: notify.Warn}
 		}
 		relPath := path
 		if rel, err := filepath.Rel(root, path); err == nil {

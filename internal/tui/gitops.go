@@ -36,6 +36,9 @@ type filePathProvider interface {
 // asyncOpPushing is the status label shown during git push operations.
 const asyncOpPushing = "pushing..."
 
+// asyncOpReverting is the status label shown during git revert operations.
+const asyncOpReverting = "reverting..."
+
 // toastMsgMaxLen is the maximum number of characters kept from a commit
 // message when it is displayed in a toast notification.
 const toastMsgMaxLen = 40
@@ -52,8 +55,20 @@ const pendingActionReword = "reword"
 // pendingActionDiscard identifies the discard-file pending action.
 const pendingActionDiscard = "discard_file"
 
+// pendingActionRevert identifies the revert-commit pending action. The value
+// matches the git package's revert undo action type so undo and redo dispatch
+// correctly.
+const pendingActionRevert = "revert"
+
 // discardFileDoneMsg carries the result of an app-level discard operation.
 type discardFileDoneMsg struct{ err error }
+
+// revertDoneMsg carries the result of an app-level revert operation. hash is the
+// short hash of the reverted commit, used for the success toast.
+type revertDoneMsg struct {
+	err  error
+	hash string
+}
 
 // unstageFileDoneMsg carries the result of an app-level unstage operation.
 type unstageFileDoneMsg struct{ err error }
@@ -250,6 +265,109 @@ func (m Model) executeReword(commitMsg string) (tea.Model, tea.Cmd) {
 		desc := pendingActionReword + ": " + truncateForToast(commitMsg, toastMsgMaxLen)
 		return panels.AsyncOpDoneMsg{Description: desc, Err: nil}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Revert
+// ---------------------------------------------------------------------------
+
+// handleRevert opens a confirmation modal before reverting the given commit.
+// The hash and subject are stored so executeRevert can run once confirmed.
+func (m Model) handleRevert(hash, subject string) (tea.Model, tea.Cmd) {
+	if m.gitClient == nil {
+		return m, showWarnToast("Git not available")
+	}
+	if m.asyncOp != "" || m.notify.HasModal() {
+		return m, nil
+	}
+	if hash == "" {
+		return m, showWarnToast("No commit selected")
+	}
+
+	m.pendingAction = pendingActionRevert
+	m.pendingRevertHash = hash
+	m.pendingRevertSubject = subject
+
+	short := hash
+	if len(short) > git.ShortHashLen {
+		short = short[:git.ShortHashLen]
+	}
+	prompt := "Revert commit " + short + "?"
+	if subject != "" {
+		prompt = "Revert commit " + short + " (" + truncateForToast(subject, toastMsgMaxLen) + ")?"
+	}
+	return m, notify.ShowConfirm("Revert Commit", prompt)
+}
+
+// executeRevert creates a revert commit asynchronously and records an undo
+// action pointing at the pre-revert HEAD so the revert can be undone.
+func (m Model) executeRevert() (tea.Model, tea.Cmd) {
+	hash := m.pendingRevertHash
+	m.pendingRevertHash = ""
+	m.pendingRevertSubject = ""
+	if hash == "" {
+		return m, nil
+	}
+
+	m.asyncOp = asyncOpReverting
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.asyncCancel = cancel
+
+	gc := m.gitClient
+	undoMgr := m.undoMgr
+
+	short := hash
+	if len(short) > git.ShortHashLen {
+		short = short[:git.ShortHashLen]
+	}
+
+	return m, func() tea.Msg {
+		headBefore, err := gc.HeadSHA(ctx)
+		if err != nil {
+			return revertDoneMsg{err: err}
+		}
+		if err := gc.Revert(ctx, hash); err != nil {
+			return revertDoneMsg{err: err}
+		}
+
+		if undoMgr != nil {
+			undoMgr.RecordAction(git.UndoAction{
+				Type:      pendingActionRevert,
+				RefBefore: headBefore,
+				Metadata: map[string]string{
+					metaKeyHash: hash,
+				},
+			})
+		}
+
+		return revertDoneMsg{hash: short}
+	}
+}
+
+// handleRevertDone clears the async state, shows a result toast, and refreshes
+// the commits list plus git status so the new revert commit appears.
+func (m Model) handleRevertDone(msg revertDoneMsg) (tea.Model, tea.Cmd) {
+	m.asyncOp = ""
+	m.asyncCancel = nil
+
+	if msg.err != nil {
+		if errors.Is(msg.err, context.Canceled) {
+			return m, showInfoToast("revert cancelled")
+		}
+		errText := msg.err.Error()
+		return m, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "revert failed: " + errText,
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	branch := m.currentBranch
+	return m, tea.Batch(
+		showSuccessToast("revert "+msg.hash+" succeeded"),
+		func() tea.Msg { return panels.BranchChangedMsg{Name: branch} },
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +624,8 @@ func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cm
 		return m.executeReword(msg.Value)
 	case pendingActionDiscard:
 		return m.executeDiscardFile()
+	case pendingActionRevert:
+		return m.executeRevert()
 	default:
 		return m, nil
 	}

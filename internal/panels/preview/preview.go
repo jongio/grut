@@ -6,6 +6,7 @@ package preview
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,6 +65,17 @@ type Preview struct {
 	// as a line-number entry and scrolls to the entered line on Enter.
 	gotoLineActive bool
 	gotoLineInput  string
+	// pendingGotoLine holds a 1-based line to scroll to once the current file
+	// finishes loading. It is set when a FileSelectedMsg carries a target line
+	// (for example from the todo fuzzy finder) and cleared after it is applied.
+	pendingGotoLine int
+	// Markdown heading-jump overlay state. mdHeadings is populated on load for
+	// markdown files; tocTargets holds the resolved display line per heading
+	// while the overlay is open.
+	tocActive  bool
+	tocCursor  int
+	mdHeadings []tocHeading
+	tocTargets []int
 	// GitHub content mode – when a GitHub item (issue/PR/action run) is
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
@@ -96,6 +108,7 @@ type fileLoadedMsg struct {
 	err      error
 	path     string
 	lines    []string
+	headings []tocHeading
 	isBinary bool
 	isLarge  bool
 }
@@ -263,6 +276,11 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.blameMode = false
 		p.blameLines = nil
 		p.diffLines = nil
+		p.pendingGotoLine = msg.Line
+		p.tocActive = false
+		p.tocCursor = 0
+		p.mdHeadings = nil
+		p.tocTargets = nil
 		cmds := []tea.Cmd{p.loadFileCmd(msg.Path)}
 		if p.gitClient != nil {
 			cmds = append(cmds, p.loadContextDiffCmd(msg.Path, p.diffContext))
@@ -273,9 +291,15 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if msg.path == p.filePath {
 			p.loading = false
 			p.lines = msg.lines
+			p.mdHeadings = msg.headings
 			p.err = msg.err
 			p.isBinary = msg.isBinary
 			p.isLarge = msg.isLarge
+			// Honor a pending line jump now that content is available.
+			if p.pendingGotoLine > 0 && msg.err == nil && !msg.isBinary && !msg.isLarge {
+				p.gotoLine(p.pendingGotoLine)
+			}
+			p.pendingGotoLine = 0
 		}
 		return p, nil
 	case diffLoadedMsg:
@@ -288,11 +312,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.clearSelection()
 		p.ghMode = true
 		p.ghPlainText = false
-		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, ansi.Strip(msg.Title))
-		p.ghContent = msg.Body
-		if p.ghContent == "" {
-			p.ghContent = "*No description provided.*"
-		}
+		safeTitle := ansi.Strip(msg.Title)
+		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, safeTitle)
+		p.ghContent = renderIssuePreviewContent(msg, safeTitle)
 		p.scrollY = 0
 		p.lines = markdown.RenderStatic(p.ghContent, p.width)
 		return p, nil
@@ -471,6 +493,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if p.gotoLineActive {
 			return p.handleGotoLineKey(msg)
 		}
+		// The heading-jump overlay captures all input while it is open.
+		if p.tocActive {
+			return p.handleTOCKey(msg)
+		}
 		switch msg.String() {
 		case "e":
 			// Edit is only allowed in file mode (not diff) and for local files.
@@ -496,6 +522,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollToBottom()
 		case "L":
 			return p, p.openGotoLine()
+		case "t":
+			return p, p.openTOC()
 		case "W":
 			p.wordWrap = !p.wordWrap
 		case "n":
@@ -524,6 +552,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p.copyPermalink()
 		case "O":
 			return p.openOnGitHub()
+		case "ctrl+g":
+			return p.createGist()
 		case keyEscape, keyEsc:
 			if p.hasSelection() {
 				p.clearSelection()
@@ -563,7 +593,7 @@ func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	switch msg.String() {
 	case keyEscape, keyEsc:
 		return p, p.closeGotoLine()
-	case "enter":
+	case keyEnter:
 		p.commitGotoLine()
 		return p, p.closeGotoLine()
 	case "backspace":
@@ -637,6 +667,10 @@ func (p *Preview) View(width, height int) string {
 	// Edit mode rendering
 	if p.editMode && p.editBuf != nil {
 		return renderEditContent(p, width, height)
+	}
+	// Heading-jump overlay takes over the content area while it is open.
+	if p.tocActive {
+		return p.renderTOC(width, height)
 	}
 	// Blame mode
 	if p.blameMode && len(p.blameLines) > 0 {
@@ -719,6 +753,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "goto_top"},
 		{Key: "G", Description: "Go to bottom", Action: "goto_bottom"},
 		{Key: "L", Description: "Go to line", Action: "goto_line"},
+		{Key: "t", Description: "Jump to heading", Action: "goto_heading"},
 		{Key: "W", Description: "Toggle word wrap", Action: "toggle_wrap"},
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
@@ -726,6 +761,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "y/Ctrl+C", Description: "Copy selection or file path", Action: "copy_selection"},
 		{Key: "Y", Description: "Copy GitHub permalink", Action: "copy_permalink"},
 		{Key: "O", Description: "Open file on GitHub", Action: "open_on_github"},
+		{Key: "Ctrl+G", Description: "Create secret gist", Action: "create_gist"},
 	}
 }
 
@@ -773,7 +809,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		mime := mimetype.Detect(header)
 		if !isTextMIME(mime.String()) {
 			result.isBinary = true
-			result.lines = append(buildMetadataLines(path, info), "", "Type: "+mime.String())
+			result.lines = buildBinaryMetadataLines(path, info, mime.String(), nil)
 			return result
 		}
 		// Read file content
@@ -786,7 +822,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		// check but contain null bytes (polyglot / binary-after-header).
 		if bytes.ContainsRune(data, 0) {
 			result.isBinary = true
-			result.lines = append(buildMetadataLines(path, info), "", "Type: binary (null bytes detected)")
+			result.lines = buildBinaryMetadataLines(path, info, "binary (null bytes detected)", data)
 			return result
 		}
 		// Normalize line endings so \r doesn't corrupt rendering
@@ -797,6 +833,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		// Render based on file type
 		switch ext {
 		case extMD, extMarkdown, extMdown, extMkd:
+			result.headings = parseMarkdownHeadings(source)
 			if renderMD {
 				result.lines = markdown.RenderStatic(source, width)
 			} else if cfg.GetSyntaxHighlighting() {
@@ -1099,6 +1136,66 @@ func buildMetadataLines(path string, info os.FileInfo) []string {
 		"Mode: " + info.Mode().String(),
 		"Modified: " + info.ModTime().Format(time.RFC3339),
 	}
+}
+
+func renderIssuePreviewContent(msg panels.IssueSelectedMsg, safeTitle string) string {
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "# Issue #%d\n\n**%s**", msg.Number, safeTitle)
+	if meta := issueMetadataLines(msg); len(meta) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(strings.Join(meta, "\n"))
+	}
+	body := msg.Body
+	if body == "" {
+		body = "*No description provided.*"
+	}
+	b.WriteString("\n\n---\n\n")
+	b.WriteString(body)
+	return b.String()
+}
+
+func issueMetadataLines(msg panels.IssueSelectedMsg) []string {
+	var lines []string
+	if state := strings.TrimSpace(ansi.Strip(msg.State)); state != "" {
+		lines = append(lines, "State: "+state)
+	}
+	if author := strings.TrimSpace(ansi.Strip(msg.Author)); author != "" {
+		lines = append(lines, "Author: @"+author)
+	}
+	if assignee := strings.TrimSpace(ansi.Strip(msg.Assignee)); assignee != "" {
+		lines = append(lines, "Assignee: @"+assignee)
+	}
+	if labels := cleanIssueLabels(msg.Labels); len(labels) > 0 {
+		lines = append(lines, "Labels: "+strings.Join(labels, ", "))
+	}
+	return lines
+}
+
+func cleanIssueLabels(labels []string) []string {
+	clean := make([]string, 0, len(labels))
+	for _, label := range labels {
+		label = strings.TrimSpace(ansi.Strip(label))
+		if label == "" {
+			continue
+		}
+		label = strings.ReplaceAll(label, "`", "'")
+		clean = append(clean, "`"+label+"`")
+	}
+	return clean
+}
+
+func buildBinaryMetadataLines(path string, info os.FileInfo, mimeType string, data []byte) []string {
+	lines := buildMetadataLines(path, info)
+	if len(data) == 0 {
+		var err error
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return append(lines, "", "Type: "+mimeType)
+		}
+	}
+	sum := sha256.Sum256(data)
+	lines = append(lines, "SHA-256: "+fmt.Sprintf("%x", sum))
+	return append(lines, "", "Type: "+mimeType)
 }
 
 // --- Scrolling ---

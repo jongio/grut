@@ -40,47 +40,51 @@ const (
 // Model is the top-level TUI model for grut. It composes panels via
 // the layout engine, routes keyboard events, and renders the final view.
 type Model struct {
-	lastStatusBarClick time.Time     // for double-click detection on the status bar
-	gitClient          git.GitClient // git client for app-level operations (nil = no git)
-	ctx                context.Context
-	engine             layout.PanelManager
-	theme              *theme.Theme
-	keys               *keymap.Keymap
-	notify             *notify.Manager               // F27: integrated notification manager
-	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	overlays           OverlayCreator                // factory for overlay panels
-	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
-	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
-	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
-	helpShown          bool                          // whether help overlay is visible
-	welcomePanel       panels.Panel                  // overlay welcome panel (nil = hidden)
-	welcomeShown       bool                          // whether welcome overlay is visible
-	settingsPanel      panels.Panel                  // overlay settings panel (nil = hidden)
-	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
-	cfg                *config.Config                // app config (nil = defaults)
-	sessionMgr         *session.Manager              // session persistence (nil = disabled)
-	chat               *chat.Model                   // AI chat footer (nil if AI disabled)
-	asyncCancel        context.CancelFunc            // cancel the running async operation
-	aiCommitSuggestion *panels.AICommitSuggestionMsg // AI-generated commit message suggestion
-	cancel             context.CancelFunc
-	asyncOp            string // current async operation label ("pushing...", etc.)
-	pendingAction      string // action waiting for modal input ("commit")
-	pendingDiscardPath string // file path for pending discard confirmation
-	currentBranch      string // cached git branch name for status bar
-	cwdEditValue       string // editable path text
-	branchAhead        int    // commits ahead of upstream (needs push)
-	branchBehind       int    // commits behind upstream (needs pull)
-	width              int
-	height             int
-	cwdEditCursor      int    // cursor position (rune index) within cwdEditValue
-	branchInfoGen      uint64 // generation counter - invalidates stale branchLoadedMsg
-	bookmarksShown     bool   // whether bookmark overlay is visible
-	settingsShown      bool   // whether settings overlay is visible
-	gitDirty           bool   // true when working tree has uncommitted changes
-	ready              bool   // true after first WindowSizeMsg
-	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
-	previewEditing     bool   // true when preview panel is in edit mode
-	previewInput       bool   // true when preview panel has an inline prompt open (e.g. go-to-line)
+	lastStatusBarClick   time.Time     // for double-click detection on the status bar
+	gitClient            git.GitClient // git client for app-level operations (nil = no git)
+	ctx                  context.Context
+	engine               layout.PanelManager
+	theme                *theme.Theme
+	keys                 *keymap.Keymap
+	notify               *notify.Manager               // F27: integrated notification manager
+	bookmarkMgr          *bm.Manager                   // bookmark persistence
+	overlays             OverlayCreator                // factory for overlay panels
+	bookmarkPanel        panels.Panel                  // overlay panel (nil = hidden)
+	fuzzyFinder          panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	helpPanel            panels.Panel                  // overlay help panel (nil = hidden)
+	helpShown            bool                          // whether help overlay is visible
+	welcomePanel         panels.Panel                  // overlay welcome panel (nil = hidden)
+	welcomeShown         bool                          // whether welcome overlay is visible
+	settingsPanel        panels.Panel                  // overlay settings panel (nil = hidden)
+	undoMgr              *git.UndoManager              // undo/redo manager (nil = disabled)
+	cfg                  *config.Config                // app config (nil = defaults)
+	sessionMgr           *session.Manager              // session persistence (nil = disabled)
+	chat                 *chat.Model                   // AI chat footer (nil if AI disabled)
+	asyncCancel          context.CancelFunc            // cancel the running async operation
+	aiCommitSuggestion   *panels.AICommitSuggestionMsg // AI-generated commit message suggestion
+	cancel               context.CancelFunc
+	asyncOp              string // current async operation label ("pushing...", etc.)
+	pendingAction        string // action waiting for modal input ("commit")
+	pendingDiscardPath   string // file path for pending discard confirmation
+	pendingRevertHash    string // full commit hash for pending revert confirmation
+	pendingRevertSubject string // reverted commit subject for the confirm prompt
+	currentBranch        string // cached git branch name for status bar
+	cwdEditValue         string // editable path text
+	initialFile          string // file to open + focus in preview at startup (empty = none)
+	branchAhead          int    // commits ahead of upstream (needs push)
+	branchBehind         int    // commits behind upstream (needs pull)
+	width                int
+	height               int
+	initialLine          int    // 1-based line to scroll the preview to at startup (0 = none)
+	cwdEditCursor        int    // cursor position (rune index) within cwdEditValue
+	branchInfoGen        uint64 // generation counter - invalidates stale branchLoadedMsg
+	bookmarksShown       bool   // whether bookmark overlay is visible
+	settingsShown        bool   // whether settings overlay is visible
+	gitDirty             bool   // true when working tree has uncommitted changes
+	ready                bool   // true after first WindowSizeMsg
+	cwdEditing           bool   // true when status bar CWD is in inline-edit mode
+	previewEditing       bool   // true when preview panel is in edit mode
+	previewInput         bool   // true when preview panel has an inline prompt open (e.g. go-to-line)
 }
 
 // New creates a new TUI model with the given panel manager, theme, keymap,
@@ -137,6 +141,16 @@ func (m Model) WithChat(c *chat.Model) Model {
 	return m
 }
 
+// WithInitialFile returns a copy of the model configured to open the given
+// file in the preview panel at startup, focusing the preview and scrolling
+// to the given 1-based line (0 = top). Used when grut is launched with a
+// file path argument, e.g. "grut main.go:42". An empty path is a no-op.
+func (m Model) WithInitialFile(path string, line int) Model {
+	m.initialFile = path
+	m.initialLine = line
+	return m
+}
+
 // branchLoadedMsg carries the initial branch name and tracking info for the status bar.
 type branchLoadedMsg struct {
 	Name       string
@@ -152,6 +166,18 @@ type gitDirtyMsg struct{ dirty bool }
 // auto-fetch timer if configured.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.engine.Init(m.ctx)}
+	// Open a file passed on the command line (e.g. "grut main.go:42"):
+	// focus the preview panel and ask the filetree to reveal + select the
+	// file, carrying the optional line so the preview scrolls to it once the
+	// content loads. engine.Init has already focused the default panel above,
+	// so this FocusByName call takes precedence for the initial view.
+	if m.initialFile != "" {
+		m.engine.FocusByName("preview")
+		file, line := m.initialFile, m.initialLine
+		cmds = append(cmds, func() tea.Msg {
+			return panels.RevealFileMsg{Path: file, Line: line}
+		})
+	}
 	if tick := m.autoFetchTickCmd(); tick != nil {
 		cmds = append(cmds, tick)
 	}
@@ -228,7 +254,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.CommitRequestMsg, panels.AmendRequestMsg, panels.RewordRequestMsg,
 		panels.AICommitSuggestionMsg, panels.PushRequestMsg, panels.PullRequestMsg,
 		panels.FetchRequestMsg, panels.AsyncOpDoneMsg, discardFileDoneMsg,
-		unstageFileDoneMsg, panels.AutoFetchTickMsg:
+		unstageFileDoneMsg, panels.AutoFetchTickMsg, panels.RevertRequestMsg,
+		revertDoneMsg:
 		return m.handleGitOpMsg(msg)
 
 	// Undo / redo.
@@ -366,6 +393,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("commands"), nil
 	case "change_directory":
 		return m.openFuzzyFinder("directories"), nil
+	case "todo_finder":
+		return m.openFuzzyFinder("todos"), nil
 	case "help":
 		return m.toggleHelp()
 	case "welcome":
