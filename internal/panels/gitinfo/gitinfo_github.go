@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 	ghclient "github.com/jongio/grut/internal/github"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
@@ -1401,10 +1401,13 @@ func (p *Panel) issueSelectedCmd() tea.Cmd {
 	iss := items[cursor].issue
 	return func() tea.Msg {
 		return panels.IssueSelectedMsg{
-			Number: iss.Number,
-			Title:  iss.Title,
-			Body:   iss.Body,
-			State:  iss.State,
+			Number:   iss.Number,
+			Title:    iss.Title,
+			Body:     iss.Body,
+			State:    iss.State,
+			Author:   iss.Author,
+			Assignee: iss.Assignee,
+			Labels:   append([]string(nil), iss.Labels...),
 		}
 	}
 }

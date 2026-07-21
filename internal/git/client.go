@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/jongio/grut/internal/proctree"
 )
 
 // Client wraps the git CLI and implements GitClient.
@@ -116,7 +117,12 @@ func (c *Client) runWithEnv(ctx context.Context, extraEnv []string, args ...stri
 	if err := validateArgs(normalized); err != nil {
 		return "", fmt.Errorf("invalid git argument: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, "git", normalized...)
+	// proctree.Command wires the git process into a containment group (Job
+	// Object on Windows, process group on Unix) and sets a bounded WaitDelay,
+	// so cancelling ctx kills the whole tree — including children like
+	// git-remote-https, ssh, and credential helpers — and a descendant that
+	// inherits the output pipes cannot block Wait forever (CWE-269, CWE-400).
+	cmd := proctree.Command(ctx, "git", normalized...)
 	cmd.Dir = c.repoDir
 	if len(extraEnv) > 0 {
 		cmd.Env = append(os.Environ(), extraEnv...)
@@ -126,7 +132,7 @@ func (c *Client) runWithEnv(ctx context.Context, extraEnv []string, args ...stri
 	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	slog.Debug("git exec", "args", normalized, "dir", c.repoDir)
-	if err := cmd.Run(); err != nil {
+	if err := proctree.Run(cmd); err != nil {
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
 			return "", fmt.Errorf("git %s: %w", normalized[0], err)

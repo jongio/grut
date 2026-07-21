@@ -72,6 +72,15 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 	assert.Equal(t, "default", cfg.Theme.Name)
 }
 
+func TestDefaultsTOMLReturnsCopy(t *testing.T) {
+	got := DefaultsTOML()
+
+	require.NotEmpty(t, got)
+	assert.Contains(t, string(got), "[general]")
+	got[0] = '#'
+	assert.NotEqual(t, got[0], DefaultsTOML()[0])
+}
+
 func TestLoadEmbeddedDefaultsValidate(t *testing.T) {
 	cfg := &Config{}
 	require.NoError(t, toml.Unmarshal(defaultsTOML, cfg))

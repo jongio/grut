@@ -59,6 +59,21 @@ func TestModelViewBeforeResize(t *testing.T) {
 	assert.True(t, view.AltScreen)
 }
 
+func TestInitWithInitialFileFocusesPreview(t *testing.T) {
+	m := newTestModel(t).WithInitialFile("internal/git/client.go", 42)
+	cmd := m.Init()
+	require.NotNil(t, cmd)
+	assert.Equal(t, "preview", m.engine.FocusedName(),
+		"an initial file argument should focus the preview panel at startup")
+}
+
+func TestInitWithoutInitialFileFocusesFiletree(t *testing.T) {
+	m := newTestModel(t)
+	m.Init()
+	assert.Equal(t, "filetree", m.engine.FocusedName(),
+		"without a file argument the filetree keeps default focus")
+}
+
 func TestModelViewAfterResize(t *testing.T) {
 	m := newTestModel(t)
 
@@ -607,6 +622,26 @@ func TestCommandPaletteAction(t *testing.T) {
 	updated, _ = m.handleAction("command_palette", tea.KeyPressMsg{})
 	m = updated.(Model)
 	assert.NotNil(t, m.fuzzyFinder, "command_palette action should open fuzzy finder")
+}
+
+func TestTodoFinderAction(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+	m.Init()
+
+	// The "todo_finder" action should open the fuzzy finder in todos mode.
+	updated, _ = m.handleAction("todo_finder", tea.KeyPressMsg{})
+	m = updated.(Model)
+	assert.NotNil(t, m.fuzzyFinder, "todo_finder action should open fuzzy finder")
+}
+
+func TestOpenFuzzyFinderTodosMode(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 100
+	m.height = 40
+	m = m.openFuzzyFinder("todos")
+	assert.NotNil(t, m.fuzzyFinder, "fuzzy finder should be created for todos mode")
 }
 
 // ---------------------------------------------------------------------------

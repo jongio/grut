@@ -9,7 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 	"github.com/jongio/grut/internal/actions"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -1917,6 +1917,9 @@ func TestIssueSelectedCmd_ValidCursor(t *testing.T) {
 	sel, ok := msg.(panels.IssueSelectedMsg)
 	require.True(t, ok)
 	assert.Equal(t, 1, sel.Number)
+	assert.Equal(t, "testuser", sel.Author)
+	assert.Equal(t, "testuser", sel.Assignee)
+	assert.Equal(t, []string{"bug"}, sel.Labels)
 }
 
 func TestPRSelectedCmd_ValidCursor(t *testing.T) {

@@ -60,7 +60,7 @@ func (f *Factory) NewSettingsPanel(
 }
 
 // NewFuzzyFinder creates a fuzzy finder overlay for the given mode.
-// Supported modes: "files", "commands", "directories".
+// Supported modes: "files", "commands", "directories", "todos".
 // The bindings parameter is used for the "commands" mode source.
 func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.Panel {
 	cwd, err := os.Getwd()
@@ -73,6 +73,7 @@ func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.
 		fuzzyfinder.NewCommandSource(bindings),
 		fuzzyfinder.NewBookmarkSource(f.bookmarkMgr),
 		fuzzyfinder.NewGitChangedSource(cwd),
+		fuzzyfinder.NewTodoSource(cwd),
 	}
 	defaultCategories := []string{fuzzyfinder.DefaultCategoryFile()}
 	switch mode {
@@ -82,6 +83,8 @@ func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.
 		defaultCategories = []string{fuzzyfinder.DefaultCategoryCommand()}
 	case "directories":
 		defaultCategories = []string{fuzzyfinder.DefaultCategoryDirectory()}
+	case "todos":
+		defaultCategories = []string{fuzzyfinder.DefaultCategoryTodo()}
 	}
 	return fuzzyfinder.NewWithDefaultCategories(f.theme, defaultCategories, sources...)
 }

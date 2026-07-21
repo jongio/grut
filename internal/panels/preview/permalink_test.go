@@ -149,3 +149,18 @@ func TestBuildLocalLocation_OutsideRepoFallsBackToAbsolutePath(t *testing.T) {
 
 	assert.Equal(t, filepath.ToSlash(filepath.Clean(outside))+":7", location)
 }
+
+func TestOpenOnGitHub_NoOpWhenNoFile(t *testing.T) {
+	p := newTestPreview([]string{"a"})
+	p.filePath = ""
+	_, cmd := p.openOnGitHub()
+	assert.Nil(t, cmd)
+}
+
+func TestOpenOnGitHub_NoOpInGitHubMode(t *testing.T) {
+	p := newTestPreview([]string{"a"})
+	p.filePath = "main.go"
+	p.ghMode = true
+	_, cmd := p.openOnGitHub()
+	assert.Nil(t, cmd)
+}

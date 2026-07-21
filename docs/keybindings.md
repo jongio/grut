@@ -27,6 +27,7 @@ Always active regardless of focused panel.
 | `/` | Fuzzy finder |
 | `:` | Command palette |
 | `~` | Change directory |
+| `T` | Find TODO/FIXME markers |
 | `ctrl+space` | Toggle AI chat |
 | `ctrl+z` | Undo last git action |
 | `ctrl+y` | Redo |
@@ -59,6 +60,8 @@ File Tree panel (panel 1).
 | `h/l` | Collapse/expand directory |
 | `H/L` | Collapse/expand all directories |
 | `o` | Open in external editor |
+| `M` | Reveal in OS file manager |
+| `B` | Open on GitHub |
 | `.` | Toggle hidden files |
 | `f` | Toggle git filter |
 | `v` | Toggle tree/list view |
@@ -162,14 +165,16 @@ Commits panel (panel 4).
 |-----|--------|
 | `Enter` | View commit detail |
 | `Esc` | Back to list |
-| `o` | Open in browser |
+| `o` | Open commit on GitHub |
 | `y` | Copy SHA |
 | `a` | Filter the commit log by the selected commit's author |
 | `x` | Export the selected commit as a .patch file |
 | `A` | Amend last commit |
 | `r` | Reword last commit |
+| `v` | Revert the selected commit |
 | `/` | Search commits |
 | `S` | Search commit content (pickaxe) |
+| `M` | Search commit messages (grep) |
 
 ---
 
@@ -184,6 +189,7 @@ Preview panel (panel 5).
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `L` | Go to line |
+| `t` | Jump to markdown heading |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
@@ -192,6 +198,8 @@ Preview panel (panel 5).
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
 | `p` | Copy local file location |
+| `O` | Open file on GitHub |
+| `Ctrl+G` | Create secret gist |
 | `Esc` | Clear selection |
 
 Navigation keys (j/k/g/G/PgDn/PgUp) scroll content. Click+drag to select text, double-click to select a word.
@@ -216,6 +224,20 @@ Diff viewer panel for file, commit, branch, and PR diffs.
 | `R` | Toggle review annotations |
 | `+/-` | More/less diff context lines |
 | `0` | Reset diff context to default |
+
+---
+
+## Help Overlay
+
+Active when the help overlay is open.
+
+| Key | Action |
+|-----|--------|
+| `/` | Filter shortcuts by section, key, or action |
+| `j/k` | Scroll help content |
+| `Enter` | Keep the current filter and leave filter input |
+| `Esc` | Clear filter, or close help when no filter is active |
+| `?` | Close help |
 
 ---
 

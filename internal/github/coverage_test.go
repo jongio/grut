@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,12 +199,12 @@ func TestClient_ListReleases_MultiPage(t *testing.T) {
 			w.Header().Set("Link", fmt.Sprintf(`<%s/repos/owner/repo/releases?page=2>; rel="next"`, srvURL))
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode([]*gh.RepositoryRelease{
-				{ID: ptr(int64(1)), TagName: ptr("v1.0.0")},
-				{ID: ptr(int64(2)), TagName: ptr("v1.1.0")},
+				{ID: 1, TagName: "v1.0.0"},
+				{ID: 2, TagName: "v1.1.0"},
 			})
 		case 2:
 			respondJSON(w, http.StatusOK, []*gh.RepositoryRelease{
-				{ID: ptr(int64(3)), TagName: ptr("v2.0.0")},
+				{ID: 3, TagName: "v2.0.0"},
 			})
 		default:
 			t.Fatal("unexpected page request beyond 2")
@@ -230,7 +230,7 @@ func TestClient_ListReleases_CacheHit(t *testing.T) {
 	})
 
 	cached := []*gh.RepositoryRelease{
-		{ID: ptr(int64(1)), TagName: ptr("cached-tag")},
+		{ID: 1, TagName: "cached-tag"},
 	}
 	local := gh.ListOptions{}
 	local.Page = 0
@@ -373,8 +373,8 @@ func TestClient_GetReleaseByTag_Success(t *testing.T) {
 	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/repos/owner/repo/releases/tags/v1.2.3", r.URL.Path)
 		respondJSON(w, http.StatusOK, &gh.RepositoryRelease{
-			ID:      ptr(int64(42)),
-			TagName: ptr("v1.2.3"),
+			ID:      42,
+			TagName: "v1.2.3",
 			Name:    ptr("Release v1.2.3"),
 		})
 	})
@@ -412,7 +412,7 @@ func TestClient_GetReleaseByTag_CacheHit(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	cached := &gh.RepositoryRelease{ID: ptr(int64(10)), TagName: ptr("v0.1.0")}
+	cached := &gh.RepositoryRelease{ID: 10, TagName: "v0.1.0"}
 	client.cache.Set("release-tag:owner/repo:v0.1.0", cached)
 
 	ctx := context.Background()
@@ -468,8 +468,8 @@ func TestClient_GetRelease_Success(t *testing.T) {
 	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/repos/owner/repo/releases/50", r.URL.Path)
 		respondJSON(w, http.StatusOK, &gh.RepositoryRelease{
-			ID:      ptr(int64(50)),
-			TagName: ptr("v3.0.0"),
+			ID:      50,
+			TagName: "v3.0.0",
 			Name:    ptr("Major Release"),
 		})
 	})
@@ -488,7 +488,7 @@ func TestClient_GetRelease_CacheHit(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	cached := &gh.RepositoryRelease{ID: ptr(int64(50)), TagName: ptr("cached-release")}
+	cached := &gh.RepositoryRelease{ID: 50, TagName: "cached-release"}
 	client.cache.Set("release:owner/repo:50", cached)
 
 	ctx := context.Background()

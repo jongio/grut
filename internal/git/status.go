@@ -16,6 +16,22 @@ func (c *Client) Status(ctx context.Context) ([]FileStatus, error) {
 	return parseStatusV2(out)
 }
 
+// StatusWithBranch returns branch tracking metadata together with the working
+// tree file statuses from a single git invocation. It is a convenience for
+// callers that need both the branch header (name, upstream, ahead, behind) and
+// the changed entries without running git status twice.
+func (c *Client) StatusWithBranch(ctx context.Context) (StatusBranch, []FileStatus, error) {
+	out, err := c.run(ctx, "status", "--porcelain=v2", "--branch", "-uall")
+	if err != nil {
+		return StatusBranch{}, nil, fmt.Errorf("status: %w", err)
+	}
+	files, err := parseStatusV2(out)
+	if err != nil {
+		return StatusBranch{}, nil, err
+	}
+	return ParseStatusBranch(out), files, nil
+}
+
 // parseStatusV2 parses git status --porcelain=v2 output into FileStatus entries.
 //
 // Porcelain v2 format:

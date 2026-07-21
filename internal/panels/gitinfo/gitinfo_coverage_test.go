@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	gh "github.com/google/go-github/v88/github"
+	gh "github.com/google/go-github/v89/github"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"

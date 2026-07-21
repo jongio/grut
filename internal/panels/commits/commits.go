@@ -153,6 +153,10 @@ type Panel struct {
 	pickaxeMode  bool
 	pickaxeTerm  string
 	pickaxeRegex bool
+	// Message grep-search state (server-side git --grep). grepTerm doubles
+	// as the editable input buffer and the applied filter.
+	grepMode bool
+	grepTerm string
 	// Detail view state.
 	detailMode bool
 	// PR-commits mode: shows commits in a pull request.
@@ -200,6 +204,7 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 	}
 	pickaxe := p.pickaxeTerm
 	pickaxeRegex := p.pickaxeRegex
+	grep := p.grepTerm
 	return func() tea.Msg {
 		commits, err := client.Log(ctx, git.LogOpts{
 			Ref:          ref,
@@ -208,6 +213,7 @@ func (p *Panel) loadCommitsCmd(skip int, appendMode bool) tea.Cmd {
 			Path:         pathFilter,
 			Pickaxe:      pickaxe,
 			PickaxeRegex: pickaxeRegex,
+			Grep:         grep,
 		})
 		if err != nil {
 			return notify.ShowToastMsg{
@@ -354,12 +360,15 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "o", Description: "Open commit on GitHub", Action: "open_on_github"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
 		{Key: "S", Description: "Search commit content (pickaxe)", Action: "pickaxe"},
+		{Key: "M", Description: "Search commit messages (grep)", Action: "grep"},
 		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
+		{Key: "v", Description: "Revert commit", Action: "revert"},
 	}
 }
 
@@ -518,6 +527,8 @@ func (p *Panel) resetState() {
 	p.searchQuery = ""
 	p.pickaxeMode = false
 	p.pickaxeTerm = ""
+	p.grepMode = false
+	p.grepTerm = ""
 	p.authorFilter = ""
 	p.filteredIdx = nil
 	p.detailMode = false
@@ -643,6 +654,8 @@ func (p *Panel) renderList(width, height int) string {
 	// client-side subject search when both are relevant.
 	var barLine string
 	switch {
+	case p.grepMode || p.grepTerm != "":
+		barLine = p.renderGrepBar(width)
 	case p.pickaxeMode || p.pickaxeTerm != "":
 		barLine = p.renderPickaxeBar(width)
 	case p.searchMode:
@@ -690,6 +703,20 @@ func (p *Panel) renderPickaxeBar(width int) string {
 	case p.pickaxeMode:
 		prompt += "  (Tab: regex, Enter: search, Esc: clear)"
 	case p.pickaxeTerm != "":
+		prompt += fmt.Sprintf("  [%d results]", len(p.commits))
+	}
+	return barStyle.Width(width).Render(prompt)
+}
+
+func (p *Panel) renderGrepBar(width int) string {
+	barStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(p.colors.SearchBg)).
+		Foreground(lipgloss.Color(p.colors.SearchFg))
+	prompt := " grep: " + p.grepTerm
+	switch {
+	case p.grepMode:
+		prompt += "  (Enter: search, Esc: clear)"
+	case p.grepTerm != "":
 		prompt += fmt.Sprintf("  [%d results]", len(p.commits))
 	}
 	return barStyle.Width(width).Render(prompt)
@@ -822,6 +849,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if p.pickaxeMode {
 		return p.handlePickaxeKey(msg)
 	}
+	if p.grepMode {
+		return p.handleGrepKey(msg)
+	}
 	if p.searchMode {
 		return p.handleSearchKey(msg)
 	}
@@ -845,6 +875,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "o":
+		return p.openCommitOnGitHub()
 	case "x":
 		return p.exportPatch()
 	case "/":
@@ -852,6 +884,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.searchQuery = ""
 	case "S":
 		p.pickaxeMode = true
+	case "M":
+		p.grepMode = true
 	case "a":
 		return p.toggleAuthorFilter()
 	case "A":
@@ -865,10 +899,23 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			}
 			return p, func() tea.Msg { return panels.RewordRequestMsg{OldMessage: msg} }
 		}
+	case "v":
+		c := p.commitAt(p.cursor)
+		if c.Hash != "" {
+			hash, subject := c.Hash, c.Subject
+			return p, func() tea.Msg {
+				return panels.RevertRequestMsg{Hash: hash, Subject: subject}
+			}
+		}
 	case "esc": //nolint:goconst // inline string is more readable here
 		// Progressive reset: pickaxe → PR-commits mode → selected commit → filter → nothing.
 		if p.pickaxeTerm != "" {
 			p.pickaxeTerm = ""
+			p.resetState()
+			return p, p.loadCommitsCmd(0, false)
+		}
+		if p.grepTerm != "" {
+			p.grepTerm = ""
 			p.resetState()
 			return p, p.loadCommitsCmd(0, false)
 		}
@@ -900,7 +947,7 @@ func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.searchMode = false
 		p.searchQuery = ""
 		p.applyFilters()
-	case "backspace":
+	case keyBackspace:
 		if len(p.searchQuery) > 0 {
 			p.searchQuery = p.searchQuery[:len(p.searchQuery)-1]
 			p.applyFilters()
@@ -936,7 +983,7 @@ func (p *Panel) handlePickaxeKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 	case "tab":
 		p.pickaxeRegex = !p.pickaxeRegex
-	case "backspace":
+	case keyBackspace:
 		if len(p.pickaxeTerm) > 0 {
 			p.pickaxeTerm = p.pickaxeTerm[:len(p.pickaxeTerm)-1]
 		}
@@ -944,6 +991,38 @@ func (p *Panel) handlePickaxeKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		ch := msg.String()
 		if len(ch) == 1 && ch[0] >= ' ' {
 			p.pickaxeTerm += ch
+		}
+	}
+	return p, nil
+}
+
+func (p *Panel) handleGrepKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		// Run the message search server-side. Empty term clears the filter.
+		p.grepMode = false
+		p.cursor = 0
+		p.offset = 0
+		p.allLoaded = false
+		return p, p.loadCommitsCmd(0, false)
+	case "esc":
+		hadTerm := p.grepTerm != ""
+		p.grepMode = false
+		p.grepTerm = ""
+		if hadTerm {
+			p.cursor = 0
+			p.offset = 0
+			p.allLoaded = false
+			return p, p.loadCommitsCmd(0, false)
+		}
+	case keyBackspace:
+		if len(p.grepTerm) > 0 {
+			p.grepTerm = p.grepTerm[:len(p.grepTerm)-1]
+		}
+	default:
+		ch := msg.String()
+		if len(ch) == 1 && ch[0] >= ' ' {
+			p.grepTerm += ch
 		}
 	}
 	return p, nil

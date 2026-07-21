@@ -537,6 +537,44 @@ func TestCtrlUClearsQuery(t *testing.T) {
 // Command selection tests
 // ---------------------------------------------------------------------------
 
+func collectBatchMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, collectBatchMsgs(c)...)
+		}
+		return out
+	}
+	if msg != nil {
+		return []tea.Msg{msg}
+	}
+	return nil
+}
+
+func TestSelectCurrent_TodoItemCarriesLine(t *testing.T) {
+	items := []Item{
+		{Text: "main.go:42  TODO fix", Category: categoryTodo, Value: "/abs/main.go", Line: 42},
+	}
+	ff := newTestFinder(items)
+
+	_, cmd := ff.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.NotNil(t, cmd)
+
+	found := false
+	for _, m := range collectBatchMsgs(cmd) {
+		if fs, ok := m.(panels.FileSelectedMsg); ok {
+			assert.Equal(t, "/abs/main.go", fs.Path)
+			assert.Equal(t, 42, fs.Line)
+			found = true
+		}
+	}
+	assert.True(t, found, "expected a FileSelectedMsg carrying the todo line")
+}
+
 func TestCommandSourceSelectReturnsCommandItem(t *testing.T) {
 	bindings := []keymap.Binding{
 		{Key: "ctrl+c", Action: "quit", Description: "Quit grut", Mode: keymap.ModeGlobal},

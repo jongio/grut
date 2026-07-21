@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,6 +47,12 @@ type mockGitOps struct {
 	repoRootCalls int
 	discardPath   string
 	unstagePaths  []string
+	headSHA       string
+	headSHAErr    error
+	headSHACalls  int
+	revertErr     error
+	revertHash    string
+	revertCalls   int
 }
 
 func (m *mockGitOps) Commit(_ context.Context, _ string, _ git.CommitOpts) (string, error) {
@@ -86,6 +93,20 @@ func (m *mockGitOps) Unstage(_ context.Context, paths []string) error {
 	m.unstageCalls++
 	m.unstagePaths = paths
 	return m.unstageErr
+}
+
+func (m *mockGitOps) HeadSHA(_ context.Context) (string, error) {
+	m.headSHACalls++
+	if m.headSHA != "" {
+		return m.headSHA, m.headSHAErr
+	}
+	return "0000000000000000000000000000000000000000", m.headSHAErr
+}
+
+func (m *mockGitOps) Revert(_ context.Context, hash string) error {
+	m.revertCalls++
+	m.revertHash = hash
+	return m.revertErr
 }
 
 // newTestModelWithGit creates a test model with a mock git client and config.
@@ -1097,4 +1118,202 @@ func TestTruncateForToastMultibyte(t *testing.T) {
 	// ASCII still works.
 	got = truncateForToast("hello world", 8)
 	assert.Equal(t, "hello...", got)
+}
+
+// ---------------------------------------------------------------------------
+// Revert tests
+// ---------------------------------------------------------------------------
+
+func TestHandleRevertWithoutGitShowsToast(t *testing.T) {
+	m := newTestModel(t) // no git client
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated2, cmd := m.handleRevert("abc123", "fix bug")
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	toast, ok := cmd().(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "Git not available")
+}
+
+func TestHandleRevertDuringAsyncOpBlocked(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = "pushing..."
+
+	updated2, cmd := m.handleRevert("abc123", "fix bug")
+	m = updated2.(Model)
+
+	assert.Nil(t, cmd, "should be blocked during async op")
+	assert.Empty(t, m.pendingAction)
+}
+
+func TestHandleRevertEmptyHashShowsToast(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated2, cmd := m.handleRevert("", "")
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingAction)
+	require.NotNil(t, cmd)
+	toast, ok := cmd().(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Warn, toast.Level)
+	assert.Contains(t, toast.Message, "No commit selected")
+}
+
+func TestHandleRevertSetsPendingAndConfirms(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	updated2, cmd := m.handleRevert("abcdef1234567890", "fix the parser")
+	m = updated2.(Model)
+
+	assert.Equal(t, pendingActionRevert, m.pendingAction)
+	assert.Equal(t, "abcdef1234567890", m.pendingRevertHash)
+	assert.Equal(t, "fix the parser", m.pendingRevertSubject)
+	require.NotNil(t, cmd)
+	// The command opens a confirm modal.
+	msg := cmd()
+	_, ok := msg.(notify.ShowModalMsg)
+	assert.True(t, ok, "expected a confirm modal message, got %T", msg)
+}
+
+func TestExecuteRevertSuccessRecordsUndo(t *testing.T) {
+	mock := &mockGitOps{headSHA: "1111111111111111111111111111111111111111"}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.undoMgr = git.NewUndoManager(nil)
+	m.pendingRevertHash = "abcdef1234567890"
+	m.pendingRevertSubject = "fix the parser"
+
+	updated2, cmd := m.executeRevert()
+	m = updated2.(Model)
+
+	assert.Empty(t, m.pendingRevertHash, "pendingRevertHash should be cleared")
+	assert.Empty(t, m.pendingRevertSubject, "pendingRevertSubject should be cleared")
+	assert.Equal(t, asyncOpReverting, m.asyncOp)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	done, ok := msg.(revertDoneMsg)
+	require.True(t, ok)
+	assert.NoError(t, done.err)
+	assert.Equal(t, "abcdef1", done.hash, "short hash truncated to ShortHashLen")
+	assert.Equal(t, 1, mock.headSHACalls)
+	assert.Equal(t, 1, mock.revertCalls)
+	assert.Equal(t, "abcdef1234567890", mock.revertHash)
+	assert.True(t, m.undoMgr.CanUndo(), "revert should record an undo action")
+}
+
+func TestExecuteRevertEmptyHashNoop(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.pendingRevertHash = ""
+
+	_, cmd := m.executeRevert()
+	assert.Nil(t, cmd, "empty hash should noop")
+	assert.Equal(t, 0, mock.revertCalls)
+}
+
+func TestExecuteRevertHeadSHAErrorReported(t *testing.T) {
+	mock := &mockGitOps{headSHAErr: errors.New("rev-parse failed")}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.pendingRevertHash = "abcdef1234567890"
+
+	_, cmd := m.executeRevert()
+	require.NotNil(t, cmd)
+	done, ok := cmd().(revertDoneMsg)
+	require.True(t, ok)
+	require.Error(t, done.err)
+	assert.Equal(t, 0, mock.revertCalls, "Revert must not run when HeadSHA fails")
+}
+
+func TestExecuteRevertRevertErrorReported(t *testing.T) {
+	mock := &mockGitOps{revertErr: errors.New("merge conflict")}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.pendingRevertHash = "abcdef1234567890"
+
+	_, cmd := m.executeRevert()
+	require.NotNil(t, cmd)
+	done, ok := cmd().(revertDoneMsg)
+	require.True(t, ok)
+	require.Error(t, done.err)
+	assert.Equal(t, 1, mock.revertCalls)
+}
+
+func TestHandleRevertDoneSuccessRefreshes(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = asyncOpReverting
+	m.currentBranch = "main"
+
+	updated2, cmd := m.handleRevertDone(revertDoneMsg{hash: "abcdef1"})
+	m = updated2.(Model)
+
+	assert.Empty(t, m.asyncOp, "asyncOp should be cleared")
+	assert.Nil(t, m.asyncCancel)
+	require.NotNil(t, cmd, "should batch a toast and a refresh")
+
+	// The batch must include a BranchChangedMsg to reload the commit list.
+	msgs := executeBatchCmd(t, cmd)
+	foundBranch := false
+	for _, msg := range msgs {
+		if bc, ok := msg.(panels.BranchChangedMsg); ok {
+			foundBranch = true
+			assert.Equal(t, "main", bc.Name)
+		}
+	}
+	assert.True(t, foundBranch, "expected a BranchChangedMsg in the refresh batch")
+}
+
+func TestHandleRevertDoneErrorShowsToast(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = asyncOpReverting
+
+	_, cmd := m.handleRevertDone(revertDoneMsg{err: errors.New("merge conflict")})
+	require.NotNil(t, cmd)
+	toast, ok := cmd().(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Error, toast.Level)
+	assert.Contains(t, toast.Message, "revert failed")
+	assert.Contains(t, toast.Message, "merge conflict")
+}
+
+func TestHandleRevertDoneCancelledInfoToast(t *testing.T) {
+	mock := &mockGitOps{}
+	m := newTestModelWithGit(t, mock)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.asyncOp = asyncOpReverting
+
+	_, cmd := m.handleRevertDone(revertDoneMsg{err: context.Canceled})
+	require.NotNil(t, cmd)
+	toast, ok := cmd().(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, notify.Info, toast.Level)
+	assert.Contains(t, toast.Message, "cancelled")
 }

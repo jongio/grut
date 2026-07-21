@@ -19,6 +19,7 @@ import (
 	_ "github.com/jongio/grut/internal/panels/preview"
 	_ "github.com/jongio/grut/internal/panels/review"
 	_ "github.com/jongio/grut/internal/panels/stash"
+	_ "github.com/jongio/grut/internal/panels/status"
 	_ "github.com/jongio/grut/internal/panels/terminal"
 	_ "github.com/jongio/grut/internal/panels/worktrees"
 )

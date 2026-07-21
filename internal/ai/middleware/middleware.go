@@ -154,6 +154,10 @@ func (c *AIGitClient) Checkout(ctx context.Context, ref string) error {
 	return c.inner.Checkout(ctx, ref)
 }
 
+func (c *AIGitClient) HeadSHA(ctx context.Context) (string, error) {
+	return c.inner.HeadSHA(ctx)
+}
+
 // ---------------------------------------------------------------------------
 // RemoteOps — pass-through
 // ---------------------------------------------------------------------------
