@@ -118,6 +118,7 @@ func newCommitLineStyles(c panelColors) commitrender.Styles {
 type Panel struct {
 	actionsCfg   config.ActionsConfig
 	gitClient    gitOps
+	remoteURL    func(context.Context, string) string // origin remote URL lookup (injected; overridable in tests)
 	ctx          context.Context
 	ref          string // current branch/ref to show commits for
 	refLabel     string // display label for the current ref
@@ -175,6 +176,7 @@ func New(client gitOps, th *theme.Theme) *Panel {
 	c := initColors(th)
 	return &Panel{
 		gitClient: client,
+		remoteURL: originRemoteURL,
 		pageSize:  defaultPageSize,
 		colors:    c,
 		clStyles:  newCommitLineStyles(c),

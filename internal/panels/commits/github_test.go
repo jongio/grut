@@ -1,6 +1,7 @@
 package commits
 
 import (
+	"context"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -83,11 +84,38 @@ func TestOpenCommitOnGitHubEmptyListNoop(t *testing.T) {
 func TestOpenCommitOnGitHubNoGitHubRemote(t *testing.T) {
 	t.Parallel()
 
-	// A fresh temp dir is not a git repo, so origin lookup fails and the
-	// handler reports that there is no github remote to open. This exercises
-	// the guard without launching a browser.
+	// Inject a remote lookup that reports no origin so the handler
+	// deterministically warns that there is no github remote to open, without
+	// spawning a real git subprocess or launching a browser.
 	mock := &mockGitOps{commits: defaultCommits(), root: t.TempDir()}
 	p := newTestPanel(mock)
+	p.remoteURL = func(context.Context, string) string { return "" }
+	p.Focus()
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'o'})
+	if cmd == nil {
+		t.Fatal("expected a command from o")
+	}
+	msg, ok := cmd().(notify.ShowToastMsg)
+	if !ok {
+		t.Fatalf("expected ShowToastMsg, got %T", cmd())
+	}
+	if msg.Level != notify.Warn {
+		t.Errorf("toast level = %v, want Warn", msg.Level)
+	}
+	if msg.Message != "No github remote to open" {
+		t.Errorf("message = %q, want %q", msg.Message, "No github remote to open")
+	}
+}
+
+func TestOpenCommitOnGitHubNonGitHubRemote(t *testing.T) {
+	t.Parallel()
+
+	// A non-github origin yields no commit URL, so the handler warns rather
+	// than opening a browser.
+	mock := &mockGitOps{commits: defaultCommits(), root: t.TempDir()}
+	p := newTestPanel(mock)
+	p.remoteURL = func(context.Context, string) string { return "https://gitlab.com/owner/repo.git" }
 	p.Focus()
 
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 'o'})

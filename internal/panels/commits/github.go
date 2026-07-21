@@ -48,6 +48,7 @@ func (p *Panel) openCommitOnGitHub() (panels.Panel, tea.Cmd) {
 	}
 	hash := c.Hash
 	gc := p.gitClient
+	remoteURL := p.remoteURL
 	ctx := p.ctx
 	return p, func() tea.Msg {
 		if gc == nil {
@@ -57,7 +58,7 @@ func (p *Panel) openCommitOnGitHub() (panels.Panel, tea.Cmd) {
 		if err != nil || root == "" {
 			return notify.ShowToastMsg{Message: "No git repository", Level: notify.Warn}
 		}
-		link := commitURL(originRemoteURL(ctx, root), hash)
+		link := commitURL(remoteURL(ctx, root), hash)
 		if link == "" {
 			return notify.ShowToastMsg{Message: "No github remote to open", Level: notify.Warn}
 		}
