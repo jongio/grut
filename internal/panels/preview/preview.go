@@ -6,6 +6,7 @@ package preview
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -770,7 +771,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		mime := mimetype.Detect(header)
 		if !isTextMIME(mime.String()) {
 			result.isBinary = true
-			result.lines = append(buildMetadataLines(path, info), "", "Type: "+mime.String())
+			result.lines = buildBinaryMetadataLines(path, info, mime.String(), nil)
 			return result
 		}
 		// Read file content
@@ -783,7 +784,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		// check but contain null bytes (polyglot / binary-after-header).
 		if bytes.ContainsRune(data, 0) {
 			result.isBinary = true
-			result.lines = append(buildMetadataLines(path, info), "", "Type: binary (null bytes detected)")
+			result.lines = buildBinaryMetadataLines(path, info, "binary (null bytes detected)", data)
 			return result
 		}
 		// Normalize line endings so \r doesn't corrupt rendering
@@ -1096,6 +1097,20 @@ func buildMetadataLines(path string, info os.FileInfo) []string {
 		"Mode: " + info.Mode().String(),
 		"Modified: " + info.ModTime().Format(time.RFC3339),
 	}
+}
+
+func buildBinaryMetadataLines(path string, info os.FileInfo, mimeType string, data []byte) []string {
+	lines := buildMetadataLines(path, info)
+	if len(data) == 0 {
+		var err error
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return append(lines, "", "Type: "+mimeType)
+		}
+	}
+	sum := sha256.Sum256(data)
+	lines = append(lines, "SHA-256: "+fmt.Sprintf("%x", sum))
+	return append(lines, "", "Type: "+mimeType)
 }
 
 // --- Scrolling ---
