@@ -622,10 +622,13 @@ type GitHubUserMsg struct {
 // IssueSelectedMsg is sent when the user selects an issue in the GitHub Issues tab.
 // Preview pane should render the issue body as markdown.
 type IssueSelectedMsg struct {
-	Title  string
-	Body   string
-	State  string
-	Number int
+	Title    string
+	Body     string
+	State    string
+	Author   string
+	Assignee string
+	Labels   []string
+	Number   int
 }
 
 // IssueDeselectedMsg is sent when the user deselects an issue (via Escape).

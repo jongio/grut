@@ -987,14 +987,22 @@ func TestIssueSelectedMsg(t *testing.T) {
 	p.SetSize(80, 30)
 
 	_, cmd := p.Update(panels.IssueSelectedMsg{
-		Number: 42,
-		Title:  "Fix authentication bug",
-		Body:   "The login flow is broken.\n\nSteps to reproduce...",
-		State:  "open",
+		Number:   42,
+		Title:    "Fix authentication bug",
+		Body:     "The login flow is broken.\n\nSteps to reproduce...",
+		State:    "open",
+		Author:   "octocat",
+		Assignee: "hubot",
+		Labels:   []string{"bug", "needs triage"},
 	})
 
 	assert.True(t, p.ghMode)
 	assert.Equal(t, "#42 Fix authentication bug", p.ghTitle)
+	assert.Contains(t, p.ghContent, "# Issue #42")
+	assert.Contains(t, p.ghContent, "State: open")
+	assert.Contains(t, p.ghContent, "Author: @octocat")
+	assert.Contains(t, p.ghContent, "Assignee: @hubot")
+	assert.Contains(t, p.ghContent, "Labels: `bug`, `needs triage`")
 	assert.Contains(t, p.ghContent, "The login flow is broken.")
 	assert.Equal(t, 0, p.scrollY)
 	assert.NotNil(t, p.lines)
@@ -1015,7 +1023,7 @@ func TestIssueSelectedMsg_EmptyBody(t *testing.T) {
 	})
 
 	assert.True(t, p.ghMode)
-	assert.Equal(t, "*No description provided.*", p.ghContent)
+	assert.Contains(t, p.ghContent, "*No description provided.*")
 }
 
 func TestIssueDeselectedMsg(t *testing.T) {
@@ -1669,13 +1677,22 @@ func TestIssueSelectedMsg_ANSIInjection(t *testing.T) {
 	p := New(defaultCfg(), defaultEditorCfg(), nil)
 	p.SetSize(80, 30)
 	msg := panels.IssueSelectedMsg{
-		Number: 42,
-		Title:  "Bug: \x1b[31mRED\x1b[0m injection",
-		Body:   "body text",
+		Number:   42,
+		Title:    "Bug: \x1b[31mRED\x1b[0m injection",
+		Body:     "body text",
+		State:    "\x1b[31mopen\x1b[0m",
+		Author:   "\x1b[31moctocat\x1b[0m",
+		Assignee: "\x1b[31mhubot\x1b[0m",
+		Labels:   []string{"\x1b[31mbug\x1b[0m"},
 	}
 	p.Update(msg)
 	assert.NotContains(t, p.ghTitle, "\x1b", "ANSI in issue title should be stripped")
 	assert.Contains(t, p.ghTitle, "#42 Bug: RED injection")
+	assert.NotContains(t, p.ghContent, "\x1b", "ANSI in issue metadata should be stripped")
+	assert.Contains(t, p.ghContent, "State: open")
+	assert.Contains(t, p.ghContent, "Author: @octocat")
+	assert.Contains(t, p.ghContent, "Assignee: @hubot")
+	assert.Contains(t, p.ghContent, "Labels: `bug`")
 }
 
 func TestPRSelectedMsg_ANSIInjection(t *testing.T) {
