@@ -363,6 +363,7 @@ Environment:
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newReportCmd())
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(newThemeCmd())
 	rootCmd.AddCommand(newCleanCmd())
 	rootCmd.AddCommand(newCompletionCmd())
