@@ -1182,12 +1182,12 @@ func TestHandleRevertSetsPendingAndConfirms(t *testing.T) {
 
 	assert.Equal(t, pendingActionRevert, m.pendingAction)
 	assert.Equal(t, "abcdef1234567890", m.pendingRevertHash)
-	assert.Equal(t, "fix the parser", m.pendingRevertSubject)
 	require.NotNil(t, cmd)
-	// The command opens a confirm modal.
+	// The command opens a confirm modal that includes the commit subject.
 	msg := cmd()
-	_, ok := msg.(notify.ShowModalMsg)
+	modal, ok := msg.(notify.ShowModalMsg)
 	assert.True(t, ok, "expected a confirm modal message, got %T", msg)
+	assert.Contains(t, modal.Message, "fix the parser")
 }
 
 func TestExecuteRevertSuccessRecordsUndo(t *testing.T) {
@@ -1197,13 +1197,11 @@ func TestExecuteRevertSuccessRecordsUndo(t *testing.T) {
 	m = updated.(Model)
 	m.undoMgr = git.NewUndoManager(nil)
 	m.pendingRevertHash = "abcdef1234567890"
-	m.pendingRevertSubject = "fix the parser"
 
 	updated2, cmd := m.executeRevert()
 	m = updated2.(Model)
 
 	assert.Empty(t, m.pendingRevertHash, "pendingRevertHash should be cleared")
-	assert.Empty(t, m.pendingRevertSubject, "pendingRevertSubject should be cleared")
 	assert.Equal(t, asyncOpReverting, m.asyncOp)
 	require.NotNil(t, cmd)
 

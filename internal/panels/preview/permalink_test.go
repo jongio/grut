@@ -150,6 +150,21 @@ func TestBuildLocalLocation_OutsideRepoFallsBackToAbsolutePath(t *testing.T) {
 	assert.Equal(t, filepath.ToSlash(filepath.Clean(outside))+":7", location)
 }
 
+func TestCopyLocalLocation_NoOpWhenNoFile(t *testing.T) {
+	p := newTestPreview([]string{"a"})
+	p.filePath = ""
+	_, cmd := p.copyLocalLocation()
+	assert.Nil(t, cmd)
+}
+
+func TestCopyLocalLocation_NoOpInGitHubMode(t *testing.T) {
+	p := newTestPreview([]string{"a"})
+	p.filePath = "main.go"
+	p.ghMode = true
+	_, cmd := p.copyLocalLocation()
+	assert.Nil(t, cmd)
+}
+
 func TestOpenOnGitHub_NoOpWhenNoFile(t *testing.T) {
 	p := newTestPreview([]string{"a"})
 	p.filePath = ""

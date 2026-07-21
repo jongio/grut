@@ -286,7 +286,6 @@ func (m Model) handleRevert(hash, subject string) (tea.Model, tea.Cmd) {
 
 	m.pendingAction = pendingActionRevert
 	m.pendingRevertHash = hash
-	m.pendingRevertSubject = subject
 
 	short := hash
 	if len(short) > git.ShortHashLen {
@@ -304,7 +303,6 @@ func (m Model) handleRevert(hash, subject string) (tea.Model, tea.Cmd) {
 func (m Model) executeRevert() (tea.Model, tea.Cmd) {
 	hash := m.pendingRevertHash
 	m.pendingRevertHash = ""
-	m.pendingRevertSubject = ""
 	if hash == "" {
 		return m, nil
 	}
