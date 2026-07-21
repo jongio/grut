@@ -45,9 +45,11 @@ func initColors(th *theme.Theme) panelColors {
 type Panel struct {
 	lines []string // pre-rendered content lines (unstyled text)
 	panels.BasePanel
-	colors panelColors
-	theme  *theme.Theme
-	offset int // scroll offset
+	colors      panelColors
+	theme       *theme.Theme
+	filterMode  bool
+	filterQuery string
+	offset      int // scroll offset
 }
 
 // Compile-time interface check.
@@ -68,15 +70,42 @@ func New(th *theme.Theme) *Panel {
 // Lines are stored as plain text; styling is applied during rendering.
 func (p *Panel) buildLines() {
 	secs := keybindings.Sections()
+	query := strings.ToLower(strings.TrimSpace(p.filterQuery))
 	var lines []string
 	lines = append(lines, "") // top padding
+
+	if p.filterMode || query != "" {
+		display := p.filterQuery
+		if display == "" {
+			display = "type to filter"
+		}
+		lines = append(lines, "filter:Filter: "+display)
+		lines = append(lines, "")
+	}
+
+	matchedSections := 0
 	for i, sec := range secs {
+		sectionMatches := query == "" || strings.Contains(strings.ToLower(sec.Title), query)
+		matchingBindings := sec.Bindings
+		if query != "" && !sectionMatches {
+			matchingBindings = nil
+			for _, b := range sec.Bindings {
+				haystack := strings.ToLower(b.Key + " " + b.Action)
+				if strings.Contains(haystack, query) {
+					matchingBindings = append(matchingBindings, b)
+				}
+			}
+		}
+		if query != "" && !sectionMatches && len(matchingBindings) == 0 {
+			continue
+		}
+		matchedSections++
 		// Section title.
 		lines = append(lines, "section:"+sec.Title)
 		// Separator under title.
 		lines = append(lines, "sep:"+strings.Repeat("─", len(sec.Title)))
 		// Bindings.
-		for _, b := range sec.Bindings {
+		for _, b := range matchingBindings {
 			lines = append(lines, "bind:"+b.Key+"\t"+b.Action)
 		}
 		// Blank line between sections (except after the last).
@@ -84,8 +113,15 @@ func (p *Panel) buildLines() {
 			lines = append(lines, "")
 		}
 	}
+	if matchedSections == 0 {
+		lines = append(lines, "text:No matching keybindings")
+	}
 	lines = append(lines, "") // bottom padding
-	lines = append(lines, "footer:Press ? or Esc to close")
+	if p.filterMode || query != "" {
+		lines = append(lines, "footer:Enter keeps filter, Esc clears, ? closes")
+	} else {
+		lines = append(lines, "footer:Press / to filter, ? or Esc to close")
+	}
 	p.lines = lines
 }
 
@@ -158,6 +194,12 @@ func (p *Panel) View(width, height int) string {
 				padded = key + strings.Repeat(" ", 12-keyWidth)
 			}
 			styled = "  " + keyStyle.Render(padded) + descStyle.Render(desc)
+		case strings.HasPrefix(line, "filter:"):
+			text := strings.TrimPrefix(line, "filter:")
+			styled = "  " + dimStyle.Render(text)
+		case strings.HasPrefix(line, "text:"):
+			text := strings.TrimPrefix(line, "text:")
+			styled = "  " + descStyle.Render(text)
 		case strings.HasPrefix(line, "footer:"):
 			text := strings.TrimPrefix(line, "footer:")
 			styled = "  " + dimStyle.Render(text)
@@ -173,13 +215,16 @@ func (p *Panel) View(width, height int) string {
 	return strings.Join(rendered, "\n")
 }
 
+const keyEscape = "escape"
+
 // KeyBindings implements panels.Panel.
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
+		{Key: "/", Description: "Filter shortcuts", Action: "filter"},
 		{Key: "?", Description: "Close help", Action: "close"},
-		{Key: "escape", Description: "Close help", Action: "close"},
+		{Key: keyEscape, Description: "Close help", Action: "close"},
 	}
 }
 
@@ -187,15 +232,58 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 // Key handling
 // ---------------------------------------------------------------------------
 func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
+	if p.filterMode {
+		switch msg.String() {
+		case "enter":
+			p.filterMode = false
+			p.rebuildFromFilter()
+			return p, nil
+		case keyEscape, "esc":
+			p.clearFilter()
+			return p, nil
+		case "backspace":
+			if r := []rune(p.filterQuery); len(r) > 0 {
+				p.filterQuery = string(r[:len(r)-1])
+				p.rebuildFromFilter()
+			}
+			return p, nil
+		default:
+			if msg.Text != "" {
+				p.filterQuery += msg.Text
+				p.rebuildFromFilter()
+			}
+			return p, nil
+		}
+	}
 	switch msg.String() {
 	case "j", "down":
 		p.scrollDown()
 	case "k", "up":
 		p.scrollUp()
-	case "escape", "esc", "?":
+	case "/":
+		p.filterMode = true
+		p.rebuildFromFilter()
+	case keyEscape, "esc":
+		if p.filterQuery != "" {
+			p.clearFilter()
+			return p, nil
+		}
+		return p, func() tea.Msg { return panels.ToggleHelpMsg{} }
+	case "?":
 		return p, func() tea.Msg { return panels.ToggleHelpMsg{} }
 	}
 	return p, nil
+}
+
+func (p *Panel) rebuildFromFilter() {
+	p.offset = 0
+	p.buildLines()
+}
+
+func (p *Panel) clearFilter() {
+	p.filterMode = false
+	p.filterQuery = ""
+	p.rebuildFromFilter()
 }
 
 // ---------------------------------------------------------------------------
