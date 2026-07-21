@@ -65,6 +65,13 @@ type Preview struct {
 	// as a line-number entry and scrolls to the entered line on Enter.
 	gotoLineActive bool
 	gotoLineInput  string
+	// Markdown heading-jump overlay state. mdHeadings is populated on load for
+	// markdown files; tocTargets holds the resolved display line per heading
+	// while the overlay is open.
+	tocActive  bool
+	tocCursor  int
+	mdHeadings []tocHeading
+	tocTargets []int
 	// GitHub content mode – when a GitHub item (issue/PR/action run) is
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
@@ -97,6 +104,7 @@ type fileLoadedMsg struct {
 	err      error
 	path     string
 	lines    []string
+	headings []tocHeading
 	isBinary bool
 	isLarge  bool
 }
@@ -264,6 +272,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.blameMode = false
 		p.blameLines = nil
 		p.diffLines = nil
+		p.tocActive = false
+		p.tocCursor = 0
+		p.mdHeadings = nil
+		p.tocTargets = nil
 		cmds := []tea.Cmd{p.loadFileCmd(msg.Path)}
 		if p.gitClient != nil {
 			cmds = append(cmds, p.loadContextDiffCmd(msg.Path, p.diffContext))
@@ -274,6 +286,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if msg.path == p.filePath {
 			p.loading = false
 			p.lines = msg.lines
+			p.mdHeadings = msg.headings
 			p.err = msg.err
 			p.isBinary = msg.isBinary
 			p.isLarge = msg.isLarge
@@ -470,6 +483,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if p.gotoLineActive {
 			return p.handleGotoLineKey(msg)
 		}
+		// The heading-jump overlay captures all input while it is open.
+		if p.tocActive {
+			return p.handleTOCKey(msg)
+		}
 		switch msg.String() {
 		case "e":
 			// Edit is only allowed in file mode (not diff) and for local files.
@@ -495,6 +512,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.scrollToBottom()
 		case "L":
 			return p, p.openGotoLine()
+		case "t":
+			return p, p.openTOC()
 		case "W":
 			p.wordWrap = !p.wordWrap
 		case "n":
@@ -560,7 +579,7 @@ func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	switch msg.String() {
 	case keyEscape, keyEsc:
 		return p, p.closeGotoLine()
-	case "enter":
+	case keyEnter:
 		p.commitGotoLine()
 		return p, p.closeGotoLine()
 	case "backspace":
@@ -634,6 +653,10 @@ func (p *Preview) View(width, height int) string {
 	// Edit mode rendering
 	if p.editMode && p.editBuf != nil {
 		return renderEditContent(p, width, height)
+	}
+	// Heading-jump overlay takes over the content area while it is open.
+	if p.tocActive {
+		return p.renderTOC(width, height)
 	}
 	// Blame mode
 	if p.blameMode && len(p.blameLines) > 0 {
@@ -716,6 +739,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "goto_top"},
 		{Key: "G", Description: "Go to bottom", Action: "goto_bottom"},
 		{Key: "L", Description: "Go to line", Action: "goto_line"},
+		{Key: "t", Description: "Jump to heading", Action: "goto_heading"},
 		{Key: "W", Description: "Toggle word wrap", Action: "toggle_wrap"},
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
@@ -793,6 +817,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		// Render based on file type
 		switch ext {
 		case extMD, extMarkdown, extMdown, extMkd:
+			result.headings = parseMarkdownHeadings(source)
 			if renderMD {
 				result.lines = markdown.RenderStatic(source, width)
 			} else if cfg.GetSyntaxHighlighting() {
