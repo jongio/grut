@@ -65,6 +65,10 @@ type Preview struct {
 	// as a line-number entry and scrolls to the entered line on Enter.
 	gotoLineActive bool
 	gotoLineInput  string
+	// pendingGotoLine holds a 1-based line to scroll to once the current file
+	// finishes loading. It is set when a FileSelectedMsg carries a target line
+	// (for example from the todo fuzzy finder) and cleared after it is applied.
+	pendingGotoLine int
 	// Markdown heading-jump overlay state. mdHeadings is populated on load for
 	// markdown files; tocTargets holds the resolved display line per heading
 	// while the overlay is open.
@@ -272,6 +276,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.blameMode = false
 		p.blameLines = nil
 		p.diffLines = nil
+		p.pendingGotoLine = msg.Line
 		p.tocActive = false
 		p.tocCursor = 0
 		p.mdHeadings = nil
@@ -290,6 +295,11 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.err = msg.err
 			p.isBinary = msg.isBinary
 			p.isLarge = msg.isLarge
+			// Honor a pending line jump now that content is available.
+			if p.pendingGotoLine > 0 && msg.err == nil && !msg.isBinary && !msg.isLarge {
+				p.gotoLine(p.pendingGotoLine)
+			}
+			p.pendingGotoLine = 0
 		}
 		return p, nil
 	case diffLoadedMsg:

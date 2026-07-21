@@ -49,6 +49,7 @@ type DiffContext struct {
 type FileSelectedMsg struct {
 	Path        string
 	DiffContext *DiffContext // nil = working tree diff (backward compatible)
+	Line        int          // 1-based line to scroll to after load (0 = none)
 }
 
 // RevealFileMsg requests the filetree to expand parent directories and
