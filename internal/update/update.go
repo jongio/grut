@@ -538,22 +538,36 @@ func replaceUnix(newBinaryPath, exePath string) error {
 	return nil
 }
 
-// replaceWindows renames the running exe to .old, then copies the new
-// binary and updates any companion binaries if present.
+// replaceWindows renames the running exe to .old, then renames a pre-staged
+// copy of the new binary into place. The new binary is first copied to a temp
+// file in the target directory so the critical rename window (between removing
+// the old exe and placing the new one) is minimised (CWE-367).
 func replaceWindows(newBinaryPath, exeDir, exeName string) error {
 	exePath := filepath.Join(exeDir, exeName)
 	oldPath := exePath + oldBinarySuffix
 
+	// Stage the new binary into the target directory first, before we touch
+	// the running exe. This ensures the replacement file is ready on the same
+	// volume and the rename-into-place is near-instant.
+	stagedPath := exePath + ".new"
+	if err := copyFile(newBinaryPath, stagedPath); err != nil {
+		return fmt.Errorf("staging new binary: %w", err)
+	}
+
 	// Remove any previous .old file.
 	_ = os.Remove(oldPath)
 
-	// Rename running exe so we can write the new one.
+	// Rename running exe so we can rename the staged binary into place.
 	if err := os.Rename(exePath, oldPath); err != nil {
+		_ = os.Remove(stagedPath) // cleanup staged file
 		return fmt.Errorf("renaming current binary: %w", err)
 	}
 
-	if err := copyFile(newBinaryPath, exePath); err != nil {
+	// Rename the staged binary into the final location (near-instant on NTFS).
+	if err := os.Rename(stagedPath, exePath); err != nil {
+		// Attempt rollback: restore the original binary.
 		rollbackErr := os.Rename(oldPath, exePath)
+		_ = os.Remove(stagedPath)
 		if rollbackErr != nil {
 			return fmt.Errorf("installing new binary: %w", errors.Join(err, fmt.Errorf("restoring original binary: %w", rollbackErr)))
 		}

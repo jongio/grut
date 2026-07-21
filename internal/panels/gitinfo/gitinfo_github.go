@@ -1401,10 +1401,13 @@ func (p *Panel) issueSelectedCmd() tea.Cmd {
 	iss := items[cursor].issue
 	return func() tea.Msg {
 		return panels.IssueSelectedMsg{
-			Number: iss.Number,
-			Title:  iss.Title,
-			Body:   iss.Body,
-			State:  iss.State,
+			Number:   iss.Number,
+			Title:    iss.Title,
+			Body:     iss.Body,
+			State:    iss.State,
+			Author:   iss.Author,
+			Assignee: iss.Assignee,
+			Labels:   append([]string(nil), iss.Labels...),
 		}
 	}
 }

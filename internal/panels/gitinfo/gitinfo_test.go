@@ -1917,6 +1917,9 @@ func TestIssueSelectedCmd_ValidCursor(t *testing.T) {
 	sel, ok := msg.(panels.IssueSelectedMsg)
 	require.True(t, ok)
 	assert.Equal(t, 1, sel.Number)
+	assert.Equal(t, "testuser", sel.Author)
+	assert.Equal(t, "testuser", sel.Assignee)
+	assert.Equal(t, []string{"bug"}, sel.Labels)
 }
 
 func TestPRSelectedCmd_ValidCursor(t *testing.T) {
