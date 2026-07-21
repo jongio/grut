@@ -173,18 +173,18 @@ func withTestCertChain(t *testing.T, chain testCertChain) {
 
 func TestVerifyCosignChecksums_Success(t *testing.T) {
 	checksumData := []byte("abc123  grut_1.0.0_linux_amd64.tar.gz\n")
-	sigContent := []byte("dGVzdC1zaWduYXR1cmU=")
-	certContent := []byte("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----")
+	sigContent := "dGVzdC1zaWduYXR1cmU="
+	certDER := []byte("fake-der-cert")
+	certB64 := base64.StdEncoding.EncodeToString(certDER)
+
+	bundleJSON := fmt.Sprintf(`{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{"certificate":{"rawBytes":"%s"}},"messageSignature":{"signature":"%s"}}`, certB64, sigContent)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, ".sig"):
-			_, _ = w.Write(sigContent)
-		case strings.HasSuffix(r.URL.Path, ".pem"):
-			_, _ = w.Write(certContent)
-		default:
-			w.WriteHeader(http.StatusNotFound)
+		if strings.HasSuffix(r.URL.Path, ".sigstore.json") {
+			_, _ = w.Write([]byte(bundleJSON))
+			return
 		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
@@ -192,15 +192,17 @@ func TestVerifyCosignChecksums_Success(t *testing.T) {
 	downloadBaseURL = srv.URL
 	defer func() { downloadBaseURL = origBase }()
 
+	expectedCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
 	origVerify := cosignVerifyFunc
 	cosignVerifyFunc = func(data, sig, cert []byte) error {
 		if string(data) != string(checksumData) {
 			t.Errorf("verify received wrong data: %q", data)
 		}
-		if string(sig) != string(sigContent) {
-			t.Errorf("verify received wrong sig: %q", sig)
+		if string(sig) != sigContent {
+			t.Errorf("verify received wrong sig: %q, want %q", sig, sigContent)
 		}
-		if string(cert) != string(certContent) {
+		if string(cert) != string(expectedCertPEM) {
 			t.Errorf("verify received wrong cert: %q", cert)
 		}
 		return nil
@@ -214,8 +216,10 @@ func TestVerifyCosignChecksums_Success(t *testing.T) {
 }
 
 func TestVerifyCosignChecksums_VerificationFails(t *testing.T) {
+	bundleJSON := `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{"certificate":{"rawBytes":"AAAA"}},"messageSignature":{"signature":"BBBB"}}`
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("artifact-data"))
+		_, _ = w.Write([]byte(bundleJSON))
 	}))
 	defer srv.Close()
 
@@ -238,13 +242,9 @@ func TestVerifyCosignChecksums_VerificationFails(t *testing.T) {
 	}
 }
 
-func TestVerifyCosignChecksums_SigNotFound_OldVersion(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".sig") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte("cert-data"))
+func TestVerifyCosignChecksums_BundleNotFound_OldVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
@@ -254,7 +254,7 @@ func TestVerifyCosignChecksums_SigNotFound_OldVersion(t *testing.T) {
 
 	origVerify := cosignVerifyFunc
 	cosignVerifyFunc = func(_, _, _ []byte) error {
-		t.Fatal("verify should not be called when sig is missing")
+		t.Fatal("verify should not be called when bundle is missing")
 		return nil
 	}
 	defer func() { cosignVerifyFunc = origVerify }()
@@ -266,13 +266,9 @@ func TestVerifyCosignChecksums_SigNotFound_OldVersion(t *testing.T) {
 	}
 }
 
-func TestVerifyCosignChecksums_SigNotFound_EnforcedVersion(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".sig") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte("cert-data"))
+func TestVerifyCosignChecksums_BundleNotFound_EnforcedVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
@@ -283,72 +279,16 @@ func TestVerifyCosignChecksums_SigNotFound_EnforcedVersion(t *testing.T) {
 	// Version >= cosignRequiredSince: must fail (prevent downgrade attack)
 	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
 	if err == nil {
-		t.Fatal("expected error for missing sig on enforced version, got nil")
+		t.Fatal("expected error for missing bundle on enforced version, got nil")
 	}
 	if !strings.Contains(err.Error(), "cosign signature required") {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }
 
-func TestVerifyCosignChecksums_CertNotFound_OldVersion(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".pem") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte("sig-data"))
-	}))
-	defer srv.Close()
-
-	origBase := downloadBaseURL
-	downloadBaseURL = srv.URL
-	defer func() { downloadBaseURL = origBase }()
-
-	origVerify := cosignVerifyFunc
-	cosignVerifyFunc = func(_, _, _ []byte) error {
-		t.Fatal("verify should not be called when cert is missing")
-		return nil
-	}
-	defer func() { cosignVerifyFunc = origVerify }()
-
-	// Pre-cosign version: graceful degradation
-	err := verifyCosignChecksums(context.Background(), []byte("data"), "0.9.0")
-	if err != nil {
-		t.Fatalf("expected nil (graceful degradation for old version), got: %v", err)
-	}
-}
-
-func TestVerifyCosignChecksums_CertNotFound_EnforcedVersion(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".pem") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte("sig-data"))
-	}))
-	defer srv.Close()
-
-	origBase := downloadBaseURL
-	downloadBaseURL = srv.URL
-	defer func() { downloadBaseURL = origBase }()
-
-	// Version >= cosignRequiredSince: must fail
-	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
-	if err == nil {
-		t.Fatal("expected error for missing cert on enforced version, got nil")
-	}
-	if !strings.Contains(err.Error(), "cosign certificate required") {
-		t.Fatalf("unexpected error message: %v", err)
-	}
-}
-
-func TestVerifyCosignChecksums_SigDownloadError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".sig") {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write([]byte("cert-data"))
+func TestVerifyCosignChecksums_BundleDownloadError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
@@ -358,20 +298,16 @@ func TestVerifyCosignChecksums_SigDownloadError(t *testing.T) {
 
 	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
 	if err == nil {
-		t.Fatal("expected error for sig download failure")
+		t.Fatal("expected error for bundle download failure")
 	}
-	if !strings.Contains(err.Error(), "downloading cosign signature") {
-		t.Errorf("error should mention signature download, got: %v", err)
+	if !strings.Contains(err.Error(), "downloading cosign bundle") {
+		t.Errorf("error should mention bundle download, got: %v", err)
 	}
 }
 
-func TestVerifyCosignChecksums_CertDownloadError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".pem") {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write([]byte("sig-data"))
+func TestVerifyCosignChecksums_InvalidBundleJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
 	}))
 	defer srv.Close()
 
@@ -381,10 +317,10 @@ func TestVerifyCosignChecksums_CertDownloadError(t *testing.T) {
 
 	err := verifyCosignChecksums(context.Background(), []byte("data"), "1.0.0")
 	if err == nil {
-		t.Fatal("expected error for cert download failure")
+		t.Fatal("expected error for invalid bundle JSON")
 	}
-	if !strings.Contains(err.Error(), "downloading cosign certificate") {
-		t.Errorf("error should mention certificate download, got: %v", err)
+	if !strings.Contains(err.Error(), "parsing cosign bundle") {
+		t.Errorf("error should mention bundle parsing, got: %v", err)
 	}
 }
 
@@ -451,6 +387,82 @@ func TestDownloadCosignArtifact_OversizedResponse(t *testing.T) {
 	}
 	if !errors.Is(err, ErrPayloadTooLarge) {
 		t.Errorf("error should wrap ErrPayloadTooLarge, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseSigstoreBundle
+// ---------------------------------------------------------------------------
+
+func TestParseSigstoreBundle_Valid(t *testing.T) {
+	certDER := []byte("fake-der-certificate-bytes")
+	certB64 := base64.StdEncoding.EncodeToString(certDER)
+	sigB64 := "dGVzdC1zaWduYXR1cmU="
+
+	bundleJSON := fmt.Sprintf(`{
+		"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+		"verificationMaterial": {"certificate": {"rawBytes": "%s"}},
+		"messageSignature": {"signature": "%s"}
+	}`, certB64, sigB64)
+
+	sig, certPEM, err := parseSigstoreBundle([]byte(bundleJSON))
+	if err != nil {
+		t.Fatalf("parseSigstoreBundle: %v", err)
+	}
+
+	if string(sig) != sigB64 {
+		t.Errorf("sig = %q, want %q", sig, sigB64)
+	}
+
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		t.Fatal("expected PEM block in cert output")
+	}
+	if string(block.Bytes) != string(certDER) {
+		t.Errorf("cert DER mismatch: got %q, want %q", block.Bytes, certDER)
+	}
+}
+
+func TestParseSigstoreBundle_InvalidJSON(t *testing.T) {
+	_, _, err := parseSigstoreBundle([]byte("not-json"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+	if !strings.Contains(err.Error(), "invalid bundle JSON") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestParseSigstoreBundle_MissingSignature(t *testing.T) {
+	bundleJSON := `{"verificationMaterial":{"certificate":{"rawBytes":"AAAA"}},"messageSignature":{}}`
+	_, _, err := parseSigstoreBundle([]byte(bundleJSON))
+	if err == nil {
+		t.Fatal("expected error for missing signature")
+	}
+	if !errors.Is(err, ErrCosignVerification) {
+		t.Errorf("error should wrap ErrCosignVerification, got: %v", err)
+	}
+}
+
+func TestParseSigstoreBundle_MissingCertificate(t *testing.T) {
+	bundleJSON := `{"verificationMaterial":{"certificate":{}},"messageSignature":{"signature":"BBBB"}}`
+	_, _, err := parseSigstoreBundle([]byte(bundleJSON))
+	if err == nil {
+		t.Fatal("expected error for missing certificate")
+	}
+	if !errors.Is(err, ErrCosignCertInvalid) {
+		t.Errorf("error should wrap ErrCosignCertInvalid, got: %v", err)
+	}
+}
+
+func TestParseSigstoreBundle_InvalidCertBase64(t *testing.T) {
+	bundleJSON := `{"verificationMaterial":{"certificate":{"rawBytes":"!!!not-base64!!!"}},"messageSignature":{"signature":"BBBB"}}`
+	_, _, err := parseSigstoreBundle([]byte(bundleJSON))
+	if err == nil {
+		t.Fatal("expected error for invalid cert base64")
+	}
+	if !errors.Is(err, ErrCosignCertInvalid) {
+		t.Errorf("error should wrap ErrCosignCertInvalid, got: %v", err)
 	}
 }
 
