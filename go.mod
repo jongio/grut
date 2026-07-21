@@ -35,9 +35,9 @@ require (
 	github.com/buger/jsonparser v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20260713092251-4bee1914c0cf // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20260720091822-7cc6674724ac // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20260705004817-2cc9a8fe1146 // indirect
-	github.com/charmbracelet/x/exp/slice v0.0.0-20260719004043-bb9a97036f23 // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20260720091843-3eef36eaaa28 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
@@ -47,8 +47,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
-	github.com/ebitengine/purego v0.10.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/ebitengine/purego v0.10.2 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect

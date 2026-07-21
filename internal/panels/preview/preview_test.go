@@ -2,6 +2,8 @@ package preview
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -324,6 +326,10 @@ func TestBinaryFileDetection(t *testing.T) {
 	view := p.View(60, 20)
 	assert.Contains(t, view, "Binary file")
 	assert.Contains(t, view, "image.png")
+	assert.Contains(t, view, "Type: image/png")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(p.lines, "\n"), "SHA-256: "+fmt.Sprintf("%x", sha256.Sum256(data)))
 }
 
 func TestLargeFileRejection(t *testing.T) {
@@ -362,6 +368,7 @@ func TestLargeFileShowsMetadata(t *testing.T) {
 	assert.Contains(t, view, "200 B")
 	assert.Contains(t, view, "Mode:")
 	assert.Contains(t, view, "Modified:")
+	assert.NotContains(t, view, "SHA-256:")
 }
 
 func TestMaxFileSizeZeroDisablesCheck(t *testing.T) {
