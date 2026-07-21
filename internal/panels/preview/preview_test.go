@@ -810,6 +810,7 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "toggle_diff_mode")
 	assert.Contains(t, actions, "copy_selection")
 	assert.Contains(t, actions, "copy_permalink")
+	assert.Contains(t, actions, "create_gist")
 }
 
 func TestKeysIgnoredWhenBlurred(t *testing.T) {
