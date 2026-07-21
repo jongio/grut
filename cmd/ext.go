@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/extension"
@@ -74,12 +77,16 @@ func newExtRemoveCmd() *cobra.Command {
 }
 
 func newExtListCmd() *cobra.Command {
-	return &cobra.Command{
+	var jsonFlag bool
+	cmd := &cobra.Command{
 		Use:   cmdList,
 		Short: "List installed extensions",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mgr := extManager()
 			list := mgr.List()
+			if jsonFlag {
+				return printExtensionListJSON(cmd, list)
+			}
 			if len(list) == 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No extensions installed.")
 				return nil
@@ -95,6 +102,8 @@ func newExtListCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&jsonFlag, "json", false, "Print machine-readable JSON")
+	return cmd
 }
 
 func newExtEnableCmd() *cobra.Command {
@@ -176,7 +185,8 @@ func newExtCreateCmd() *cobra.Command {
 }
 
 func newExtInfoCmd() *cobra.Command {
-	return &cobra.Command{
+	var jsonFlag bool
+	cmd := &cobra.Command{
 		Use:   "info <name>",
 		Short: "Show details about an installed extension",
 		Args:  cobra.ExactArgs(1),
@@ -185,6 +195,9 @@ func newExtInfoCmd() *cobra.Command {
 			info, err := mgr.Get(args[0])
 			if err != nil {
 				return fmt.Errorf("ext info: %w", err)
+			}
+			if jsonFlag {
+				return printExtensionJSON(cmd, *info)
 			}
 			w := cmd.OutOrStdout()
 			status := "enabled"
@@ -206,4 +219,64 @@ func newExtInfoCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&jsonFlag, "json", false, "Print machine-readable JSON")
+	return cmd
+}
+
+type extensionInventoryJSON struct {
+	InstalledAt time.Time `json:"installed_at"`
+	Name        string    `json:"name"`
+	Version     string    `json:"version"`
+	Description string    `json:"description"`
+	Author      string    `json:"author"`
+	License     string    `json:"license"`
+	Runtime     string    `json:"runtime"`
+	EntryPoint  string    `json:"entry_point"`
+	MinGrut     string    `json:"min_grut"`
+	Permissions []string  `json:"permissions"`
+	Directory   string    `json:"directory"`
+	SourceURL   string    `json:"source_url,omitempty"`
+	CommitHash  string    `json:"commit_hash,omitempty"`
+	Enabled     bool      `json:"enabled"`
+}
+
+func printExtensionListJSON(cmd *cobra.Command, list []extension.ExtensionInfo) error {
+	out := make([]extensionInventoryJSON, 0, len(list))
+	for _, info := range list {
+		out = append(out, extensionInventory(info))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
+	return writeExtensionJSON(cmd, out)
+}
+
+func printExtensionJSON(cmd *cobra.Command, info extension.ExtensionInfo) error {
+	return writeExtensionJSON(cmd, extensionInventory(info))
+}
+
+func extensionInventory(info extension.ExtensionInfo) extensionInventoryJSON {
+	permissions := append([]string(nil), info.Manifest.Permissions...)
+	return extensionInventoryJSON{
+		Name:        info.Manifest.Name,
+		Version:     info.Manifest.Version,
+		Description: info.Manifest.Description,
+		Author:      info.Manifest.Author,
+		License:     info.Manifest.License,
+		Runtime:     info.Manifest.Runtime,
+		EntryPoint:  info.Manifest.EntryPoint,
+		MinGrut:     info.Manifest.MinGrut,
+		Permissions: permissions,
+		Enabled:     info.Enabled,
+		SourceURL:   info.SourceURL,
+		CommitHash:  info.CommitHash,
+		InstalledAt: info.InstalledAt,
+		Directory:   info.Dir,
+	}
+}
+
+func writeExtensionJSON(cmd *cobra.Command, value any) error {
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(value)
 }

@@ -93,6 +93,7 @@ type Item struct {
 	Text        string // Searchable text (what fuzzy matches against)
 	Description string // Secondary text shown in results
 	Category    string // Source category for display grouping
+	Line        int    // 1-based line to jump to when selected (0 = none)
 }
 
 // ---------------------------------------------------------------------------
