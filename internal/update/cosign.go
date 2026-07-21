@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -18,11 +19,9 @@ import (
 )
 
 const (
-	// cosignSigSuffix is the file extension for cosign detached signature files.
-	cosignSigSuffix = ".sig"
-
-	// cosignCertSuffix is the file extension for cosign certificate files.
-	cosignCertSuffix = ".pem"
+	// cosignBundleSuffix is the file extension for Sigstore bundle files
+	// produced by cosign sign-blob --bundle.
+	cosignBundleSuffix = ".sigstore.json"
 
 	// expectedOIDCIssuer is the OIDC issuer for GitHub Actions keyless signing.
 	expectedOIDCIssuer = "https://token.actions.githubusercontent.com"
@@ -92,41 +91,80 @@ func init() {
 // as a verification failure to prevent downgrade attacks.
 const cosignRequiredSince = "1.0.0"
 
-// verifyCosignChecksums downloads cosign signature artifacts for the given
-// release version and verifies the cryptographic signature over checksumData.
+// verifyCosignChecksums downloads the Sigstore bundle for the given release
+// version and verifies the cryptographic signature over checksumData.
 //
 // For releases >= cosignRequiredSince, missing signature artifacts are treated
 // as errors (preventing downgrade attacks). For older releases, missing
 // artifacts log a warning and allow the update to proceed.
 func verifyCosignChecksums(ctx context.Context, checksumData []byte, version string) error {
-	sigURL := fmt.Sprintf("%s/v%s/%s%s", downloadBaseURL, version, checksumFileName, cosignSigSuffix)
-	certURL := fmt.Sprintf("%s/v%s/%s%s", downloadBaseURL, version, checksumFileName, cosignCertSuffix)
+	bundleURL := fmt.Sprintf("%s/v%s/%s%s", downloadBaseURL, version, checksumFileName, cosignBundleSuffix)
 
-	sig, sigErr := downloadCosignArtifact(ctx, sigURL)
-	if errors.Is(sigErr, ErrCosignArtifactNotFound) {
+	bundleData, err := downloadCosignArtifact(ctx, bundleURL)
+	if errors.Is(err, ErrCosignArtifactNotFound) {
 		if !versionPredatesCosign(version) {
 			return fmt.Errorf("cosign signature required for v%s but not found (possible downgrade attack)", version)
 		}
 		fmt.Fprintf(os.Stderr, "Warning: cosign signature not found for v%s, skipping signature verification\n", version)
 		return nil
 	}
-	if sigErr != nil {
-		return fmt.Errorf("downloading cosign signature: %w", sigErr)
+	if err != nil {
+		return fmt.Errorf("downloading cosign bundle: %w", err)
 	}
 
-	cert, certErr := downloadCosignArtifact(ctx, certURL)
-	if errors.Is(certErr, ErrCosignArtifactNotFound) {
-		if !versionPredatesCosign(version) {
-			return fmt.Errorf("cosign certificate required for v%s but not found (possible downgrade attack)", version)
-		}
-		fmt.Fprintf(os.Stderr, "Warning: cosign certificate not found for v%s, skipping signature verification\n", version)
-		return nil
-	}
-	if certErr != nil {
-		return fmt.Errorf("downloading cosign certificate: %w", certErr)
+	sig, cert, err := parseSigstoreBundle(bundleData)
+	if err != nil {
+		return fmt.Errorf("parsing cosign bundle: %w", err)
 	}
 
 	return cosignVerifyFunc(checksumData, sig, cert)
+}
+
+// sigstoreBundle represents the relevant fields of a Sigstore bundle JSON
+// file produced by cosign sign-blob --bundle.
+type sigstoreBundle struct {
+	VerificationMaterial struct {
+		Certificate struct {
+			RawBytes string `json:"rawBytes"`
+		} `json:"certificate"`
+	} `json:"verificationMaterial"`
+	MessageSignature struct {
+		Signature string `json:"signature"`
+	} `json:"messageSignature"`
+}
+
+// parseSigstoreBundle extracts the base64-encoded signature and PEM certificate
+// from a Sigstore bundle JSON file. Returns (sigBase64, certPEM, error).
+func parseSigstoreBundle(data []byte) ([]byte, []byte, error) {
+	var bundle sigstoreBundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		return nil, nil, fmt.Errorf("invalid bundle JSON: %w", err)
+	}
+
+	if bundle.MessageSignature.Signature == "" {
+		return nil, nil, fmt.Errorf("%w: bundle missing messageSignature.signature", ErrCosignVerification)
+	}
+	if bundle.VerificationMaterial.Certificate.RawBytes == "" {
+		return nil, nil, fmt.Errorf("%w: bundle missing verificationMaterial.certificate.rawBytes", ErrCosignCertInvalid)
+	}
+
+	// The signature in the bundle is already base64-encoded, which is what
+	// defaultCosignVerify expects.
+	sig := []byte(bundle.MessageSignature.Signature)
+
+	// The certificate rawBytes is base64-encoded DER. Decode to DER then
+	// wrap in PEM for the existing verification function.
+	derBytes, err := base64.StdEncoding.DecodeString(bundle.VerificationMaterial.Certificate.RawBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: decoding certificate from bundle: %v", ErrCosignCertInvalid, err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: derBytes,
+	})
+
+	return sig, certPEM, nil
 }
 
 // versionPredatesCosign returns true if version is strictly older than
