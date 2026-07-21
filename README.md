@@ -158,6 +158,26 @@ grut update       # Update grut to the latest release
 grut version      # Print the version
 ```
 
+## Commands
+
+grut is primarily a TUI, but it also exposes subcommands for scripting and setup. Run `grut <command> --help` for full options.
+
+| Command | Description |
+|---|---|
+| `grut [path]` | Launch the TUI in the current or given directory |
+| `grut version` | Print the version of grut |
+| `grut update` | Update grut to the latest release |
+| `grut status` | Print a summary of the working tree status |
+| `grut config` | Inspect configuration (`check`, `get <key>`, `defaults`) |
+| `grut theme` | Inspect themes (`theme list`) |
+| `grut keys` | Print keybindings (`--filter`, `--json`) |
+| `grut clean` | Remove transient session and diagnostic data |
+| `grut completion` | Generate shell completion scripts |
+| `grut run <shortcut>` | Execute an AI-powered git workflow shortcut |
+| `grut ext` | Manage extensions (`install`, `remove`, `enable`, `disable`, `create`, `info`) |
+| `grut report` | View crash reports and file GitHub issues |
+| `grut mcp` | Run grut as an MCP server (`mcp tools` lists exposed tools) |
+
 ## CLI Flags
 
 | Flag | Description |
@@ -254,7 +274,7 @@ go vet ./...     # Vet all packages
 
 ## Tech Stack
 
-- **Go 1.26.3** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
+- **Go 1.26.5** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
 - **Chroma v2** (syntax highlighting) + **Glamour** (markdown rendering)
 - **fsnotify** (filesystem watching) + **mimetype** (file type detection)
 - **TOML** configuration via go-toml/v2

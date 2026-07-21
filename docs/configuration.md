@@ -175,3 +175,15 @@ paths = ["~/projects", "~/notes"]
 level = "info"
 file = "~/.local/share/grut/grut.log"
 ```
+
+---
+
+## Environment Variables
+
+A few settings are controlled by environment variables rather than the config file:
+
+| Variable | Effect |
+|---|---|
+| `GRUT_LOG` | Path to a log file. Setting it enables structured debug logging for the session. |
+| `GRUT_NERD_FONT` | Set to `1` to force Nerd Font icons in any terminal, regardless of `file_tree.icon_mode`. |
+| `GRUT_FORCE_TERMINAL` | Set to any non-empty value (for example `1`) to bypass the MinTTY/MSYS compatibility check on Windows. |
