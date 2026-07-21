@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/jongio/grut/internal/shortcuts"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -259,6 +261,7 @@ func TestNewRunCmd_FlagsRegistered(t *testing.T) {
 		{"describe", "string"},
 		{"dry-run", "bool"},
 		{"no-confirm", "bool"},
+		{"json", "bool"},
 	}
 
 	for _, tt := range tests {
@@ -267,6 +270,75 @@ func TestNewRunCmd_FlagsRegistered(t *testing.T) {
 			assert.Equal(t, tt.flagType, f.Value.Type(), "flag --%s type mismatch", tt.name)
 		}
 	}
+}
+
+func TestPrintShortcutListJSON_SortedSummaries(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := printShortcutListJSON(cmd, []shortcuts.Shortcut{
+		{Name: "zeta", Description: "last", Builtin: false, Confirm: true},
+		{Name: "alpha", Description: "first", Builtin: true, Confirm: false},
+	})
+	require.NoError(t, err)
+
+	var out []shortcutSummaryJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	require.Len(t, out, 2)
+	assert.Equal(t, "alpha", out[0].Name)
+	assert.Equal(t, "builtin", out[0].Source)
+	assert.Equal(t, "zeta", out[1].Name)
+	assert.Equal(t, "custom", out[1].Source)
+}
+
+func TestPrintShortcutJSON_IncludesArgsAndSteps(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := printShortcutJSON(cmd, shortcuts.Shortcut{
+		Name:        "release",
+		Description: "Create a release",
+		Builtin:     true,
+		Confirm:     true,
+		Args: []shortcuts.Arg{
+			{Name: "version", Prompt: "Release version", Required: true, Default: "v1.0.0"},
+		},
+		Steps: []shortcuts.Step{
+			{Op: "tag", Params: map[string]string{"name": "{{version}}"}, OnFail: ""},
+		},
+	})
+	require.NoError(t, err)
+
+	var out shortcutDetailJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	assert.Equal(t, "release", out.Name)
+	require.Len(t, out.Args, 1)
+	assert.Equal(t, "version", out.Args[0].Name)
+	require.Len(t, out.Steps, 1)
+	assert.Equal(t, "tag", out.Steps[0].Op)
+	assert.Equal(t, shortcuts.OnFailStop, out.Steps[0].OnFail)
+	assert.Equal(t, "{{version}}", out.Steps[0].Params["name"])
+}
+
+func TestPrintShortcutPlanJSON_IncludesResolvedSteps(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := printShortcutPlanJSON(cmd, "deploy", []shortcuts.Step{
+		{Op: "push", Params: map[string]string{"remote": "origin"}, OnFail: shortcuts.OnFailContinue},
+	})
+	require.NoError(t, err)
+
+	var out shortcutPlanJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	assert.Equal(t, "deploy", out.Name)
+	require.Len(t, out.Steps, 1)
+	assert.Equal(t, "push", out.Steps[0].Op)
+	assert.Equal(t, "origin", out.Steps[0].Params["remote"])
+	assert.Equal(t, shortcuts.OnFailContinue, out.Steps[0].OnFail)
 }
 
 func TestNewRunCmd_UseAndShort(t *testing.T) {
