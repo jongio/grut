@@ -197,6 +197,7 @@ Preview panel (panel 5).
 | `B` | Toggle blame |
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
+| `O` | Open file on GitHub |
 | `Ctrl+G` | Create secret gist |
 | `Esc` | Clear selection |
 
