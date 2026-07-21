@@ -171,6 +171,7 @@ Commits panel (panel 4).
 | `x` | Export the selected commit as a .patch file |
 | `A` | Amend last commit |
 | `r` | Reword last commit |
+| `v` | Revert the selected commit |
 | `/` | Search commits |
 | `S` | Search commit content (pickaxe) |
 | `M` | Search commit messages (grep) |

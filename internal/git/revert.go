@@ -3,7 +3,19 @@ package git
 import (
 	"context"
 	"fmt"
+	"strings"
 )
+
+// HeadSHA returns the full commit hash that HEAD currently points to. It is a
+// read-only lookup used to capture the pre-revert position so the operation can
+// be undone with a hard reset.
+func (c *Client) HeadSHA(ctx context.Context) (string, error) {
+	out, err := c.run(ctx, "rev-parse", refHEAD)
+	if err != nil {
+		return "", fmt.Errorf("head sha: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
 
 // Revert creates a new commit that undoes the changes introduced by the given
 // commit hash. If the revert causes conflicts, the user must resolve them and

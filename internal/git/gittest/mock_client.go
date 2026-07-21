@@ -32,6 +32,7 @@ type MockClient struct {
 	BranchDeleteFunc   func(ctx context.Context, name string, force bool) error
 	BranchRenameFunc   func(ctx context.Context, oldName, newName string) error
 	CheckoutFunc       func(ctx context.Context, ref string) error
+	HeadSHAFunc        func(ctx context.Context) (string, error)
 	PushFunc           func(ctx context.Context, opts git.PushOpts) error
 	PullFunc           func(ctx context.Context, opts git.PullOpts) error
 	FetchFunc          func(ctx context.Context, opts git.FetchOpts) error
@@ -243,6 +244,13 @@ func (m *MockClient) Checkout(ctx context.Context, ref string) error {
 		return m.CheckoutFunc(ctx, ref)
 	}
 	return nil
+}
+
+func (m *MockClient) HeadSHA(ctx context.Context) (string, error) {
+	if m.HeadSHAFunc != nil {
+		return m.HeadSHAFunc(ctx)
+	}
+	return "", nil
 }
 
 // --- RemoteOps ---
