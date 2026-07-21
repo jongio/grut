@@ -22,6 +22,13 @@ import (
 //go:embed defaults.toml
 var defaultsTOML []byte
 
+// DefaultsTOML returns the embedded default configuration as TOML bytes.
+func DefaultsTOML() []byte {
+	out := make([]byte, len(defaultsTOML))
+	copy(out, defaultsTOML)
+	return out
+}
+
 // Config is the top-level configuration for grut.
 type Config struct {
 	Actions    ActionsConfig    `toml:"actions"`
@@ -399,9 +406,16 @@ func expandPaths(cfg *Config) {
 }
 
 // warnIfWorldReadable logs a warning when the config file's permissions
-// allow "other" users to read it. Only meaningful on Unix systems.
+// allow other users to read it.
+//
+// On Unix: checks if the "other" permission bits are set.
+// On Windows: checks if the config directory is outside the user's private
+// AppData folder (which has restrictive ACLs by default). Full DACL
+// introspection is not performed because %APPDATA% is user-private on all
+// modern Windows versions and the check would require cgo or x/sys/windows.
 func warnIfWorldReadable(path string) {
 	if runtime.GOOS == "windows" {
+		warnIfInsecureLocationWindows(path)
 		return
 	}
 	info, err := os.Stat(path)
@@ -413,6 +427,37 @@ func warnIfWorldReadable(path string) {
 			"config file is world-readable; consider chmod 600",
 			"path", path,
 			"mode", info.Mode().Perm().String(),
+		)
+	}
+}
+
+// warnIfInsecureLocationWindows logs a warning if the config file is not
+// inside the user's AppData directory. On Windows, %APPDATA% has user-private
+// ACLs by default, so files stored there are protected. Files placed elsewhere
+// (e.g., a shared drive or world-writable directory) may be accessible to
+// other local users (CWE-276).
+func warnIfInsecureLocationWindows(path string) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return // cannot determine safe location; skip check
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return
+	}
+	absAppData, err := filepath.Abs(appData)
+	if err != nil {
+		return
+	}
+	// Normalize for case-insensitive comparison on Windows.
+	if !strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(absAppData)+string(filepath.Separator)) {
+		slog.Warn(
+			"config file is outside user-private AppData; other users may be able to read it",
+			"path", path,
+			"expected_prefix", appData,
 		)
 	}
 }

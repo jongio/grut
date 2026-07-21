@@ -31,12 +31,15 @@ func ValidateEditorPath(path string) error {
 	return nil
 }
 
+// schemeFile is the file:// URL scheme.
+const schemeFile = "file"
+
 // dangerousSchemes lists URL schemes that must not be opened in a browser.
 var dangerousSchemes = map[string]bool{
 	"javascript": true,
 	"data":       true,
 	"vbscript":   true,
-	"file":       true,
+	schemeFile:   true,
 }
 
 // ValidateBrowserURL validates a URL before opening it in the default browser.
@@ -208,7 +211,7 @@ func RevealInFileManager(ctx context.Context, path string) error {
 		return StartDetachedFn(exec.CommandContext(ctx, "open", "-R", path))
 	default:
 		if _, err := exec.LookPath("dbus-send"); err == nil {
-			fileURI := (&url.URL{Scheme: "file", Path: path}).String()
+			fileURI := (&url.URL{Scheme: schemeFile, Path: path}).String()
 			return StartDetachedFn(exec.CommandContext(
 				ctx, "dbus-send",
 				"--session",

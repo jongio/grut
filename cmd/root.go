@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,6 +57,7 @@ func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
 	// memstatsDone is closed by cleanup to stop the background memstats
 	// goroutine, preventing a goroutine leak when --pprof is used.
 	memstatsDone := make(chan struct{})
+	var startupLayout string
 
 	rootCmd = &cobra.Command{
 		Use:   "grut",
@@ -178,7 +180,10 @@ Environment:
 
 			// Create session manager and attempt to restore previous session.
 			sessMgr := session.NewManager()
-			preset := restoreSessionOrDefault(sessMgr, cfg, cwd, gc)
+			preset, err := restoreSessionOrDefault(sessMgr, cfg, cwd, gc, startupLayout)
+			if err != nil {
+				return err
+			}
 
 			// Create the layout engine
 			engine, err := layout.NewEngine(reg, preset)
@@ -348,6 +353,7 @@ Environment:
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
 	rootCmd.PersistentFlags().Bool("reset-welcome", false, "Reset first-run state so the welcome screen shows on next launch")
+	rootCmd.PersistentFlags().StringVar(&startupLayout, "layout", "", "Startup layout override (explorer, git, review, agent, full)")
 
 	// Register subcommands via constructors (no init() side effects).
 	rootCmd.AddCommand(newVersionCmd())
@@ -357,6 +363,11 @@ Environment:
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newReportCmd())
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(newStatusCmd())
+	rootCmd.AddCommand(newThemeCmd())
+	rootCmd.AddCommand(newCleanCmd())
+	rootCmd.AddCommand(newCompletionCmd())
+	rootCmd.AddCommand(newKeysCmd())
 
 	// cleanup releases profiling resources. It is idempotent — safe to call
 	// multiple times (subsequent calls are no-ops).
@@ -396,12 +407,12 @@ Environment:
 // restoreSessionOrDefault attempts to load a saved session for the given
 // working directory and returns the first tab's preset. Falls back to
 // ExplorerPreset when sessions are disabled or no saved session exists.
-func restoreSessionOrDefault(mgr *session.Manager, cfg *config.Config, workDir string, _ git.GitClient) layout.Preset {
-	defaultPreset := func() layout.Preset { //nolint:gocritic // closure needed for deferred evaluation
-		// v1: always default to ExplorerPreset. The filetree panel
-		// already shows git status indicators when .git exists.
-		// GitPreset and other presets are preserved for v2 multi-tab.
-		return layout.ExplorerPreset()
+func restoreSessionOrDefault(mgr *session.Manager, cfg *config.Config, workDir string, _ git.GitClient, layoutOverride string) (layout.Preset, error) {
+	defaultPreset := func() (layout.Preset, error) { //nolint:gocritic // closure needed for deferred evaluation
+		return startupPreset(cfg, layoutOverride)
+	}
+	if strings.TrimSpace(layoutOverride) != "" {
+		return defaultPreset()
 	}
 
 	if !cfg.Session.Enabled {
@@ -423,9 +434,35 @@ func restoreSessionOrDefault(mgr *session.Manager, cfg *config.Config, workDir s
 		presetName = state.Tabs[0].Name
 	}
 	if p, ok := layout.Presets()[presetName]; ok {
-		return p
+		return p, nil
 	}
 	return defaultPreset()
+}
+
+func startupPreset(cfg *config.Config, layoutOverride string) (layout.Preset, error) {
+	name := strings.TrimSpace(layoutOverride)
+	if name == "" && cfg != nil {
+		name = strings.TrimSpace(cfg.General.DefaultLayout)
+	}
+	if name == "" {
+		name = "explorer"
+	}
+	presets := layout.Presets()
+	preset, ok := presets[name]
+	if ok {
+		return preset, nil
+	}
+	return layout.Preset{}, fmt.Errorf("unknown layout %q (valid: %s)", name, strings.Join(validLayoutNames(), ", "))
+}
+
+func validLayoutNames() []string {
+	presets := layout.Presets()
+	names := make([]string, 0, len(presets))
+	for name := range presets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // addRestoredTabs adds any additional tabs (beyond the first) from a
