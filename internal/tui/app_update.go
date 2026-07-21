@@ -132,6 +132,10 @@ func (m Model) handleGitOpMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleUnstageFileDone(msg)
 	case panels.AutoFetchTickMsg:
 		return m.handleAutoFetchTick()
+	case panels.RevertRequestMsg:
+		return m.handleRevert(msg.Hash, msg.Subject)
+	case revertDoneMsg:
+		return m.handleRevertDone(msg)
 	}
 	return m, nil
 }

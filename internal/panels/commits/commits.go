@@ -360,6 +360,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "o", Description: "Open commit on GitHub", Action: "open_on_github"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
 		{Key: "S", Description: "Search commit content (pickaxe)", Action: "pickaxe"},
@@ -367,6 +368,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "a", Description: "Filter by commit author", Action: "author_filter"},
 		{Key: "A", Description: "Amend last commit", Action: "amend"},
 		{Key: "r", Description: "Reword last commit", Action: "reword"},
+		{Key: "v", Description: "Revert commit", Action: "revert"},
 	}
 }
 
@@ -873,6 +875,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "o":
+		return p.openCommitOnGitHub()
 	case "x":
 		return p.exportPatch()
 	case "/":
@@ -894,6 +898,14 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				msg = c.Subject + "\n\n" + c.Body
 			}
 			return p, func() tea.Msg { return panels.RewordRequestMsg{OldMessage: msg} }
+		}
+	case "v":
+		c := p.commitAt(p.cursor)
+		if c.Hash != "" {
+			hash, subject := c.Hash, c.Subject
+			return p, func() tea.Msg {
+				return panels.RevertRequestMsg{Hash: hash, Subject: subject}
+			}
 		}
 	case "esc": //nolint:goconst // inline string is more readable here
 		// Progressive reset: pickaxe → PR-commits mode → selected commit → filter → nothing.

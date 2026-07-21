@@ -41,6 +41,15 @@ func TestNoAIFlagInheritedBySubcommands(t *testing.T) {
 	}
 }
 
+func TestLayoutFlagRegistered(t *testing.T) {
+	root, cleanup := newRootCommand()
+	defer cleanup()
+	flag := root.PersistentFlags().Lookup("layout")
+	require.NotNil(t, flag, "--layout persistent flag must be registered")
+	assert.Equal(t, "string", flag.Value.Type())
+	assert.Equal(t, "", flag.DefValue)
+}
+
 func TestApplyNoAIFlag_WhenSet(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("no-ai", false, "")
@@ -292,7 +301,8 @@ func TestRestoreSessionOrDefault_SessionsDisabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Session.Enabled = false
 
-	preset := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil)
+	preset, err := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil, "")
+	require.NoError(t, err)
 	// When sessions are disabled, should return the default ExplorerPreset.
 	expected := layout.ExplorerPreset()
 	assert.Equal(t, expected.Name, preset.Name)
@@ -304,9 +314,51 @@ func TestRestoreSessionOrDefault_NoSavedSession(t *testing.T) {
 	cfg.Session.Enabled = true
 
 	// Use a temp dir where no session file exists.
-	preset := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil)
+	preset, err := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil, "")
+	require.NoError(t, err)
 	expected := layout.ExplorerPreset()
 	assert.Equal(t, expected.Name, preset.Name)
+}
+
+func TestRestoreSessionOrDefault_UsesConfiguredDefaultLayout(t *testing.T) {
+	mgr := session.NewManager()
+	mgr.SetDataDir(t.TempDir())
+	cfg := &config.Config{}
+	cfg.Session.Enabled = true
+	cfg.General.DefaultLayout = "git"
+
+	preset, err := restoreSessionOrDefault(mgr, cfg, t.TempDir(), nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, layout.GitPreset().Name, preset.Name)
+}
+
+func TestRestoreSessionOrDefault_LayoutOverrideWinsOverSavedSession(t *testing.T) {
+	mgr := session.NewManager()
+	mgr.SetDataDir(t.TempDir())
+	workDir := t.TempDir()
+	cfg := &config.Config{}
+	cfg.Session.Enabled = true
+	cfg.General.DefaultLayout = "explorer"
+	require.NoError(t, mgr.Save(session.SessionState{
+		WorkDir: workDir,
+		Tabs: []session.TabState{
+			{Name: "git", Preset: "git", FocusedPanel: "filetree"},
+		},
+	}))
+
+	preset, err := restoreSessionOrDefault(mgr, cfg, workDir, nil, "review")
+	require.NoError(t, err)
+	assert.Equal(t, layout.ReviewPreset().Name, preset.Name)
+}
+
+func TestStartupPreset_InvalidLayoutReturnsError(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.General.DefaultLayout = "missing"
+
+	_, err := startupPreset(cfg, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown layout")
+	assert.Contains(t, err.Error(), "explorer")
 }
 
 // ---------------------------------------------------------------------------

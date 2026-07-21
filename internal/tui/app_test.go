@@ -624,6 +624,26 @@ func TestCommandPaletteAction(t *testing.T) {
 	assert.NotNil(t, m.fuzzyFinder, "command_palette action should open fuzzy finder")
 }
 
+func TestTodoFinderAction(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+	m.Init()
+
+	// The "todo_finder" action should open the fuzzy finder in todos mode.
+	updated, _ = m.handleAction("todo_finder", tea.KeyPressMsg{})
+	m = updated.(Model)
+	assert.NotNil(t, m.fuzzyFinder, "todo_finder action should open fuzzy finder")
+}
+
+func TestOpenFuzzyFinderTodosMode(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 100
+	m.height = 40
+	m = m.openFuzzyFinder("todos")
+	assert.NotNil(t, m.fuzzyFinder, "fuzzy finder should be created for todos mode")
+}
+
 // ---------------------------------------------------------------------------
 // Change directory tests
 // ---------------------------------------------------------------------------

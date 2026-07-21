@@ -347,6 +347,7 @@ var deadcodeAllowlist = []string{
 	"MockClient.Revert",
 	"MockClient.RevertContinue",
 	"MockClient.RevertAbort",
+	"MockClient.HeadSHA",
 	"MockClient.Reset",
 	"MockClient.Clean",
 	"MockClient.CleanPreview",

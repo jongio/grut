@@ -47,7 +47,7 @@ func Validate(cfg *Config) error {
 	errs = appendEnumOrPathErr(errs, "general.keybinding_scheme",
 		cfg.General.KeybindingScheme, "default", "classic", "vim")
 	errs = appendEnumErr(errs, "general.default_layout",
-		cfg.General.DefaultLayout, "explorer", "git", "review", "agent")
+		cfg.General.DefaultLayout, "explorer", "git", "review", "agent", "full")
 
 	// --- file_tree ---
 	errs = appendEnumErr(errs, "file_tree.icon_mode",

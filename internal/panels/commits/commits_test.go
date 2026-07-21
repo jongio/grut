@@ -1764,3 +1764,41 @@ func TestGrepEscClears(t *testing.T) {
 		t.Errorf("expected LogOpts.Grep empty after Esc reload, got %q", mock.lastOpts.Grep)
 	}
 }
+
+func TestRevertKeyEmitsRequest(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	// Move to the second commit so we're not reverting HEAD.
+	p.Update(tea.KeyPressMsg{Code: 'j'})
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'v'})
+	if cmd == nil {
+		t.Fatal("expected a RevertRequestMsg command from v")
+	}
+	msg := cmd()
+	req, ok := msg.(panels.RevertRequestMsg)
+	if !ok {
+		t.Fatalf("expected panels.RevertRequestMsg, got %T", msg)
+	}
+	if req.Hash != "def5678901234" {
+		t.Errorf("expected hash of commit under cursor, got %q", req.Hash)
+	}
+	if req.Subject != "Add feature" {
+		t.Errorf("expected subject of commit under cursor, got %q", req.Subject)
+	}
+}
+
+func TestRevertKeyEmptyCommitsNoop(t *testing.T) {
+	mock := &mockGitOps{commits: nil}
+	p := newTestPanel(mock)
+	p.Focus()
+	p.SetSize(80, 20)
+
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'v'})
+	if cmd != nil {
+		t.Error("expected no command when there are no commits")
+	}
+}

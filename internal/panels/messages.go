@@ -49,7 +49,7 @@ type DiffContext struct {
 type FileSelectedMsg struct {
 	Path        string
 	DiffContext *DiffContext // nil = working tree diff (backward compatible)
-	Line        int          // 1-based line to scroll the preview to (0 = none)
+	Line        int          // 1-based line to scroll to after load (0 = none)
 }
 
 // RevealFileMsg requests the filetree to expand parent directories and
@@ -310,6 +310,14 @@ type AmendRequestMsg struct{}
 // OldMessage carries the current commit message so the modal can pre-fill it.
 type RewordRequestMsg struct {
 	OldMessage string
+}
+
+// RevertRequestMsg is sent to revert the commit under the cursor in the commits
+// panel. The app shows a confirmation modal, then creates a revert commit. Hash
+// is the full commit hash; Subject is shown in the confirmation prompt.
+type RevertRequestMsg struct {
+	Hash    string
+	Subject string
 }
 
 // AsyncOpStartMsg is emitted when an async git operation begins. The root
@@ -624,10 +632,13 @@ type GitHubUserMsg struct {
 // IssueSelectedMsg is sent when the user selects an issue in the GitHub Issues tab.
 // Preview pane should render the issue body as markdown.
 type IssueSelectedMsg struct {
-	Title  string
-	Body   string
-	State  string
-	Number int
+	Title    string
+	Body     string
+	State    string
+	Author   string
+	Assignee string
+	Labels   []string
+	Number   int
 }
 
 // IssueDeselectedMsg is sent when the user deselects an issue (via Escape).

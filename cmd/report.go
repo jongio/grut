@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
+	"time"
 
 	"github.com/jongio/grut/internal/crashlog"
 	"github.com/jongio/grut/internal/panels"
@@ -15,7 +17,21 @@ const (
 	githubRepo = "jongio/grut"
 	issueURL   = "https://github.com/" + githubRepo + "/issues/new"
 	maxURLLen  = 4000
+
+	reportJSONFlag = "json"
 )
+
+type crashReportSummary struct {
+	ID         string `json:"id"`
+	Timestamp  string `json:"timestamp"`
+	Version    string `json:"version"`
+	GoVersion  string `json:"go_version"`
+	OS         string `json:"os"`
+	Arch       string `json:"arch"`
+	Terminal   string `json:"terminal"`
+	PanicValue string `json:"panic_value"`
+	Context    string `json:"context"`
+}
 
 // newReportCmd creates the report command for viewing crash reports
 // and filing GitHub issues.
@@ -36,6 +52,7 @@ all stored reports, --show to inspect one, or --clear to remove them all.`,
 	cmd.Flags().String("show", "", "Show a specific crash report by ID")
 	cmd.Flags().Bool("clear", false, "Clear all crash reports")
 	cmd.Flags().Bool("no-browser", false, "Print the GitHub issue URL instead of opening the browser")
+	cmd.Flags().Bool(reportJSONFlag, false, "Print list output as JSON")
 
 	return cmd
 }
@@ -47,13 +64,18 @@ func runReport(cmd *cobra.Command, _ []string) error {
 	}
 
 	list, _ := cmd.Flags().GetBool("list")
+	jsonOutput, _ := cmd.Flags().GetBool(reportJSONFlag)
 	if list {
-		return runReportList()
+		return runReportList(cmd, jsonOutput)
 	}
 
 	showID, _ := cmd.Flags().GetString("show")
 	if showID != "" {
 		return runReportShow(showID)
+	}
+
+	if jsonOutput {
+		return fmt.Errorf("--json can only be used with --list")
 	}
 
 	// Default / --latest: open issue for most recent crash.
@@ -70,18 +92,23 @@ func runReportClear() error {
 	return nil
 }
 
-func runReportList() error {
+func runReportList(cmd *cobra.Command, jsonOutput bool) error {
 	reports, err := crashlog.List()
 	if err != nil {
 		return fmt.Errorf("listing crash reports: %w", err)
 	}
+	if jsonOutput {
+		return writeCrashReportListJSON(cmd.OutOrStdout(), reports)
+	}
+
+	w := cmd.OutOrStdout()
 	if len(reports) == 0 {
-		fmt.Println("No crash reports found.")
+		fmt.Fprintln(w, "No crash reports found.")
 		return nil
 	}
 
-	fmt.Printf("Crash Reports (%d found)\n\n", len(reports))
-	fmt.Printf("  %-12s %-22s %-42s %s\n", "ID", "Timestamp", "Panic", "Context")
+	fmt.Fprintf(w, "Crash Reports (%d found)\n\n", len(reports))
+	fmt.Fprintf(w, "  %-12s %-22s %-42s %s\n", "ID", "Timestamp", "Panic", "Context")
 	for _, r := range reports {
 		id := r.ID
 		if runes := []rune(id); len(runes) > 8 {
@@ -89,9 +116,27 @@ func runReportList() error {
 		}
 		ts := r.Timestamp.Format("2006-01-02 15:04:05")
 		pv := truncate(r.PanicValue, 50)
-		fmt.Printf("  %-12s %-22s %-42s %s\n", id, ts, pv, r.Context)
+		fmt.Fprintf(w, "  %-12s %-22s %-42s %s\n", id, ts, pv, r.Context)
 	}
 	return nil
+}
+
+func writeCrashReportListJSON(w io.Writer, reports []*crashlog.CrashReport) error {
+	summaries := make([]crashReportSummary, 0, len(reports))
+	for _, r := range reports {
+		summaries = append(summaries, crashReportSummary{
+			ID:         r.ID,
+			Timestamp:  r.Timestamp.Format(time.RFC3339),
+			Version:    r.Version,
+			GoVersion:  r.GoVersion,
+			OS:         r.OS,
+			Arch:       r.Arch,
+			Terminal:   r.Terminal,
+			PanicValue: r.PanicValue,
+			Context:    r.Context,
+		})
+	}
+	return json.NewEncoder(w).Encode(summaries)
 }
 
 func runReportShow(id string) error {
