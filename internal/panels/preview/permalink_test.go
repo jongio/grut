@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,6 +121,33 @@ func TestCopyPermalink_NoOpInGitHubMode(t *testing.T) {
 	p.ghMode = true
 	_, cmd := p.copyPermalink()
 	assert.Nil(t, cmd)
+}
+
+func TestBuildLocalLocation_SingleLine(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "git", "status.go")
+
+	location := buildLocalLocation(root, path, 42, 42)
+
+	assert.Equal(t, "internal/git/status.go:42", location)
+}
+
+func TestBuildLocalLocation_Range(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "panels", "preview", "preview.go")
+
+	location := buildLocalLocation(root, path, 10, 14)
+
+	assert.Equal(t, "internal/panels/preview/preview.go:10-14", location)
+}
+
+func TestBuildLocalLocation_OutsideRepoFallsBackToAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(filepath.Dir(root), "outside.go")
+
+	location := buildLocalLocation(root, outside, 7, 7)
+
+	assert.Equal(t, filepath.ToSlash(filepath.Clean(outside))+":7", location)
 }
 
 func TestOpenOnGitHub_NoOpWhenNoFile(t *testing.T) {
