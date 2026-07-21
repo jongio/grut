@@ -219,6 +219,30 @@ func TestInlineViewRendering(t *testing.T) {
 	assert.Contains(t, view, "another added line")
 }
 
+func TestDiffStatsFooter(t *testing.T) {
+	p := newTestPanel(nil)
+	p.SetSize(80, 8)
+	p.SetDiffs(sampleMultiFileDiff())
+
+	view := p.View(80, 8)
+
+	assert.Contains(t, view, "2 files, 2 hunks, +2 -1")
+	assert.Contains(t, view, "ctx 3")
+}
+
+func TestDiffStatsFooterCountsBinaryFiles(t *testing.T) {
+	p := newTestPanel(nil)
+	p.SetSize(80, 8)
+	p.SetDiffs([]git.FileDiff{
+		sampleDiff(),
+		{Path: "logo.png", IsBinary: true},
+	})
+
+	view := p.View(80, 8)
+
+	assert.Contains(t, view, "2 files, 1 hunk, +2 -1, 1 binary")
+}
+
 func TestInlineViewPrefixes(t *testing.T) {
 	p := newTestPanel(nil)
 	p.SetSize(80, 24)

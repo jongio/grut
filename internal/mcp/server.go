@@ -30,6 +30,7 @@ type Server struct {
 	limiter  *RateLimiter
 	audit    *AuditLogger
 	repoRoot string
+	tools    []ToolInfo
 }
 
 // Default rate limits (calls per minute) when not configured.
@@ -92,6 +93,11 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 
 // addTool registers a tool with security middleware wrapping.
 func (s *Server) addTool(name string, category string, tool mcplib.Tool, handler mcpserver.ToolHandlerFunc) {
+	s.tools = append(s.tools, ToolInfo{
+		Name:        name,
+		Category:    category,
+		Description: tool.Description,
+	})
 	s.mcp.AddTool(tool, s.wrapHandler(name, category, handler))
 }
 
