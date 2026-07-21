@@ -13,6 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	shortcutSourceBuiltin = "builtin"
+	shortcutSourceCustom  = "custom"
+)
+
 // newRunCmd creates the "run" subcommand for executing git workflow shortcuts.
 func newRunCmd() *cobra.Command {
 	var (
@@ -72,10 +77,7 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 				_, _ = fmt.Fprintln(w, "Available shortcuts:")
 				_, _ = fmt.Fprintln(w)
 				for _, s := range all {
-					src := "builtin"
-					if !s.Builtin {
-						src = "custom"
-					}
+					src := shortcutSource(s)
 					_, _ = fmt.Fprintf(w, "  %-12s %-8s %s\n", s.Name, "["+src+"]", s.Description)
 				}
 				return nil
@@ -293,9 +295,9 @@ func shortcutStep(step shortcuts.Step) shortcutStepJSON {
 
 func shortcutSource(s shortcuts.Shortcut) string {
 	if s.Builtin {
-		return "builtin"
+		return shortcutSourceBuiltin
 	}
-	return "custom"
+	return shortcutSourceCustom
 }
 
 func writeJSON(cmd *cobra.Command, value any) error {
@@ -350,10 +352,7 @@ func parseShortcutArgs(raw []string) map[string]string {
 // printShortcutDetails prints full details of a shortcut.
 func printShortcutDetails(cmd *cobra.Command, s shortcuts.Shortcut) {
 	w := cmd.OutOrStdout()
-	src := "builtin"
-	if !s.Builtin {
-		src = "custom"
-	}
+	src := shortcutSource(s)
 	fmt.Fprintf(w, "Name:        %s\n", s.Name)
 	fmt.Fprintf(w, "Source:      %s\n", src)
 	fmt.Fprintf(w, "Description: %s\n", s.Description)
