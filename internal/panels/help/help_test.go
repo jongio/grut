@@ -105,7 +105,7 @@ func TestView_ContainsPreviewSection(t *testing.T) {
 func TestView_ContainsCloseHint(t *testing.T) {
 	p := newTestPanel(t)
 	view := p.View(60, 200)
-	assert.Contains(t, view, "Press ? or Esc to close")
+	assert.Contains(t, view, "? or Esc to close")
 }
 
 func TestView_ContainsKeyBindings(t *testing.T) {

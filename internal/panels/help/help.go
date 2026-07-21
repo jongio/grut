@@ -215,6 +215,8 @@ func (p *Panel) View(width, height int) string {
 	return strings.Join(rendered, "\n")
 }
 
+const keyEscape = "escape"
+
 // KeyBindings implements panels.Panel.
 func (p *Panel) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
@@ -222,7 +224,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
 		{Key: "/", Description: "Filter shortcuts", Action: "filter"},
 		{Key: "?", Description: "Close help", Action: "close"},
-		{Key: "escape", Description: "Close help", Action: "close"},
+		{Key: keyEscape, Description: "Close help", Action: "close"},
 	}
 }
 
@@ -236,7 +238,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.filterMode = false
 			p.rebuildFromFilter()
 			return p, nil
-		case "escape", "esc":
+		case keyEscape, "esc":
 			p.clearFilter()
 			return p, nil
 		case "backspace":
@@ -261,7 +263,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "/":
 		p.filterMode = true
 		p.rebuildFromFilter()
-	case "escape", "esc":
+	case keyEscape, "esc":
 		if p.filterQuery != "" {
 			p.clearFilter()
 			return p, nil
