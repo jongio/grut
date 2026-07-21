@@ -14,7 +14,7 @@ All paths support tilde (`~`) expansion. Only set values you want to change — 
 ```toml
 [general]
 keybinding_scheme = "default"    # "default", "vim", "classic", or path to .toml file
-default_layout = "explorer"      # "explorer", "git", "review", "agent"
+default_layout = "explorer"      # "explorer", "git", "review", "agent", "full"
 auto_save_session = true         # Save/restore tab layout on exit/start
 show_first_run_help = true       # Show help overlay on first launch
 ```

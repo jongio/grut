@@ -96,9 +96,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 // buildStatusReport classifies file entries into staged, unstaged, untracked,
 // and conflicted buckets. A file may be both staged and unstaged (for example
 // an index change plus a later worktree edit), in which case it appears in both.
+const detachedHead = "(detached)"
+
 func buildStatusReport(branch git.StatusBranch, files []git.FileStatus) statusReport {
 	head := branch.Head
-	detached := head == "" || head == "(detached)"
+	detached := head == "" || head == detachedHead
 
 	report := statusReport{
 		Branch:     head,
@@ -113,10 +115,10 @@ func buildStatusReport(branch git.StatusBranch, files []git.FileStatus) statusRe
 	}
 
 	for _, f := range files {
-		switch {
-		case f.StagedStatus == git.StatusUntracked:
+		switch f.StagedStatus {
+		case git.StatusUntracked:
 			report.Untracked = append(report.Untracked, f.Path)
-		case f.StagedStatus == git.StatusConflict:
+		case git.StatusConflict:
 			report.Conflicted = append(report.Conflicted, f.Path)
 		default:
 			if isChange(f.StagedStatus) {

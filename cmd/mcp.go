@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -66,6 +67,34 @@ Use --socket to serve over a Unix domain socket (future).`,
 	}
 
 	cmd.Flags().StringVar(&socketPath, "socket", "", "Unix socket path for TUI+MCP mode (not yet implemented)")
+	cmd.AddCommand(newMCPToolsCmd())
 
+	return cmd
+}
+
+const mcpToolsUse = "tools"
+
+func newMCPToolsCmd() *cobra.Command {
+	var jsonOut bool
+
+	cmd := &cobra.Command{
+		Use:   mcpToolsUse,
+		Short: "List grut MCP tools",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tools := grut_mcp.ToolInventory()
+			w := cmd.OutOrStdout()
+			if jsonOut {
+				enc := json.NewEncoder(w)
+				enc.SetIndent("", "  ")
+				return enc.Encode(tools)
+			}
+			fmt.Fprintf(w, "%-24s %-6s %s\n", "NAME", "TYPE", "DESCRIPTION")
+			for _, tool := range tools {
+				fmt.Fprintf(w, "%-24s %-6s %s\n", tool.Name, tool.Category, tool.Description)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print tools as JSON")
 	return cmd
 }
