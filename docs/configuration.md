@@ -7,6 +7,8 @@ grut uses TOML configuration with sensible defaults. User overrides are loaded f
 
 All paths support tilde (`~`) expansion. Only set values you want to change — everything has a built-in default.
 
+Run `grut doctor` to validate the active config, selected theme, terminal compatibility, Git/GitHub auth, AI provider readiness, and config/data directory writability. Use `grut doctor --json` to attach a stable machine-readable report to bug reports or CI logs.
+
 ---
 
 ## General
