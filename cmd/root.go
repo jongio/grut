@@ -59,6 +59,8 @@ func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
 	// goroutine, preventing a goroutine leak when --pprof is used.
 	memstatsDone := make(chan struct{})
 	var startupLayout string
+	var demoScenario string
+	var demoKeep bool
 
 	rootCmd = &cobra.Command{
 		Use:   "grut [path]",
@@ -80,6 +82,14 @@ Environment:
 				return resetWelcomeState()
 			}
 
+			demo, _ := cmd.Flags().GetBool("demo")
+			if !demo && strings.TrimSpace(demoScenario) != "" {
+				return fmt.Errorf("--scenario requires --demo")
+			}
+			if demo && isDemoScenarioList(demoScenario) {
+				return printDemoScenarioList(cmd.OutOrStdout())
+			}
+
 			// Start background update check early so it can run concurrently
 			// with config loading and TUI startup.
 			updateCh := make(chan *update.UpdateInfo, 1)
@@ -88,17 +98,30 @@ Environment:
 			}()
 
 			// Handle --demo: create a temporary project and chdir into it.
-			demo, _ := cmd.Flags().GetBool("demo")
+			var initialFocusPanel string
+			var demoGuidePath string
 			if demo {
-				dir, cleanup, err := setupDemoProject()
+				setup, cleanup, err := setupDemoProjectWithOptions(demoScenario, demoKeep)
 				if err != nil {
 					return fmt.Errorf("set up demo project: %w", err)
 				}
 				defer cleanup()
+				dir := setup.Dir
 				if err := os.Chdir(dir); err != nil {
 					return fmt.Errorf("chdir to demo: %w", err)
 				}
-				fmt.Fprintf(os.Stderr, "Demo project created at %s\n", dir)
+				if setup.Scenario != nil {
+					if strings.TrimSpace(startupLayout) == "" {
+						startupLayout = setup.Scenario.Layout
+					}
+					initialFocusPanel = setup.Scenario.FocusPanel
+					demoGuidePath = setup.GuidePath
+				}
+				if demoKeep {
+					fmt.Fprintf(os.Stderr, "Demo project kept at %s\n", dir)
+				} else {
+					fmt.Fprintf(os.Stderr, "Demo project created at %s\n", dir)
+				}
 			}
 
 			// Handle a positional file or directory argument. A directory roots
@@ -118,6 +141,9 @@ Environment:
 				}
 				initialFile = target.file
 				initialLine = target.line
+			}
+			if initialFile == "" && demoGuidePath != "" {
+				initialFile = demoGuidePath
 			}
 
 			// Capture original stderr BEFORE redirection so error messages
@@ -178,6 +204,9 @@ Environment:
 
 			// Override AI if --no-ai flag is set.
 			applyNoAIFlag(cmd, cfg)
+			if demoGuidePath != "" {
+				cfg.General.ShowFirstRunHelp = false
+			}
 
 			// Load theme from config
 			th, err := theme.Load(cfg.Theme.Name)
@@ -262,7 +291,8 @@ Environment:
 				WithGitClient(gitClient).
 				WithConfig(cfg).
 				WithSessionManager(sessMgr).
-				WithInitialFile(initialFile, initialLine)
+				WithInitialFile(initialFile, initialLine).
+				WithInitialFocusPanel(initialFocusPanel)
 
 			if chatModel != nil {
 				model = model.WithChat(chatModel)
@@ -384,6 +414,8 @@ Environment:
 	rootCmd.PersistentFlags().String("pprof", "", "start pprof server on given port (e.g. 6060)")
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
+	rootCmd.PersistentFlags().StringVar(&demoScenario, "scenario", "", "Demo scenario to launch (use \"list\" to show options)")
+	rootCmd.PersistentFlags().BoolVar(&demoKeep, "demo-keep", false, "Keep the generated demo project after grut exits")
 	rootCmd.PersistentFlags().Bool("reset-welcome", false, "Reset first-run state so the welcome screen shows on next launch")
 	rootCmd.PersistentFlags().StringVar(&startupLayout, "layout", "", "Startup layout override (explorer, git, review, agent, full)")
 
@@ -396,6 +428,7 @@ Environment:
 	rootCmd.AddCommand(newReportCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newStatusCmd())
+	rootCmd.AddCommand(newDoctorCmd())
 	rootCmd.AddCommand(newThemeCmd())
 	rootCmd.AddCommand(newCleanCmd())
 	rootCmd.AddCommand(newCompletionCmd())

@@ -7,6 +7,21 @@ grut uses TOML configuration with sensible defaults. User overrides are loaded f
 
 All paths support tilde (`~`) expansion. Only set values you want to change — everything has a built-in default.
 
+To print the exact paths grut resolves at runtime, run:
+
+```sh
+grut config path
+```
+
+Example output:
+
+```text
+Config: C:\Users\me\AppData\Roaming\grut\config.toml
+Data:   C:\Users\me\AppData\Local\grut
+```
+
+Run `grut doctor` to validate the active config, selected theme, terminal compatibility, Git/GitHub auth, AI provider readiness, and config/data directory writability. Use `grut doctor --json` to attach a stable machine-readable report to bug reports or CI logs.
+
 ---
 
 ## General

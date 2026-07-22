@@ -219,6 +219,57 @@ func TestNewRootCommand_DemoFlagRegistered(t *testing.T) {
 	assert.Equal(t, "false", flag.DefValue)
 }
 
+func TestNewRootCommand_DemoScenarioFlagsRegistered(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+
+	scenarioFlag := cmd.PersistentFlags().Lookup("scenario")
+	require.NotNil(t, scenarioFlag, "--scenario persistent flag must be registered")
+	assert.Equal(t, "string", scenarioFlag.Value.Type())
+	assert.Equal(t, "", scenarioFlag.DefValue)
+
+	keepFlag := cmd.PersistentFlags().Lookup("demo-keep")
+	require.NotNil(t, keepFlag, "--demo-keep persistent flag must be registered")
+	assert.Equal(t, "bool", keepFlag.Value.Type())
+	assert.Equal(t, "false", keepFlag.DefValue)
+}
+
+func TestDemoScenarioListPrintsAvailableScenarios(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--demo", "--scenario", "list"})
+
+	require.NoError(t, cmd.Execute())
+	output := buf.String()
+	assert.Contains(t, output, "Available demo scenarios:")
+	assert.Contains(t, output, "branch-review")
+	assert.Contains(t, output, "conflict-resolution")
+	assert.Contains(t, output, "extensions")
+}
+
+func TestDemoScenarioRequiresDemoFlag(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	cmd.SetArgs([]string{"--scenario", "branch-review"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--scenario requires --demo")
+}
+
+func TestDemoScenarioUnknownErrors(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	defer cleanup()
+	cmd.SetArgs([]string{"--demo", "--scenario", "missing"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown demo scenario")
+}
+
 func TestRootCommandHasProfilingFlags(t *testing.T) {
 	cmd, cleanup := newRootCommand()
 	defer cleanup()

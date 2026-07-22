@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/jongio/grut/internal/proctree"
 )
 
 // SetupProject creates a temporary directory with a realistic Go project
@@ -14,19 +15,38 @@ import (
 // Returns the project path and a cleanup function that removes the
 // temporary directory.
 func SetupProject() (string, func(), error) {
+	setup, cleanup, err := SetupProjectWithOptions(SetupOptions{})
+	if err != nil {
+		return "", nil, err
+	}
+	return setup.Dir, cleanup, nil
+}
+
+// SetupProjectWithOptions creates a demo project and optionally applies a
+// guided scenario.
+func SetupProjectWithOptions(opts SetupOptions) (*ScenarioSetup, func(), error) {
 	dir, err := os.MkdirTemp("", "grut-demo-*")
 	if err != nil {
-		return "", nil, fmt.Errorf("create temp dir: %w", err)
+		return nil, nil, fmt.Errorf("create temp dir: %w", err)
 	}
 
 	cleanup := func() { _ = os.RemoveAll(dir) }
+	if opts.Keep {
+		cleanup = func() {}
+	}
 
 	if err := populateDemoProject(dir); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("populate demo: %w", err)
+		return nil, nil, fmt.Errorf("populate demo: %w", err)
 	}
 
-	return dir, cleanup, nil
+	setup, err := applyScenario(dir, opts.Scenario)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+
+	return setup, cleanup, nil
 }
 
 func populateDemoProject(dir string) error {
@@ -71,7 +91,7 @@ func populateDemoProject(dir string) error {
 
 func buildGitHistory(dir string) error {
 	runAs := func(name, email string, args ...string) error {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd := proctree.Command(context.Background(), "git", args...)
 		cmd.Dir = dir
 		cmd.Env = append(
 			os.Environ(),
@@ -80,7 +100,7 @@ func buildGitHistory(dir string) error {
 			"GIT_COMMITTER_NAME="+name,
 			"GIT_COMMITTER_EMAIL="+email,
 		)
-		return cmd.Run()
+		return proctree.Run(cmd)
 	}
 	alice := func(args ...string) error { return runAs("Alice Chen", "alice@example.com", args...) }
 	bob := func(args ...string) error { return runAs("Bob Kumar", "bob@example.com", args...) }
