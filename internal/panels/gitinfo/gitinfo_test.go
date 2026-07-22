@@ -2552,6 +2552,14 @@ type mockGHClientFull struct {
 	createReq   *gh.NewPullRequest // captured request passed to CreatePR
 	createCalls int                // number of times CreatePR was called
 	repoInfo    *gh.Repository     // returned by RepoInfo
+
+	// Workflow-dispatch controls (issue #361).
+	workflowInputs []ghclient.WorkflowInput
+	dispatchErr    error
+	dispatchCalls  int
+	dispatchID     int64
+	dispatchRef    string
+	dispatchInputs map[string]any
 }
 
 func (m *mockGHClientFull) CurrentUser(_ context.Context) (*gh.User, error) {
@@ -2692,11 +2700,15 @@ func (m *mockGHClientFull) ListWorkflows(_ context.Context, _, _ string, _ *gh.L
 }
 
 func (m *mockGHClientFull) GetWorkflowInputs(_ context.Context, _, _, _, _ string) ([]ghclient.WorkflowInput, error) {
-	return nil, nil
+	return m.workflowInputs, nil
 }
 
-func (m *mockGHClientFull) DispatchWorkflow(_ context.Context, _, _ string, _ int64, _ string, _ map[string]any) error {
-	return nil
+func (m *mockGHClientFull) DispatchWorkflow(_ context.Context, _, _ string, id int64, ref string, inputs map[string]any) error {
+	m.dispatchCalls++
+	m.dispatchID = id
+	m.dispatchRef = ref
+	m.dispatchInputs = inputs
+	return m.dispatchErr
 }
 
 func (m *mockGHClientFull) RerunWorkflow(_ context.Context, _, _ string, _ int64) error {

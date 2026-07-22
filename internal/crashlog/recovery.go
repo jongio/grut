@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sync/atomic"
 )
 
 // RecoverAndReport is intended to be called inside a deferred function at
@@ -56,4 +57,46 @@ func WriteRecovery(panicVal any, ctx string, tail *LogTailHandler) {
 	fmt.Fprintf(os.Stderr, "\ngrut crashed unexpectedly.\n")
 	fmt.Fprintf(os.Stderr, "Crash report saved to: %s\n", ScrubPII(path))
 	fmt.Fprintf(os.Stderr, "Run 'grut report' to file a GitHub issue.\n")
+}
+
+// lastCrashPath records the path of the most recent crash report written by
+// GuardTUI. It lets the program surface the report location after Bubble Tea
+// has restored the terminal, since anything GuardTUI itself prints would land
+// on the (about to be torn down) alternate screen while still in raw mode.
+var lastCrashPath atomic.Pointer[string]
+
+// LastCrashPath returns the filesystem path of the most recent crash report
+// captured by GuardTUI during this run, or "" if no TUI panic was captured.
+func LastCrashPath() string {
+	if p := lastCrashPath.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// GuardTUI is a deferred panic guard for the Bubble Tea model's Update, View,
+// and Init methods. Bubble Tea catches panics inside those methods itself and
+// returns only a generic ErrProgramPanic, so the top-level recover in main
+// never sees the panic value and no crash report is written. GuardTUI closes
+// that gap: it recovers the in-flight panic, writes a crash report with the
+// preserved stack (debug.Stack in a deferred recover still points at the
+// original panic site) and the recent log tail, records the report path, then
+// re-panics with the original value so Bubble Tea still restores the terminal.
+//
+// Use it as the first statement of the guarded method:
+//
+//	func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+//		defer crashlog.GuardTUI("tui.Update")
+//		...
+//	}
+func GuardTUI(ctx string) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	report := NewReport(r, debug.Stack(), ctx)
+	if path, err := Write(report); err == nil {
+		lastCrashPath.Store(&path)
+	}
+	panic(r)
 }

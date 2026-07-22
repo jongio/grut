@@ -750,6 +750,20 @@ func ShowMultilineInput(title, placeholder string) tea.Cmd {
 	}
 }
 
+// ShowMultilineInputWithValue returns a tea.Cmd that produces a ShowModalMsg
+// for a multi-line text composer pre-filled with the given value. Enter
+// inserts a newline, Ctrl+D submits, and Esc cancels.
+func ShowMultilineInputWithValue(title, placeholder, value string) tea.Cmd {
+	return func() tea.Msg {
+		return ShowModalMsg{
+			Title:       title,
+			Placeholder: placeholder,
+			Value:       value,
+			Kind:        ModalMultilineInput,
+		}
+	}
+}
+
 // ShowConfirmWithCheckbox returns a tea.Cmd that produces a ShowModalMsg
 // for a confirmation dialog with a "remember this choice" checkbox.
 func ShowConfirmWithCheckbox(title, message, checkboxLabel string) tea.Cmd {
