@@ -64,6 +64,7 @@ File Tree panel (panel 1).
 | `B` | Open on GitHub |
 | `.` | Toggle hidden files |
 | `f` | Toggle git filter |
+| `D` | Scan directory size |
 | `v` | Toggle tree/list view |
 | `n` | New file |
 | `N` | New directory |

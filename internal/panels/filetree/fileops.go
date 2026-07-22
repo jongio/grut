@@ -254,6 +254,7 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
+	ft.clearDirSizeCache()
 	ft.rootPath = absPath
 	ft.root = &node{
 		name:  filepath.Base(absPath),

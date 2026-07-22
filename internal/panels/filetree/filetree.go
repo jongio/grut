@@ -172,6 +172,7 @@ type FileTree struct {
 	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
 	gitFileStatus   map[string]string
 	gitIgnoredPaths map[string]bool
+	dirSizeCache    map[string]int64
 	// Per-mode expand/collapse state preservation (Change 3).
 	explorerExpanded map[string]bool   // saved expand state for explorer mode
 	gitModeExpanded  map[string]bool   // saved expand state for git mode
@@ -337,6 +338,8 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case gitIgnoredMsg:
 		ft.gitIgnoredPaths = msg.paths
 		return ft, nil
+	case dirSizeResultMsg:
+		return ft.handleDirSizeResult(msg)
 	case pasteResultMsg:
 		if msg.wasCut {
 			ft.clip = clipboard{}
@@ -403,6 +406,11 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return ft.handleMouseWheel(msg)
 	case notify.ModalResultMsg:
 		return ft.handleModalResult(msg)
+	case panels.CommandSelectedMsg:
+		if !ft.focused || msg.Action != actionDirSize {
+			return ft, nil
+		}
+		return ft.requestDirSizeScan()
 	case RefreshMsg:
 		return ft.handleRefresh()
 	case panels.NavigateToPathMsg:
@@ -581,6 +589,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "f", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
+		{Key: "D", Description: "Scan directory size", Action: actionDirSize},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -951,6 +960,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		ft.toggleHidden()
 	case "f":
 		return ft.cycleFileFilter()
+	case "D":
+		return ft.requestDirSizeScan()
 	case "g":
 		ft.goToTop()
 	case "G":
