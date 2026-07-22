@@ -70,6 +70,11 @@ var deadcodeAllowlist = []string{
 	// cmd — test-only accessor (returns root command + cleanup for tests)
 	"newRootCommand",
 
+	// demo — build-tag stub: SetupProject is only referenced by
+	// cmd/screenshots/main.go (//go:build screenshots), so deadcode cannot see
+	// its caller in a normal build. SetupProjectWithOptions is the wired API.
+	"SetupProject",
+
 	// crashlog — test-only accessors
 	"CollectDiagnostics",
 	"RecoverAndReport",
