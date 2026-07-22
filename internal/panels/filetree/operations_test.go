@@ -126,7 +126,7 @@ func TestDeleteFile_RegularFile(t *testing.T) {
 	path := filepath.Join(root, "to_delete.txt")
 	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
 
-	err := deleteFile(context.Background(), root, path)
+	err := deleteFile(context.Background(), root, path, true)
 	require.NoError(t, err)
 
 	_, err = os.Stat(path)
@@ -140,7 +140,7 @@ func TestDeleteFile_DirectoryRecursive(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "f.txt"), []byte("f"), 0o644))
 
-	err := deleteFile(context.Background(), root, dir)
+	err := deleteFile(context.Background(), root, dir, true)
 	require.NoError(t, err)
 
 	_, err = os.Stat(dir)
@@ -159,7 +159,7 @@ func TestBulkDelete(t *testing.T) {
 	}
 
 	for _, f := range files {
-		require.NoError(t, deleteFile(context.Background(), root, f))
+		require.NoError(t, deleteFile(context.Background(), root, f, true))
 	}
 
 	for _, f := range files {
@@ -301,7 +301,7 @@ func TestPathJailing_DeletePreventsEscape(t *testing.T) {
 	outsideFile := filepath.Join(outside, "secret.txt")
 	require.NoError(t, os.WriteFile(outsideFile, []byte("secret"), 0o644))
 
-	err := deleteFile(context.Background(), root, outsideFile)
+	err := deleteFile(context.Background(), root, outsideFile, true)
 	assert.Error(t, err, "delete outside root should fail")
 
 	// Verify file still exists.
@@ -354,7 +354,7 @@ func TestMoveFile_NonExistent(t *testing.T) {
 func TestDeleteFile_NonExistent(t *testing.T) {
 	root := t.TempDir()
 	// os.RemoveAll does not error on non-existent paths.
-	err := deleteFile(context.Background(), root, filepath.Join(root, "nope.txt"))
+	err := deleteFile(context.Background(), root, filepath.Join(root, "nope.txt"), true)
 	assert.NoError(t, err, "deleteFile on non-existent path should not error (RemoveAll semantics)")
 }
 

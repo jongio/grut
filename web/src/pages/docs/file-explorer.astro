@@ -39,6 +39,7 @@ import Screenshot from '../../components/Screenshot.astro';
     { key: 'n', action: 'Create a new file' },
     { key: 'N', action: 'Create a new directory' },
     { key: 'e / F2', action: 'Rename the selected file or directory' },
+    { key: 'r', action: 'Batch rename selected entries' },
     { key: 'x', action: 'Delete the selected file or directory (with confirmation)' },
     { key: 'o', action: 'Open file in external editor' },
     { key: 'y', action: 'Copy file path to clipboard' },
@@ -56,6 +57,13 @@ import Screenshot from '../../components/Screenshot.astro';
     When creating a file or directory, grüt opens an inline text input at the
     current cursor position. Type the name and press <kbd>Enter</kbd> to
     confirm, or <kbd>Esc</kbd> to cancel.
+  </p>
+  <p>
+    Batch rename opens an editor with one repo-relative path per line for the
+    current selection, or the focused entry if nothing is selected. Edit the
+    destination paths, press <kbd>Ctrl+S</kbd> to apply, or <kbd>Esc</kbd> to
+    cancel. Empty names, duplicate destinations, parent-directory traversal
+    (<code>..</code>), and paths outside the repository are blocked.
   </p>
   <p>
     Deletion always requires confirmation — grüt shows the file name and asks
@@ -95,6 +103,14 @@ icon_mode = "ascii"   # Options: "nerd", "ascii", "auto" (default: "auto")</code
     a marker if any file within it has changes.
   </p>
 
+  <h2>Safe Delete</h2>
+  <p>
+    Deleted files and directories move to grut trash by default, with a manifest
+    that records the original path. Press <code>u</code> in the file tree to
+    restore the most recent trashed item. Set <code>file_tree.permanent_delete</code>
+    to <code>true</code> to opt back into permanent deletion.
+  </p>
+
   <h2>Preview Panel</h2>
   <p>
     Selecting a file shows a syntax-highlighted preview in the adjacent panel.
@@ -110,7 +126,8 @@ show_hidden = false             # Show dotfiles and hidden directories
 sort_directories_first = true   # Directories appear before files
 git_status_markers = true       # Show git status markers on files
 max_depth = 0                   # Max tree depth (0 = unlimited)
-follow_symlinks = false         # Follow symbolic links in the tree</code></pre>
+follow_symlinks = false         # Follow symbolic links in the tree
+permanent_delete = false       # Permanently delete instead of moving deletes to trash</code></pre>
 
   <h2>Next Steps</h2>
   <ul>

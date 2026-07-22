@@ -172,6 +172,7 @@ type FileTree struct {
 	// Git file status indicators (e.g. M, A, ?, D) per absolute path.
 	gitFileStatus   map[string]string
 	gitIgnoredPaths map[string]bool
+	dirSizeCache    map[string]int64
 	// Per-mode expand/collapse state preservation (Change 3).
 	explorerExpanded map[string]bool   // saved expand state for explorer mode
 	gitModeExpanded  map[string]bool   // saved expand state for git mode
@@ -186,6 +187,7 @@ type FileTree struct {
 	theme           *theme.Theme
 	// File operation state.
 	clip              clipboard // cut/copy clipboard
+	batchRename       batchRenameState
 	focused           bool
 	showHidden        bool
 	listMode          bool // true = flat list with relative paths, false = tree view
@@ -337,6 +339,12 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case gitIgnoredMsg:
 		ft.gitIgnoredPaths = msg.paths
 		return ft, nil
+	case dirSizeResultMsg:
+		return ft.handleDirSizeResult(msg)
+	case undoDeleteResultMsg:
+		return ft.handleUndoDeleteResult(msg)
+	case batchRenameResultMsg:
+		return ft.handleBatchRenameResult(msg)
 	case pasteResultMsg:
 		if msg.wasCut {
 			ft.clip = clipboard{}
@@ -392,6 +400,9 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Renamed to " + newName, Level: notify.Success}
 		}
 	case tea.KeyPressMsg:
+		if ft.batchRename.enabled {
+			return ft.handleBatchRenameKey(msg)
+		}
 		return ft.handleKey(msg)
 	case panels.PanelMouseClickMsg:
 		return ft.handleMouseClick(msg)
@@ -403,6 +414,20 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return ft.handleMouseWheel(msg)
 	case notify.ModalResultMsg:
 		return ft.handleModalResult(msg)
+	case panels.CommandSelectedMsg:
+		if !ft.focused {
+			return ft, nil
+		}
+		switch msg.Action {
+		case actionDirSize:
+			return ft.requestDirSizeScan()
+		case actionUndoDelete:
+			return ft.requestUndoDelete()
+		case actionBatchRename:
+			return ft.requestBatchRename()
+		default:
+			return ft, nil
+		}
 	case RefreshMsg:
 		return ft.handleRefresh()
 	case panels.NavigateToPathMsg:
@@ -507,6 +532,9 @@ func (ft *FileTree) View(width, height int) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
+	if ft.batchRename.enabled {
+		return ft.renderBatchRename(width, height)
+	}
 	if len(ft.visible) == 0 {
 		label := "Empty"
 		if !ft.root.loaded {
@@ -581,6 +609,9 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "f", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
+		{Key: "D", Description: "Scan directory size", Action: actionDirSize},
+		{Key: "u", Description: "Undo delete (restore from trash)", Action: actionUndoDelete},
+		{Key: "r", Description: "Batch rename selection", Action: actionBatchRename},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -951,6 +982,12 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		ft.toggleHidden()
 	case "f":
 		return ft.cycleFileFilter()
+	case "D":
+		return ft.requestDirSizeScan()
+	case "u":
+		return ft.requestUndoDelete()
+	case "r":
+		return ft.requestBatchRename()
 	case "g":
 		ft.goToTop()
 	case "G":

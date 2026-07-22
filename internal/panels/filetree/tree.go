@@ -325,6 +325,8 @@ func (ft *FileTree) handleRefresh() (panels.Panel, tea.Cmd) {
 // reloadTree reloads the entire tree from disk, preserving the cursor
 // position as much as possible.
 func (ft *FileTree) reloadTree() {
+	ft.clearDirSizeCache()
+
 	// Remember the current cursor path for restoration.
 	var cursorPath string
 	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
@@ -612,10 +614,18 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		gitIndicatorW = 1 + displayWidth(gitIndicator)
 	}
 
-	// Truncate content, reserving space for git indicator when present.
+	var sizeText string
+	sizeIndicatorW := 0
+	if size, ok := ft.dirSizeCache[n.path]; ok {
+		sizeText = humanizeSize(size)
+		sizeIndicatorW = 1 + displayWidth(sizeText)
+	}
+
+	// Truncate content, reserving space for size and git indicators when present.
 	availW := width
-	if gitIndicatorW > 0 {
-		availW = width - gitIndicatorW
+	reservedW := sizeIndicatorW + gitIndicatorW
+	if reservedW > 0 {
+		availW = width - reservedW
 		if availW < 1 {
 			availW = 1
 		}
@@ -629,6 +639,11 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 		content += strings.Repeat(" ", availW-visW)
 	}
 
+	mainContent := content
+	if sizeText != "" {
+		mainContent += " " + sizeText
+	}
+	content = mainContent
 	// Append git indicator before styling.
 	if gitIndicator != "" {
 		content += " " + gitIndicator
@@ -650,10 +665,14 @@ func (ft *FileTree) renderLine(n *node, width int, isCursor bool) string {
 	// part and the indicator separately so they can have different colours.
 	if gitIndicator != "" {
 		// Split back: main part is everything except last (1 + icon_width) chars.
-		mainPart := truncateToWidth(content, availW)
+		mainPartW := width - gitIndicatorW
+		if mainPartW < 1 {
+			mainPartW = 1
+		}
+		mainPart := truncateToWidth(mainContent, mainPartW)
 		mainVisW := displayWidth(mainPart)
-		if mainVisW < availW {
-			mainPart += strings.Repeat(" ", availW-mainVisW)
+		if mainVisW < mainPartW {
+			mainPart += strings.Repeat(" ", mainPartW-mainVisW)
 		}
 		line := style.Render(mainPart)
 		line += lipgloss.NewStyle().

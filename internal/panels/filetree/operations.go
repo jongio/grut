@@ -198,12 +198,16 @@ func moveFile(ctx context.Context, root, src, dst string) error {
 // deleteFile removes the file or directory at path (recursive for dirs).
 // The path must be within root.
 // The context allows cancellation before the operation starts (F20).
-func deleteFile(ctx context.Context, root, path string) error {
+func deleteFile(ctx context.Context, root, path string, permanent bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if !isWithinRoot(root, path) {
 		return fmt.Errorf("path %q is outside root", path)
+	}
+	if !permanent {
+		_, err := trashFile(ctx, root, path)
+		return err
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("delete %q: %w", path, err)

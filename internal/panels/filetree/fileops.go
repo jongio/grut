@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -83,9 +84,13 @@ func (ft *FileTree) requestDelete() (panels.Panel, tea.Cmd) {
 	}
 	var msg string
 	if len(paths) == 1 {
-		msg = fmt.Sprintf("Delete %s?", filepath.Base(paths[0]))
+		msg = ft.deleteConfirmMessage(paths[0])
 	} else {
-		msg = fmt.Sprintf("Delete %d items?", len(paths))
+		lines := []string{fmt.Sprintf("Delete %d items?", len(paths))}
+		for _, path := range paths {
+			lines = append(lines, ft.deleteConfirmMessage(path))
+		}
+		msg = strings.Join(lines, "\n\n")
 	}
 	return ft, func() tea.Msg {
 		return notify.ShowModalMsg{
@@ -94,6 +99,26 @@ func (ft *FileTree) requestDelete() (panels.Panel, tea.Cmd) {
 			Message: msg,
 		}
 	}
+}
+
+func (ft *FileTree) deleteConfirmMessage(path string) string {
+	tracking := "tracked"
+	// Best-effort from the last git status snapshot: "?" means untracked;
+	// absent entries are treated as tracked because clean tracked files are absent.
+	if ft.gitFileStatus[path] == "?" {
+		tracking = "untracked"
+	}
+	lines := []string{
+		fmt.Sprintf("Delete %s?", filepath.Base(path)),
+		"Original: " + path,
+		"Git: " + tracking,
+	}
+	if ft.cfg.GetPermanentDelete() {
+		lines = append(lines, "Mode: permanent delete")
+	} else {
+		lines = append(lines, "Trash: "+trashDestinationPreview(ft.rootPath, path))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // requestRename initiates a rename operation with input modal.
@@ -254,6 +279,7 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
+	ft.clearDirSizeCache()
 	ft.rootPath = absPath
 	ft.root = &node{
 		name:  filepath.Base(absPath),
@@ -328,10 +354,11 @@ func (ft *FileTree) executeDelete(paths []string) (panels.Panel, tea.Cmd) {
 	pathsCopy := make([]string, len(paths))
 	copy(pathsCopy, paths)
 	ctx := ft.safeCtx()
+	permanent := ft.cfg.GetPermanentDelete()
 	return ft, func() tea.Msg {
 		var errs []string
 		for _, p := range pathsCopy {
-			if err := deleteFile(ctx, rootPath, p); err != nil {
+			if err := deleteFile(ctx, rootPath, p, permanent); err != nil {
 				errs = append(errs, err.Error())
 			}
 		}
