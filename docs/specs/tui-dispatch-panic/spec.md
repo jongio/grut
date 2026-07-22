@@ -1,7 +1,8 @@
 ---
 title: Capture TUI panics and harden the workflow-dispatch path
-status: draft
+status: shipped
 issue: https://github.com/jongio/grut/issues/361
+pr: https://github.com/jongio/grut/pull/362
 scope: P1
 ---
 
@@ -72,11 +73,9 @@ causing any residual crash.
 
 <!-- Pipeline tracking (auto-managed, not part of product spec) -->
 ## Pipeline Status
-Phase: CERTIFYING
+Phase: SHIPPED (PR https://github.com/jongio/grut/pull/362)
 
-- Phase 1 SCOPE/PLAN: done — P1, issue #361, test-plan written.
-- Phase 2 BUILD: done — implementation + tests; build/vet/lint clean.
-- Phase 3 VERIFY: done — full `go test ./...` green; test plan COVERED (0 gaps); code-review found no significant issues (validated re-panic safety, stack fidelity, no race, intact routing).
-- Phase 4 CERTIFY: in progress — `mage preflight` (fmt/tidy/verify/vet/lint/build/test/race/vulncheck/gofumpt/deadcode/benchmarks). Individually verified clean: vet, full lint, gofumpt, deadcode, govulncheck, mod tidy.
-- Known unrelated pre-existing issue (NOT this change): `cmd.TestRunStatus_NotARepo` fails when `GOTMPDIR` points inside the worktree (mage default `bin/.tmp`), because `t.TempDir()` then lands in a repo; reproduced identically on origin/main. Gates run with an external `GOTMPDIR` (a magefile-supported config).
+- Phases 1-5 complete. Validation: full `go test ./...` (incl. `-race`), golangci-lint (0 issues), vet, build, gofumpt, deadcode, govulncheck all clean; code-review found no significant issues; `mage install` succeeded.
+- Known unrelated pre-existing issues (NOT this change), reproduced identically on origin/main: `cmd.TestRunStatus_NotARepo` and `internal/update` `TestRunUpdate_*` both fail only when `GOTMPDIR`/temp point inside the worktree (mage default `bin/.tmp`) or a stale update lock leaks; gates were run with an external `GOTMPDIR` (a magefile-supported config).
+
 
