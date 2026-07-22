@@ -192,12 +192,15 @@ Preview panel (panel 5).
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `L` | Go to line |
+| `Ctrl+F` | Search in preview |
+| `n/N` | Next/previous search match |
 | `t` | Jump to markdown heading |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
 | `n` | Toggle line numbers |
 | `m` | Toggle markdown render |
 | `B` | Toggle blame |
+| `o` | Open blame line's commit (blame mode) |
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
 | `p` | Copy local file location |

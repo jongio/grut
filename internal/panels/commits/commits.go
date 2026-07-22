@@ -262,6 +262,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRCommitsLoaded(msg)
 	case panels.PRDeselectedMsg:
 		return p.exitPRCommitsMode()
+	case panels.ShowCommitDetailMsg:
+		return p.handleShowCommitDetail(msg)
 	case panels.ChangeDirectoryMsg:
 		return p.handleSwitchWorktree(msg)
 	case panels.WorktreeChangedMsg:
@@ -1136,6 +1138,27 @@ func (p *Panel) deselectCommit() (panels.Panel, tea.Cmd) {
 	p.selectedSubject = ""
 	return p, func() tea.Msg {
 		return panels.CommitDeselectedMsg{}
+	}
+}
+
+func (p *Panel) handleShowCommitDetail(msg panels.ShowCommitDetailMsg) (panels.Panel, tea.Cmd) {
+	if msg.Hash == "" {
+		return p, nil
+	}
+	for i := range p.activeLen() {
+		c := p.commitAt(i)
+		if c.Hash == msg.Hash || strings.HasPrefix(c.Hash, msg.Hash) {
+			p.cursor = i
+			return p, p.showDetail()
+		}
+	}
+
+	short := msg.Hash
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{Message: "Commit " + short + " not in current view", Level: notify.Info}
 	}
 }
 

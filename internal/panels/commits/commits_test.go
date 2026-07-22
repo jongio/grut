@@ -837,6 +837,63 @@ func TestShowDetail(t *testing.T) {
 	}
 }
 
+func TestShowCommitDetailSelectsTargetAndShowsDetail(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	target := "def5678901234"
+
+	updated, cmd := p.Update(panels.ShowCommitDetailMsg{Hash: target})
+	p = updated.(*Panel)
+
+	if !p.detailMode {
+		t.Fatal("expected detailMode=true")
+	}
+	if p.cursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", p.cursor)
+	}
+	if cmd == nil {
+		t.Fatal("expected CommitSelectedMsg command")
+	}
+	msg := cmd()
+	csm, ok := msg.(panels.CommitSelectedMsg)
+	if !ok {
+		t.Fatalf("expected CommitSelectedMsg, got %T", msg)
+	}
+	if csm.Hash != target {
+		t.Fatalf("expected hash=%q, got %q", target, csm.Hash)
+	}
+}
+
+func TestShowCommitDetailUnknownHashShowsToast(t *testing.T) {
+	mock := &mockGitOps{commits: defaultCommits()}
+	p := newTestPanel(mock)
+	target := "ffffffffffffffffffffffffffffffffffffffff"
+
+	updated, cmd := p.Update(panels.ShowCommitDetailMsg{Hash: target})
+	p = updated.(*Panel)
+
+	if p.detailMode {
+		t.Fatal("expected detailMode=false")
+	}
+	if cmd == nil {
+		t.Fatal("expected toast command")
+	}
+	msg := cmd()
+	if _, ok := msg.(panels.CommitSelectedMsg); ok {
+		t.Fatal("did not expect CommitSelectedMsg")
+	}
+	toast, ok := msg.(notify.ShowToastMsg)
+	if !ok {
+		t.Fatalf("expected ShowToastMsg, got %T", msg)
+	}
+	if toast.Message != "Commit fffffff not in current view" {
+		t.Fatalf("unexpected toast message: %q", toast.Message)
+	}
+	if toast.Level != notify.Info {
+		t.Fatalf("expected info toast, got %v", toast.Level)
+	}
+}
+
 func TestShowDetail_EmptyCommits(t *testing.T) {
 	mock := &mockGitOps{commits: nil}
 	p := newTestPanel(mock)

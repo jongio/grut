@@ -270,6 +270,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		unstageFileDoneMsg, panels.AutoFetchTickMsg, panels.RevertRequestMsg,
 		revertDoneMsg:
 		return m.handleGitOpMsg(msg)
+	case panels.ToggleBlameMsg:
+		return m.handleToggleBlame(msg)
+	case panels.ShowCommitDetailMsg:
+		m.engine.FocusByName("commits")
+		return m, m.engine.Update(msg)
 
 	// Undo / redo.
 	case panels.UndoMsg, panels.RedoMsg, panels.UndoResultMsg:
