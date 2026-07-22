@@ -16,19 +16,21 @@ import (
 type (
 	configLoadFunc func() (*config.Config, error)
 	configPathFunc func() string
+	dataPathFunc   func() string
 	keymapLoadFunc func(string) (*keymap.Keymap, error)
 )
 
 func newConfigCmd() *cobra.Command {
-	return newConfigCmdWithDeps(config.Load, config.UserConfigFilePath)
+	return newConfigCmdWithDeps(config.Load, config.UserConfigFilePath, config.DataDir)
 }
 
-func newConfigCmdWithDeps(load configLoadFunc, path configPathFunc) *cobra.Command {
+func newConfigCmdWithDeps(load configLoadFunc, path configPathFunc, dataPath dataPathFunc) *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:   cmdConfig,
 		Short: "Inspect grut configuration",
 	}
 	configCmd.AddCommand(newConfigCheckCmd(load, path))
+	configCmd.AddCommand(newConfigPathCmd(path, dataPath))
 	configCmd.AddCommand(newConfigGetCmd(load))
 	configCmd.AddCommand(newConfigDefaultsCmd(config.DefaultsTOML))
 	return configCmd
@@ -54,6 +56,19 @@ func newConfigCheckCmdWithKeymap(load configLoadFunc, path configPathFunc, loadK
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nOK\n", cfgPath)
 			return nil
+		},
+	}
+}
+
+const configPathCommandName = "path"
+
+func newConfigPathCmd(path configPathFunc, dataPath dataPathFunc) *cobra.Command {
+	return &cobra.Command{
+		Use:   configPathCommandName,
+		Short: "Print resolved grut config and data paths",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nData:   %s\n", path(), dataPath())
+			return err
 		},
 	}
 }
