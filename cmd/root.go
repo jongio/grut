@@ -22,6 +22,7 @@ import (
 	"github.com/jongio/grut/internal/bookmarks"
 	"github.com/jongio/grut/internal/chat"
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/crashlog"
 	"github.com/jongio/grut/internal/diag"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/keymap"
@@ -278,6 +279,16 @@ Environment:
 
 			p := tea.NewProgram(model)
 			if _, err := p.Run(); err != nil {
+				// A TUI panic is caught by Bubble Tea (which restores the
+				// terminal) but its value is swallowed; crashlog.GuardTUI in
+				// the model has already written a crash report by now. Surface
+				// its location here, after the terminal is restored, since a
+				// message printed mid-panic would be lost with the alt screen.
+				if cp := crashlog.LastCrashPath(); cp != "" {
+					fmt.Fprintf(origStderr, "\ngrut crashed unexpectedly.\n")
+					fmt.Fprintf(origStderr, "Crash report saved to: %s\n", crashlog.ScrubPII(cp))
+					fmt.Fprintf(origStderr, "Run 'grut report' to file a GitHub issue.\n")
+				}
 				fmt.Fprintf(origStderr, "Error: run TUI: %v\n", err)
 				return fmt.Errorf("run TUI: %w", err)
 			}

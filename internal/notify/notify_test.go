@@ -534,6 +534,38 @@ func TestShowMultilineInput(t *testing.T) {
 	assert.Equal(t, ModalMultilineInput, smm.Kind)
 }
 
+func TestShowMultilineInputWithValue(t *testing.T) {
+	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod\nversion=1.0")
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	smm, ok := msg.(ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Inputs for Deploy", smm.Title)
+	assert.Equal(t, "edit values", smm.Placeholder)
+	assert.Equal(t, "env=prod\nversion=1.0", smm.Value)
+	assert.Equal(t, ModalMultilineInput, smm.Kind)
+}
+
+func TestShowMultilineInputWithValueSubmitsEditedValue(t *testing.T) {
+	m := NewManager()
+	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod")
+	m.Update(cmd())
+	require.True(t, m.HasModal())
+
+	// Cursor starts at end of the pre-filled value; add a second input line.
+	assert.Nil(t, m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}), "enter inserts a newline")
+	m.Update(tea.KeyPressMsg{Code: -1, Text: "v"})
+
+	submit := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+	require.NotNil(t, submit)
+	result, ok := submit().(ModalResultMsg)
+	require.True(t, ok)
+	assert.True(t, result.Accept)
+	assert.Equal(t, "env=prod\nv", result.Value)
+	assert.False(t, m.HasModal())
+}
+
 func TestModalMultilineInputSubmit(t *testing.T) {
 	m := NewManager()
 	m.Update(ShowModalMsg{

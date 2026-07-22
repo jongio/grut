@@ -4,6 +4,7 @@ package gitinfo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -18,6 +19,11 @@ import (
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 )
+
+// errGitHubClientUnavailable is surfaced (as a failure toast) when a modal
+// handler reaches a GitHub write with no client configured, instead of
+// dereferencing a nil client and crashing the TUI.
+var errGitHubClientUnavailable = errors.New("GitHub client unavailable")
 
 // modalArgs holds the snapshot of pending-operation state captured before
 // the switch in handleModalResult. Passing it explicitly keeps handler
@@ -334,6 +340,14 @@ func (p *Panel) handleWorkflowDispatchInputs(a modalArgs) (panels.Panel, tea.Cmd
 	owner, repo := p.gh.owner, p.gh.repo
 	ghClient := p.gh.client
 	ctx := a.ctx
+	if ghClient == nil {
+		// Defensive: the dispatch flow should not start without a client,
+		// but guard here so a nil client surfaces as a failure toast rather
+		// than a nil dereference that crashes the TUI.
+		return p, func() tea.Msg {
+			return workflowDispatchResultMsg{workflowName: workflowName, err: errGitHubClientUnavailable}
+		}
+	}
 	return p, func() tea.Msg {
 		err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
 		return workflowDispatchResultMsg{workflowName: workflowName, err: err}

@@ -1816,7 +1816,10 @@ func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panel
 	if len(msg.inputs) > 0 {
 		placeholder = "edit values below (empty to skip)"
 	}
-	return p, notify.ShowInputWithValue(title, placeholder, prePopulated)
+	// The content is one key=value per line, so use a multi-line composer
+	// (Enter=newline, Ctrl+D=submit). A single-line input can neither hold
+	// nor let the user add newlines, so multi-input workflows were unusable.
+	return p, notify.ShowMultilineInputWithValue(title, placeholder, prePopulated)
 }
 
 // ---------------------------------------------------------------------------

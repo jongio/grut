@@ -17,6 +17,7 @@ import (
 	bm "github.com/jongio/grut/internal/bookmarks"
 	"github.com/jongio/grut/internal/chat"
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/crashlog"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/layout"
@@ -164,6 +165,7 @@ type gitDirtyMsg struct{ dirty bool }
 // Init implements tea.Model. Initializes all panels and starts the
 // auto-fetch timer if configured.
 func (m Model) Init() tea.Cmd {
+	defer crashlog.GuardTUI("tui.Init")
 	cmds := []tea.Cmd{m.engine.Init(m.ctx)}
 	// Open a file passed on the command line (e.g. "grut main.go:42"):
 	// focus the preview panel and ask the filetree to reveal + select the
@@ -236,9 +238,10 @@ func (m Model) loadBranchInfo() tea.Cmd {
 // Update implements tea.Model. Routes messages to the layout engine
 // and handles global key bindings.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer crashlog.GuardTUI("tui.Update")
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		return m.handleWindowSizeMsg(msg)
+		return m.handleWindowSizeMsg(msg), nil
 
 	// Branch / git status.
 	case branchLoadedMsg, gitDirtyMsg, panels.BranchChangedMsg:
@@ -1017,6 +1020,7 @@ func (m Model) fuzzyFinderDims() (int, int) {
 // View implements tea.Model. Composes all panels and the status bar
 // into the final view. F27: overlay notifications on top of the panel layout.
 func (m Model) View() tea.View {
+	defer crashlog.GuardTUI("tui.View")
 	var v tea.View
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion

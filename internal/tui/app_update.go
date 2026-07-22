@@ -20,8 +20,9 @@ import (
 )
 
 // handleWindowSizeMsg processes terminal resize events, propagating dimensions
-// to chat, notification manager, and layout engine.
-func (m Model) handleWindowSizeMsg(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+// to chat, notification manager, and layout engine. It never issues a command
+// (the caller supplies a nil tea.Cmd), so it returns only the updated model.
+func (m Model) handleWindowSizeMsg(msg tea.WindowSizeMsg) tea.Model {
 	m.width = msg.Width
 	m.height = msg.Height
 	// Inform chat of full terminal dimensions so overlay mode can
@@ -40,7 +41,7 @@ func (m Model) handleWindowSizeMsg(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	// The engine internally reserves space for status bar, hints bar, and tab bar.
 	m.engine.SetSize(msg.Width, msg.Height-chatHeight)
 	m.ready = true
-	return m, nil
+	return m
 }
 
 // handleBranchMsg routes branch-info and git-dirty messages to update the
