@@ -30,10 +30,11 @@ func newExtCmd() *cobra.Command {
 	extCmd := &cobra.Command{
 		Use:   "ext",
 		Short: "Manage grut extensions",
-		Long:  `Install, list, enable, disable, and remove grut extensions.`,
+		Long:  `Create, validate, install, list, enable, disable, and remove grut extensions.`,
 	}
 
 	extCmd.AddCommand(newExtCreateCmd())
+	extCmd.AddCommand(newExtValidateCmd())
 	extCmd.AddCommand(newExtInstallCmd())
 	extCmd.AddCommand(newExtRemoveCmd())
 	extCmd.AddCommand(newExtListCmd())
@@ -184,6 +185,38 @@ func newExtCreateCmd() *cobra.Command {
 	return cmd
 }
 
+func newExtValidateCmd() *cobra.Command {
+	var jsonFlag bool
+	cmd := &cobra.Command{
+		Use:          "validate [path]",
+		Short:        "Validate a local extension project",
+		Long:         `Validate a local extension project manifest and entry point without installing it.`,
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := "."
+			if len(args) > 0 {
+				path = args[0]
+			}
+
+			result := validateExtensionProject(path)
+			if jsonFlag {
+				if err := writeExtensionJSON(cmd, result); err != nil {
+					return err
+				}
+			} else {
+				printExtensionValidation(cmd, result)
+			}
+			if result.Status != extValidationStatusValid {
+				return fmt.Errorf("ext validate: %s", strings.Join(result.Errors, "; "))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonFlag, "json", false, "Print machine-readable JSON")
+	return cmd
+}
+
 func newExtInfoCmd() *cobra.Command {
 	var jsonFlag bool
 	cmd := &cobra.Command{
@@ -223,6 +256,32 @@ func newExtInfoCmd() *cobra.Command {
 	return cmd
 }
 
+const (
+	extValidationStatusValid   = "valid"
+	extValidationStatusInvalid = "invalid"
+	extRuntimeLua              = "lua"
+	extRuntimeMCP              = "mcp"
+	extRuntimeWasm             = "wasm"
+)
+
+type extensionValidationManifestJSON struct {
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Description string   `json:"description"`
+	Runtime     string   `json:"runtime"`
+	EntryPoint  string   `json:"entry_point"`
+	MinGrut     string   `json:"min_grut"`
+	Permissions []string `json:"permissions"`
+}
+
+type extensionValidationJSON struct {
+	Manifest *extensionValidationManifestJSON `json:"manifest,omitempty"`
+	Status   string                           `json:"status"`
+	Path     string                           `json:"path"`
+	Warnings []string                         `json:"warnings"`
+	Errors   []string                         `json:"errors"`
+}
+
 type extensionInventoryJSON struct {
 	InstalledAt time.Time `json:"installed_at"`
 	Name        string    `json:"name"`
@@ -238,6 +297,130 @@ type extensionInventoryJSON struct {
 	SourceURL   string    `json:"source_url,omitempty"`
 	CommitHash  string    `json:"commit_hash,omitempty"`
 	Enabled     bool      `json:"enabled"`
+}
+
+func validateExtensionProject(path string) extensionValidationJSON {
+	result := extensionValidationJSON{
+		Status:   extValidationStatusValid,
+		Path:     path,
+		Warnings: []string{},
+		Errors:   []string{},
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return invalidExtensionValidation(result, fmt.Sprintf("resolve path %q: %v", path, err))
+	}
+	result.Path = absPath
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return invalidExtensionValidation(result, fmt.Sprintf("extension path %q is not accessible: %v", absPath, err))
+	}
+	if !info.IsDir() {
+		return invalidExtensionValidation(result, fmt.Sprintf("extension path %q is not a directory", absPath))
+	}
+
+	manifest, err := extension.LoadManifest(absPath)
+	if err != nil {
+		return invalidExtensionValidation(result, fmt.Sprintf("manifest validation failed: %v", err))
+	}
+	result.Manifest = &extensionValidationManifestJSON{
+		Name:        manifest.Name,
+		Version:     manifest.Version,
+		Description: manifest.Description,
+		Runtime:     manifest.Runtime,
+		EntryPoint:  manifest.EntryPoint,
+		MinGrut:     manifest.MinGrut,
+		Permissions: append([]string(nil), manifest.Permissions...),
+	}
+
+	validateExtensionEntryPoint(&result, absPath, manifest)
+	addExtensionRuntimeHints(&result, manifest)
+	if len(result.Errors) > 0 {
+		result.Status = extValidationStatusInvalid
+	}
+	return result
+}
+
+func validateExtensionEntryPoint(result *extensionValidationJSON, projectDir string, manifest *extension.Manifest) {
+	if manifest.EntryPoint == "" {
+		result.Warnings = append(result.Warnings, "entry_point is not set; grut may not know which file to load")
+		return
+	}
+
+	entryPath := filepath.Clean(filepath.Join(projectDir, manifest.EntryPoint))
+	rel, err := filepath.Rel(projectDir, entryPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		result.Errors = append(result.Errors, fmt.Sprintf("entry_point %q escapes the extension directory", manifest.EntryPoint))
+		return
+	}
+
+	info, err := os.Stat(entryPath)
+	if err != nil {
+		message := fmt.Sprintf("entry_point %q does not exist under %s", manifest.EntryPoint, projectDir)
+		if manifest.Runtime == extRuntimeWasm {
+			result.Warnings = append(result.Warnings, message+"; build the WebAssembly module before install or runtime use")
+			return
+		}
+		result.Errors = append(result.Errors, message)
+		return
+	}
+	if info.IsDir() {
+		result.Errors = append(result.Errors, fmt.Sprintf("entry_point %q is a directory, not a file", manifest.EntryPoint))
+	}
+}
+
+func addExtensionRuntimeHints(result *extensionValidationJSON, manifest *extension.Manifest) {
+	switch manifest.Runtime {
+	case extRuntimeLua:
+		if manifest.EntryPoint != "" && !strings.HasSuffix(manifest.EntryPoint, ".lua") {
+			result.Warnings = append(result.Warnings, "lua extensions usually use a .lua entry point")
+		}
+	case extRuntimeWasm:
+		if manifest.EntryPoint != "" && !strings.HasSuffix(manifest.EntryPoint, ".wasm") {
+			result.Warnings = append(result.Warnings, "wasm extensions should point entry_point at the built .wasm module")
+		}
+	case extRuntimeMCP:
+		if manifest.EntryPoint != "" &&
+			!strings.HasSuffix(manifest.EntryPoint, ".py") &&
+			!strings.HasSuffix(manifest.EntryPoint, ".js") &&
+			!strings.HasSuffix(manifest.EntryPoint, ".ts") {
+			result.Warnings = append(result.Warnings, "mcp extensions usually use a Python or Node.js server entry point")
+		}
+	}
+}
+
+func invalidExtensionValidation(result extensionValidationJSON, message string) extensionValidationJSON {
+	result.Status = extValidationStatusInvalid
+	result.Errors = append(result.Errors, message)
+	return result
+}
+
+func printExtensionValidation(cmd *cobra.Command, result extensionValidationJSON) {
+	w := cmd.OutOrStdout()
+	if result.Status == extValidationStatusValid {
+		fmt.Fprintf(w, "✓ Extension project is valid: %s\n", result.Path)
+		if result.Manifest != nil {
+			fmt.Fprintf(w, "Name:        %s\n", result.Manifest.Name)
+			fmt.Fprintf(w, "Version:     %s\n", result.Manifest.Version)
+			fmt.Fprintf(w, "Runtime:     %s\n", result.Manifest.Runtime)
+			fmt.Fprintf(w, "Entry Point: %s\n", result.Manifest.EntryPoint)
+		}
+	} else {
+		fmt.Fprintf(w, "✗ Extension project is invalid: %s\n", result.Path)
+	}
+	if len(result.Warnings) > 0 {
+		fmt.Fprintln(w, "Warnings:")
+		for _, warning := range result.Warnings {
+			fmt.Fprintf(w, "  ⚠ %s\n", warning)
+		}
+	}
+	if len(result.Errors) > 0 {
+		fmt.Fprintln(w, "Errors:")
+		for _, validationErr := range result.Errors {
+			fmt.Fprintf(w, "  ✗ %s\n", validationErr)
+		}
+	}
 }
 
 func printExtensionListJSON(cmd *cobra.Command, list []extension.ExtensionInfo) error {

@@ -1,6 +1,6 @@
 # Extension Development Guide
 
-grut supports two extension runtimes: **Lua** and **WASM**. Extensions are sandboxed with a permission system that controls access to files, git, network, and UI.
+grut supports three extension runtimes: **Lua**, **WASM**, and **MCP**. Extensions are sandboxed with a permission system that controls access to files, git, network, and UI.
 
 ## Quick Start
 
@@ -13,6 +13,24 @@ grut ext create my-extension --template lua
 
 This scaffolds an extension directory with a manifest and entry point file.
 
+Available templates:
+
+| Template | Runtime | Description |
+|----------|---------|-------------|
+| `lua` | `lua` | Lua scripting extension |
+| `wasm-go` | `wasm` | WebAssembly extension built with TinyGo |
+| `mcp-python` | `mcp` | Python MCP server extension |
+| `mcp-node` | `mcp` | Node.js MCP server extension |
+
+Validate the project before installing it:
+
+```bash
+grut ext validate ./my-extension
+grut ext validate ./my-extension --json
+```
+
+Validation loads `extension.toml`, reuses the same manifest checks as install, verifies the entry point when available, and prints actionable errors for invalid fields, unknown permissions, path traversal, or missing entry-point files. The `--json` form emits status, manifest metadata, warnings, and errors for editor and CI integration.
+
 ---
 
 ## CLI Commands
@@ -20,6 +38,7 @@ This scaffolds an extension directory with a manifest and entry point file.
 | Command | Description |
 |---------|-------------|
 | `grut ext create <name> --template <type>` | Scaffold a new extension |
+| `grut ext validate [path]` | Validate a local extension project without installing it |
 | `grut ext install <url-or-path>` | Install from HTTPS URL or local path |
 | `grut ext list` | List installed extensions |
 | `grut ext info <name>` | Show extension details |
@@ -54,7 +73,7 @@ min_grut = "0.1.0"          # Minimum grut version
 | `description` | No | Human-readable summary |
 | `author` | No | Author name |
 | `license` | No | License identifier (e.g., `MIT`, `Apache-2.0`) |
-| `runtime` | Yes | `"lua"` or `"wasm"` |
+| `runtime` | Yes | `"lua"`, `"wasm"`, or `"mcp"` |
 | `entry_point` | No | Path to the main file |
 | `permissions` | No | List of permission strings |
 | `min_grut` | No | Minimum compatible grut version |
