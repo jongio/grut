@@ -71,6 +71,7 @@ type Model struct {
 	currentBranch      string // cached git branch name for status bar
 	cwdEditValue       string // editable path text
 	initialFile        string // file to open + focus in preview at startup (empty = none)
+	initialFocusPanel  string // panel to focus after startup file reveal (empty = default)
 	branchAhead        int    // commits ahead of upstream (needs push)
 	branchBehind       int    // commits behind upstream (needs pull)
 	width              int
@@ -151,6 +152,13 @@ func (m Model) WithInitialFile(path string, line int) Model {
 	return m
 }
 
+// WithInitialFocusPanel returns a copy of the model configured to focus the
+// named panel after initial startup messages are queued.
+func (m Model) WithInitialFocusPanel(name string) Model {
+	m.initialFocusPanel = name
+	return m
+}
+
 // branchLoadedMsg carries the initial branch name and tracking info for the status bar.
 type branchLoadedMsg struct {
 	Name       string
@@ -178,6 +186,9 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, func() tea.Msg {
 			return panels.RevealFileMsg{Path: file, Line: line}
 		})
+	}
+	if m.initialFocusPanel != "" {
+		m.engine.FocusByName(m.initialFocusPanel)
 	}
 	if tick := m.autoFetchTickCmd(); tick != nil {
 		cmds = append(cmds, tick)

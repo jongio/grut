@@ -185,6 +185,8 @@ grut is primarily a TUI, but it also exposes subcommands for scripting and setup
 | `--help`, `-h` | Show usage information |
 | `--version`, `-v` | Print the version and exit |
 | `--demo` | Launch with a demo project to explore grut |
+| `--scenario NAME` | Launch a guided demo scenario (`list`, `branch-review`, `conflict-resolution`, `extensions`) |
+| `--demo-keep` | Keep the generated demo repository after exit and print its path |
 | `--no-ai` | Disable AI features for this session |
 | `--layout NAME` | Start with a layout for this launch (`explorer`, `git`, `review`, `agent`, `full`) |
 | `--cpu-profile FILE` | Write CPU profile to FILE (dev/debug) |
@@ -193,6 +195,10 @@ grut is primarily a TUI, but it also exposes subcommands for scripting and setup
 | `--reset-welcome` | Reset first-run state so the welcome screen shows on next launch |
 
 A background update check runs on every launch and notifies you when a new version is available.
+
+## Demo Scenarios
+
+Use `grut --demo --scenario list` to print guided scenarios. Launch one with `grut --demo --scenario branch-review`, `conflict-resolution`, or `extensions`. Each scenario opens a seeded repository, selects a focused layout/panel, and displays `.grut/demo-scenario.md` in the TUI with walkthrough steps. Add `--demo-keep` to retain the generated path for local bug reports or repro notes.
 
 ## Nerd Font Icons
 
