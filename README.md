@@ -155,6 +155,7 @@ grut update  # Downloads and installs the latest release
 grut              # Launch file explorer in current directory
 grut /path/to/dir # Open specific directory
 grut update       # Update grut to the latest release
+grut doctor       # Check terminal, config, Git, GitHub, and AI readiness
 grut version      # Print the version
 ```
 
@@ -167,6 +168,7 @@ grut is primarily a TUI, but it also exposes subcommands for scripting and setup
 | `grut [path]` | Launch the TUI in the current or given directory |
 | `grut version` | Print the version of grut |
 | `grut update` | Update grut to the latest release |
+| `grut doctor` | Check environment health (`--json` for issue reports/CI logs) |
 | `grut status` | Print a summary of the working tree status |
 | `grut config` | Inspect configuration (`check`, `get <key>`, `defaults`) |
 | `grut theme` | Inspect themes (`theme list`) |
