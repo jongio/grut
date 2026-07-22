@@ -53,7 +53,7 @@ func (p *Preview) renderBlameContent(width, height int) string {
 	}
 
 	rendered := make([]string, 0, len(visible))
-	for _, bl := range visible {
+	for i, bl := range visible {
 		annotation := formatBlameAnnotation(bl)
 		color := blameRecencyColor(bl.Date, now)
 		styledAnnotation := lipgloss.NewStyle().
@@ -62,6 +62,7 @@ func (p *Preview) renderBlameContent(width, height int) string {
 
 		line := bl.Content
 		line = strings.ReplaceAll(line, "\t", "    ")
+		line = p.applySearchHighlight(line, start+i)
 		if p.wordWrap && contentWidth > 0 {
 			line = lipgloss.NewStyle().Width(contentWidth).Render(line)
 		} else {
@@ -80,6 +81,7 @@ func (p *Preview) renderBlameContent(width, height int) string {
 
 	// Add scroll indicator
 	scrollInfo := p.scrollIndicator(totalLines, height)
+	scrollInfo = p.searchFooterInfo(scrollInfo)
 	content += "\n" + p.newDimStyle().Render(scrollInfo)
 
 	return content

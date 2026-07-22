@@ -19,11 +19,12 @@ import (
 
 // Key name constants for KeyPressMsg.String() comparisons.
 const (
-	keyDown   = "down"
-	keyEsc    = "esc"
-	keyEscape = "escape"
-	keyEnter  = "enter"
-	keyEnd    = "end"
+	keyDown      = "down"
+	keyEsc       = "esc"
+	keyEscape    = "escape"
+	keyEnter     = "enter"
+	keyEnd       = "end"
+	keyBackspace = "backspace"
 
 	// clipboardTimeout bounds how long clipboard subprocess calls may block.
 	clipboardTimeout = 2 * time.Second
@@ -298,7 +299,7 @@ func handleEditKeyPress(p *Preview, msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 			ensureCursorVisible(p)
 		}
 
-	case "backspace":
+	case keyBackspace:
 		if p.editBuf != nil {
 			if hasEditSelection(p) {
 				start, end := editSelRange(p)

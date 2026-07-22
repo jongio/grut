@@ -65,6 +65,13 @@ type Preview struct {
 	// as a line-number entry and scrolls to the entered line on Enter.
 	gotoLineActive bool
 	gotoLineInput  string
+	// Search prompt state. When active, the panel captures key presses as a
+	// preview-local search query and highlights matches in the current buffer.
+	searchActive  bool
+	searchInput   string
+	searchQuery   string
+	searchMatches []searchMatch
+	searchIdx     int
 	// pendingGotoLine holds a 1-based line to scroll to once the current file
 	// finishes loading. It is set when a FileSelectedMsg carries a target line
 	// (for example from the todo fuzzy finder) and cleared after it is applied.
@@ -177,6 +184,7 @@ func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	p.diffLines = nil
 	p.diffMode = false
 	p.diffContext = nil
+	p.clearSearch()
 	return p, nil
 }
 
@@ -263,6 +271,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghContent = ""
 		p.ghPlainText = false
 		p.clearSelection()
+		p.clearSearch()
 		// Store the diff context from the filetree's current mode.
 		p.diffContext = msg.DiffContext
 		// Start async file load (F01: no blocking I/O in Update).
@@ -310,6 +319,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.IssueSelectedMsg:
 		p.clearSelection()
+		p.clearSearch()
 		p.ghMode = true
 		p.ghPlainText = false
 		safeTitle := ansi.Strip(msg.Title)
@@ -329,6 +339,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.PRSelectedMsg:
 		p.clearSelection()
+		p.clearSearch()
 		p.ghMode = true
 		p.ghPlainText = false
 		safeTitle := ansi.Strip(msg.Title)
@@ -351,6 +362,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.ActionRunSelectedMsg:
 		p.clearSelection()
+		p.clearSearch()
 		p.ghMode = true
 		p.ghPlainText = false
 		safeWfName := ansi.Strip(msg.WorkflowName)
@@ -373,6 +385,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.WorkflowSelectedMsg:
 		// Show the workflow definition file in the preview pane.
 		p.clearSelection()
+		p.clearSearch()
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -390,6 +403,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, p.loadFileCmd(msg.Path)
 	case panels.ActionJobsLoadedMsg:
 		p.clearSelection()
+		p.clearSearch()
 		p.ghMode = true
 		p.ghPlainText = true
 		p.scrollY = 0
@@ -398,6 +412,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.ActionLogMsg:
 		if p.ghMode && msg.Log != "" {
+			p.clearSearch()
 			p.ghPlainText = true
 			logSection := renderActionLog(msg.Log)
 			p.ghContent += "\n" + logSection
@@ -405,6 +420,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.GitFilterActiveMsg:
+		p.clearSearch()
 		p.diffMode = msg.Active
 		if msg.Active {
 			p.diffContext = &panels.DiffContext{Type: panels.DiffContextWorking}
@@ -412,6 +428,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.RefreshPreviewMsg:
 		// Re-render whatever is currently showing without changing content type.
+		p.clearSearch()
 		if p.ghMode {
 			if p.ghContent != "" {
 				if p.ghPlainText {
@@ -493,6 +510,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if p.gotoLineActive {
 			return p.handleGotoLineKey(msg)
 		}
+		// Search prompt captures all input until it is committed or cancelled.
+		if p.searchActive {
+			return p.handleSearchKey(msg)
+		}
 		// The heading-jump overlay captures all input while it is open.
 		if p.tocActive {
 			return p.handleTOCKey(msg)
@@ -505,9 +526,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			}
 			return p, enterEditMode(p)
 		case "f":
+			p.clearSearch()
 			p.diffMode = !p.diffMode
 			p.scrollY = 0
 			return p, nil
+		case "ctrl+f":
+			return p, p.openSearch()
 		case "j", keyDown:
 			p.scrollDown(1)
 		case "k", "up":
@@ -527,14 +551,24 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		case "W":
 			p.wordWrap = !p.wordWrap
 		case "n":
-			p.lineNumbers = !p.lineNumbers
+			if len(p.searchMatches) > 0 {
+				p.nextMatch()
+			} else {
+				p.lineNumbers = !p.lineNumbers
+			}
+		case "N":
+			if len(p.searchMatches) > 0 {
+				p.prevMatch()
+			}
 		case "m":
+			p.clearSearch()
 			p.renderMarkdown = !p.renderMarkdown
 			if p.filePath != "" && isMarkdownExt(filepath.Ext(p.filePath)) {
 				return p, p.loadFileCmd(p.filePath)
 			}
 		case "B":
 			if p.filePath != "" {
+				p.clearSearch()
 				p.blameMode = !p.blameMode
 				if p.blameMode {
 					return p, func() tea.Msg {
@@ -557,6 +591,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		case "ctrl+g":
 			return p.createGist()
 		case keyEscape, keyEsc:
+			p.clearSearch()
 			if p.hasSelection() {
 				p.clearSelection()
 			}
@@ -598,7 +633,7 @@ func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 	case keyEnter:
 		p.commitGotoLine()
 		return p, p.closeGotoLine()
-	case "backspace":
+	case keyBackspace:
 		if r := []rune(p.gotoLineInput); len(r) > 0 {
 			p.gotoLineInput = string(r[:len(r)-1])
 		}
@@ -755,6 +790,8 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "goto_top"},
 		{Key: "G", Description: "Go to bottom", Action: "goto_bottom"},
 		{Key: "L", Description: "Go to line", Action: "goto_line"},
+		{Key: "Ctrl+F", Description: "Search in preview", Action: "search"},
+		{Key: "n/N", Description: "Next/previous match", Action: "search_nav"},
 		{Key: "t", Description: "Jump to heading", Action: "goto_heading"},
 		{Key: "W", Description: "Toggle word wrap", Action: "toggle_wrap"},
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
@@ -1379,6 +1416,7 @@ func (p *Preview) renderContent(width, height int) string {
 		// Apply selection highlight before truncation/wrapping so
 		// the highlight covers the correct rune range.
 		line = p.applySelectionHighlight(line, absLine, sel, selE)
+		line = p.applySearchHighlight(line, absLine)
 		if p.wordWrap && contentWidth > 0 {
 			line = lipgloss.NewStyle().Width(contentWidth).Render(line)
 		} else {
@@ -1404,6 +1442,7 @@ func (p *Preview) renderContent(width, height int) string {
 	content := strings.Join(rendered, "\n")
 	// Add scroll indicator, or the go-to-line prompt when it is active.
 	scrollInfo := p.scrollIndicator(totalLines, height)
+	scrollInfo = p.searchFooterInfo(scrollInfo)
 	if p.gotoLineActive {
 		scrollInfo = "Go to line: " + p.gotoLineInput
 	}

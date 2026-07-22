@@ -785,7 +785,7 @@ func TestKeyBindings(t *testing.T) {
 	bindings := p.KeyBindings()
 
 	assert.NotEmpty(t, bindings)
-	assert.Len(t, bindings, 19)
+	assert.Len(t, bindings, 21)
 
 	// Verify all expected bindings are present
 	actions := make([]string, len(bindings))
@@ -802,6 +802,8 @@ func TestKeyBindings(t *testing.T) {
 	assert.Contains(t, actions, "goto_top")
 	assert.Contains(t, actions, "goto_bottom")
 	assert.Contains(t, actions, "goto_line")
+	assert.Contains(t, actions, "search")
+	assert.Contains(t, actions, "search_nav")
 	assert.Contains(t, actions, "goto_heading")
 	assert.Contains(t, actions, "toggle_wrap")
 	assert.Contains(t, actions, "toggle_line_numbers")

@@ -192,6 +192,8 @@ Preview panel (panel 5).
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `L` | Go to line |
+| `Ctrl+F` | Search in preview |
+| `n/N` | Next/previous search match |
 | `t` | Jump to markdown heading |
 | `PgDn/PgUp` | Page down/up |
 | `W` | Toggle word wrap |
