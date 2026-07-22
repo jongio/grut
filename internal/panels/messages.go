@@ -587,6 +587,13 @@ type CommitSelectedMsg struct {
 	Subject string
 }
 
+// ShowCommitDetailMsg requests the commits panel select the commit with the
+// given hash and switch to its detail view. Emitted by the preview panel's
+// blame view so the user can jump from a blame line to the full commit.
+type ShowCommitDetailMsg struct {
+	Hash string
+}
+
 // CommitDeselectedMsg is sent when the user deselects a commit (via Escape).
 // File tree exits commit-files mode when receiving this.
 type CommitDeselectedMsg struct{}

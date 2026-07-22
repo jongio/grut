@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- Blame recency color tests ---
@@ -339,6 +341,85 @@ func TestBlameScrolling(t *testing.T) {
 	// Scroll to top
 	p.Update(keyMsg("g"))
 	assert.Equal(t, 0, p.scrollY)
+}
+
+func TestCurrentBlameLineUsesTopVisibleLine(t *testing.T) {
+	t.Parallel()
+
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	targetHash := "2222222222222222222222222222222222222222"
+	p.blameMode = true
+	p.scrollY = 1
+	p.blameLines = []git.BlameLine{
+		{Hash: "1111111111111111111111111111111111111111", Content: "line one"},
+		{Hash: targetHash, Content: "line two"},
+		{Hash: "3333333333333333333333333333333333333333", Content: "line three"},
+	}
+
+	bl, ok := p.currentBlameLine()
+	require.True(t, ok)
+	assert.Equal(t, targetHash, bl.Hash)
+	assert.Equal(t, "line two", bl.Content)
+}
+
+func TestCurrentBlameLineClampsScrollY(t *testing.T) {
+	t.Parallel()
+
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	targetHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	p.blameMode = true
+	p.scrollY = 99
+	p.blameLines = []git.BlameLine{{Hash: targetHash}}
+
+	bl, ok := p.currentBlameLine()
+	require.True(t, ok)
+	assert.Equal(t, targetHash, bl.Hash)
+}
+
+func TestOpenBlameCommitKeyEmitsShowCommitDetailMsg(t *testing.T) {
+	t.Parallel()
+
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	targetHash := "abcdef1234567890abcdef1234567890abcdef12"
+	p.Focus()
+	p.filePath = "x"
+	p.blameMode = true
+	p.scrollY = 1
+	p.blameLines = []git.BlameLine{
+		{Hash: "1111111111111111111111111111111111111111", Content: "line one"},
+		{Hash: targetHash, Content: "line two"},
+	}
+
+	_, cmd := p.Update(keyMsg("o"))
+	require.NotNil(t, cmd)
+
+	msg, ok := cmd().(panels.ShowCommitDetailMsg)
+	require.True(t, ok)
+	assert.Equal(t, targetHash, msg.Hash)
+}
+
+func TestOpenBlameCommitKeyShowsToastForUncommittedLine(t *testing.T) {
+	t.Parallel()
+
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.Focus()
+	p.filePath = "x"
+	p.blameMode = true
+	p.blameLines = []git.BlameLine{{
+		Hash:    "0000000000000000000000000000000000000000",
+		Content: "new line",
+	}}
+
+	_, cmd := p.Update(keyMsg("o"))
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, isJump := msg.(panels.ShowCommitDetailMsg)
+	require.False(t, isJump)
+	toast, ok := msg.(notify.ShowToastMsg)
+	require.True(t, ok)
+	assert.Equal(t, "Line not yet committed", toast.Message)
+	assert.Equal(t, notify.Info, toast.Level)
 }
 
 // --- Bisect message tests ---

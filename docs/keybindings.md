@@ -200,6 +200,7 @@ Preview panel (panel 5).
 | `n` | Toggle line numbers |
 | `m` | Toggle markdown render |
 | `B` | Toggle blame |
+| `o` | Open blame line's commit (blame mode) |
 | `y/Ctrl+C` | Copy selection |
 | `Y` | Copy GitHub permalink |
 | `p` | Copy local file location |

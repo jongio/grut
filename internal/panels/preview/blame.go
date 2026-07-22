@@ -5,9 +5,12 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/jongio/grut/internal/git"
+	"github.com/jongio/grut/internal/notify"
+	"github.com/jongio/grut/internal/panels"
 )
 
 // blameHashLen is the truncated hash length for blame annotations.
@@ -69,7 +72,11 @@ func (p *Preview) renderBlameContent(width, height int) string {
 			line = ansi.Truncate(line, contentWidth, "")
 		}
 
-		rendered = append(rendered, styledAnnotation+line)
+		row := styledAnnotation + line
+		if i == 0 {
+			row = lipgloss.NewStyle().Background(lipgloss.Color("#2A2A2A")).Render(row)
+		}
+		rendered = append(rendered, row)
 	}
 
 	// Pad with empty lines if needed
@@ -85,6 +92,35 @@ func (p *Preview) renderBlameContent(width, height int) string {
 	content += "\n" + p.newDimStyle().Render(scrollInfo)
 
 	return content
+}
+
+func (p *Preview) currentBlameLine() (git.BlameLine, bool) {
+	if !p.blameMode || len(p.blameLines) == 0 {
+		return git.BlameLine{}, false
+	}
+	idx := p.scrollY
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(p.blameLines) {
+		idx = len(p.blameLines) - 1
+	}
+	return p.blameLines[idx], true
+}
+
+func (p *Preview) openBlameCommit() tea.Cmd {
+	bl, ok := p.currentBlameLine()
+	if !ok {
+		return nil
+	}
+	if bl.Hash == "" || strings.Trim(bl.Hash, "0") == "" {
+		return func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Line not yet committed", Level: notify.Info}
+		}
+	}
+	return func() tea.Msg {
+		return panels.ShowCommitDetailMsg{Hash: bl.Hash}
+	}
 }
 
 // formatBlameAnnotation formats the blame prefix for a single line.

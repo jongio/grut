@@ -577,6 +577,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 				}
 				p.blameLines = nil
 			}
+		case "o":
+			if p.blameMode && len(p.blameLines) > 0 {
+				return p, p.openBlameCommit()
+			}
 		case "y":
 			if p.hasSelection() {
 				return p.copySelection()
@@ -797,6 +801,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "n", Description: "Toggle line numbers", Action: "toggle_line_numbers"},
 		{Key: "m", Description: "Toggle markdown render", Action: "toggle_markdown_render"},
 		{Key: "B", Description: "Toggle blame", Action: "toggle_blame"},
+		{Key: "o", Description: "Open blame line's commit", Action: "open_blame_commit"},
 		{Key: "y/Ctrl+C", Description: "Copy selection or file path", Action: "copy_selection"},
 		{Key: "Y", Description: "Copy GitHub permalink", Action: "copy_permalink"},
 		{Key: "p", Description: "Copy local file location", Action: "copy_local_location"},
