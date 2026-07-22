@@ -39,6 +39,7 @@ import Screenshot from '../../components/Screenshot.astro';
     { key: 'n', action: 'Create a new file' },
     { key: 'N', action: 'Create a new directory' },
     { key: 'e / F2', action: 'Rename the selected file or directory' },
+    { key: 'r', action: 'Batch rename selected entries' },
     { key: 'x', action: 'Delete the selected file or directory (with confirmation)' },
     { key: 'o', action: 'Open file in external editor' },
     { key: 'y', action: 'Copy file path to clipboard' },
@@ -56,6 +57,13 @@ import Screenshot from '../../components/Screenshot.astro';
     When creating a file or directory, grüt opens an inline text input at the
     current cursor position. Type the name and press <kbd>Enter</kbd> to
     confirm, or <kbd>Esc</kbd> to cancel.
+  </p>
+  <p>
+    Batch rename opens an editor with one repo-relative path per line for the
+    current selection, or the focused entry if nothing is selected. Edit the
+    destination paths, press <kbd>Ctrl+S</kbd> to apply, or <kbd>Esc</kbd> to
+    cancel. Empty names, duplicate destinations, parent-directory traversal
+    (<code>..</code>), and paths outside the repository are blocked.
   </p>
   <p>
     Deletion always requires confirmation — grüt shows the file name and asks

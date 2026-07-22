@@ -66,6 +66,7 @@ File Tree panel (panel 1).
 | `f` | Toggle git filter |
 | `D` | Scan directory size |
 | `u` | Undo delete (restore from trash) |
+| `r` | Batch rename selection |
 | `v` | Toggle tree/list view |
 | `n` | New file |
 | `N` | New directory |
