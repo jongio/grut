@@ -340,6 +340,8 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return ft, nil
 	case dirSizeResultMsg:
 		return ft.handleDirSizeResult(msg)
+	case undoDeleteResultMsg:
+		return ft.handleUndoDeleteResult(msg)
 	case pasteResultMsg:
 		if msg.wasCut {
 			ft.clip = clipboard{}
@@ -407,10 +409,17 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case notify.ModalResultMsg:
 		return ft.handleModalResult(msg)
 	case panels.CommandSelectedMsg:
-		if !ft.focused || msg.Action != actionDirSize {
+		if !ft.focused {
 			return ft, nil
 		}
-		return ft.requestDirSizeScan()
+		switch msg.Action {
+		case actionDirSize:
+			return ft.requestDirSizeScan()
+		case actionUndoDelete:
+			return ft.requestUndoDelete()
+		default:
+			return ft, nil
+		}
 	case RefreshMsg:
 		return ft.handleRefresh()
 	case panels.NavigateToPathMsg:
@@ -590,6 +599,7 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "f", Description: "Cycle filter: all → git changed → branch diff", Action: "cycle_file_filter"},
 		{Key: "D", Description: "Scan directory size", Action: actionDirSize},
+		{Key: "u", Description: "Undo delete (restore from trash)", Action: actionUndoDelete},
 		{Key: "space", Description: "Toggle selection", Action: "toggle_select"},
 		{Key: "n", Description: "Create new file", Action: "item_create"},
 		{Key: "d", Description: "Delete file(s)", Action: "item_delete"},
@@ -962,6 +972,8 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return ft.cycleFileFilter()
 	case "D":
 		return ft.requestDirSizeScan()
+	case "u":
+		return ft.requestUndoDelete()
 	case "g":
 		ft.goToTop()
 	case "G":

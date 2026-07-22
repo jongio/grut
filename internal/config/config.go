@@ -66,6 +66,7 @@ type FileTreeConfig struct {
 	SortDirectoriesFirst bool   `toml:"sort_directories_first"`
 	GitStatusMarkers     bool   `toml:"git_status_markers"`
 	FollowSymlinks       bool   `toml:"follow_symlinks"`
+	PermanentDelete      bool   `toml:"permanent_delete"`
 }
 
 // PreviewConfig controls the file preview pane.

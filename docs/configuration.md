@@ -46,8 +46,11 @@ icon_mode = "auto"               # "nerd" (nerd fonts), "ascii" (fallback), "aut
 sort_directories_first = true    # Directories listed before files
 git_status_markers = true        # Show git status indicators (M, A, ?)
 follow_symlinks = false          # Follow symbolic links when traversing
+permanent_delete = false        # Permanently delete instead of moving file-tree deletes to trash
 max_depth = 20                   # Maximum directory depth (≥ 1)
 ```
+
+File-tree deletes move files and directories to a per-repository grut trash under the user data directory by default. Press `u` in the file tree to restore the most recent trashed item; set `permanent_delete = true` to keep the old permanent-delete behavior.
 
 ---
 

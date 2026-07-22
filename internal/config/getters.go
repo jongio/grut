@@ -20,6 +20,7 @@ func (c FileTreeConfig) GetShowIcons() bool            { return c.ShowIcons }
 func (c FileTreeConfig) GetSortDirectoriesFirst() bool { return c.SortDirectoriesFirst }
 func (c FileTreeConfig) GetGitStatusMarkers() bool     { return c.GitStatusMarkers }
 func (c FileTreeConfig) GetFollowSymlinks() bool       { return c.FollowSymlinks }
+func (c FileTreeConfig) GetPermanentDelete() bool      { return c.PermanentDelete }
 
 // --- PreviewConfig getters -------------------------------------------------
 

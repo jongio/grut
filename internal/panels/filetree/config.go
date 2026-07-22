@@ -15,4 +15,5 @@ type Config interface {
 	GetSortDirectoriesFirst() bool
 	GetGitStatusMarkers() bool
 	GetFollowSymlinks() bool
+	GetPermanentDelete() bool
 }

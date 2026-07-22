@@ -95,6 +95,14 @@ icon_mode = "ascii"   # Options: "nerd", "ascii", "auto" (default: "auto")</code
     a marker if any file within it has changes.
   </p>
 
+  <h2>Safe Delete</h2>
+  <p>
+    Deleted files and directories move to grut trash by default, with a manifest
+    that records the original path. Press <code>u</code> in the file tree to
+    restore the most recent trashed item. Set <code>file_tree.permanent_delete</code>
+    to <code>true</code> to opt back into permanent deletion.
+  </p>
+
   <h2>Preview Panel</h2>
   <p>
     Selecting a file shows a syntax-highlighted preview in the adjacent panel.
@@ -110,7 +118,8 @@ show_hidden = false             # Show dotfiles and hidden directories
 sort_directories_first = true   # Directories appear before files
 git_status_markers = true       # Show git status markers on files
 max_depth = 0                   # Max tree depth (0 = unlimited)
-follow_symlinks = false         # Follow symbolic links in the tree</code></pre>
+follow_symlinks = false         # Follow symbolic links in the tree
+permanent_delete = false       # Permanently delete instead of moving deletes to trash</code></pre>
 
   <h2>Next Steps</h2>
   <ul>
