@@ -3,12 +3,21 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jongio/grut/internal/extension"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	extValidateCommand = "validate"
+	extValidateJSONArg = "--json"
+	extTestManifest    = "extension.toml"
+	extTestName        = "valid-ext"
 )
 
 // ---------------------------------------------------------------------------
@@ -132,6 +141,193 @@ func TestExtInfoCmd_JSONFlagRegistered(t *testing.T) {
 	require.NotNil(t, flag, "--json flag must be registered")
 	assert.Equal(t, "bool", flag.Value.Type())
 	assert.Equal(t, "false", flag.DefValue)
+}
+
+func TestExtValidateCmd_JSONFlagRegistered(t *testing.T) {
+	cmd := newExtValidateCmd()
+	flag := cmd.Flags().Lookup("json")
+	require.NotNil(t, flag, "--json flag must be registered")
+	assert.Equal(t, "bool", flag.Value.Type())
+	assert.Equal(t, "false", flag.DefValue)
+}
+
+func TestExtValidateCmd_ValidatesScaffoldedTemplates(t *testing.T) {
+	for _, tmpl := range extension.ListTemplates() {
+		t.Run(tmpl.Name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, extension.Scaffold(dir, extTestName, tmpl.Name))
+
+			cmd := newExtCmd()
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetErr(&buf)
+			cmd.SetArgs([]string{extValidateCommand, filepath.Join(dir, extTestName)})
+
+			require.NoError(t, cmd.Execute())
+			assert.Contains(t, buf.String(), "Extension project is valid")
+			assert.Contains(t, buf.String(), tmpl.Runtime)
+		})
+	}
+}
+
+func TestExtValidateCmd_DefaultsToCurrentDirectory(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, extension.Scaffold(dir, extTestName, "lua"))
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(filepath.Join(dir, extTestName)))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(origDir)) })
+
+	cmd := newExtCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{extValidateCommand})
+
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "Extension project is valid")
+}
+
+func TestExtValidateCmd_InvalidProjects(t *testing.T) {
+	tests := []struct {
+		name          string
+		manifest      string
+		fileName      string
+		path          string
+		wantErr       string
+		wantOutput    string
+		createProject bool
+	}{
+		{
+			name: "invalid manifest field",
+			manifest: `
+name = "Bad Name"
+version = "1.0.0"
+runtime = "lua"
+entry_point = "init.lua"
+`,
+			fileName:      "init.lua",
+			wantErr:       "manifest validation failed",
+			wantOutput:    "name",
+			createProject: true,
+		},
+		{
+			name: "unknown permission",
+			manifest: `
+name = "bad-permission"
+version = "1.0.0"
+runtime = "lua"
+entry_point = "init.lua"
+permissions = ["secrets"]
+`,
+			fileName:      "init.lua",
+			wantErr:       "unknown permission",
+			wantOutput:    "secrets",
+			createProject: true,
+		},
+		{
+			name: "missing entry point",
+			manifest: `
+name = "missing-entry"
+version = "1.0.0"
+runtime = "lua"
+entry_point = "init.lua"
+`,
+			wantErr:       "does not exist",
+			wantOutput:    "entry_point",
+			createProject: true,
+		},
+		{
+			name: "path traversal",
+			manifest: `
+name = "traversal"
+version = "1.0.0"
+runtime = "lua"
+entry_point = "../init.lua"
+`,
+			wantErr:       "must not contain '..'",
+			wantOutput:    "manifest validation failed",
+			createProject: true,
+		},
+		{
+			name:       "nonexistent path",
+			path:       filepath.Join(t.TempDir(), "missing"),
+			wantErr:    "not accessible",
+			wantOutput: "not accessible",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectDir := tt.path
+			if tt.createProject {
+				projectDir = t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(projectDir, extTestManifest), []byte(tt.manifest), 0o600))
+				if tt.fileName != "" {
+					require.NoError(t, os.WriteFile(filepath.Join(projectDir, tt.fileName), []byte("-- ok\n"), 0o600))
+				}
+			}
+
+			cmd := newExtCmd()
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetErr(&buf)
+			cmd.SetArgs([]string{extValidateCommand, projectDir})
+
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Contains(t, buf.String(), "Extension project is invalid")
+			assert.Contains(t, buf.String(), tt.wantOutput)
+		})
+	}
+}
+
+func TestExtValidateCmd_JSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, extension.Scaffold(dir, extTestName, "lua"))
+
+	cmd := newExtCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{extValidateCommand, filepath.Join(dir, extTestName), extValidateJSONArg})
+
+	require.NoError(t, cmd.Execute())
+
+	var out extensionValidationJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	require.NotNil(t, out.Manifest)
+	assert.Equal(t, extValidationStatusValid, out.Status)
+	assert.Equal(t, extTestName, out.Manifest.Name)
+	assert.Equal(t, "lua", out.Manifest.Runtime)
+	assert.Empty(t, out.Errors)
+}
+
+func TestExtValidateCmd_JSONOutputForInvalidProject(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, extTestManifest), []byte(`
+name = "json-invalid"
+version = "1.0.0"
+runtime = "lua"
+entry_point = "missing.lua"
+`), 0o600))
+
+	cmd := newExtCmd()
+	var buf bytes.Buffer
+	var errBuf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs([]string{extValidateCommand, dir, extValidateJSONArg})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+
+	var out extensionValidationJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	assert.Equal(t, extValidationStatusInvalid, out.Status)
+	assert.NotEmpty(t, out.Errors)
+	assert.Contains(t, out.Errors[0], "entry_point")
 }
 
 func TestPrintExtensionListJSON_EmptyList(t *testing.T) {
