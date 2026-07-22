@@ -788,6 +788,15 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			result.lines = []string{fmt.Sprintf("Directory: %s", path)}
 			return result
 		}
+		if _, ok := detectArchiveType(path); ok {
+			lines, err := archiveManifest(path)
+			if err != nil {
+				result.lines = archiveErrorLines(path, err)
+				return result
+			}
+			result.lines = lines
+			return result
+		}
 		// Check max file size
 		if cfg.GetMaxFileSize() > 0 && info.Size() > int64(cfg.GetMaxFileSize()) {
 			result.isLarge = true
