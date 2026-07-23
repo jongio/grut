@@ -236,6 +236,8 @@ func (m Model) handleOverlayMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Help overlay messages.
 	case panels.ToggleHelpMsg:
 		return m.toggleHelp()
+	case panels.ToggleCommandLogMsg:
+		return m.toggleCommandLog()
 	case panels.FirstRunMsg:
 		return m.toggleWelcome()
 
@@ -413,6 +415,10 @@ func (m Model) handleMouseMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			_, cmd := m.helpPanel.Update(msg)
 			return m, cmd, true
 		}
+		if m.commandLogShown && m.commandLogPanel != nil {
+			_, cmd := m.commandLogPanel.Update(msg)
+			return m, cmd, true
+		}
 		if m.welcomeShown && m.welcomePanel != nil {
 			_, cmd := m.welcomePanel.Update(msg)
 			return m, cmd, true
@@ -449,6 +455,10 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If help overlay is shown, route keys to it.
 	if m.helpShown && m.helpPanel != nil {
 		_, cmd := m.helpPanel.Update(msg)
+		return m, cmd
+	}
+	if m.commandLogShown && m.commandLogPanel != nil {
+		_, cmd := m.commandLogPanel.Update(msg)
 		return m, cmd
 	}
 

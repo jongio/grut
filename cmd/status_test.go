@@ -129,13 +129,16 @@ func TestWriteStatusJSON_RoundTrip(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRunStatus_NotARepo(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "grut-status-nonrepo-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte(""), 0o644))
 	t.Chdir(dir)
 
 	cmd := newStatusCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	err := runStatus(cmd, nil)
+	err = runStatus(cmd, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a git repository")
 }

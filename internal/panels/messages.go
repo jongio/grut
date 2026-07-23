@@ -78,6 +78,9 @@ type ToggleBookmarksMsg struct{}
 // ToggleHelpMsg requests showing or hiding the help overlay panel.
 type ToggleHelpMsg struct{}
 
+// ToggleCommandLogMsg requests showing or hiding the git command log overlay panel.
+type ToggleCommandLogMsg struct{}
+
 // FirstRunMsg is sent when the application detects it is the user's first run.
 // The root model shows the help overlay in response.
 type FirstRunMsg struct{}

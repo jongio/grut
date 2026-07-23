@@ -23,6 +23,7 @@ Always active regardless of focused panel.
 | `P` | Push to remote |
 | `F` | Fetch all remotes |
 | `?` | Help overlay |
+| `ctrl+g` | Git command log |
 | `,` | Settings |
 | `/` | Fuzzy finder |
 | `:` | Command palette |

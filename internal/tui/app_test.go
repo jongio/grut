@@ -1162,6 +1162,37 @@ func TestToggleHelpHidesOverlay(t *testing.T) {
 	assert.Nil(t, m.helpPanel, "helpPanel should be nil")
 }
 
+func TestToggleCommandLogShowsOverlay(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+	m.Init()
+
+	assert.False(t, m.commandLogShown)
+	assert.Nil(t, m.commandLogPanel)
+
+	updated, _ = m.Update(panels.ToggleCommandLogMsg{})
+	m = updated.(Model)
+	assert.True(t, m.commandLogShown, "command log overlay should be shown")
+	assert.NotNil(t, m.commandLogPanel, "commandLogPanel should be initialised")
+}
+
+func TestToggleCommandLogHidesOverlay(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+	m.Init()
+
+	updated, _ = m.Update(panels.ToggleCommandLogMsg{})
+	m = updated.(Model)
+	assert.True(t, m.commandLogShown)
+
+	updated, _ = m.Update(panels.ToggleCommandLogMsg{})
+	m = updated.(Model)
+	assert.False(t, m.commandLogShown, "command log overlay should be hidden")
+	assert.Nil(t, m.commandLogPanel, "commandLogPanel should be nil")
+}
+
 func TestHelpOverlayRoutesKeys(t *testing.T) {
 	m := newTestModel(t)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
