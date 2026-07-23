@@ -41,6 +41,7 @@ type Preview struct {
 	gitClient git.StatusReader
 	// File state
 	filePath      string
+	fileContent   string
 	ghTitle       string   // title for GitHub content (e.g., "#42 Fix auth")
 	ghContent     string   // raw markdown body
 	ghJobsContent string   // rendered GitHub Actions jobs, kept separate for live log replacement
@@ -92,6 +93,7 @@ type Preview struct {
 	// Dual-mode preview: file content vs contextual diff.
 	diffMode    bool                // when true, show diff instead of file content
 	diffContext *panels.DiffContext // context for diff resolution (nil = working tree)
+	commitRef   string              // selected commit ref, when preview is showing commit context
 	// Pull request review comment state.
 	prContext        bool
 	prNumber         int
@@ -121,6 +123,7 @@ type fileLoadedMsg struct {
 	err      error
 	path     string
 	lines    []string
+	content  string
 	headings []tocHeading
 	isBinary bool
 	isLarge  bool
@@ -184,6 +187,7 @@ func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 		p.gitClient = client
 	}
 	p.filePath = ""
+	p.fileContent = ""
 	p.lines = nil
 	p.scrollY = 0
 	p.err = nil
@@ -199,6 +203,7 @@ func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	p.diffLines = nil
 	p.diffMode = false
 	p.diffContext = nil
+	p.commitRef = ""
 	p.prContext = false
 	p.prNumber = 0
 	p.pendingPRComment = nil
@@ -295,8 +300,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.clearSearch()
 		// Store the diff context from the filetree's current mode.
 		p.diffContext = msg.DiffContext
+		p.commitRef = commitRefFromDiffContext(msg.DiffContext)
 		// Start async file load (F01: no blocking I/O in Update).
 		p.filePath = msg.Path
+		p.fileContent = ""
 		p.scrollY = 0
 		p.err = nil
 		p.isBinary = false
@@ -321,6 +328,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if msg.path == p.filePath {
 			p.loading = false
 			p.lines = msg.lines
+			p.fileContent = msg.content
 			p.mdHeadings = msg.headings
 			p.err = msg.err
 			p.isBinary = msg.isBinary
@@ -337,6 +345,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if msg.path == p.filePath && msg.err == nil {
 			p.diffLines = msg.lines
 		}
+		return p, nil
+	case panels.CommitSelectedMsg:
+		p.commitRef = msg.Hash
+		return p, nil
+	case panels.CommitDeselectedMsg:
+		p.commitRef = ""
 		return p, nil
 	case panels.IssueSelectedMsg:
 		p.clearSelection()
@@ -616,6 +630,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.diffMode = !p.diffMode
 			p.scrollY = 0
 			return p, nil
+		case "E":
+			return p, p.explainThis()
 		case "ctrl+f":
 			return p, p.openSearch()
 		case "c":
@@ -993,6 +1009,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 	}
 	return []panels.KeyBinding{
 		{Key: "e", Description: "Edit file", Action: "edit"},
+		{Key: "E", Description: "Explain this in chat", Action: "explain_this"},
 		{Key: "f", Description: "Toggle diff view", Action: "toggle_diff_mode"},
 		{Key: "c", Description: "Comment on PR diff line", Action: "comment_pr_diff"},
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
@@ -1016,6 +1033,40 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 		{Key: "O", Description: "Open file on GitHub", Action: "open_on_github"},
 		{Key: "Ctrl+G", Description: "Create secret gist", Action: "create_gist"},
 	}
+}
+
+func (p *Preview) explainThis() tea.Cmd {
+	content := p.currentExplainPrompt()
+	if content == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return panels.AIExplainMsg{Content: content}
+	}
+}
+
+func (p *Preview) currentExplainPrompt() string {
+	if p.ghMode {
+		return ""
+	}
+	if p.commitRef != "" && p.diffContext != nil && p.diffContext.Type == panels.DiffContextCommit {
+		return buildExplainPrompt(explainPromptCommit, "", "", "", p.commitRef)
+	}
+	if p.diffMode {
+		return buildExplainPrompt(explainPromptDiff, p.filePath, "", strings.Join(p.diffLines, "\n"), "")
+	}
+	content := p.fileContent
+	if content == "" {
+		content = strings.Join(p.lines, "\n")
+	}
+	return buildExplainPrompt(explainPromptFile, p.filePath, content, "", "")
+}
+
+func commitRefFromDiffContext(dc *panels.DiffContext) string {
+	if dc == nil || dc.Type != panels.DiffContextCommit {
+		return ""
+	}
+	return dc.CommitB
 }
 
 // --- File loading ---
@@ -1091,6 +1142,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		// (lipgloss Width padding after \r overwrites content).
 		source := strings.ReplaceAll(string(data), "\r\n", "\n")
 		source = strings.ReplaceAll(source, "\r", "\n")
+		result.content = source
 		ext := strings.ToLower(filepath.Ext(path))
 		// Render based on file type
 		switch ext {

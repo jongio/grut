@@ -305,6 +305,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Chat.
 	case panels.ChatFocusMsg, panels.ChatRefreshMsg, panels.ChatNavigateMsg:
 		return m.handleChatMsg(msg)
+	case panels.AIExplainMsg:
+		return m.handleAIExplainMsg(msg)
 	case chat.StreamChunkMsg, chat.ToolCallMsg, chat.ToolResultMsg,
 		chat.SendMessageCmd:
 		if m.chat != nil {
@@ -552,6 +554,21 @@ func (m Model) toggleChatFocus() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) handleAIExplainMsg(msg panels.AIExplainMsg) (tea.Model, tea.Cmd) {
+	if m.chat == nil {
+		return m, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "AI chat is disabled (--no-ai)", Level: notify.Info}
+		}
+	}
+	if !m.chat.Focused() {
+		m.chat.Focus()
+		if m.keys != nil {
+			m.keys.SetMode(keymap.ModeInput)
+		}
+	}
+	return m.handleChatStreamMsg(chat.SendMessageCmd{Content: msg.Content})
 }
 
 // handleGlobalRefresh refreshes all data sources and forces preview to re-render.

@@ -176,6 +176,7 @@ Commits panel (panel 4).
 |-----|--------|
 | `Enter` | View commit detail |
 | `Esc` | Back to list |
+| `E` | Explain commit in AI chat |
 | `o` | Open commit on GitHub |
 | `y` | Copy SHA |
 | `a` | Filter the commit log by the selected commit's author |
@@ -196,6 +197,7 @@ Preview panel (panel 5).
 | Key | Action |
 |-----|--------|
 | `e` | Edit file inline |
+| `E` | Explain current file, diff, or commit in AI chat |
 | `f` | Toggle diff view |
 | `c` | Comment on the selected PR diff line (PR diff context) |
 | `j/k` | Scroll content |

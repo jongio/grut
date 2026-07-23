@@ -374,6 +374,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "g", Description: "Go to top", Action: "go_top"},
 		{Key: "G", Description: "Go to bottom", Action: "go_bottom"},
 		{Key: "y", Description: "Copy commit hash", Action: "copy_hash"},
+		{Key: "E", Description: "Explain commit in chat", Action: "explain_this"},
 		{Key: "o", Description: "Open commit on GitHub", Action: "open_on_github"},
 		{Key: "x", Description: "Export commit as a .patch file", Action: "export_patch"},
 		{Key: "/", Description: "Search commits", Action: "search"},
@@ -945,6 +946,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.goToBottom()
 	case "y":
 		return p.copyHash()
+	case "E":
+		return p.explainCommit()
 	case "o":
 		return p.openCommitOnGitHub()
 	case "x":
@@ -967,6 +970,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			if c.Body != "" {
 				msg = c.Subject + "\n\n" + c.Body
 			}
+
 			return p, func() tea.Msg { return panels.RewordRequestMsg{OldMessage: msg} }
 		}
 	case "v":
@@ -1010,6 +1014,20 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 	}
 	return p, nil
+}
+
+func (p *Panel) explainCommit() (panels.Panel, tea.Cmd) {
+	if p.cursor < 0 || p.cursor >= p.activeLen() {
+		return p, nil
+	}
+	c := p.commitAt(p.cursor)
+	hash := c.Hash
+	if hash == "" {
+		return p, nil
+	}
+	return p, func() tea.Msg {
+		return panels.AIExplainMsg{Content: "Explain this commit: " + hash}
+	}
 }
 
 func (p *Panel) handleSearchKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {

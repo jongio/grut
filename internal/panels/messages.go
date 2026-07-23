@@ -601,6 +601,11 @@ type AICommitSuggestionMsg struct {
 	Scope   string
 }
 
+// AIExplainMsg requests that the app send an explain prompt to the AI chat.
+type AIExplainMsg struct {
+	Content string
+}
+
 // ---------------------------------------------------------------------------
 // Commit selection messages
 // ---------------------------------------------------------------------------
