@@ -50,6 +50,7 @@ type gitOps interface {
 	TagDelete(ctx context.Context, name string) error
 	TagPush(ctx context.Context, remote, name string) error
 	Reflog(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error)
+	Submodules(ctx context.Context) ([]git.Submodule, error)
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +74,7 @@ const (
 	kindTag                          // local tag
 	kindRemoteTag                    // remote-only tag
 	kindReflogEntry                  // reflog entry
+	kindSubmodule                    // submodule entry
 	kindNotification                 // GitHub notification thread
 )
 
@@ -95,6 +97,7 @@ const (
 	tabStash
 	tabTags
 	tabReflog
+	tabSubmodules
 	tabIssues
 	tabPRs
 	tabActions
@@ -108,6 +111,7 @@ const (
 type listItem struct {
 	tag       git.Tag            // tag data (valid when kind == kindTag/kindRemoteTag)
 	reflog    git.ReflogEntry    // reflog data (valid when kind == kindReflogEntry)
+	submodule git.Submodule      // submodule data (valid when kind == kindSubmodule)
 	issue     ghIssueItem        // issue data (valid when kind == kindIssue)
 	release   ghReleaseItem      // release data (valid when kind == kindRelease)
 	actionRun ghActionItem       // action run data (valid when kind == kindActionRun)
@@ -169,13 +173,14 @@ const (
 // ---------------------------------------------------------------------------
 // dataLoadedMsg carries the result of an async data load.
 type dataLoadedMsg struct {
-	err       error
-	branches  []git.Branch
-	worktrees []git.Worktree
-	remotes   []git.Remote
-	stashes   []git.StashEntry
-	tags      []git.Tag
-	reflog    []git.ReflogEntry
+	err        error
+	branches   []git.Branch
+	worktrees  []git.Worktree
+	remotes    []git.Remote
+	stashes    []git.StashEntry
+	tags       []git.Tag
+	reflog     []git.ReflogEntry
+	submodules []git.Submodule
 }
 
 // opResultMsg carries the result of an async operation.
@@ -297,12 +302,13 @@ var defaultColors = initColors(nil)
 // gitState holds cached git data used to rebuild tab items without
 // re-fetching from the repository.
 type gitState struct {
-	lastBranches  []git.Branch
-	lastWorktrees []git.Worktree
-	lastRemotes   []git.Remote
-	lastStashes   []git.StashEntry
-	lastTags      []git.Tag
-	lastReflog    []git.ReflogEntry
+	lastBranches   []git.Branch
+	lastWorktrees  []git.Worktree
+	lastRemotes    []git.Remote
+	lastStashes    []git.StashEntry
+	lastTags       []git.Tag
+	lastReflog     []git.ReflogEntry
+	lastSubmodules []git.Submodule
 }
 
 // githubState holds all GitHub-related integration state: API client,
@@ -378,7 +384,7 @@ type Panel struct {
 var _ panels.Panel = (*Panel)(nil)
 
 // isGitTab returns true if t is a git-only tab (branches through reflog).
-func isGitTab(t tabID) bool { return t <= tabReflog }
+func isGitTab(t tabID) bool { return t <= tabSubmodules }
 
 // isGitHubTab returns true if t is a tab shown in the GitHub pane.
 // This includes branches and tags (shared with git pane) plus the
@@ -391,14 +397,18 @@ func isGitHubTab(t tabID) bool {
 // visible for the panel's current mode. This is used for Tab/Shift+Tab
 // cycling within the panel.
 func (p *Panel) visibleTabs() []tabID {
+	gitTabs := []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}
+	if len(p.tabItems[tabSubmodules]) > 0 {
+		gitTabs = append(gitTabs, tabSubmodules)
+	}
 	switch p.mode {
 	case ModeGit:
-		return []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}
+		return gitTabs
 	case ModeGitHub:
 		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}
 	default: // ModeAll
 		if isGitTab(p.activeTab) {
-			return []tabID{tabBranches, tabWorktrees, tabRemotes, tabStash, tabTags, tabReflog}
+			return gitTabs
 		}
 		return []tabID{tabBranches, tabTags, tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases, tabNotifications}
 	}
@@ -436,6 +446,8 @@ func (p *Panel) SetActiveTab(name string) {
 		p.activeTab = tabTags
 	case sectionReflog:
 		p.activeTab = tabReflog
+	case sectionSubmodules:
+		p.activeTab = tabSubmodules
 	case sectionIssues:
 		p.activeTab = tabIssues
 	case sectionPRs:
@@ -581,6 +593,7 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	p.gitData.lastStashes = nil
 	p.gitData.lastTags = nil
 	p.gitData.lastReflog = nil
+	p.gitData.lastSubmodules = nil
 	for i := range p.tabItems {
 		p.tabItems[i] = nil
 		p.tabCursor[i] = 0
@@ -655,13 +668,18 @@ func (p *Panel) loadData() tea.Cmd {
 		if rlErr != nil {
 			return dataLoadedMsg{err: rlErr}
 		}
+		submodules, smErr := g.Submodules(ctx)
+		if smErr != nil {
+			return dataLoadedMsg{err: smErr}
+		}
 		return dataLoadedMsg{
-			branches:  branches,
-			worktrees: worktrees,
-			remotes:   remotes,
-			stashes:   stashes,
-			tags:      tags,
-			reflog:    reflog,
+			branches:   branches,
+			worktrees:  worktrees,
+			remotes:    remotes,
+			stashes:    stashes,
+			tags:       tags,
+			reflog:     reflog,
+			submodules: submodules,
 		}
 	}
 }
@@ -855,6 +873,8 @@ func (p *Panel) View(width, height int) string {
 			label = "Loading..."
 		case p.activeTab == tabNotifications:
 			label = "No unread notifications"
+		case p.activeTab == tabSubmodules:
+			label = "No submodules"
 		case p.activeTab >= tabIssues && p.gh.err != nil:
 			label = "GitHub unavailable"
 		}
@@ -961,7 +981,7 @@ func (p *Panel) handleDataLoaded(msg dataLoadedMsg) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Git info load error: " + errMsg, Level: notify.Error}
 		}
 	}
-	p.buildItems(msg.branches, msg.worktrees, msg.remotes, msg.stashes, msg.tags, msg.reflog)
+	p.buildItems(msg.branches, msg.worktrees, msg.remotes, msg.stashes, msg.tags, msg.reflog, msg.submodules)
 	return p, nil
 }
 
@@ -1319,6 +1339,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				func() tea.Msg { return panels.ActionRunDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
+		case tabSubmodules:
+			p.activeTab = defaultTab
+			return p, tea.Batch(
+				func() tea.Msg { return panels.SubmoduleDeselectedMsg{} },
+				p.activeTabSelectionCmd(),
+			)
 		case tabWorkflows, tabReleases, tabNotifications:
 			p.activeTab = defaultTab
 			return p, p.activeTabSelectionCmd()
@@ -1500,6 +1526,9 @@ func (p *Panel) handleTabBarClick(col int) {
 		{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		{id: tabReflog, name: labelReflog, short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
 	}
+	if len(p.tabItems[tabSubmodules]) > 0 {
+		tabs = append(tabs, tabEntry{id: tabSubmodules, name: labelSubmodules, short: "Sm", count: fmt.Sprintf("%d", len(p.tabItems[tabSubmodules]))})
+	}
 	// Determine whether abbreviations are active (same logic as renderRow).
 	plain := make([]struct{ name, short, count string }, len(tabs))
 	for i, t := range tabs {
@@ -1615,6 +1644,8 @@ func (p *Panel) activeTabSelectionCmd() tea.Cmd {
 		return p.stashSelectedCmd()
 	case tabTags:
 		return nil // Tags tab has no persistent selection message
+	case tabSubmodules:
+		return p.submoduleSelectedCmd()
 	case tabIssues:
 		return p.issueSelectedCmd()
 	case tabPRs:
@@ -2336,7 +2367,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 // Item list building
 // ---------------------------------------------------------------------------
 // buildItems constructs the per-tab item lists and positions cursors.
-func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remotes []git.Remote, stashes []git.StashEntry, tags []git.Tag, reflog []git.ReflogEntry) {
+func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remotes []git.Remote, stashes []git.StashEntry, tags []git.Tag, reflog []git.ReflogEntry, submodules []git.Submodule) {
 	// Store data for rebuilds.
 	p.gitData.lastBranches = branches
 	p.gitData.lastWorktrees = worktrees
@@ -2344,6 +2375,7 @@ func (p *Panel) buildItems(branches []git.Branch, worktrees []git.Worktree, remo
 	p.gitData.lastStashes = stashes
 	p.gitData.lastTags = tags
 	p.gitData.lastReflog = reflog
+	p.gitData.lastSubmodules = submodules
 	p.doBuildItems()
 }
 
@@ -2355,6 +2387,7 @@ func (p *Panel) doBuildItems() {
 	stashes := p.gitData.lastStashes
 	tags := p.gitData.lastTags
 	reflog := p.gitData.lastReflog
+	submodules := p.gitData.lastSubmodules
 	var local, remote []git.Branch
 	for _, b := range branches {
 		if b.IsRemote {
@@ -2435,6 +2468,15 @@ func (p *Panel) doBuildItems() {
 			hash:   hash,
 		})
 	}
+	// Submodules tab
+	p.tabItems[tabSubmodules] = nil
+	for _, sm := range submodules {
+		p.tabItems[tabSubmodules] = append(p.tabItems[tabSubmodules], listItem{
+			kind:      kindSubmodule,
+			submodule: sm,
+			hash:      sm.Commit,
+		})
+	}
 	// Default cursor to first item in branches tab; prefer current branch.
 	p.tabCursor[tabBranches] = 0
 	for i, item := range p.tabItems[tabBranches] {
@@ -2448,12 +2490,14 @@ func (p *Panel) doBuildItems() {
 	p.tabCursor[tabStash] = 0
 	p.tabCursor[tabTags] = 0
 	p.tabCursor[tabReflog] = 0
+	p.tabCursor[tabSubmodules] = 0
 	p.tabOffset[tabBranches] = 0
 	p.tabOffset[tabWorktrees] = 0
 	p.tabOffset[tabRemotes] = 0
 	p.tabOffset[tabStash] = 0
 	p.tabOffset[tabTags] = 0
 	p.tabOffset[tabReflog] = 0
+	p.tabOffset[tabSubmodules] = 0
 	p.ensureCursorVisible()
 }
 
@@ -2503,6 +2547,8 @@ func (p *Panel) renderLine(item listItem, width int, isCursor bool) string {
 		return p.renderTag(item, width, isCursor)
 	case kindReflogEntry:
 		return p.renderReflogEntry(item, width, isCursor)
+	case kindSubmodule:
+		return p.renderSubmodule(item, width, isCursor)
 	case kindNotification:
 		return p.renderNotification(item, width, isCursor)
 	}
@@ -2571,6 +2617,9 @@ func (p *Panel) renderTabBar(width int) string {
 		{id: tabStash, name: labelStash, short: "St", count: fmt.Sprintf("%d", len(p.tabItems[tabStash]))},
 		{id: tabTags, name: labelTags, short: "Tg", count: fmt.Sprintf("%d", len(p.tabItems[tabTags]))},
 		{id: tabReflog, name: labelReflog, short: "Rl", count: fmt.Sprintf("%d", len(p.tabItems[tabReflog]))},
+	}
+	if len(p.tabItems[tabSubmodules]) > 0 {
+		gitTabs = append(gitTabs, tabDef{id: tabSubmodules, name: labelSubmodules, short: "Sm", count: fmt.Sprintf("%d", len(p.tabItems[tabSubmodules]))})
 	}
 	// Build GitHub tab row with status icons for Actions.
 	actionsCount := p.actionsStatusIcon()

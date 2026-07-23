@@ -58,7 +58,7 @@ func (c *Client) CleanPreview(ctx context.Context, opts CleanOpts) ([]CleanCandi
 // the reported paths. Using -X (uppercase) for the ignored pass keeps ignored
 // candidates cleanly separated from plain untracked ones.
 func (c *Client) cleanDryRun(ctx context.Context, ignoredOnly bool) ([]string, error) {
-	args := []string{"clean", "-n", "-d"}
+	args := []string{gitCleanCommand, "-n", "-d"}
 	if ignoredOnly {
 		args = append(args, "-X")
 	}

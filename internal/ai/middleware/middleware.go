@@ -332,6 +332,14 @@ func (c *AIGitClient) Reflog(ctx context.Context, ref string, limit int) ([]git.
 }
 
 // ---------------------------------------------------------------------------
+// SubmoduleOps - pass-through
+// ---------------------------------------------------------------------------
+
+func (c *AIGitClient) Submodules(ctx context.Context) ([]git.Submodule, error) {
+	return c.inner.Submodules(ctx)
+}
+
+// ---------------------------------------------------------------------------
 // DiscardOps — pass-through
 // ---------------------------------------------------------------------------
 

@@ -129,6 +129,18 @@ type BranchSelectedMsg struct {
 // or clicking the same branch again in the gitinfo panel).
 type BranchDeselectedMsg struct{}
 
+// SubmoduleSelectedMsg is sent when the user selects a submodule in the
+// gitinfo panel so preview-like panels can show submodule details.
+type SubmoduleSelectedMsg struct {
+	Path     string
+	Commit   string
+	State    string
+	Describe string
+}
+
+// SubmoduleDeselectedMsg is sent when the selected submodule should be cleared.
+type SubmoduleDeselectedMsg struct{}
+
 // RefreshBranchesMsg is received by the branches panel to trigger a re-fetch
 // of the branch list.
 type RefreshBranchesMsg struct{}

@@ -17,31 +17,33 @@ const panelGitinfo = "gitinfo"
 
 // Section tab labels (title-case, displayed in the tab bar).
 const (
-	labelBranches  = "Branches"
-	labelTags      = "Tags"
-	labelRemotes   = "Remotes"
-	labelStash     = "Stash"
-	labelWorktrees = "Worktrees"
-	labelIssues    = "Issues"
-	labelPRs       = "PRs"
-	labelReflog    = "Reflog"
-	labelActions   = "Actions"
-	labelAll       = "All"
+	labelBranches   = "Branches"
+	labelTags       = "Tags"
+	labelRemotes    = "Remotes"
+	labelStash      = "Stash"
+	labelWorktrees  = "Worktrees"
+	labelIssues     = "Issues"
+	labelPRs        = "PRs"
+	labelReflog     = "Reflog"
+	labelSubmodules = "Submodules"
+	labelActions    = "Actions"
+	labelAll        = "All"
 
 	labelNotifications = "Notifications"
 )
 
 // Section names (lowercase, used in SetActiveTab and filter messages).
 const (
-	sectionBranches  = "branches"
-	sectionWorktrees = "worktrees"
-	sectionRemotes   = "remotes"
-	sectionStash     = "stash"
-	sectionTags      = "tags"
-	sectionReflog    = "reflog"
-	sectionIssues    = "issues"
-	sectionPRs       = "prs"
-	sectionActions   = "actions"
+	sectionBranches   = "branches"
+	sectionWorktrees  = "worktrees"
+	sectionRemotes    = "remotes"
+	sectionStash      = "stash"
+	sectionTags       = "tags"
+	sectionReflog     = "reflog"
+	sectionSubmodules = "submodules"
+	sectionIssues     = "issues"
+	sectionPRs        = "prs"
+	sectionActions    = "actions"
 
 	sectionNotifications = "notifications"
 )
