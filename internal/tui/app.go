@@ -47,6 +47,7 @@ type Model struct {
 	engine             layout.PanelManager
 	theme              *theme.Theme
 	keys               *keymap.Keymap
+	nav                navHistory
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
 	overlays           OverlayCreator                // factory for overlay panels
@@ -253,6 +254,9 @@ func (m Model) loadBranchInfo() tea.Cmd {
 // and handles global key bindings.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer crashlog.GuardTUI("tui.Update")
+	if entry, ok := navEntryFromMsg(msg); ok {
+		m.nav.record(entry)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSizeMsg(msg), nil
@@ -278,7 +282,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.ToggleBlameMsg:
 		return m.handleToggleBlame(msg)
 	case panels.ShowCommitDetailMsg:
-		m.engine.FocusByName("commits")
+		m.engine.FocusByName(panelCommits)
 		return m, m.engine.Update(msg)
 
 	// Undo / redo.
@@ -391,6 +395,18 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "focus_right":
 		m.engine.FocusNext()
 		return m, nil
+	case actionNavBack:
+		entry, ok := m.nav.back()
+		if !ok {
+			return m, nil
+		}
+		return m.restoreNavigation(entry)
+	case actionNavForward:
+		entry, ok := m.nav.forward()
+		if !ok {
+			return m, nil
+		}
+		return m.restoreNavigation(entry)
 	case "zoom_toggle":
 		m.engine.ToggleZoom()
 		return m, nil
@@ -440,16 +456,16 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFetch()
 	// Direct panel focus (1-5 number keys).
 	case "focus_panel_1":
-		m.engine.FocusByName("filetree")
+		m.engine.FocusByName(panelFileTree)
 		return m, nil
 	case "focus_panel_2":
 		m.engine.FocusByName("gitinfo")
 		return m, nil
 	case "focus_panel_3":
-		m.engine.FocusByName("github")
+		m.engine.FocusByName(panelGitHub)
 		return m, nil
 	case "focus_panel_4":
-		m.engine.FocusByName("commits")
+		m.engine.FocusByName(panelCommits)
 		return m, nil
 	case "focus_panel_5":
 		m.engine.FocusByName("preview")
@@ -1752,13 +1768,13 @@ func (m Model) renderHintsBar() string {
 	// Panel-specific hints.
 	var hints []string
 	switch focusedName {
-	case "filetree":
+	case panelFileTree:
 		hints = []string{"h/l:collapse/expand", hintFind, hintHelp}
 	case "gitstatus":
 		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", hintHelp}
 	case "preview":
 		hints = []string{hintScroll, hintTabFocus, hintFind, hintHelp}
-	case "branches":
+	case panelBranches:
 		hints = []string{"enter:checkout", "n:new branch", "d:delete", hintHelp}
 	case "gitlog":
 		hints = []string{"enter:details", hintScroll, "/:search", hintHelp}

@@ -19,6 +19,8 @@ Always active regardless of focused panel.
 |-----|--------|
 | `1-5` | Focus panel by number |
 | `ctrl+b z` | Zoom focused panel |
+| `alt+left` | Navigate back |
+| `alt+right` | Navigate forward |
 | `R` | Refresh all data + preview |
 | `P` | Push to remote |
 | `F` | Fetch all remotes |

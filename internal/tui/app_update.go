@@ -216,6 +216,7 @@ func (m Model) handleChangeDirectoryMsg(msg panels.ChangeDirectoryMsg) (tea.Mode
 			}
 		}
 	}
+	m.nav.reset()
 	// Reinitialize git client for the new directory.
 	newClient, gitErr := git.NewClient(targetPath)
 	if gitErr != nil {
