@@ -714,6 +714,17 @@ type PRCommentAddedMsg struct {
 	ThreadID int64
 }
 
+// PostPRReviewCommentMsg requests posting a PR diff review comment. When
+// HasLine is false, handlers should fall back to a regular PR conversation
+// comment using Body.
+type PostPRReviewCommentMsg struct {
+	Body    string
+	Path    string
+	Number  int
+	Line    int
+	HasLine bool
+}
+
 // PRThreadResolvedMsg is sent when a review thread is resolved/unresolved.
 type PRThreadResolvedMsg struct {
 	Number   int

@@ -198,6 +198,14 @@ type commentResultMsg struct {
 	err    error
 }
 
+// prReviewCommentResultMsg carries the result of a diff review comment or its
+// plain PR comment fallback.
+type prReviewCommentResultMsg struct {
+	err      error
+	number   int
+	fallback bool
+}
+
 // prRequestReviewersResultMsg carries the result of a request-reviewers operation.
 type prRequestReviewersResultMsg struct {
 	err       error
@@ -2701,6 +2709,74 @@ func (p *Panel) handleCommentResult(msg commentResultMsg) (panels.Panel, tea.Cmd
 	}
 	if refresh := p.activeTabSelectionCmd(); refresh != nil {
 		cmds = append(cmds, refresh)
+	}
+	return p, tea.Batch(cmds...)
+}
+
+// postPRReviewCommentCmd posts a line-anchored review comment when line data
+// is available, otherwise it falls back to a regular PR conversation comment.
+func (p *Panel) postPRReviewCommentCmd(msg panels.PostPRReviewCommentMsg) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return func() tea.Msg {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("GitHub client unavailable"),
+			}
+		}
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		if !msg.HasLine {
+			err := client.CommentOnIssue(ctx, owner, repo, msg.Number, msg.Body)
+			return prReviewCommentResultMsg{number: msg.Number, fallback: true, err: err}
+		}
+		pr, err := client.GetPR(ctx, owner, repo, msg.Number)
+		if err != nil {
+			return prReviewCommentResultMsg{number: msg.Number, err: err}
+		}
+		if pr == nil {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("PR details unavailable"),
+			}
+		}
+		commitID := pr.GetHead().GetSHA()
+		if commitID == "" {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("PR head SHA unavailable"),
+			}
+		}
+		err = client.CreateReviewComment(ctx, owner, repo, msg.Number, commitID, msg.Path, msg.Line, msg.Body)
+		return prReviewCommentResultMsg{number: msg.Number, err: err}
+	}
+}
+
+func (p *Panel) handlePRReviewCommentResult(msg prReviewCommentResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Comment on PR #%d failed: %s", msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	text := fmt.Sprintf("Review comment posted on PR #%d", msg.number)
+	if msg.fallback {
+		text = fmt.Sprintf("PR comment posted on PR #%d (no line anchor)", msg.number)
+	}
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{Message: text, Level: notify.Success}
+		},
+		func() tea.Msg { return panels.RefreshPreviewMsg{} },
+	}
+	if p.gh.client != nil {
+		cmds = append(cmds, p.loadPRDetails(msg.number))
 	}
 	return p, tea.Batch(cmds...)
 }

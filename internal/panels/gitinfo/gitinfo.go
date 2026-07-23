@@ -971,6 +971,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, p.loadData()
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
+	case panels.PostPRReviewCommentMsg:
+		return p, p.postPRReviewCommentCmd(msg)
 	case prDetailsLoadedMsg:
 		return p.handlePRDetailsLoaded(msg)
 	case releaseCompareLoadedMsg:
@@ -994,6 +996,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case commentResultMsg:
 		return p.handleCommentResult(msg)
+	case prReviewCommentResultMsg:
+		return p.handlePRReviewCommentResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
 	case prCreateResultMsg:

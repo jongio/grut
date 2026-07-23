@@ -197,6 +197,7 @@ Preview panel (panel 5).
 |-----|--------|
 | `e` | Edit file inline |
 | `f` | Toggle diff view |
+| `c` | Comment on the selected PR diff line (PR diff context) |
 | `j/k` | Scroll content |
 | `g/G` | Jump to top/bottom |
 | `L` | Go to line |

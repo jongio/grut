@@ -582,6 +582,31 @@ func TestClient_CommentOnPR(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestClient_CreateReviewCommentBuildsAnchoredRequest(t *testing.T) {
+	t.Parallel()
+
+	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/pulls/10/comments", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
+
+		var got gh.PullRequestComment
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&got))
+		assert.Equal(t, "Review comment", got.GetBody())
+		assert.Equal(t, "abc123", got.GetCommitID())
+		assert.Equal(t, "main.go", got.GetPath())
+		assert.Equal(t, 42, got.GetLine())
+		assert.Equal(t, "RIGHT", got.GetSide())
+
+		respondJSON(w, http.StatusCreated, &gh.PullRequestComment{
+			ID:   ptr(int64(50)),
+			Body: ptr("Review comment"),
+		})
+	})
+
+	err := client.CreateReviewComment(t.Context(), "owner", "repo", 10, "abc123", "main.go", 42, "Review comment")
+	require.NoError(t, err)
+}
+
 func TestClient_SubmitReview(t *testing.T) {
 	client, _ := setupMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/repos/owner/repo/pulls/10/reviews", r.URL.Path)

@@ -443,6 +443,22 @@ func (c *clientImpl) CommentOnPR(ctx context.Context, owner, repo string, number
 	return nil
 }
 
+func (c *clientImpl) CreateReviewComment(ctx context.Context, owner, repo string, number int, commitID, path string, line int, body string) error {
+	comment := &gh.PullRequestComment{
+		Body:     gh.Ptr(body),
+		CommitID: gh.Ptr(commitID),
+		Path:     gh.Ptr(path),
+		Line:     gh.Ptr(line),
+		Side:     gh.Ptr("RIGHT"),
+	}
+	_, _, err := c.gh.PullRequests.CreateComment(ctx, owner, repo, number, comment)
+	if err != nil {
+		return fmt.Errorf("create review comment on PR #%d: %w", number, err)
+	}
+	c.cache.Invalidate(fmt.Sprintf("pr-comments:%s/%s:%d", owner, repo, number))
+	return nil
+}
+
 func (c *clientImpl) SubmitReview(ctx context.Context, owner, repo string, number int, review *gh.PullRequestReviewRequest) error {
 	_, _, err := c.gh.PullRequests.CreateReview(ctx, owner, repo, number, review)
 	if err != nil {

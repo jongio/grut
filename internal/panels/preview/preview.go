@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -91,6 +92,10 @@ type Preview struct {
 	// Dual-mode preview: file content vs contextual diff.
 	diffMode    bool                // when true, show diff instead of file content
 	diffContext *panels.DiffContext // context for diff resolution (nil = working tree)
+	// Pull request review comment state.
+	prContext        bool
+	prNumber         int
+	pendingPRComment *pendingPRComment
 	// Theme support
 	theme *theme.Theme
 	// Text selection state
@@ -127,6 +132,15 @@ type diffLoadedMsg struct {
 	path  string
 	lines []string
 }
+
+type pendingPRComment struct {
+	path    string
+	line    int
+	number  int
+	hasLine bool
+}
+
+var diffHunkHeaderRE = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 // Compile-time check that *Preview implements panels.Panel.
 var _ panels.Panel = (*Preview)(nil)
@@ -185,6 +199,9 @@ func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, te
 	p.diffLines = nil
 	p.diffMode = false
 	p.diffContext = nil
+	p.prContext = false
+	p.prNumber = 0
+	p.pendingPRComment = nil
 	p.clearSearch()
 	return p, nil
 }
@@ -200,6 +217,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
 	// Handle edit-mode-specific modal results (dirty guard).
 	case notify.ModalResultMsg:
+		if p.pendingPRComment != nil {
+			return p.handlePRCommentResult(msg)
+		}
 		if p.editMode {
 			return handleModalResult(p, msg)
 		}
@@ -341,6 +361,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.PRSelectedMsg:
 		p.clearSelection()
 		p.clearSearch()
+		p.prContext = true
+		p.prNumber = msg.Number
+		p.pendingPRComment = nil
 		p.ghMode = true
 		p.ghPlainText = false
 		safeTitle := ansi.Strip(msg.Title)
@@ -353,6 +376,9 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
 	case panels.PRDeselectedMsg:
+		p.prContext = false
+		p.prNumber = 0
+		p.pendingPRComment = nil
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -592,6 +618,10 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, nil
 		case "ctrl+f":
 			return p, p.openSearch()
+		case "c":
+			if p.canOpenPRComment() {
+				return p, p.openPRCommentComposer()
+			}
 		case "j", keyDown:
 			p.scrollDown(1)
 		case "k", "up":
@@ -711,6 +741,123 @@ func (p *Preview) handleGotoLineKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd)
 		}
 		return p, nil
 	}
+}
+
+func (p *Preview) canOpenPRComment() bool {
+	return p.prContext && p.prNumber > 0 && p.diffMode && p.filePath != "" && len(p.diffLines) > 0
+}
+
+func (p *Preview) openPRCommentComposer() tea.Cmd {
+	path := p.prCommentPath()
+	line, hasLine := p.resolveSelectedDiffLine()
+	p.pendingPRComment = &pendingPRComment{
+		number:  p.prNumber,
+		path:    path,
+		line:    line,
+		hasLine: hasLine,
+	}
+
+	var title string
+	if hasLine {
+		title = fmt.Sprintf("Comment on %s:%d", path, line)
+	} else {
+		title = fmt.Sprintf("Comment on %s (no line anchor)", path)
+	}
+	return notify.ShowMultilineInput(title, "Write a review comment...")
+}
+
+func (p *Preview) handlePRCommentResult(msg notify.ModalResultMsg) (panels.Panel, tea.Cmd) {
+	pending := p.pendingPRComment
+	p.pendingPRComment = nil
+	if !msg.Accept {
+		return p, nil
+	}
+	body := strings.TrimSpace(msg.Value)
+	if body == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Comment cannot be empty", Level: notify.Warn}
+		}
+	}
+	return p, func() tea.Msg {
+		return panels.PostPRReviewCommentMsg{
+			Number:  pending.number,
+			Path:    pending.path,
+			Line:    pending.line,
+			HasLine: pending.hasLine,
+			Body:    body,
+		}
+	}
+}
+
+func (p *Preview) prCommentPath() string {
+	path := p.filePath
+	if p.gitClient != nil {
+		if root, err := p.gitClient.RepoRoot(context.Background()); err == nil {
+			if rel, err := filepath.Rel(root, path); err == nil {
+				path = rel
+			}
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func (p *Preview) resolveSelectedDiffLine() (int, bool) {
+	if len(p.diffLines) == 0 {
+		return 0, false
+	}
+	selected := p.scrollY
+	if selected < 0 {
+		selected = 0
+	}
+	if selected >= len(p.diffLines) {
+		selected = len(p.diffLines) - 1
+	}
+
+	header := -1
+	for i := selected; i >= 0; i-- {
+		line := ansi.Strip(p.diffLines[i])
+		if strings.HasPrefix(line, "@@") {
+			header = i
+			break
+		}
+	}
+	if header < 0 {
+		return 0, false
+	}
+	newLine, ok := parseDiffHunkNewStart(ansi.Strip(p.diffLines[header]))
+	if !ok {
+		return 0, false
+	}
+
+	for i := header + 1; i <= selected; i++ {
+		line := ansi.Strip(p.diffLines[i])
+		if i == selected {
+			switch {
+			case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+				return newLine, true
+			case strings.HasPrefix(line, " "):
+				return newLine, true
+			default:
+				return 0, false
+			}
+		}
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") || strings.HasPrefix(line, " ") {
+			newLine++
+		}
+	}
+	return 0, false
+}
+
+func parseDiffHunkNewStart(header string) (int, bool) {
+	matches := diffHunkHeaderRE.FindStringSubmatch(header)
+	if len(matches) != 2 {
+		return 0, false
+	}
+	line, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, false
+	}
+	return line, true
 }
 
 // commitGotoLine parses the entered text and scrolls to that line. Empty or
@@ -847,6 +994,7 @@ func (p *Preview) KeyBindings() []panels.KeyBinding {
 	return []panels.KeyBinding{
 		{Key: "e", Description: "Edit file", Action: "edit"},
 		{Key: "f", Description: "Toggle diff view", Action: "toggle_diff_mode"},
+		{Key: "c", Description: "Comment on PR diff line", Action: "comment_pr_diff"},
 		{Key: "j/↓", Description: "Scroll down", Action: "scroll_down"},
 		{Key: "k/↑", Description: "Scroll up", Action: "scroll_up"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
