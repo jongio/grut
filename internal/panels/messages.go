@@ -770,6 +770,29 @@ type PRCommit struct {
 	Date    string
 }
 
+// ReleaseCompareFilesLoadedMsg carries files changed between two release tags.
+type ReleaseCompareFilesLoadedMsg struct {
+	Files   []PRFile
+	BaseTag string
+	HeadTag string
+}
+
+// ReleaseCompareCommitsLoadedMsg carries commits between two release tags.
+type ReleaseCompareCommitsLoadedMsg struct {
+	Commits []PRCommit
+	BaseTag string
+	HeadTag string
+}
+
+// ReleaseComparePreviewMsg carries a pre-formatted release comparison summary.
+type ReleaseComparePreviewMsg struct {
+	Title   string
+	Content string
+}
+
+// ReleaseCompareDeselectedMsg exits release comparison views.
+type ReleaseCompareDeselectedMsg struct{}
+
 // ActionRunSelectedMsg is sent when the user selects a workflow run in the Actions tab.
 // Preview pane should show job steps and logs.
 type ActionRunSelectedMsg struct {

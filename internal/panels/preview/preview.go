@@ -361,6 +361,25 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, p.loadFileCmd(p.filePath)
 		}
 		return p, nil
+	case panels.ReleaseComparePreviewMsg:
+		p.clearSelection()
+		p.clearSearch()
+		p.ghMode = true
+		p.ghPlainText = true
+		p.ghTitle = ansi.Strip(msg.Title)
+		p.ghContent = ansi.Strip(msg.Content)
+		p.scrollY = 0
+		p.lines = strings.Split(p.ghContent, "\n")
+		return p, nil
+	case panels.ReleaseCompareDeselectedMsg:
+		p.ghMode = false
+		p.ghTitle = ""
+		p.ghContent = ""
+		p.ghPlainText = false
+		if p.filePath != "" {
+			return p, p.loadFileCmd(p.filePath)
+		}
+		return p, nil
 	case panels.SubmoduleSelectedMsg:
 		p.clearSelection()
 		p.clearSearch()

@@ -973,6 +973,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleRepoChanged(msg)
 	case prDetailsLoadedMsg:
 		return p.handlePRDetailsLoaded(msg)
+	case releaseCompareLoadedMsg:
+		return p.handleReleaseCompareLoaded(msg)
 	case actionJobsLoadedMsg:
 		return p.handleActionJobsLoaded(msg)
 	case actionLogLoadedMsg:
@@ -1210,7 +1212,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "C", Description: "Comment on issue/PR", Action: "item_comment"},
-			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue", Action: "checkout_pr_or_close_issue"},
+			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue / compare release", Action: "checkout_pr_close_issue_or_compare_release"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
 			panels.KeyBinding{Key: "V", Description: "Toggle live log follow (Actions tab)", Action: "actions_follow"},
@@ -1542,6 +1544,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doAssignSelf()
 		}
 	case "c":
+		if p.activeTab == tabReleases && p.gh.client != nil {
+			return p.compareRelease()
+		}
 		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.checkoutPR()
 		}
@@ -1659,7 +1664,13 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				func() tea.Msg { return panels.SubmoduleDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
-		case tabWorkflows, tabReleases, tabNotifications:
+		case tabReleases:
+			p.switchActiveTab(defaultTab)
+			return p, tea.Batch(
+				func() tea.Msg { return panels.ReleaseCompareDeselectedMsg{} },
+				p.activeTabSelectionCmd(),
+			)
+		case tabWorkflows, tabNotifications:
 			p.switchActiveTab(defaultTab)
 			return p, p.activeTabSelectionCmd()
 		case tabBranches, tabTags:

@@ -79,6 +79,7 @@ type ReleaseReader interface {
 	ListReleasesPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.RepositoryRelease, PageResult, error)
 	GetRelease(ctx context.Context, owner, repo string, id int64) (*gh.RepositoryRelease, error)
 	GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*gh.RepositoryRelease, error)
+	CompareCommits(ctx context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error)
 }
 
 // NotificationReader provides access to GitHub notifications.

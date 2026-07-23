@@ -2562,6 +2562,13 @@ type mockGHClientFull struct {
 	prFilesErr       error
 	prCommits        []*gh.RepositoryCommit
 	prCommErr        error
+	comparison       *gh.CommitsComparison
+	compareErr       error
+	compareOwner     string
+	compareRepo      string
+	compareBase      string
+	compareHead      string
+	compareCalls     int
 	jobs             []*gh.WorkflowJob
 	jobsErr          error
 	jobLog           string
@@ -2788,6 +2795,15 @@ func (m *mockGHClientFull) GetRelease(_ context.Context, _, _ string, _ int64) (
 
 func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*gh.RepositoryRelease, error) {
 	return nil, nil
+}
+
+func (m *mockGHClientFull) CompareCommits(_ context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error) {
+	m.compareCalls++
+	m.compareOwner = owner
+	m.compareRepo = repo
+	m.compareBase = base
+	m.compareHead = head
+	return m.comparison, m.compareErr
 }
 
 func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {

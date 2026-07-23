@@ -804,6 +804,25 @@ func (c *clientImpl) GetReleaseByTag(ctx context.Context, owner, repo, tag strin
 	return release, nil
 }
 
+func (c *clientImpl) CompareCommits(ctx context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error) {
+	key := fmt.Sprintf("compare:%s/%s:%s...%s", owner, repo, base, head)
+	if v, ok := c.cache.Get(key); ok {
+		comparison, ok := v.(*gh.CommitsComparison)
+		if !ok {
+			return nil, fmt.Errorf("unexpected cache type for commit comparison")
+		}
+		return comparison, nil
+	}
+
+	comparison, _, err := c.gh.Repositories.CompareCommits(ctx, owner, repo, base, head, nil)
+	if err != nil {
+		return nil, fmt.Errorf("compare commits %s...%s: %w", base, head, err)
+	}
+
+	c.cache.Set(key, comparison)
+	return comparison, nil
+}
+
 // ---------------------------------------------------------------------------
 // NotificationReader
 // ---------------------------------------------------------------------------
