@@ -41,6 +41,8 @@ type gitOps interface {
 	RemoteAdd(ctx context.Context, name, url string) error
 	RemoteRemove(ctx context.Context, name string) error
 	Fetch(ctx context.Context, opts git.FetchOpts) error
+	Pull(ctx context.Context, opts git.PullOpts) error
+	Push(ctx context.Context, opts git.PushOpts) error
 	StashList(ctx context.Context) ([]git.StashEntry, error)
 	StashApply(ctx context.Context, index int) error
 	StashPop(ctx context.Context, index int) error
@@ -136,6 +138,9 @@ const (
 	opBranchDelete                       // awaiting delete confirmation
 	opBranchRename                       // awaiting new name
 	opBranchCheckout                     // awaiting checkout confirmation
+	opBranchPull                         // awaiting pull confirmation
+	opBranchPullRebase                   // awaiting pull --rebase confirmation
+	opBranchPush                         // awaiting push confirmation
 	opBranchCheckoutStash                // awaiting dirty-tree stash-and-switch confirmation
 	opWorktreeCreate                     // awaiting new branch name for worktree
 	opWorktreeDelete                     // awaiting delete confirmation
@@ -947,7 +952,9 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
 		{Key: "g", Description: "Go to first item", Action: actionFirst},
 		{Key: "G", Description: "Go to last item", Action: actionLast},
-		{Key: "P", Description: "Push tag", Action: "push_tag"},
+		{Key: "p", Description: "Pull branch", Action: "pull_branch"},
+		{Key: "B", Description: "Pull branch with rebase", Action: "pull_branch_rebase"},
+		{Key: "P", Description: "Push branch / Push tag", Action: "push"},
 		{Key: "D", Description: "Dispatch workflow", Action: "workflow_dispatch"},
 	}
 	if p.gh.client != nil {
@@ -1024,6 +1031,14 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 	case eventBranchRenamed:
 		cmds = append(cmds, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Branch renamed to: " + name, Level: notify.Success}
+		})
+	case eventBranchPulled:
+		cmds = append(cmds, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Pulled " + name, Level: notify.Success}
+		})
+	case eventBranchPushed:
+		cmds = append(cmds, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Pushed " + name, Level: notify.Success}
 		})
 	case eventWorktreeAdded:
 		cmds = append(
@@ -1203,6 +1218,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p, p.activeTabSelectionCmd()
 		}
 	case "p":
+		if p.activeTab == tabBranches && p.mode != ModeGitHub {
+			return p.requestPull()
+		}
 		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabPRs
 			return p, p.activeTabSelectionCmd()
@@ -1211,6 +1229,10 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.mode != ModeGit && p.gh.client != nil {
 			p.activeTab = tabActions
 			return p, p.activeTabSelectionCmd()
+		}
+	case "B":
+		if p.activeTab == tabBranches && p.mode != ModeGitHub {
+			return p.requestPullRebase()
 		}
 	case "N":
 		if p.mode != ModeGit && p.gh.client != nil {
@@ -1303,7 +1325,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		p.moveToLast()
 		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
 	case "P":
-		if p.activeTab == tabTags {
+		switch p.activeTab { //nolint:exhaustive // only relevant cases handled
+		case tabBranches:
+			if p.mode != ModeGitHub {
+				return p.requestPush()
+			}
+		case tabTags:
 			return p.doTagPush()
 		}
 	case "esc":
@@ -2309,6 +2336,12 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handleRemoteDelete(a)
 	case opBranchCheckout:
 		return p.handleBranchCheckout(a)
+	case opBranchPull:
+		return p.handleBranchPull(a, false)
+	case opBranchPullRebase:
+		return p.handleBranchPull(a, true)
+	case opBranchPush:
+		return p.handleBranchPush(a)
 	case opBranchCheckoutStash:
 		return p.handleBranchCheckoutStash(a)
 	case opStashAction:

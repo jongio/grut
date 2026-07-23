@@ -31,6 +31,8 @@ type mockGitOps struct {
 	stashes    []git.StashEntry
 	tags       []git.Tag
 	submodules []git.Submodule
+	pullFunc   func(context.Context, git.PullOpts) error
+	pushFunc   func(context.Context, git.PushOpts) error
 	branchErr  error
 }
 
@@ -69,6 +71,20 @@ func (m *mockGitOps) RemoteList(_ context.Context) ([]git.Remote, error) {
 func (m *mockGitOps) RemoteAdd(_ context.Context, _, _ string) error { return nil }
 func (m *mockGitOps) RemoteRemove(_ context.Context, _ string) error { return nil }
 func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error { return nil }
+func (m *mockGitOps) Pull(ctx context.Context, opts git.PullOpts) error {
+	if m.pullFunc != nil {
+		return m.pullFunc(ctx, opts)
+	}
+	return nil
+}
+
+func (m *mockGitOps) Push(ctx context.Context, opts git.PushOpts) error {
+	if m.pushFunc != nil {
+		return m.pushFunc(ctx, opts)
+	}
+	return nil
+}
+
 func (m *mockGitOps) StashList(_ context.Context) ([]git.StashEntry, error) {
 	return m.stashes, nil
 }

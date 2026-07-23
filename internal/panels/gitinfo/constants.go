@@ -59,6 +59,8 @@ const (
 	eventBranchCreated   = "branch_created"
 	eventBranchDeleted   = "branch_deleted"
 	eventBranchRenamed   = "branch_renamed"
+	eventBranchPulled    = "branch_pulled"
+	eventBranchPushed    = "branch_pushed"
 	eventRemoteAdded     = "remote_added"
 	eventRemoteRemoved   = "remote_removed"
 	eventStashApplied    = "stash_applied"
@@ -117,8 +119,11 @@ const (
 	actionLast  = "last"
 )
 
-// Default branch fallback.
-const branchMain = "main"
+// Default branch and remote fallbacks.
+const (
+	branchMain   = "main"
+	remoteOrigin = "origin"
+)
 
 // Worktree open mode.
 const openModeNewTerminal = "new_terminal"

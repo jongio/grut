@@ -76,6 +76,64 @@ func (p *Panel) requestCheckout() (panels.Panel, tea.Cmd) {
 	return p, notify.ShowConfirm("Switch Branch", fmt.Sprintf("Switch to branch %q?", ref))
 }
 
+func (p *Panel) requestPull() (panels.Panel, tea.Cmd) {
+	return p.requestBranchPull(false)
+}
+
+func (p *Panel) requestPullRebase() (panels.Panel, tea.Cmd) {
+	return p.requestBranchPull(true)
+}
+
+func (p *Panel) requestBranchPull(rebase bool) (panels.Panel, tea.Cmd) {
+	b := p.selectedBranch()
+	if b == nil {
+		return p, nil
+	}
+	if b.IsRemote {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Cannot pull a remote branch", Level: notify.Warn}
+		}
+	}
+	if b.Upstream == "" {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No upstream for " + b.Name, Level: notify.Warn}
+		}
+	}
+	title := "Pull Branch"
+	prompt := fmt.Sprintf("Pull branch %q from %s?", b.Name, b.Upstream)
+	op := opBranchPull
+	if rebase {
+		title = "Pull Branch with Rebase"
+		prompt = fmt.Sprintf("Pull branch %q from %s with rebase?", b.Name, b.Upstream)
+		op = opBranchPullRebase
+	}
+	p.clearPending()
+	p.pending = op
+	p.pendingName = b.Name
+	p.pendingPath = b.Upstream
+	return p, notify.ShowConfirm(title, prompt)
+}
+
+func (p *Panel) requestPush() (panels.Panel, tea.Cmd) {
+	b := p.selectedBranch()
+	if b == nil {
+		return p, nil
+	}
+	if b.IsRemote {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Cannot push a remote branch", Level: notify.Warn}
+		}
+	}
+	p.clearPending()
+	p.pending = opBranchPush
+	p.pendingName = b.Name
+	p.pendingPath = b.Upstream
+	if b.Upstream == "" {
+		return p, notify.ShowConfirm("Push Branch", fmt.Sprintf("Push branch %q to origin and set upstream?", b.Name))
+	}
+	return p, notify.ShowConfirm("Push Branch", fmt.Sprintf("Push branch %q to %s?", b.Name, b.Upstream))
+}
+
 func (p *Panel) handleCheckoutDirty(msg checkoutDirtyMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
 		// Status check failed - try checkout anyway, git will report errors.
@@ -131,13 +189,23 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 	if b.IsCurrent {
 		prefix = "* "
 	}
-	// Build right side — hash is always shown, never truncated.
+	// Build right side — sync metadata and hash are shown, never truncated.
 	var rightParts []string
-	if b.Ahead > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("↑%d", b.Ahead))
+	if b.Ahead > 0 || b.Behind > 0 {
+		syncText := branchSyncText(b)
+		syncColor := p.colors.Dim
+		switch {
+		case b.Ahead > 0 && b.Behind > 0:
+			syncColor = colorOrange
+		case b.Ahead > 0:
+			syncColor = colorGreen
+		case b.Behind > 0:
+			syncColor = colorYellow
+		}
+		rightParts = append(rightParts, lipgloss.NewStyle().Foreground(lipgloss.Color(syncColor)).Render(syncText))
 	}
-	if b.Behind > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("↓%d", b.Behind))
+	if b.Upstream != "" {
+		rightParts = append(rightParts, lipgloss.NewStyle().Foreground(lipgloss.Color(p.colors.Dim)).Render("→ "+b.Upstream))
 	}
 	rightSide := ""
 	if len(rightParts) > 0 {
@@ -179,6 +247,20 @@ func (p *Panel) renderBranch(item listItem, width int, isCursor bool) string {
 		style = style.Foreground(lipgloss.Color(p.colors.Local))
 	}
 	return style.Render(line)
+}
+
+func branchSyncText(b git.Branch) string {
+	var parts []string
+	if b.Ahead > 0 && b.Behind > 0 {
+		parts = append(parts, "⇕")
+	}
+	if b.Ahead > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d", b.Ahead))
+	}
+	if b.Behind > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d", b.Behind))
+	}
+	return strings.Join(parts, " ")
 }
 
 // worktreePath computes the worktree directory for a branch following the

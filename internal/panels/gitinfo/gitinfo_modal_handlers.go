@@ -144,6 +144,51 @@ func (p *Panel) handleBranchCheckout(a modalArgs) (panels.Panel, tea.Cmd) {
 	}
 }
 
+func (p *Panel) handleBranchPull(a modalArgs, rebase bool) (panels.Panel, tea.Cmd) {
+	branchName := a.name
+	upstream := a.pendingPath
+	remote, branch := splitBranchUpstream(upstream)
+	g, ctx := a.git, a.ctx
+	return p, func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic during branch pull", "branch", branchName, "panic", r)
+			}
+		}()
+		err := g.Pull(ctx, git.PullOpts{Rebase: rebase, Remote: remote, Branch: branch})
+		return opResultMsg{op: eventBranchPulled, name: branchName, err: err}
+	}
+}
+
+func (p *Panel) handleBranchPush(a modalArgs) (panels.Panel, tea.Cmd) {
+	branchName := a.name
+	upstream := a.pendingPath
+	remote, _ := splitBranchUpstream(upstream)
+	setUpstream := false
+	if remote == "" {
+		remote = remoteOrigin
+		setUpstream = true
+	}
+	g, ctx := a.git, a.ctx
+	return p, func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic during branch push", "branch", branchName, "panic", r)
+			}
+		}()
+		err := g.Push(ctx, git.PushOpts{Remote: remote, Branch: branchName, SetUpstream: setUpstream})
+		return opResultMsg{op: eventBranchPushed, name: branchName, err: err}
+	}
+}
+
+func splitBranchUpstream(upstream string) (string, string) {
+	remote, branch, ok := strings.Cut(upstream, "/")
+	if !ok {
+		return "", ""
+	}
+	return remote, branch
+}
+
 func (p *Panel) handleBranchCheckoutStash(a modalArgs) (panels.Panel, tea.Cmd) {
 	ref := a.name
 	g, ctx := a.git, a.ctx
@@ -242,7 +287,7 @@ func (p *Panel) handleTagPush(a modalArgs) (panels.Panel, tea.Cmd) {
 	tagName := a.name
 	g, ctx := a.git, a.ctx
 	return p, func() tea.Msg {
-		err := g.TagPush(ctx, "origin", tagName)
+		err := g.TagPush(ctx, remoteOrigin, tagName)
 		return opResultMsg{op: eventTagPushed, name: tagName, err: err}
 	}
 }
