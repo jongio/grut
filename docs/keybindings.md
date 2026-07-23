@@ -159,6 +159,7 @@ GitHub panel (panel 3).
 | `C` | Comment on issue/PR (Issues/PRs tab) |
 | `c` | Check out PR (PRs tab) / close-reopen issue (Issues tab) |
 | `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
+| `/` | Filter loaded issues/PRs by title or number (Issues/PRs tab) |
 | `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
 | `V` | Toggle live log follow (Actions tab) |

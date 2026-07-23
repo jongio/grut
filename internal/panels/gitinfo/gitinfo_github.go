@@ -1491,6 +1491,13 @@ func (p *Panel) applyIssueFilter() {
 	}
 	p.tabCursor[tabIssues] = 0
 	p.tabOffset[tabIssues] = 0
+	p.reapplyActiveGitHubFilter(tabIssues)
+}
+
+func (p *Panel) reapplyActiveGitHubFilter(tab tabID) {
+	if p.activeTab == tab && isGitHubFilterTab(tab) && p.filterQuery != "" {
+		p.applyFilter()
+	}
 }
 
 func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
@@ -1579,6 +1586,17 @@ func (p *Panel) handleIssueCreateResult(msg issueCreateResultMsg) (panels.Panel,
 // selectIssueByNumber moves the Issues-tab cursor to the issue with the given
 // number, if present in the current filtered view. Returns true when found.
 func (p *Panel) selectIssueByNumber(number int) bool {
+	if p.activeTab == tabIssues && p.filteredIdx != nil {
+		for i := range p.activeItemCount() {
+			item, ok := p.activeItemAt(i)
+			if ok && item.kind == kindIssue && item.issue.Number == number {
+				p.tabCursor[tabIssues] = i
+				p.ensureCursorVisible()
+				return true
+			}
+		}
+		return false
+	}
 	for i, item := range p.tabItems[tabIssues] {
 		if item.kind == kindIssue && item.issue.Number == number {
 			p.tabCursor[tabIssues] = i
@@ -1601,6 +1619,7 @@ func (p *Panel) applyPRFilter() {
 	}
 	p.tabCursor[tabPRs] = 0
 	p.tabOffset[tabPRs] = 0
+	p.reapplyActiveGitHubFilter(tabPRs)
 }
 
 func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
@@ -2923,6 +2942,17 @@ func (p *Panel) handlePRCreateResult(msg prCreateResultMsg) (panels.Panel, tea.C
 // if it is present in the currently visible list.
 func (p *Panel) selectPRByNumber(number int) {
 	if number == 0 {
+		return
+	}
+	if p.activeTab == tabPRs && p.filteredIdx != nil {
+		for i := range p.activeItemCount() {
+			item, ok := p.activeItemAt(i)
+			if ok && item.kind == kindPR && item.pr.Number == number {
+				p.tabCursor[tabPRs] = i
+				p.ensureCursorVisible()
+				return
+			}
+		}
 		return
 	}
 	for i, item := range p.tabItems[tabPRs] {

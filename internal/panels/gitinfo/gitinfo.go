@@ -513,7 +513,12 @@ func (p *Panel) switchActiveTab(tab tabID) {
 }
 
 func (p *Panel) canFilterActiveTab() bool {
-	return p.mode != ModeGitHub && isGitTab(p.activeTab)
+	return (p.mode != ModeGitHub && isGitTab(p.activeTab)) ||
+		(p.mode != ModeGit && isGitHubFilterTab(p.activeTab))
+}
+
+func isGitHubFilterTab(tab tabID) bool {
+	return tab == tabIssues || tab == tabPRs
 }
 
 func (p *Panel) activeItemCount() int {
@@ -1185,7 +1190,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
-		{Key: "/", Description: "Filter list", Action: "filter"},
+		{Key: "/", Description: "Filter list / Issues / PRs", Action: "filter"},
 		{Key: "=", Description: "Pin/clear compare base", Action: "compare_base"},
 		{Key: "g", Description: "Go to first item", Action: actionFirst},
 		{Key: "G", Description: "Go to last item", Action: actionLast},
