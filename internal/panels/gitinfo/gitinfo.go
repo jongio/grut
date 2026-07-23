@@ -376,6 +376,7 @@ type Panel struct {
 	activeTab         tabID         // currently active tab
 	filterQuery       string        // incremental filter query for the active git list tab
 	filteredIdx       []int         // indices into tabItems[activeTab]; nil = no filter
+	compareBase       string        // currently pinned diff compare base
 	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp     // operation awaiting modal result
 	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
@@ -909,6 +910,12 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleModalResult(msg)
 	case panels.BranchChangedMsg, panels.RefreshBranchesMsg:
 		return p, p.loadData()
+	case panels.SetCompareBaseMsg:
+		p.compareBase = msg.Ref
+		return p, nil
+	case panels.ClearCompareBaseMsg:
+		p.compareBase = ""
+		return p, nil
 	case panels.WorktreeChangedMsg:
 		return p, p.loadData()
 	case panels.RemoteChangedMsg:
@@ -1108,6 +1115,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
 		{Key: "/", Description: "Filter list", Action: "filter"},
+		{Key: "=", Description: "Pin/clear compare base", Action: "compare_base"},
 		{Key: "g", Description: "Go to first item", Action: actionFirst},
 		{Key: "G", Description: "Go to last item", Action: actionLast},
 		{Key: "p", Description: "Pull branch", Action: "pull_branch"},
@@ -1455,6 +1463,8 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.applyFilter()
 		}
 		return p, nil
+	case "=":
+		return p.setCompareBaseFromCursor()
 	case "j", "down":
 		p.moveCursorDown()
 		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
@@ -1554,6 +1564,45 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 	}
 	return p, nil
+}
+
+func (p *Panel) compareBaseRefFromCursor() (string, bool) {
+	if p.mode == ModeGitHub {
+		return "", false
+	}
+	item, ok := p.currentItem()
+	if !ok {
+		return "", false
+	}
+	switch item.kind {
+	case kindLocalBranch, kindRemoteBranch:
+		return item.branch.Name, item.branch.Name != ""
+	case kindTag, kindRemoteTag:
+		return item.tag.Name, item.tag.Name != ""
+	default:
+		return "", false
+	}
+}
+
+func (p *Panel) setCompareBaseFromCursor() (panels.Panel, tea.Cmd) {
+	ref, ok := p.compareBaseRefFromCursor()
+	if !ok {
+		return p, nil
+	}
+	if ref == p.compareBase {
+		return p, tea.Batch(
+			func() tea.Msg { return panels.ClearCompareBaseMsg{} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Compare base cleared", Level: notify.Info}
+			},
+		)
+	}
+	return p, tea.Batch(
+		func() tea.Msg { return panels.SetCompareBaseMsg{Ref: ref} },
+		func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Compare base: " + ref, Level: notify.Info}
+		},
+	)
 }
 
 func (p *Panel) handleFilterKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {

@@ -71,6 +71,7 @@ type Model struct {
 	pendingDiscardPath string // file path for pending discard confirmation
 	pendingRevertHash  string // full commit hash for pending revert confirmation
 	currentBranch      string // cached git branch name for status bar
+	compareBase        string // pinned branch-diff compare base for status bar
 	cwdEditValue       string // editable path text
 	initialFile        string // file to open + focus in preview at startup (empty = none)
 	initialFocusPanel  string // panel to focus after startup file reveal (empty = default)
@@ -259,6 +260,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Branch / git status.
 	case branchLoadedMsg, gitDirtyMsg, panels.BranchChangedMsg:
 		return m.handleBranchMsg(msg)
+	case panels.SetCompareBaseMsg, panels.ClearCompareBaseMsg:
+		return m.handleCompareBaseMsg(msg)
 
 	// Notifications.
 	case notify.ShowToastMsg, notify.ShowModalMsg,
@@ -1892,6 +1895,12 @@ func (m Model) renderStatusBar() string {
 			Foreground(lipgloss.Color(m.theme.Colors.NormalYellow)).
 			Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
 		leftParts = append(leftParts, asyncStyle.Render("⟳ "+m.asyncOp))
+	}
+	if m.compareBase != "" {
+		baseStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.Colors.NormalCyan)).
+			Background(lipgloss.Color(m.theme.Colors.StatusBarBg))
+		leftParts = append(leftParts, baseStyle.Render("⇄ base: "+ansi.Strip(m.compareBase)))
 	}
 	sep := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Colors.BrightBlack)).

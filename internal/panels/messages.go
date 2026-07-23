@@ -128,6 +128,15 @@ type BranchSelectedMsg struct {
 	Name string
 }
 
+// SetCompareBaseMsg pins a ref as the active diff compare base. Broadcast so
+// the filetree and status bar can react.
+type SetCompareBaseMsg struct {
+	Ref string
+}
+
+// ClearCompareBaseMsg clears the pinned compare base, restoring the default.
+type ClearCompareBaseMsg struct{}
+
 // BranchDeselectedMsg is sent when the user deselects a branch (e.g. Escape
 // or clicking the same branch again in the gitinfo panel).
 type BranchDeselectedMsg struct{}
