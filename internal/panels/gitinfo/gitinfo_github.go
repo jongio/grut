@@ -47,7 +47,10 @@ type ghPRItem struct {
 const prStateMerged = "merged"
 
 // prStateOpen is the canonical value for an open pull request state.
-const prStateOpen = "open"
+const (
+	prStateOpen             = "open"
+	githubStaleToastMessage = "GitHub data may be stale — refresh failed"
+)
 
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
@@ -317,6 +320,11 @@ type ghDataLoadedMsg struct {
 	workflows     []ghWorkflowItem
 	releases      []ghReleaseItem
 	repoPrivate   bool
+	issuesOK      bool
+	prsOK         bool
+	actionsOK     bool
+	workflowsOK   bool
+	releasesOK    bool
 }
 
 // ghMetaLoadedMsg carries repo metadata and current user info.
@@ -328,6 +336,7 @@ type ghMetaLoadedMsg struct {
 
 // ghIssuesPageMsg carries one page of issues from the GitHub API.
 type ghIssuesPageMsg struct {
+	err      error
 	issues   []ghIssueItem
 	nextPage int
 	replace  bool // true = first page (replace all), false = append
@@ -335,6 +344,7 @@ type ghIssuesPageMsg struct {
 
 // ghPRsPageMsg carries one page of PRs from the GitHub API.
 type ghPRsPageMsg struct {
+	err      error
 	prs      []ghPRItem
 	nextPage int
 	replace  bool
@@ -342,6 +352,7 @@ type ghPRsPageMsg struct {
 
 // ghActionsPageMsg carries one page of workflow runs from the GitHub API.
 type ghActionsPageMsg struct {
+	err      error
 	actions  []ghActionItem
 	nextPage int
 	replace  bool
@@ -349,6 +360,7 @@ type ghActionsPageMsg struct {
 
 // ghWorkflowsPageMsg carries one page of workflow definitions.
 type ghWorkflowsPageMsg struct {
+	err       error
 	workflows []ghWorkflowItem
 	nextPage  int
 	replace   bool
@@ -356,9 +368,100 @@ type ghWorkflowsPageMsg struct {
 
 // ghReleasesPageMsg carries one page of releases.
 type ghReleasesPageMsg struct {
+	err      error
 	releases []ghReleaseItem
 	nextPage int
 	replace  bool
+}
+
+var ghPagedTabs = [...]tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases}
+
+func (p *Panel) beginGitHubRefreshBurst() {
+	p.gh.staleToastShown = false
+	for _, tab := range ghPagedTabs {
+		p.tabPaging[tab].loading = true
+		if p.gh.freshness[tab].fetchedAt.IsZero() {
+			p.tabPaging[tab].nextPage = 1
+			p.tabPaging[tab].allLoaded = false
+		}
+	}
+}
+
+func (p *Panel) markGitHubTabFresh(tab tabID) {
+	p.gh.freshness[tab] = ghTabFreshness{
+		fetchedAt: time.Now(),
+		owner:     p.gh.owner,
+		repo:      p.gh.repo,
+		stale:     false,
+	}
+}
+
+func (p *Panel) markGitHubTabStale(tab tabID) tea.Cmd {
+	if p.gh.freshness[tab].fetchedAt.IsZero() {
+		return nil
+	}
+	p.gh.freshness[tab].stale = true
+	if p.gh.staleToastShown {
+		return nil
+	}
+	p.gh.staleToastShown = true
+	return func() tea.Msg {
+		return notify.ShowToastMsg{Message: githubStaleToastMessage, Level: notify.Warn}
+	}
+}
+
+func (p *Panel) ghStaleBadge(tab tabID) string {
+	fresh := p.gh.freshness[tab]
+	if !fresh.stale || fresh.fetchedAt.IsZero() {
+		return ""
+	}
+	return "stale • " + formatGitHubDataAge(time.Since(fresh.fetchedAt)) + " ago"
+}
+
+func currentGitHubActions(items []listItem) []ghActionItem {
+	actions := make([]ghActionItem, 0, len(items))
+	for _, item := range items {
+		if item.kind == kindActionRun {
+			actions = append(actions, item.actionRun)
+		}
+	}
+	return actions
+}
+
+func currentGitHubWorkflows(items []listItem) []ghWorkflowItem {
+	workflows := make([]ghWorkflowItem, 0, len(items))
+	for _, item := range items {
+		if item.kind == kindWorkflow {
+			workflows = append(workflows, item.workflow)
+		}
+	}
+	return workflows
+}
+
+func currentGitHubReleases(items []listItem) []ghReleaseItem {
+	releases := make([]ghReleaseItem, 0, len(items))
+	for _, item := range items {
+		if item.kind == kindRelease {
+			releases = append(releases, item.release)
+		}
+	}
+	return releases
+}
+
+func formatGitHubDataAge(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return relativeDateJustNow
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -481,6 +584,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		if err != nil {
 			slog.Warn("github: fetch issues failed", "owner", owner, "repo", repo, "err", err)
 		} else {
+			result.issuesOK = true
 			for _, iss := range issues {
 				if iss.PullRequestLinks != nil {
 					continue // skip PRs returned in issue list
@@ -519,6 +623,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		if err != nil {
 			slog.Warn("github: fetch PRs failed", "owner", owner, "repo", repo, "err", err)
 		} else {
+			result.prsOK = true
 			for _, pr := range prs {
 				state := pr.GetState()
 				if pr.GetDraft() {
@@ -548,6 +653,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		if err != nil {
 			slog.Warn("github: fetch workflow runs failed", "owner", owner, "repo", repo, "err", err)
 		} else {
+			result.actionsOK = true
 			for _, run := range runs {
 				result.actions = append(result.actions, ghActionItem{
 					RunID:        run.GetID(),
@@ -582,6 +688,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		if err != nil {
 			slog.Warn("github: fetch workflows failed", "owner", owner, "repo", repo, "err", err)
 		} else {
+			result.workflowsOK = true
 			for _, wf := range workflows {
 				result.workflows = append(result.workflows, ghWorkflowItem{
 					ID:      wf.GetID(),
@@ -597,6 +704,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		if err != nil {
 			slog.Warn("github: fetch releases failed", "owner", owner, "repo", repo, "err", err)
 		} else {
+			result.releasesOK = true
 			for _, rel := range releases {
 				author := ""
 				if rel.Author != nil {
@@ -640,7 +748,42 @@ func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) 
 		p.gh.defaultBranch = msg.defaultBranch
 	}
 	p.gh.repoPrivate = msg.repoPrivate
-	p.buildGitHubItems(msg.issues, msg.prs, msg.actions, msg.workflows, msg.releases)
+	issues := msg.issues
+	if !msg.issuesOK && len(msg.issues) == 0 && !p.gh.freshness[tabIssues].fetchedAt.IsZero() {
+		issues = append([]ghIssueItem(nil), p.gh.allIssues...)
+		p.gh.freshness[tabIssues].stale = true
+	} else {
+		p.markGitHubTabFresh(tabIssues)
+	}
+	prs := msg.prs
+	if !msg.prsOK && len(msg.prs) == 0 && !p.gh.freshness[tabPRs].fetchedAt.IsZero() {
+		prs = append([]ghPRItem(nil), p.gh.allPRs...)
+		p.gh.freshness[tabPRs].stale = true
+	} else {
+		p.markGitHubTabFresh(tabPRs)
+	}
+	actions := msg.actions
+	if !msg.actionsOK && len(msg.actions) == 0 && !p.gh.freshness[tabActions].fetchedAt.IsZero() {
+		actions = currentGitHubActions(p.tabItems[tabActions])
+		p.gh.freshness[tabActions].stale = true
+	} else {
+		p.markGitHubTabFresh(tabActions)
+	}
+	workflows := msg.workflows
+	if !msg.workflowsOK && len(msg.workflows) == 0 && !p.gh.freshness[tabWorkflows].fetchedAt.IsZero() {
+		workflows = currentGitHubWorkflows(p.tabItems[tabWorkflows])
+		p.gh.freshness[tabWorkflows].stale = true
+	} else {
+		p.markGitHubTabFresh(tabWorkflows)
+	}
+	releases := msg.releases
+	if !msg.releasesOK && len(msg.releases) == 0 && !p.gh.freshness[tabReleases].fetchedAt.IsZero() {
+		releases = currentGitHubReleases(p.tabItems[tabReleases])
+		p.gh.freshness[tabReleases].stale = true
+	} else {
+		p.markGitHubTabFresh(tabReleases)
+	}
+	p.buildGitHubItems(issues, prs, actions, workflows, releases)
 	// If a create/merge flow requested a specific PR be reselected after this
 	// refresh, honor it now that the list has been rebuilt.
 	if p.gh.pendingSelectPR != 0 {
@@ -747,7 +890,7 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 		})
 		if err != nil {
 			slog.Warn("github: fetch issues page failed", "owner", owner, "repo", repo, "page", page, "err", err)
-			return ghIssuesPageMsg{nextPage: 0, replace: replace}
+			return ghIssuesPageMsg{err: err, nextPage: 0, replace: replace}
 		}
 		var items []ghIssueItem
 		for _, iss := range issues {
@@ -800,7 +943,7 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 		})
 		if err != nil {
 			slog.Warn("github: fetch PRs page failed", "owner", owner, "repo", repo, "page", page, "err", err)
-			return ghPRsPageMsg{nextPage: 0, replace: replace}
+			return ghPRsPageMsg{err: err, nextPage: 0, replace: replace}
 		}
 		var items []ghPRItem
 		for _, ghPR := range prs {
@@ -843,7 +986,7 @@ func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 		})
 		if err != nil {
 			slog.Warn("github: fetch actions page failed", "owner", owner, "repo", repo, "page", page, "err", err)
-			return ghActionsPageMsg{nextPage: 0, replace: replace}
+			return ghActionsPageMsg{err: err, nextPage: 0, replace: replace}
 		}
 		var items []ghActionItem
 		for _, run := range runs {
@@ -875,7 +1018,7 @@ func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 		workflows, pr, err := client.ListWorkflowsPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
 			slog.Warn("github: fetch workflows page failed", "owner", owner, "repo", repo, "page", page, "err", err)
-			return ghWorkflowsPageMsg{nextPage: 0, replace: replace}
+			return ghWorkflowsPageMsg{err: err, nextPage: 0, replace: replace}
 		}
 		var items []ghWorkflowItem
 		for _, wf := range workflows {
@@ -904,7 +1047,7 @@ func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 		releases, pr, err := client.ListReleasesPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
 			slog.Warn("github: fetch releases page failed", "owner", owner, "repo", repo, "page", page, "err", err)
-			return ghReleasesPageMsg{nextPage: 0, replace: replace}
+			return ghReleasesPageMsg{err: err, nextPage: 0, replace: replace}
 		}
 		var items []ghReleaseItem
 		for _, rel := range releases {
@@ -957,6 +1100,20 @@ func (p *Panel) handleMetaLoaded(msg ghMetaLoadedMsg) (panels.Panel, tea.Cmd) {
 // handleIssuesPage processes a page of issues.
 func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 	p.tabPaging[tabIssues].loading = false
+	if msg.err != nil {
+		if !p.gh.freshness[tabIssues].fetchedAt.IsZero() {
+			if !msg.replace {
+				p.tabPaging[tabIssues].nextPage = 0
+				p.tabPaging[tabIssues].allLoaded = true
+			}
+			return p, p.markGitHubTabStale(tabIssues)
+		}
+		p.tabPaging[tabIssues].nextPage = 0
+		p.tabPaging[tabIssues].allLoaded = true
+		p.gh.allIssues = nil
+		p.applyIssueFilter()
+		return p, nil
+	}
 	p.tabPaging[tabIssues].nextPage = msg.nextPage
 	if msg.nextPage == 0 {
 		p.tabPaging[tabIssues].allLoaded = true
@@ -977,6 +1134,7 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 		p.tabCursor[tabIssues] = savedCursor
 		p.tabOffset[tabIssues] = savedOffset
 	}
+	p.markGitHubTabFresh(tabIssues)
 	// After a full refresh, select the just-created issue if one is pending.
 	if msg.replace && p.gh.pendingSelectIssue != 0 {
 		found := p.selectIssueByNumber(p.gh.pendingSelectIssue)
@@ -991,6 +1149,20 @@ func (p *Panel) handleIssuesPage(msg ghIssuesPageMsg) (panels.Panel, tea.Cmd) {
 // handlePRsPage processes a page of pull requests.
 func (p *Panel) handlePRsPage(msg ghPRsPageMsg) (panels.Panel, tea.Cmd) {
 	p.tabPaging[tabPRs].loading = false
+	if msg.err != nil {
+		if !p.gh.freshness[tabPRs].fetchedAt.IsZero() {
+			if !msg.replace {
+				p.tabPaging[tabPRs].nextPage = 0
+				p.tabPaging[tabPRs].allLoaded = true
+			}
+			return p, p.markGitHubTabStale(tabPRs)
+		}
+		p.tabPaging[tabPRs].nextPage = 0
+		p.tabPaging[tabPRs].allLoaded = true
+		p.gh.allPRs = nil
+		p.applyPRFilter()
+		return p, nil
+	}
 	p.tabPaging[tabPRs].nextPage = msg.nextPage
 	if msg.nextPage == 0 {
 		p.tabPaging[tabPRs].allLoaded = true
@@ -1012,12 +1184,28 @@ func (p *Panel) handlePRsPage(msg ghPRsPageMsg) (panels.Panel, tea.Cmd) {
 		p.tabCursor[tabPRs] = savedCursor
 		p.tabOffset[tabPRs] = savedOffset
 	}
+	p.markGitHubTabFresh(tabPRs)
 	return p, nil
 }
 
 // handleActionsPage processes a page of workflow runs.
 func (p *Panel) handleActionsPage(msg ghActionsPageMsg) (panels.Panel, tea.Cmd) {
 	p.tabPaging[tabActions].loading = false
+	if msg.err != nil {
+		if !p.gh.freshness[tabActions].fetchedAt.IsZero() {
+			if !msg.replace {
+				p.tabPaging[tabActions].nextPage = 0
+				p.tabPaging[tabActions].allLoaded = true
+			}
+			return p, p.markGitHubTabStale(tabActions)
+		}
+		p.tabPaging[tabActions].nextPage = 0
+		p.tabPaging[tabActions].allLoaded = true
+		p.tabItems[tabActions] = nil
+		p.tabCursor[tabActions] = 0
+		p.tabOffset[tabActions] = 0
+		return p, nil
+	}
 	p.tabPaging[tabActions].nextPage = msg.nextPage
 	if msg.nextPage == 0 {
 		p.tabPaging[tabActions].allLoaded = true
@@ -1035,6 +1223,7 @@ func (p *Panel) handleActionsPage(msg ghActionsPageMsg) (panels.Panel, tea.Cmd) 
 		p.tabCursor[tabActions] = 0
 		p.tabOffset[tabActions] = 0
 	}
+	p.markGitHubTabFresh(tabActions)
 	// Cross-reference PRs with newly loaded actions.
 	p.crossRefPRsActions()
 	// Re-apply PR filter to pick up updated action status.
@@ -1062,6 +1251,21 @@ func (p *Panel) handleActionsPage(msg ghActionsPageMsg) (panels.Panel, tea.Cmd) 
 // handleWorkflowsPage processes a page of workflow definitions.
 func (p *Panel) handleWorkflowsPage(msg ghWorkflowsPageMsg) (panels.Panel, tea.Cmd) {
 	p.tabPaging[tabWorkflows].loading = false
+	if msg.err != nil {
+		if !p.gh.freshness[tabWorkflows].fetchedAt.IsZero() {
+			if !msg.replace {
+				p.tabPaging[tabWorkflows].nextPage = 0
+				p.tabPaging[tabWorkflows].allLoaded = true
+			}
+			return p, p.markGitHubTabStale(tabWorkflows)
+		}
+		p.tabPaging[tabWorkflows].nextPage = 0
+		p.tabPaging[tabWorkflows].allLoaded = true
+		p.tabItems[tabWorkflows] = nil
+		p.tabCursor[tabWorkflows] = 0
+		p.tabOffset[tabWorkflows] = 0
+		return p, nil
+	}
 	p.tabPaging[tabWorkflows].nextPage = msg.nextPage
 	if msg.nextPage == 0 {
 		p.tabPaging[tabWorkflows].allLoaded = true
@@ -1079,12 +1283,28 @@ func (p *Panel) handleWorkflowsPage(msg ghWorkflowsPageMsg) (panels.Panel, tea.C
 		p.tabCursor[tabWorkflows] = 0
 		p.tabOffset[tabWorkflows] = 0
 	}
+	p.markGitHubTabFresh(tabWorkflows)
 	return p, nil
 }
 
 // handleReleasesPage processes a page of releases.
 func (p *Panel) handleReleasesPage(msg ghReleasesPageMsg) (panels.Panel, tea.Cmd) {
 	p.tabPaging[tabReleases].loading = false
+	if msg.err != nil {
+		if !p.gh.freshness[tabReleases].fetchedAt.IsZero() {
+			if !msg.replace {
+				p.tabPaging[tabReleases].nextPage = 0
+				p.tabPaging[tabReleases].allLoaded = true
+			}
+			return p, p.markGitHubTabStale(tabReleases)
+		}
+		p.tabPaging[tabReleases].nextPage = 0
+		p.tabPaging[tabReleases].allLoaded = true
+		p.tabItems[tabReleases] = nil
+		p.tabCursor[tabReleases] = 0
+		p.tabOffset[tabReleases] = 0
+		return p, nil
+	}
 	p.tabPaging[tabReleases].nextPage = msg.nextPage
 	if msg.nextPage == 0 {
 		p.tabPaging[tabReleases].allLoaded = true
@@ -1102,6 +1322,7 @@ func (p *Panel) handleReleasesPage(msg ghReleasesPageMsg) (panels.Panel, tea.Cmd
 		p.tabCursor[tabReleases] = 0
 		p.tabOffset[tabReleases] = 0
 	}
+	p.markGitHubTabFresh(tabReleases)
 	return p, nil
 }
 
