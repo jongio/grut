@@ -34,6 +34,7 @@ type modalArgs struct {
 	pendingPath string
 	issueTitle  string // captured new-issue draft title (opIssueCreate* flow)
 	issueBody   string // captured new-issue draft body (opIssueCreate* flow)
+	prCheckout  ghPRItem
 	git         gitOps
 	ctx         context.Context
 }

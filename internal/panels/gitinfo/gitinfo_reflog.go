@@ -58,7 +58,7 @@ func reflogRelativeDate(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return relativeDateJustNow
 	case d < time.Hour:
 		m := int(d.Minutes())
 		if m == 1 {

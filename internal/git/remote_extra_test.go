@@ -145,11 +145,14 @@ func TestFetchValidation(t *testing.T) {
 	err = client.Fetch(ctx, FetchOpts{Remote: "; rm -rf /"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetch remote")
+
+	err = client.Fetch(ctx, FetchOpts{Remote: "origin", Refspec: "pull/1/head:bad;branch"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch refspec")
 }
 
 func TestFetchArgConstruction(t *testing.T) {
-	t.Parallel()
-
+	GlobalCommandLog().Clear()
 	dir := initTestRepo(t)
 	client, err := NewClient(dir)
 	require.NoError(t, err)
@@ -157,14 +160,18 @@ func TestFetchArgConstruction(t *testing.T) {
 
 	// Fetch with all options — will fail because no remote configured.
 	err = client.Fetch(ctx, FetchOpts{
-		Prune:  true,
-		Tags:   true,
-		All:    true,
-		Remote: "origin",
+		Prune:   true,
+		Tags:    true,
+		All:     true,
+		Remote:  "origin",
+		Refspec: "pull/7/head:pr-7",
 	})
 	// Fails at git execution but validation passes.
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "fetch:")
+	entries := GlobalCommandLog().Entries()
+	require.NotEmpty(t, entries)
+	assert.Equal(t, []string{"fetch", "--prune", "--tags", "--all", "origin", "pull/7/head:pr-7"}, entries[len(entries)-1].Args)
 }
 
 // ---------------------------------------------------------------------------

@@ -107,6 +107,26 @@ func ValidateRef(ref string) error {
 	return nil
 }
 
+// ValidateRefspec validates a simple fetch refspec of the form src:dst.
+// Each side is validated as a ref separately so callers can safely pass the
+// whole refspec as one git argument without allowing option injection.
+func ValidateRefspec(refspec string) error {
+	src, dst, ok := strings.Cut(refspec, ":")
+	if !ok {
+		return fmt.Errorf("refspec must contain ':'")
+	}
+	if strings.Contains(dst, ":") {
+		return fmt.Errorf("refspec must contain exactly one ':'")
+	}
+	if err := ValidateRef(src); err != nil {
+		return fmt.Errorf("source ref: %w", err)
+	}
+	if err := ValidateRef(dst); err != nil {
+		return fmt.Errorf("destination ref: %w", err)
+	}
+	return nil
+}
+
 // ValidatePath validates a file path for git operations.
 // It rejects shell metacharacters, null bytes, and path traversal attempts.
 // Absolute paths are allowed for read-only callers that intentionally accept

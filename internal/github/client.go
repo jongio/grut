@@ -600,6 +600,12 @@ func (c *clientImpl) GetJobLogs(ctx context.Context, owner, repo string, jobID i
 	return logs, nil
 }
 
+func (c *clientImpl) GetJobLogsFresh(ctx context.Context, owner, repo string, jobID int64) (string, error) {
+	key := fmt.Sprintf("job-logs:%s/%s:%d", owner, repo, jobID)
+	c.cache.Invalidate(key)
+	return c.GetJobLogs(ctx, owner, repo, jobID)
+}
+
 // ---------------------------------------------------------------------------
 // ActionWriter
 // ---------------------------------------------------------------------------

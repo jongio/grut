@@ -164,6 +164,7 @@ const (
 	opPRCreateBase                       // awaiting create-PR base branch
 	opPRCreateTitle                      // awaiting create-PR title
 	opPRCreateBody                       // awaiting create-PR body (optional, final step)
+	opPRCheckout                         // awaiting PR checkout target selection
 	opIssuePRComment                     // awaiting comment body for an issue or PR
 	opIssueCreateTitle                   // awaiting new issue title (step 1)
 	opIssueCreateBody                    // awaiting new issue body (step 2)
@@ -304,6 +305,8 @@ func initColors(th *theme.Theme) panelColors {
 // helper functions (prColor, prActionIcon) that are called from tests.
 var defaultColors = initColors(nil)
 
+const relativeDateJustNow = "just now"
+
 // gitState holds cached git data used to rebuild tab items without
 // re-fetching from the repository.
 type gitState struct {
@@ -314,6 +317,13 @@ type gitState struct {
 	lastTags       []git.Tag
 	lastReflog     []git.ReflogEntry
 	lastSubmodules []git.Submodule
+}
+
+type ghTabFreshness struct {
+	fetchedAt time.Time
+	owner     string
+	repo      string
+	stale     bool
 }
 
 // githubState holds all GitHub-related integration state: API client,
@@ -335,6 +345,8 @@ type githubState struct {
 	pendingSelectPR int // PR number to reselect after the next data load (0 = none)
 	repoPrivate     bool
 	pageSize        int
+	freshness       [tabCount]ghTabFreshness
+	staleToastShown bool
 	notifLoading    bool  // true while notifications are being fetched
 	notifErr        error // last notification load error, if any
 	// New-issue create flow (multi-step input overlay driven by opIssueCreate*).
@@ -380,11 +392,19 @@ type Panel struct {
 	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp     // operation awaiting modal result
 	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
+	pendingPRCheckout ghPRItem      // PR captured for the checkout action picker
 	actionsWatchFrame int           // current animation frame index into watchFrames
 	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
-	filterMode      bool // true while the active git list filter input is focused
+	// Live GitHub Actions log follow state. The followed job is the first failed
+	// job in the selected run when available, otherwise the run's first job.
+	actionFollowing     bool
+	actionFollowPaused  bool
+	actionFollowRunID   int64
+	actionFollowJobID   int64
+	actionFollowLastErr string
+	filterMode          bool // true while the active git list filter input is focused
 	// Per-tab pagination state for lazy-loading GitHub tabs.
 	tabPaging [tabCount]tabPagination
 }
@@ -687,9 +707,7 @@ func (p *Panel) startGitHubLoad() tea.Cmd {
 	cmds := []tea.Cmd{p.loadData()}
 	if p.mode != ModeGit && p.gh.client != nil {
 		p.gh.pageSize = p.gh.cfg.EffectivePageSize()
-		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
-			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
-		}
+		p.beginGitHubRefreshBurst()
 		p.gh.notifLoading = true
 		p.gh.notifErr = nil
 		cmds = append(
@@ -738,6 +756,8 @@ func (p *Panel) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.
 	p.gh.err = nil
 	p.gh.allIssues = nil
 	p.gh.allPRs = nil
+	p.gh.freshness = [tabCount]ghTabFreshness{}
+	p.gh.staleToastShown = false
 	p.gh.notifErr = nil
 	p.gh.notifLoading = false
 	p.actionsWatching = false
@@ -846,6 +866,20 @@ func (p *Panel) actionsWatchTickCmd() tea.Cmd {
 	})
 }
 
+// actionFollowTickCmd returns a tea.Tick that refreshes followed Actions logs.
+// It self-terminates when actionFollowing is false and targets only gitinfo.
+func (p *Panel) actionFollowTickCmd() tea.Cmd {
+	if !p.actionFollowing {
+		return nil
+	}
+	return tea.Tick(actionFollowInterval, func(t time.Time) tea.Msg {
+		return panels.TargetedPanelMsg{
+			Target: panelGitinfo,
+			Inner:  actionFollowTickMsg{t},
+		}
+	})
+}
+
 // Update implements panels.Panel.
 func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -871,9 +905,7 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleNotificationReadResult(msg)
 	case githubPollTickMsg:
 		// Reset pagination state for fresh page-1 loads.
-		for _, tab := range []tabID{tabIssues, tabPRs, tabActions, tabWorkflows, tabReleases} {
-			p.tabPaging[tab] = tabPagination{loading: true, nextPage: 1}
-		}
+		p.beginGitHubRefreshBurst()
 		return p, tea.Batch(
 			p.loadGitHubMeta(),
 			p.loadIssuesPage(1, true),
@@ -890,6 +922,14 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		p.actionsWatchFrame = (p.actionsWatchFrame + 1) % len(watchFrames)
 		return p, p.actionsWatchTickCmd()
+	case actionFollowTickMsg:
+		if !p.actionFollowing {
+			return p, nil
+		}
+		if p.actionFollowPaused {
+			return p, p.actionFollowTickCmd()
+		}
+		return p, p.fetchActionFollowLogCmd(p.actionFollowRunID, p.actionFollowJobID)
 	case opResultMsg:
 		return p.handleOpResult(msg)
 	case checkoutDirtyMsg:
@@ -932,6 +972,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleActionJobsLoaded(msg)
 	case actionLogLoadedMsg:
 		return p.handleActionLogLoaded(msg)
+	case actionFollowLogMsg:
+		return p.handleActionFollowLog(msg)
 	case actionRerunResultMsg:
 		return p.handleActionRerunResult(msg)
 	case actionCancelResultMsg:
@@ -1009,6 +1051,16 @@ func (p *Panel) View(width, height int) string {
 		return tabBar
 	}
 	itemCount := p.activeItemCount()
+	staleHeader := p.renderGitHubStaleHeader(width)
+	if staleHeader != "" {
+		contentHeight--
+		if contentHeight <= 0 {
+			if filterBar != "" {
+				return tabBar + "\n" + staleHeader + "\n" + filterBar
+			}
+			return tabBar + "\n" + staleHeader
+		}
+	}
 	if itemCount == 0 {
 		label := "No items"
 		switch {
@@ -1030,6 +1082,9 @@ func (p *Panel) View(width, height int) string {
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render(label)
+		if staleHeader != "" {
+			empty = staleHeader + "\n" + empty
+		}
 		if filterBar != "" {
 			return tabBar + "\n" + empty + "\n" + filterBar
 		}
@@ -1062,11 +1117,27 @@ func (p *Panel) View(width, height int) string {
 	for len(lines) < contentHeight {
 		lines = append(lines, emptyLine)
 	}
-	body := tabBar + "\n" + strings.Join(lines, "\n")
+	content := strings.Join(lines, "\n")
+	if staleHeader != "" {
+		content = staleHeader + "\n" + content
+	}
+	body := tabBar + "\n" + content
 	if filterBar != "" {
 		body += "\n" + filterBar
 	}
 	return body
+}
+
+func (p *Panel) renderGitHubStaleHeader(width int) string {
+	fresh := p.gh.freshness[p.activeTab]
+	if !fresh.stale || fresh.fetchedAt.IsZero() {
+		return ""
+	}
+	text := " stale • updated " + formatGitHubDataAge(time.Since(fresh.fetchedAt)) + " ago"
+	return lipgloss.NewStyle().
+		Width(width).
+		Foreground(lipgloss.Color(p.colors.ActionRun)).
+		Render(text)
 }
 
 func (p *Panel) renderFilterBar(width int) string {
@@ -1134,9 +1205,11 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "C", Description: "Comment on issue/PR", Action: "item_comment"},
-			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
+			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue", Action: "checkout_pr_or_close_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
+			panels.KeyBinding{Key: "V", Description: "Toggle live log follow (Actions tab)", Action: "actions_follow"},
+			panels.KeyBinding{Key: "Space", Description: "Pause/resume live log follow (Actions tab)", Action: "actions_follow_pause"},
 			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
 			panels.KeyBinding{Key: "M", Description: "Copy issue/PR as markdown link", Action: "copy_markdown_link"},
 		)
@@ -1178,6 +1251,23 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Switched to " + name, Level: notify.Success}
+			},
+		)
+	case eventPRCheckout:
+		cmds = append(
+			cmds,
+			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Checked out PR branch: " + name, Level: notify.Success}
+			},
+		)
+	case eventPRWorktree:
+		cmds = append(
+			cmds,
+			func() tea.Msg { return panels.WorktreeChangedMsg{} },
+			func() tea.Msg { return panels.ChangeDirectoryMsg{Path: name} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Created PR worktree: " + name, Level: notify.Success}
 			},
 		)
 	case "checkout_stashed":
@@ -1411,6 +1501,14 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			p.switchActiveTab(tabNotifications)
 			return p, p.activeTabSelectionCmd()
 		}
+	case "V":
+		if p.activeTab == tabActions && p.gh.client != nil {
+			return p.doActionsFollowToggle()
+		}
+	case " ", "space":
+		if p.activeTab == tabActions && p.gh.client != nil {
+			return p.doActionsFollowPauseToggle()
+		}
 	case "D":
 		if p.activeTab == tabWorkflows && p.gh.client != nil {
 			return p.doWorkflowDispatch()
@@ -1439,6 +1537,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doAssignSelf()
 		}
 	case "c":
+		if p.activeTab == tabPRs && p.gh.client != nil {
+			return p.checkoutPR()
+		}
 		if p.activeTab == tabIssues && p.gh.client != nil {
 			return p.doCloseReopenIssue()
 		}
@@ -2526,6 +2627,7 @@ func (p *Panel) clearPending() {
 	p.pending = opNone
 	p.pendingName = ""
 	p.pendingPath = ""
+	p.pendingPRCheckout = ghPRItem{}
 	p.gh.issueDraftTitle = ""
 	p.gh.issueDraftBody = ""
 }
@@ -2536,6 +2638,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	pendingPath := p.pendingPath
 	issueTitle := p.gh.issueDraftTitle
 	issueBody := p.gh.issueDraftBody
+	prCheckout := p.pendingPRCheckout
 	p.clearPending()
 	if !msg.Accept {
 		// Abort any in-progress create-PR flow so a later run starts clean.
@@ -2548,6 +2651,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		pendingPath: pendingPath,
 		issueTitle:  issueTitle,
 		issueBody:   issueBody,
+		prCheckout:  prCheckout,
 		git:         p.git,
 		ctx:         p.ctx,
 	}
@@ -2612,6 +2716,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRCreateTitle(a)
 	case opPRCreateBody:
 		return p.handlePRCreateBody(a)
+	case opPRCheckout:
+		return p.handlePRCheckout(a)
 	case opIssuePRComment:
 		return p.handleIssuePRComment(a)
 	case opIssueCreateTitle:
@@ -2904,12 +3010,32 @@ func (p *Panel) renderTabBar(width int) string {
 	if p.gh.prState != stateFilterOpen {
 		prsCount = p.gh.prState.String() + " " + prsCount
 	}
+	if stale := p.ghStaleBadge(p.activeTab); stale != "" {
+		switch p.activeTab { //nolint:exhaustive // only GitHub tabs with paged freshness need badges.
+		case tabIssues:
+			issuesCount += " " + stale
+		case tabPRs:
+			prsCount += " " + stale
+		case tabActions:
+			actionsCount += " " + stale
+		}
+	}
+	workflowsCount := p.ghTabCountStr(tabWorkflows)
+	releasesCount := p.ghTabCountStr(tabReleases)
+	if stale := p.ghStaleBadge(p.activeTab); stale != "" {
+		switch p.activeTab { //nolint:exhaustive // only GitHub tabs with paged freshness need badges.
+		case tabWorkflows:
+			workflowsCount += " " + stale
+		case tabReleases:
+			releasesCount += " " + stale
+		}
+	}
 	ghTabs := []tabDef{
 		{id: tabIssues, name: labelIssues, short: "Iss", count: issuesCount},
 		{id: tabPRs, name: labelPRs, short: shortPRs, count: prsCount},
 		{id: tabActions, name: labelActions, short: shortAct, count: actionsCount},
-		{id: tabWorkflows, name: "Workflows", short: "Wf", count: p.ghTabCountStr(tabWorkflows)},
-		{id: tabReleases, name: "Releases", short: "Rel", count: p.ghTabCountStr(tabReleases)},
+		{id: tabWorkflows, name: "Workflows", short: "Wf", count: workflowsCount},
+		{id: tabReleases, name: "Releases", short: "Rel", count: releasesCount},
 		{id: tabNotifications, name: labelNotifications, short: "Ntf", count: p.ghNotifCountStr()},
 	}
 	// In ModeGitHub, prepend Branches and Tags to the GitHub tab row.
