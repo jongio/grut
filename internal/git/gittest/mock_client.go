@@ -65,6 +65,7 @@ type MockClient struct {
 	BisectBadFunc      func(ctx context.Context) (string, error)
 	BisectResetFunc    func(ctx context.Context) error
 	ReflogFunc         func(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error)
+	SubmodulesFunc     func(ctx context.Context) ([]git.Submodule, error)
 	DiscardFileFunc    func(ctx context.Context, path string) error
 	DiscardAllFunc     func(ctx context.Context) error
 	RevertFunc         func(ctx context.Context, hash string) error
@@ -489,6 +490,15 @@ func (m *MockClient) BisectReset(ctx context.Context) error {
 func (m *MockClient) Reflog(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error) {
 	if m.ReflogFunc != nil {
 		return m.ReflogFunc(ctx, ref, limit)
+	}
+	return nil, nil
+}
+
+// --- SubmoduleOps ---
+
+func (m *MockClient) Submodules(ctx context.Context) ([]git.Submodule, error) {
+	if m.SubmodulesFunc != nil {
+		return m.SubmodulesFunc(ctx)
 	}
 	return nil, nil
 }

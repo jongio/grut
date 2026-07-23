@@ -105,6 +105,11 @@ type ReflogOps interface {
 	Reflog(ctx context.Context, ref string, limit int) ([]ReflogEntry, error)
 }
 
+// SubmoduleOps provides submodule status operations.
+type SubmoduleOps interface {
+	Submodules(ctx context.Context) ([]Submodule, error)
+}
+
 // DiscardOps provides operations for discarding unstaged changes.
 type DiscardOps interface {
 	DiscardFile(ctx context.Context, path string) error
@@ -136,6 +141,7 @@ type GitClient interface {
 	MergeRebaseOps
 	BisectOps
 	ReflogOps
+	SubmoduleOps
 	DiscardOps
 	RevertOps
 	ResetOps

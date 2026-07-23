@@ -360,6 +360,33 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			return p, p.loadFileCmd(p.filePath)
 		}
 		return p, nil
+	case panels.SubmoduleSelectedMsg:
+		p.clearSelection()
+		p.clearSearch()
+		p.ghMode = true
+		p.ghPlainText = false
+		safePath := ansi.Strip(msg.Path)
+		safeCommit := ansi.Strip(msg.Commit)
+		safeState := ansi.Strip(msg.State)
+		safeDescribe := ansi.Strip(msg.Describe)
+		p.ghTitle = "Submodule " + safePath
+		content := fmt.Sprintf("# Submodule `%s`\n\nCommit: `%s`\nState: %s", safePath, safeCommit, safeState)
+		if safeDescribe != "" {
+			content += fmt.Sprintf("\nDescribe: %s", safeDescribe)
+		}
+		p.ghContent = content
+		p.scrollY = 0
+		p.lines = markdown.RenderStatic(content, p.width)
+		return p, nil
+	case panels.SubmoduleDeselectedMsg:
+		p.ghMode = false
+		p.ghTitle = ""
+		p.ghContent = ""
+		p.ghPlainText = false
+		if p.filePath != "" {
+			return p, p.loadFileCmd(p.filePath)
+		}
+		return p, nil
 	case panels.ActionRunSelectedMsg:
 		p.clearSelection()
 		p.clearSearch()

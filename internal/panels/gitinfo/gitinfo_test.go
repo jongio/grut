@@ -25,22 +25,26 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockGitOps struct {
-	branches  []git.Branch
-	worktrees []git.Worktree
-	remotes   []git.Remote
-	stashes   []git.StashEntry
-	tags      []git.Tag
-	branchErr error
+	branches   []git.Branch
+	worktrees  []git.Worktree
+	remotes    []git.Remote
+	stashes    []git.StashEntry
+	tags       []git.Tag
+	submodules []git.Submodule
+	pullFunc   func(context.Context, git.PullOpts) error
+	pushFunc   func(context.Context, git.PushOpts) error
+	branchErr  error
 }
 
 type countingGitOps struct {
 	mockGitOps
-	branchCalls   int
-	worktreeCalls int
-	remoteCalls   int
-	stashCalls    int
-	tagCalls      int
-	reflogCalls   int
+	branchCalls    int
+	worktreeCalls  int
+	remoteCalls    int
+	stashCalls     int
+	tagCalls       int
+	reflogCalls    int
+	submoduleCalls int
 }
 
 func (m *mockGitOps) BranchList(_ context.Context) ([]git.Branch, error) {
@@ -67,6 +71,20 @@ func (m *mockGitOps) RemoteList(_ context.Context) ([]git.Remote, error) {
 func (m *mockGitOps) RemoteAdd(_ context.Context, _, _ string) error { return nil }
 func (m *mockGitOps) RemoteRemove(_ context.Context, _ string) error { return nil }
 func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error { return nil }
+func (m *mockGitOps) Pull(ctx context.Context, opts git.PullOpts) error {
+	if m.pullFunc != nil {
+		return m.pullFunc(ctx, opts)
+	}
+	return nil
+}
+
+func (m *mockGitOps) Push(ctx context.Context, opts git.PushOpts) error {
+	if m.pushFunc != nil {
+		return m.pushFunc(ctx, opts)
+	}
+	return nil
+}
+
 func (m *mockGitOps) StashList(_ context.Context) ([]git.StashEntry, error) {
 	return m.stashes, nil
 }
@@ -81,6 +99,10 @@ func (m *mockGitOps) TagDelete(_ context.Context, _ string) error       { return
 func (m *mockGitOps) TagPush(_ context.Context, _, _ string) error      { return nil }
 func (m *mockGitOps) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEntry, error) {
 	return nil, nil
+}
+
+func (m *mockGitOps) Submodules(_ context.Context) ([]git.Submodule, error) {
+	return m.submodules, nil
 }
 
 func (m *countingGitOps) BranchList(ctx context.Context) ([]git.Branch, error) {
@@ -111,6 +133,11 @@ func (m *countingGitOps) TagList(ctx context.Context) ([]git.Tag, error) {
 func (m *countingGitOps) Reflog(ctx context.Context, ref string, limit int) ([]git.ReflogEntry, error) {
 	m.reflogCalls++
 	return m.mockGitOps.Reflog(ctx, ref, limit)
+}
+
+func (m *countingGitOps) Submodules(ctx context.Context) ([]git.Submodule, error) {
+	m.submoduleCalls++
+	return m.mockGitOps.Submodules(ctx)
 }
 
 // ---------------------------------------------------------------------------

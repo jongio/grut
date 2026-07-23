@@ -13,6 +13,7 @@ import (
 	"github.com/jongio/grut/internal/layout"
 	"github.com/jongio/grut/internal/panels"
 	bmpanel "github.com/jongio/grut/internal/panels/bookmarks"
+	commandlogpanel "github.com/jongio/grut/internal/panels/commandlog"
 	"github.com/jongio/grut/internal/panels/fuzzyfinder"
 	helppanel "github.com/jongio/grut/internal/panels/help"
 	settingspanel "github.com/jongio/grut/internal/panels/settings"
@@ -36,6 +37,11 @@ func New(th *theme.Theme, bmMgr *bm.Manager) *Factory {
 // NewBookmarkPanel creates the bookmarks overlay panel.
 func (f *Factory) NewBookmarkPanel() panels.Panel {
 	return bmpanel.New(f.bookmarkMgr, f.theme)
+}
+
+// NewCommandLogPanel creates the git command log overlay panel.
+func (f *Factory) NewCommandLogPanel() panels.Panel {
+	return commandlogpanel.New(f.theme)
 }
 
 // NewHelpPanel creates the help overlay panel.

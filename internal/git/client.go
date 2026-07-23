@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jongio/grut/internal/proctree"
 )
@@ -132,13 +133,39 @@ func (c *Client) runWithEnv(ctx context.Context, extraEnv []string, args ...stri
 	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	slog.Debug("git exec", "args", normalized, "dir", c.repoDir)
+	start := time.Now()
 	if err := proctree.Run(cmd); err != nil {
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
-			return "", fmt.Errorf("git %s: %w", normalized[0], err)
+			finalErr := fmt.Errorf("git %s: %w", normalized[0], err)
+			globalCommandLog.Record(CommandEntry{
+				Timestamp:  start,
+				Args:       normalized,
+				Dir:        c.repoDir,
+				Duration:   time.Since(start),
+				Success:    false,
+				ErrSummary: summarizeCommandError(errMsg, err),
+			})
+			return "", finalErr
 		}
-		return "", fmt.Errorf("git %s: %s: %w", normalized[0], errMsg, err)
+		finalErr := fmt.Errorf("git %s: %s: %w", normalized[0], errMsg, err)
+		globalCommandLog.Record(CommandEntry{
+			Timestamp:  start,
+			Args:       normalized,
+			Dir:        c.repoDir,
+			Duration:   time.Since(start),
+			Success:    false,
+			ErrSummary: summarizeCommandError(errMsg, err),
+		})
+		return "", finalErr
 	}
+	globalCommandLog.Record(CommandEntry{
+		Timestamp: start,
+		Args:      normalized,
+		Dir:       c.repoDir,
+		Duration:  time.Since(start),
+		Success:   true,
+	})
 	return stdout.String(), nil
 }
 

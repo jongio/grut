@@ -16,6 +16,7 @@ import (
 // help, settings, welcome) directly.
 type OverlayCreator interface {
 	NewBookmarkPanel() panels.Panel
+	NewCommandLogPanel() panels.Panel
 	NewHelpPanel() panels.Panel
 	NewWelcomePanel() panels.Panel
 	NewSettingsPanel(currentPos layout.PreviewPosition, currentTheme string, themeNames []string, actionsCfg config.ActionsConfig) panels.Panel

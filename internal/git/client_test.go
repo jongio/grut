@@ -136,6 +136,27 @@ func TestClient_IsRepo(t *testing.T) {
 	assert.False(t, isRepo)
 }
 
+func TestClientRunRecordsCommandLogEntry(t *testing.T) {
+	dir := initTestRepo(t)
+	ctx := context.Background()
+	GlobalCommandLog().Clear()
+	t.Cleanup(func() { GlobalCommandLog().Clear() })
+
+	client, err := NewClient(dir)
+	require.NoError(t, err)
+
+	_, err = client.run(ctx, "status", "--short")
+	require.NoError(t, err)
+
+	entries := GlobalCommandLog().Entries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, []string{"status", "--short"}, entries[0].Args)
+	assert.Equal(t, dir, entries[0].Dir)
+	assert.True(t, entries[0].Success)
+	assert.Empty(t, entries[0].ErrSummary)
+	assert.Positive(t, entries[0].Duration)
+}
+
 func TestClient_RepoRoot(t *testing.T) {
 	dir := initTestRepo(t)
 	ctx := context.Background()

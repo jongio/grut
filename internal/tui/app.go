@@ -52,6 +52,8 @@ type Model struct {
 	overlays           OverlayCreator                // factory for overlay panels
 	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
 	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	commandLogPanel    panels.Panel                  // overlay git command log panel (nil = hidden)
+	commandLogShown    bool                          // whether git command log overlay is visible
 	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
 	helpShown          bool                          // whether help overlay is visible
 	welcomePanel       panels.Panel                  // overlay welcome panel (nil = hidden)
@@ -286,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleBookmarkNavMsg(msg)
 
 	// Overlays & settings.
-	case panels.ToggleHelpMsg, panels.FirstRunMsg,
+	case panels.ToggleHelpMsg, panels.ToggleCommandLogMsg, panels.FirstRunMsg,
 		panels.WelcomeAnimTickMsg, panels.WelcomeDismissMsg,
 		panels.ToggleSettingsMsg, panels.SetPreviewPositionMsg,
 		panels.SetThemeMsg, panels.SetDoubleClickActionMsg,
@@ -415,6 +417,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("todos"), nil
 	case "help":
 		return m.toggleHelp()
+	case "command_log":
+		return m.toggleCommandLog()
 	case "welcome":
 		return m.toggleWelcome()
 	case "settings":
@@ -624,6 +628,22 @@ func (m Model) toggleHelp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// toggleCommandLog shows or hides the git command log overlay panel.
+func (m Model) toggleCommandLog() (tea.Model, tea.Cmd) {
+	if m.commandLogShown {
+		m.commandLogShown = false
+		m.commandLogPanel = nil
+		return m, nil
+	}
+	m.commandLogShown = true
+	m.commandLogPanel = m.overlays.NewCommandLogPanel()
+	m.commandLogPanel.Focus()
+	w, h := m.commandLogOverlayDims()
+	m.commandLogPanel.SetSize(w, h)
+	m.commandLogPanel.Init(m.ctx)
+	return m, nil
+}
+
 // overlayDims computes clamped overlay dimensions using percentage-based
 // sizing with minimum bounds. It applies the standard pattern:
 //
@@ -656,6 +676,11 @@ func (m Model) overlayDims(wDen, minW, hNum, hDen, minH int) (int, int) {
 // helpOverlayDims returns the content dimensions for the help overlay.
 func (m Model) helpOverlayDims() (int, int) {
 	return m.overlayDims(5, 40, 3, 4, 10)
+}
+
+// commandLogOverlayDims returns the content dimensions for the git command log overlay.
+func (m Model) commandLogOverlayDims() (int, int) {
+	return m.overlayDims(5, 60, 3, 4, 10)
 }
 
 // toggleWelcome shows or hides the welcome overlay panel.
@@ -1101,6 +1126,11 @@ func (m Model) View() tea.View {
 	if m.helpShown && m.helpPanel != nil {
 		w, h := m.helpOverlayDims()
 		content = m.renderOverlayBox(m.helpPanel, w, h, lipgloss.RoundedBorder(), "grut \u2014 Terminal File Explorer")
+	}
+	// Git command log overlay.
+	if m.commandLogShown && m.commandLogPanel != nil {
+		w, h := m.commandLogOverlayDims()
+		content = m.renderOverlayBox(m.commandLogPanel, w, h, lipgloss.RoundedBorder(), "Git Command Log")
 	}
 	v.SetContent(content)
 	return v

@@ -200,6 +200,7 @@ func (m *mockGitClient) BisectReset(_ context.Context) error              { retu
 func (m *mockGitClient) Reflog(_ context.Context, _ string, _ int) ([]git.ReflogEntry, error) {
 	return nil, nil
 }
+func (m *mockGitClient) Submodules(_ context.Context) ([]git.Submodule, error) { return nil, nil }
 
 func (m *mockGitClient) RemoteList(_ context.Context) ([]git.Remote, error)       { return nil, nil }
 func (m *mockGitClient) RemoteAdd(_ context.Context, _, _ string) error           { return nil }

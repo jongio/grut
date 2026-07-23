@@ -78,6 +78,9 @@ type ToggleBookmarksMsg struct{}
 // ToggleHelpMsg requests showing or hiding the help overlay panel.
 type ToggleHelpMsg struct{}
 
+// ToggleCommandLogMsg requests showing or hiding the git command log overlay panel.
+type ToggleCommandLogMsg struct{}
+
 // FirstRunMsg is sent when the application detects it is the user's first run.
 // The root model shows the help overlay in response.
 type FirstRunMsg struct{}
@@ -128,6 +131,18 @@ type BranchSelectedMsg struct {
 // BranchDeselectedMsg is sent when the user deselects a branch (e.g. Escape
 // or clicking the same branch again in the gitinfo panel).
 type BranchDeselectedMsg struct{}
+
+// SubmoduleSelectedMsg is sent when the user selects a submodule in the
+// gitinfo panel so preview-like panels can show submodule details.
+type SubmoduleSelectedMsg struct {
+	Path     string
+	Commit   string
+	State    string
+	Describe string
+}
+
+// SubmoduleDeselectedMsg is sent when the selected submodule should be cleared.
+type SubmoduleDeselectedMsg struct{}
 
 // RefreshBranchesMsg is received by the branches panel to trigger a re-fetch
 // of the branch list.
