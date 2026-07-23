@@ -397,7 +397,14 @@ type Panel struct {
 	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
-	filterMode      bool // true while the active git list filter input is focused
+	// Live GitHub Actions log follow state. The followed job is the first failed
+	// job in the selected run when available, otherwise the run's first job.
+	actionFollowing     bool
+	actionFollowPaused  bool
+	actionFollowRunID   int64
+	actionFollowJobID   int64
+	actionFollowLastErr string
+	filterMode          bool // true while the active git list filter input is focused
 	// Per-tab pagination state for lazy-loading GitHub tabs.
 	tabPaging [tabCount]tabPagination
 }
@@ -859,6 +866,20 @@ func (p *Panel) actionsWatchTickCmd() tea.Cmd {
 	})
 }
 
+// actionFollowTickCmd returns a tea.Tick that refreshes followed Actions logs.
+// It self-terminates when actionFollowing is false and targets only gitinfo.
+func (p *Panel) actionFollowTickCmd() tea.Cmd {
+	if !p.actionFollowing {
+		return nil
+	}
+	return tea.Tick(actionFollowInterval, func(t time.Time) tea.Msg {
+		return panels.TargetedPanelMsg{
+			Target: panelGitinfo,
+			Inner:  actionFollowTickMsg{t},
+		}
+	})
+}
+
 // Update implements panels.Panel.
 func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -901,6 +922,14 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		p.actionsWatchFrame = (p.actionsWatchFrame + 1) % len(watchFrames)
 		return p, p.actionsWatchTickCmd()
+	case actionFollowTickMsg:
+		if !p.actionFollowing {
+			return p, nil
+		}
+		if p.actionFollowPaused {
+			return p, p.actionFollowTickCmd()
+		}
+		return p, p.fetchActionFollowLogCmd(p.actionFollowRunID, p.actionFollowJobID)
 	case opResultMsg:
 		return p.handleOpResult(msg)
 	case checkoutDirtyMsg:
@@ -943,6 +972,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleActionJobsLoaded(msg)
 	case actionLogLoadedMsg:
 		return p.handleActionLogLoaded(msg)
+	case actionFollowLogMsg:
+		return p.handleActionFollowLog(msg)
 	case actionRerunResultMsg:
 		return p.handleActionRerunResult(msg)
 	case actionCancelResultMsg:
@@ -1177,6 +1208,8 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue", Action: "checkout_pr_or_close_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
+			panels.KeyBinding{Key: "V", Description: "Toggle live log follow (Actions tab)", Action: "actions_follow"},
+			panels.KeyBinding{Key: "Space", Description: "Pause/resume live log follow (Actions tab)", Action: "actions_follow_pause"},
 			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
 			panels.KeyBinding{Key: "M", Description: "Copy issue/PR as markdown link", Action: "copy_markdown_link"},
 		)
@@ -1467,6 +1500,14 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		if p.mode != ModeGit && p.gh.client != nil {
 			p.switchActiveTab(tabNotifications)
 			return p, p.activeTabSelectionCmd()
+		}
+	case "V":
+		if p.activeTab == tabActions && p.gh.client != nil {
+			return p.doActionsFollowToggle()
+		}
+	case " ", "space":
+		if p.activeTab == tabActions && p.gh.client != nil {
+			return p.doActionsFollowPauseToggle()
 		}
 	case "D":
 		if p.activeTab == tabWorkflows && p.gh.client != nil {

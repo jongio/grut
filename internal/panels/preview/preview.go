@@ -39,14 +39,15 @@ type Preview struct {
 	// Git integration
 	gitClient git.StatusReader
 	// File state
-	filePath   string
-	ghTitle    string   // title for GitHub content (e.g., "#42 Fix auth")
-	ghContent  string   // raw markdown body
-	lines      []string // rendered lines (with ANSI for syntax highlighting)
-	blameLines []git.BlameLine
-	diffLines  []string // pre-rendered diff lines for current file
-	cfg        Config
-	scrollY    int
+	filePath      string
+	ghTitle       string   // title for GitHub content (e.g., "#42 Fix auth")
+	ghContent     string   // raw markdown body
+	ghJobsContent string   // rendered GitHub Actions jobs, kept separate for live log replacement
+	lines         []string // rendered lines (with ANSI for syntax highlighting)
+	blameLines    []git.BlameLine
+	diffLines     []string // pre-rendered diff lines for current file
+	cfg           Config
+	scrollY       int
 	// Panel state
 	width   int
 	height  int
@@ -390,6 +391,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.ActionRunSelectedMsg:
 		p.clearSelection()
 		p.clearSearch()
+		p.ghJobsContent = ""
 		p.ghMode = true
 		p.ghPlainText = false
 		safeWfName := ansi.Strip(msg.WorkflowName)
@@ -434,16 +436,28 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghMode = true
 		p.ghPlainText = true
 		p.scrollY = 0
-		p.ghContent = renderActionJobs(msg.Jobs)
+		p.ghJobsContent = renderActionJobs(msg.Jobs)
+		p.ghContent = p.ghJobsContent
 		p.lines = strings.Split(p.ghContent, "\n")
 		return p, nil
 	case panels.ActionLogMsg:
 		if p.ghMode && msg.Log != "" {
 			p.clearSearch()
 			p.ghPlainText = true
-			logSection := renderActionLog(msg.Log)
-			p.ghContent += "\n" + logSection
+			logSection := renderActionLog(msg.Log, msg.Follow)
+			if msg.Replace {
+				base := p.ghJobsContent
+				if base == "" {
+					base = p.ghContent
+				}
+				p.ghContent = strings.TrimRight(base, "\n") + "\n" + logSection
+			} else {
+				p.ghContent += "\n" + logSection
+			}
 			p.lines = strings.Split(p.ghContent, "\n")
+			if msg.Follow {
+				p.scrollToBottom()
+			}
 		}
 		return p, nil
 	case panels.GitFilterActiveMsg:
@@ -1186,13 +1200,17 @@ func renderActionJobs(jobs []panels.ActionJob) string {
 }
 
 // renderActionLog formats raw job log output, truncating to the last 100 lines.
-func renderActionLog(log string) string {
+func renderActionLog(log string, following ...bool) string {
 	const maxLines = 100
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", 40))
 	b.WriteString("\n")
-	b.WriteString("Failed Job Log (last ")
+	b.WriteString("Job Log")
+	if len(following) > 0 && following[0] {
+		b.WriteString(" (following)")
+	}
+	b.WriteString(" (last ")
 	_, _ = fmt.Fprintf(&b, "%d", maxLines)
 	b.WriteString(" lines)\n")
 	b.WriteString(strings.Repeat("─", 40))

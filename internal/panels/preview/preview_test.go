@@ -1287,7 +1287,7 @@ func TestRenderActionLog(t *testing.T) {
 	log := "Step 1: checkout\nStep 2: build\nStep 3: test"
 	result := renderActionLog(log)
 
-	assert.Contains(t, result, "Failed Job Log")
+	assert.Contains(t, result, "Job Log")
 	assert.Contains(t, result, "Step 1: checkout")
 	assert.Contains(t, result, "Step 2: build")
 	assert.Contains(t, result, "Step 3: test")
@@ -1469,8 +1469,53 @@ func TestActionLogMsg(t *testing.T) {
 	})
 
 	assert.Contains(t, p.ghContent, "existing content")
-	assert.Contains(t, p.ghContent, "Failed Job Log")
+	assert.Contains(t, p.ghContent, "Job Log")
 	assert.Nil(t, cmd)
+}
+
+func TestActionLogMsg_FollowReplaceAutoScrollsAndDoesNotAppend(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 8)
+	jobs := []panels.ActionJob{{ID: 1, Name: "build", Status: "in_progress"}}
+	p.Update(panels.ActionJobsLoadedMsg{RunID: 100, Jobs: jobs})
+
+	p.Update(panels.ActionLogMsg{RunID: 100, JobID: 1, Log: "old", Follow: true, Replace: true})
+	p.Update(panels.ActionLogMsg{RunID: 100, JobID: 1, Log: "new", Follow: true, Replace: true})
+
+	assert.Contains(t, p.ghContent, "Job Log (following)")
+	assert.Contains(t, p.ghContent, "new")
+	assert.NotContains(t, p.ghContent, "old")
+	assert.GreaterOrEqual(t, p.scrollY, 0)
+}
+
+func TestActionLogMsg_PausedFollowPreservesScrollWhenNoUpdateArrives(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 8)
+	p.ghMode = true
+	p.ghPlainText = true
+	p.ghJobsContent = "jobs"
+	p.ghContent = "jobs\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9"
+	p.lines = strings.Split(p.ghContent, "\n")
+	p.scrollY = 3
+
+	_, cmd := p.Update(panels.ActionLogMsg{RunID: 100, JobID: 1, Log: ""})
+
+	assert.Nil(t, cmd)
+	assert.Equal(t, 3, p.scrollY)
+	assert.NotContains(t, p.ghContent, "Job Log")
+}
+
+func TestRenderActionLog_TruncationIsBoundedToTail(t *testing.T) {
+	lines := make([]string, 150)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line-%03d", i)
+	}
+	result := renderActionLog(strings.Join(lines, "\n"), true)
+
+	assert.Contains(t, result, "truncated")
+	assert.Contains(t, result, "line-149")
+	assert.NotContains(t, result, "line-000")
+	assert.LessOrEqual(t, strings.Count(result, "\n"), 106)
 }
 
 func TestActionLogMsg_NotInGhMode(t *testing.T) {

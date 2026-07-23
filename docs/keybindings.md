@@ -161,6 +161,8 @@ GitHub panel (panel 3).
 | `S` | Cycle state filter open/closed/all (Issues/PRs tab) |
 | `r` | Rerun (Actions tab) / Refresh (Notifications tab) |
 | `x` | Cancel (Actions tab) |
+| `V` | Toggle live log follow (Actions tab) |
+| `Space` | Pause/resume live log follow (Actions tab) |
 | `D` | Dispatch workflow |
 
 ---

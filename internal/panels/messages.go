@@ -815,9 +815,11 @@ type ActionJob struct {
 
 // ActionLogMsg carries log output for a specific job.
 type ActionLogMsg struct {
-	Log   string
-	RunID int64
-	JobID int64
+	Log     string
+	RunID   int64
+	JobID   int64
+	Follow  bool // true when the log is a live-follow update
+	Replace bool // true when preview should replace the current log tail instead of appending
 }
 
 // GitHubFilterChangedMsg is sent when the user cycles through quick filters.

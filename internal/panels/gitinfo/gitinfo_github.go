@@ -143,6 +143,15 @@ type actionLogLoadedMsg struct {
 	jobID int64
 }
 
+// actionFollowLogMsg carries a live-follow log refresh result.
+type actionFollowLogMsg struct {
+	err      error
+	log      string
+	runID    int64
+	jobID    int64
+	terminal bool
+}
+
 // actionRerunResultMsg carries the result of a rerun-failed-jobs operation.
 type actionRerunResultMsg struct {
 	err   error
@@ -220,6 +229,9 @@ type githubPollTickMsg struct{ time.Time }
 // "watching CI" indicator in the Actions tab bar.
 type actionsWatchTickMsg struct{ time.Time }
 
+// actionFollowTickMsg triggers a live GitHub Actions log refresh.
+type actionFollowTickMsg struct{ time.Time }
+
 // watchFrames defines the 4-frame cycle for the CI watch animation.
 var watchFrames = []string{runDot, "◐", "○", "◑"}
 
@@ -248,6 +260,9 @@ const (
 // actionsWatchTickInterval is the polling interval for the GitHub Actions
 // watch animation frame rate.
 const actionsWatchTickInterval = 1000 * time.Millisecond
+
+// actionFollowInterval controls live job log refresh cadence.
+const actionFollowInterval = 3 * time.Second
 
 // ghLoadMoreThreshold triggers a page fetch when the cursor is within
 // this many items of the end of the loaded list.
@@ -1894,6 +1909,143 @@ func (p *Panel) handleActionLogLoaded(msg actionLogLoadedMsg) (panels.Panel, tea
 	return p, func() tea.Msg {
 		return panels.ActionLogMsg{RunID: runID, JobID: jobID, Log: log}
 	}
+}
+
+func actionRunIsRunning(status string) bool {
+	return status == statusInProgress || status == statusQueued
+}
+
+func (p *Panel) selectedActionRun() (ghActionItem, bool) {
+	if p.activeTab != tabActions {
+		return ghActionItem{}, false
+	}
+	item, ok := p.currentItem()
+	if !ok || item.kind != kindActionRun {
+		return ghActionItem{}, false
+	}
+	return item.actionRun, true
+}
+
+func primaryActionJobID(jobs []*gh.WorkflowJob) int64 {
+	if len(jobs) == 0 {
+		return 0
+	}
+	for _, job := range jobs {
+		if job.GetConclusion() == conclusionFailure {
+			return job.GetID()
+		}
+	}
+	return jobs[0].GetID()
+}
+
+// doActionsFollowToggle starts/stops live log following for the selected run.
+func (p *Panel) doActionsFollowToggle() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || p.activeTab != tabActions {
+		return p, nil
+	}
+	if p.actionFollowing {
+		p.actionFollowing = false
+		p.actionFollowPaused = false
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Action log follow stopped", Level: notify.Info}
+		}
+	}
+	run, ok := p.selectedActionRun()
+	if !ok {
+		return p, nil
+	}
+	if !actionRunIsRunning(run.Status) {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Action log follow requires a queued or running job", Level: notify.Info}
+		}
+	}
+	p.actionFollowing = true
+	p.actionFollowPaused = false
+	p.actionFollowRunID = run.RunID
+	p.actionFollowJobID = 0
+	p.actionFollowLastErr = ""
+	return p, tea.Batch(
+		func() tea.Msg { return notify.ShowToastMsg{Message: "Action log follow started", Level: notify.Info} },
+		p.fetchActionFollowLogCmd(run.RunID, 0),
+	)
+}
+
+func (p *Panel) doActionsFollowPauseToggle() (panels.Panel, tea.Cmd) {
+	if p.gh.client == nil || p.activeTab != tabActions || !p.actionFollowing {
+		return p, nil
+	}
+	p.actionFollowPaused = !p.actionFollowPaused
+	message := "Action log follow resumed"
+	if p.actionFollowPaused {
+		message = "Action log follow paused"
+	}
+	return p, func() tea.Msg { return notify.ShowToastMsg{Message: message, Level: notify.Info} }
+}
+
+func (p *Panel) fetchActionFollowLogCmd(runID, jobID int64) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return nil
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		selectedJobID := jobID
+		if selectedJobID == 0 {
+			jobs, err := client.ListWorkflowJobs(ctx, owner, repo, runID)
+			if err != nil {
+				return actionFollowLogMsg{runID: runID, err: fmt.Errorf("workflow jobs: %w", err)}
+			}
+			selectedJobID = primaryActionJobID(jobs)
+			if selectedJobID == 0 {
+				return actionFollowLogMsg{runID: runID, err: fmt.Errorf("workflow jobs: no jobs found")}
+			}
+		}
+		log, err := client.GetJobLogsFresh(ctx, owner, repo, selectedJobID)
+		if err != nil {
+			return actionFollowLogMsg{runID: runID, jobID: selectedJobID, err: err}
+		}
+		run, err := client.GetWorkflowRun(ctx, owner, repo, runID)
+		if err != nil {
+			return actionFollowLogMsg{runID: runID, jobID: selectedJobID, err: fmt.Errorf("workflow run status: %w", err)}
+		}
+		terminal := run != nil && !actionRunIsRunning(run.GetStatus())
+		return actionFollowLogMsg{runID: runID, jobID: selectedJobID, log: log, terminal: terminal}
+	}
+}
+
+func (p *Panel) handleActionFollowLog(msg actionFollowLogMsg) (panels.Panel, tea.Cmd) {
+	if !p.actionFollowing || msg.runID != p.actionFollowRunID {
+		return p, nil
+	}
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		cmds := []tea.Cmd{p.actionFollowTickCmd()}
+		if errStr != p.actionFollowLastErr {
+			p.actionFollowLastErr = errStr
+			cmds = append(cmds, func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Follow logs: " + errStr, Level: notify.Error}
+			})
+		}
+		return p, tea.Batch(cmds...)
+	}
+	p.actionFollowLastErr = ""
+	if msg.jobID != 0 {
+		p.actionFollowJobID = msg.jobID
+	}
+	cmds := []tea.Cmd{func() tea.Msg {
+		return panels.ActionLogMsg{RunID: msg.runID, JobID: msg.jobID, Log: msg.log, Follow: true, Replace: true}
+	}}
+	if msg.terminal {
+		p.actionFollowing = false
+		p.actionFollowPaused = false
+		cmds = append(cmds, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "Action log follow stopped: job finished", Level: notify.Info}
+		})
+	} else {
+		cmds = append(cmds, p.actionFollowTickCmd())
+	}
+	return p, tea.Batch(cmds...)
 }
 
 // rerunFailedJobsCmd returns a Cmd that reruns failed jobs for a workflow run.

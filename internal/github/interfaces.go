@@ -61,6 +61,7 @@ type ActionReader interface {
 	GetWorkflowRun(ctx context.Context, owner, repo string, runID int64) (*gh.WorkflowRun, error)
 	ListWorkflowJobs(ctx context.Context, owner, repo string, runID int64) ([]*gh.WorkflowJob, error)
 	GetJobLogs(ctx context.Context, owner, repo string, jobID int64) (string, error)
+	GetJobLogsFresh(ctx context.Context, owner, repo string, jobID int64) (string, error)
 	GetWorkflowInputs(ctx context.Context, owner, repo, path, ref string) ([]WorkflowInput, error)
 }
 

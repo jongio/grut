@@ -2548,27 +2548,32 @@ func TestRenderStashEntry_VeryNarrow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type mockGHClientFull struct {
-	user            *gh.User
-	userErr         error
-	issues          []*gh.Issue
-	issuesErr       error
-	prs             []*gh.PullRequest
-	prsErr          error
-	runs            []*gh.WorkflowRun
-	runsErr         error
-	prFiles         []*gh.CommitFile
-	prFilesErr      error
-	prCommits       []*gh.RepositoryCommit
-	prCommErr       error
-	jobs            []*gh.WorkflowJob
-	jobsErr         error
-	jobLog          string
-	jobLogErr       error
-	rerunErr        error
-	cancelErr       error
-	mergeErr        error
-	addAssigneesErr error
-	getPRCalls      int
+	user             *gh.User
+	userErr          error
+	issues           []*gh.Issue
+	issuesErr        error
+	prs              []*gh.PullRequest
+	prsErr           error
+	runs             []*gh.WorkflowRun
+	run              *gh.WorkflowRun
+	runErr           error
+	runsErr          error
+	prFiles          []*gh.CommitFile
+	prFilesErr       error
+	prCommits        []*gh.RepositoryCommit
+	prCommErr        error
+	jobs             []*gh.WorkflowJob
+	jobsErr          error
+	jobLog           string
+	jobLogErr        error
+	jobLogFreshErr   error
+	jobLogCalls      int
+	jobLogFreshCalls int
+	rerunErr         error
+	cancelErr        error
+	mergeErr         error
+	addAssigneesErr  error
+	getPRCalls       int
 
 	lastIssuesOpts *gh.IssueListByRepoOptions
 	lastPRsOpts    *gh.PullRequestListOptions
@@ -2711,7 +2716,7 @@ func (m *mockGHClientFull) ListWorkflowRuns(_ context.Context, _, _ string, _ *g
 }
 
 func (m *mockGHClientFull) GetWorkflowRun(_ context.Context, _, _ string, _ int64) (*gh.WorkflowRun, error) {
-	return nil, nil
+	return m.run, m.runErr
 }
 
 func (m *mockGHClientFull) ListWorkflowJobs(_ context.Context, _, _ string, _ int64) ([]*gh.WorkflowJob, error) {
@@ -2719,6 +2724,15 @@ func (m *mockGHClientFull) ListWorkflowJobs(_ context.Context, _, _ string, _ in
 }
 
 func (m *mockGHClientFull) GetJobLogs(_ context.Context, _, _ string, _ int64) (string, error) {
+	m.jobLogCalls++
+	return m.jobLog, m.jobLogErr
+}
+
+func (m *mockGHClientFull) GetJobLogsFresh(_ context.Context, _, _ string, _ int64) (string, error) {
+	m.jobLogFreshCalls++
+	if m.jobLogFreshErr != nil {
+		return "", m.jobLogFreshErr
+	}
 	return m.jobLog, m.jobLogErr
 }
 
@@ -5470,4 +5484,110 @@ func TestGhNotifCountStr_CountsUnread(t *testing.T) {
 		{ThreadID: "c", Unread: true},
 	})
 	assert.Equal(t, "2", p.ghNotifCountStr())
+}
+
+func newFollowTestPanel(t *testing.T, ghMock *mockGHClientFull) *Panel {
+	t.Helper()
+	p := newTestGitHubPanel(t, defaultMock())
+	p.gh.client = ghMock
+	p.gh.owner = "owner"
+	p.gh.repo = "repo"
+	p.activeTab = tabActions
+	p.tabItems[tabActions] = []listItem{{kind: kindActionRun, actionRun: ghActionItem{RunID: 100, Status: statusInProgress, RunNumber: 1}}}
+	p.tabCursor[tabActions] = 0
+	return p
+}
+
+func TestActionFollowRefreshSchedulingUsesFreshLogs(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		jobs:   []*gh.WorkflowJob{{ID: gh.Ptr(int64(200)), Status: gh.Ptr(statusInProgress)}},
+		jobLog: "first log",
+		run:    &gh.WorkflowRun{Status: gh.Ptr(statusInProgress)},
+	}
+	p := newFollowTestPanel(t, ghMock)
+
+	_, cmd := p.doActionsFollowToggle()
+	require.NotNil(t, cmd)
+	assert.True(t, p.actionFollowing)
+
+	msg := p.fetchActionFollowLogCmd(p.actionFollowRunID, p.actionFollowJobID)()
+	result, ok := msg.(actionFollowLogMsg)
+	require.True(t, ok)
+	_, cmd = p.handleActionFollowLog(result)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, ghMock.jobLogFreshCalls)
+	assert.Equal(t, int64(200), p.actionFollowJobID)
+
+	_, cmd = p.Update(actionFollowTickMsg{})
+	require.NotNil(t, cmd)
+	msg = cmd()
+	_, ok = msg.(actionFollowLogMsg)
+	require.True(t, ok)
+	assert.Equal(t, 2, ghMock.jobLogFreshCalls)
+}
+
+func TestActionFollowStopsOnTerminalRun(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		jobs:   []*gh.WorkflowJob{{ID: gh.Ptr(int64(200)), Status: gh.Ptr("completed")}},
+		jobLog: "final log",
+		run:    &gh.WorkflowRun{Status: gh.Ptr("completed")},
+	}
+	p := newFollowTestPanel(t, ghMock)
+	p.actionFollowing = true
+	p.actionFollowRunID = 100
+
+	msg := p.fetchActionFollowLogCmd(100, 200)()
+	result, ok := msg.(actionFollowLogMsg)
+	require.True(t, ok)
+	assert.True(t, result.terminal)
+
+	_, cmd := p.handleActionFollowLog(result)
+	assert.False(t, p.actionFollowing)
+	assert.NotNil(t, cmd)
+
+	_, cmd = p.Update(actionFollowTickMsg{})
+	assert.Nil(t, cmd)
+}
+
+func TestActionFollowErrorDisplaysToastAndRetries(t *testing.T) {
+	p := newFollowTestPanel(t, &mockGHClientFull{})
+	p.actionFollowing = true
+	p.actionFollowRunID = 100
+
+	_, cmd := p.handleActionFollowLog(actionFollowLogMsg{runID: 100, err: assert.AnError})
+	require.NotNil(t, cmd)
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok)
+
+	var foundToast bool
+	for _, batchedCmd := range batch {
+		if batchedCmd == nil {
+			continue
+		}
+		toast, ok := batchedCmd().(notify.ShowToastMsg)
+		if ok {
+			foundToast = true
+			assert.Equal(t, notify.Error, toast.Level)
+			assert.Contains(t, toast.Message, "Follow logs:")
+		}
+	}
+	assert.True(t, foundToast, "expected error toast in follow error batch")
+	assert.True(t, p.actionFollowing)
+}
+
+func TestActionFollowPausedSkipsFetch(t *testing.T) {
+	ghMock := &mockGHClientFull{
+		jobs:   []*gh.WorkflowJob{{ID: gh.Ptr(int64(200)), Status: gh.Ptr(statusInProgress)}},
+		jobLog: "log",
+		run:    &gh.WorkflowRun{Status: gh.Ptr(statusInProgress)},
+	}
+	p := newFollowTestPanel(t, ghMock)
+	p.actionFollowing = true
+	p.actionFollowPaused = true
+	p.actionFollowRunID = 100
+	p.actionFollowJobID = 200
+
+	_, cmd := p.Update(actionFollowTickMsg{})
+	assert.NotNil(t, cmd)
+	assert.Zero(t, ghMock.jobLogFreshCalls)
 }
