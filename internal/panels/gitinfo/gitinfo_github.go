@@ -128,6 +128,18 @@ type prDetailsLoadedMsg struct {
 	number  int
 }
 
+type releaseCompareLoadedMsg struct {
+	err       error
+	files     []panels.PRFile
+	commits   []panels.PRCommit
+	baseTag   string
+	headTag   string
+	summary   string
+	fileCount int
+	additions int
+	deletions int
+}
+
 // actionJobsLoadedMsg carries asynchronously-fetched jobs for a workflow run.
 type actionJobsLoadedMsg struct {
 	err   error
@@ -184,6 +196,14 @@ type commentResultMsg struct {
 	number int
 	kind   string
 	err    error
+}
+
+// prReviewCommentResultMsg carries the result of a diff review comment or its
+// plain PR comment fallback.
+type prReviewCommentResultMsg struct {
+	err      error
+	number   int
+	fallback bool
 }
 
 // prRequestReviewersResultMsg carries the result of a request-reviewers operation.
@@ -1491,6 +1511,13 @@ func (p *Panel) applyIssueFilter() {
 	}
 	p.tabCursor[tabIssues] = 0
 	p.tabOffset[tabIssues] = 0
+	p.reapplyActiveGitHubFilter(tabIssues)
+}
+
+func (p *Panel) reapplyActiveGitHubFilter(tab tabID) {
+	if p.activeTab == tab && isGitHubFilterTab(tab) && p.filterQuery != "" {
+		p.applyFilter()
+	}
 }
 
 func (p *Panel) matchesIssueFilter(iss ghIssueItem) bool {
@@ -1579,6 +1606,17 @@ func (p *Panel) handleIssueCreateResult(msg issueCreateResultMsg) (panels.Panel,
 // selectIssueByNumber moves the Issues-tab cursor to the issue with the given
 // number, if present in the current filtered view. Returns true when found.
 func (p *Panel) selectIssueByNumber(number int) bool {
+	if p.activeTab == tabIssues && p.filteredIdx != nil {
+		for i := range p.activeItemCount() {
+			item, ok := p.activeItemAt(i)
+			if ok && item.kind == kindIssue && item.issue.Number == number {
+				p.tabCursor[tabIssues] = i
+				p.ensureCursorVisible()
+				return true
+			}
+		}
+		return false
+	}
 	for i, item := range p.tabItems[tabIssues] {
 		if item.kind == kindIssue && item.issue.Number == number {
 			p.tabCursor[tabIssues] = i
@@ -1601,6 +1639,7 @@ func (p *Panel) applyPRFilter() {
 	}
 	p.tabCursor[tabPRs] = 0
 	p.tabOffset[tabPRs] = 0
+	p.reapplyActiveGitHubFilter(tabPRs)
 }
 
 func (p *Panel) matchesPRFilter(pr ghPRItem) bool {
@@ -1751,6 +1790,169 @@ func (p *Panel) handlePRDetailsLoaded(msg prDetailsLoadedMsg) (panels.Panel, tea
 	return p, tea.Batch(
 		func() tea.Msg { return panels.PRFilesLoadedMsg{Number: number, Files: files} },
 		func() tea.Msg { return panels.PRCommitsLoadedMsg{Number: number, Commits: commits} },
+	)
+}
+
+func releaseCompareTags(items []listItem, cursor int) (string, string, bool) {
+	if cursor < 0 || cursor >= len(items) || items[cursor].kind != kindRelease {
+		return "", "", false
+	}
+	head := items[cursor].release.TagName
+	if head == "" {
+		return "", "", false
+	}
+	for i := cursor + 1; i < len(items); i++ {
+		if items[i].kind != kindRelease {
+			continue
+		}
+		base := items[i].release.TagName
+		if base == "" {
+			return "", "", false
+		}
+		return base, head, true
+	}
+	return "", "", false
+}
+
+func (p *Panel) compareRelease() (panels.Panel, tea.Cmd) {
+	base, head, ok := releaseCompareTags(p.tabItems[tabReleases], p.tabCursor[tabReleases])
+	if !ok {
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "No previous release to compare", Level: notify.Info}
+		}
+	}
+	return p, p.loadReleaseCompare(base, head)
+}
+
+func (p *Panel) loadReleaseCompare(base, head string) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return nil
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		comparison, err := client.CompareCommits(ctx, owner, repo, base, head)
+		if err != nil {
+			return releaseCompareLoadedMsg{err: fmt.Errorf("release compare: %w", err), baseTag: base, headTag: head}
+		}
+		return buildReleaseCompareLoadedMsg(base, head, comparison)
+	}
+}
+
+func buildReleaseCompareLoadedMsg(base, head string, comparison *gh.CommitsComparison) releaseCompareLoadedMsg {
+	result := releaseCompareLoadedMsg{baseTag: base, headTag: head}
+	if comparison == nil {
+		result.summary = formatReleaseCompareSummary(base, head, 0, 0, 0, 0, nil)
+		return result
+	}
+	for _, f := range comparison.Files {
+		additions := f.GetAdditions()
+		deletions := f.GetDeletions()
+		result.additions += additions
+		result.deletions += deletions
+		result.files = append(result.files, panels.PRFile{
+			Filename:  f.GetFilename(),
+			Status:    f.GetStatus(),
+			Additions: additions,
+			Deletions: deletions,
+			Patch:     f.GetPatch(),
+		})
+	}
+	result.fileCount = len(result.files)
+	for _, c := range comparison.Commits {
+		result.commits = append(result.commits, repositoryCommitToPanelCommit(c))
+	}
+	result.summary = formatReleaseCompareSummary(
+		base,
+		head,
+		comparison.GetTotalCommits(),
+		result.fileCount,
+		result.additions,
+		result.deletions,
+		result.commits,
+	)
+	return result
+}
+
+func repositoryCommitToPanelCommit(c *gh.RepositoryCommit) panels.PRCommit {
+	if c == nil {
+		return panels.PRCommit{}
+	}
+	msg := ""
+	if c.Commit != nil {
+		msg = c.Commit.GetMessage()
+	}
+	author := ""
+	if c.Author != nil {
+		author = c.Author.GetLogin()
+	} else if c.Commit != nil && c.Commit.Author != nil {
+		author = c.Commit.Author.GetName()
+	}
+	date := ""
+	if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Date != nil {
+		date = c.Commit.Author.Date.Format(time.RFC3339)
+	}
+	return panels.PRCommit{
+		SHA:     c.GetSHA(),
+		Message: msg,
+		Author:  author,
+		Date:    date,
+	}
+}
+
+func formatReleaseCompareSummary(base, head string, commitCount, fileCount, additions, deletions int, commits []panels.PRCommit) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Release compare: %s..%s\n\n", base, head)
+	fmt.Fprintf(&b, "Commits: %d\n", commitCount)
+	fmt.Fprintf(&b, "Changed files: %d\n", fileCount)
+	fmt.Fprintf(&b, "Additions: %d\n", additions)
+	fmt.Fprintf(&b, "Deletions: %d\n\n", deletions)
+	b.WriteString("Commits\n")
+	limit := min(len(commits), 20)
+	if limit == 0 {
+		b.WriteString("  No commits in this range\n")
+		return b.String()
+	}
+	for i := range limit {
+		commit := commits[i]
+		subject := commit.Message
+		if idx := strings.Index(subject, "\n"); idx > 0 {
+			subject = subject[:idx]
+		}
+		short := commit.SHA
+		if len(short) > git.ShortHashLen {
+			short = short[:git.ShortHashLen]
+		}
+		if short == "" {
+			short = stateUnknown
+		}
+		fmt.Fprintf(&b, "  %s %s\n", short, subject)
+	}
+	if len(commits) > limit {
+		fmt.Fprintf(&b, "  ...and %d more\n", len(commits)-limit)
+	}
+	return b.String()
+}
+
+func (p *Panel) handleReleaseCompareLoaded(msg releaseCompareLoadedMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "GitHub: " + errStr, Level: notify.Error}
+		}
+	}
+	title := fmt.Sprintf("Release %s..%s", msg.baseTag, msg.headTag)
+	return p, tea.Batch(
+		func() tea.Msg {
+			return panels.ReleaseComparePreviewMsg{Title: title, Content: msg.summary}
+		},
+		func() tea.Msg {
+			return panels.ReleaseCompareFilesLoadedMsg{BaseTag: msg.baseTag, HeadTag: msg.headTag, Files: msg.files}
+		},
+		func() tea.Msg {
+			return panels.ReleaseCompareCommitsLoadedMsg{BaseTag: msg.baseTag, HeadTag: msg.headTag, Commits: msg.commits}
+		},
 	)
 }
 
@@ -2511,6 +2713,74 @@ func (p *Panel) handleCommentResult(msg commentResultMsg) (panels.Panel, tea.Cmd
 	return p, tea.Batch(cmds...)
 }
 
+// postPRReviewCommentCmd posts a line-anchored review comment when line data
+// is available, otherwise it falls back to a regular PR conversation comment.
+func (p *Panel) postPRReviewCommentCmd(msg panels.PostPRReviewCommentMsg) tea.Cmd {
+	client := p.gh.client
+	if client == nil {
+		return func() tea.Msg {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("GitHub client unavailable"),
+			}
+		}
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ctx := p.ctx
+	return func() tea.Msg {
+		if !msg.HasLine {
+			err := client.CommentOnIssue(ctx, owner, repo, msg.Number, msg.Body)
+			return prReviewCommentResultMsg{number: msg.Number, fallback: true, err: err}
+		}
+		pr, err := client.GetPR(ctx, owner, repo, msg.Number)
+		if err != nil {
+			return prReviewCommentResultMsg{number: msg.Number, err: err}
+		}
+		if pr == nil {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("PR details unavailable"),
+			}
+		}
+		commitID := pr.GetHead().GetSHA()
+		if commitID == "" {
+			return prReviewCommentResultMsg{
+				number: msg.Number,
+				err:    fmt.Errorf("PR head SHA unavailable"),
+			}
+		}
+		err = client.CreateReviewComment(ctx, owner, repo, msg.Number, commitID, msg.Path, msg.Line, msg.Body)
+		return prReviewCommentResultMsg{number: msg.Number, err: err}
+	}
+}
+
+func (p *Panel) handlePRReviewCommentResult(msg prReviewCommentResultMsg) (panels.Panel, tea.Cmd) {
+	if msg.err != nil {
+		errStr := msg.err.Error()
+		return p, func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: fmt.Sprintf("Comment on PR #%d failed: %s", msg.number, errStr),
+				Level:   notify.Error,
+			}
+		}
+	}
+
+	text := fmt.Sprintf("Review comment posted on PR #%d", msg.number)
+	if msg.fallback {
+		text = fmt.Sprintf("PR comment posted on PR #%d (no line anchor)", msg.number)
+	}
+	cmds := []tea.Cmd{
+		func() tea.Msg {
+			return notify.ShowToastMsg{Message: text, Level: notify.Success}
+		},
+		func() tea.Msg { return panels.RefreshPreviewMsg{} },
+	}
+	if p.gh.client != nil {
+		cmds = append(cmds, p.loadPRDetails(msg.number))
+	}
+	return p, tea.Batch(cmds...)
+}
+
 // handlePRBranchDeleteResult processes the result of a post-merge branch deletion.
 func (p *Panel) handlePRBranchDeleteResult(msg prBranchDeleteResultMsg) (panels.Panel, tea.Cmd) {
 	if msg.remoteErr != nil && msg.localErr != nil {
@@ -2923,6 +3193,17 @@ func (p *Panel) handlePRCreateResult(msg prCreateResultMsg) (panels.Panel, tea.C
 // if it is present in the currently visible list.
 func (p *Panel) selectPRByNumber(number int) {
 	if number == 0 {
+		return
+	}
+	if p.activeTab == tabPRs && p.filteredIdx != nil {
+		for i := range p.activeItemCount() {
+			item, ok := p.activeItemAt(i)
+			if ok && item.kind == kindPR && item.pr.Number == number {
+				p.tabCursor[tabPRs] = i
+				p.ensureCursorVisible()
+				return
+			}
+		}
 		return
 	}
 	for i, item := range p.tabItems[tabPRs] {

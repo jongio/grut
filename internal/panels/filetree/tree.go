@@ -240,6 +240,7 @@ func (ft *FileTree) walkVisible(n *node) {
 		if !ft.showHidden && isHidden(child.name) {
 			inFilteredMode := (ft.filter.commitFilesMode && ft.filter.commitChanged.loaded()) ||
 				(ft.filter.prFilesMode && ft.filter.prChanged.loaded()) ||
+				(ft.filter.releaseCompareMode && ft.filter.releaseChanged.loaded()) ||
 				(ft.filter.branchFilesMode && ft.filter.branchChanged.loaded()) ||
 				(ft.filter.gitFilter && ft.gitChanged.loaded())
 			if !inFilteredMode {
@@ -267,6 +268,17 @@ func (ft *FileTree) walkVisible(n *node) {
 				}
 			} else {
 				if !ft.filter.prChanged.hasPath(child.path) {
+					continue
+				}
+			}
+		} else if ft.filter.releaseCompareMode && ft.filter.releaseChanged.loaded() {
+			// Release-compare filter: skip files/dirs not in the comparison set.
+			if child.isDir {
+				if !ft.filter.releaseChanged.hasDir(child.path) {
+					continue
+				}
+			} else {
+				if !ft.filter.releaseChanged.hasPath(child.path) {
 					continue
 				}
 			}

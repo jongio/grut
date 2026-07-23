@@ -2554,6 +2554,8 @@ type mockGHClientFull struct {
 	issuesErr        error
 	prs              []*gh.PullRequest
 	prsErr           error
+	pr               *gh.PullRequest
+	prErr            error
 	runs             []*gh.WorkflowRun
 	run              *gh.WorkflowRun
 	runErr           error
@@ -2562,6 +2564,13 @@ type mockGHClientFull struct {
 	prFilesErr       error
 	prCommits        []*gh.RepositoryCommit
 	prCommErr        error
+	comparison       *gh.CommitsComparison
+	compareErr       error
+	compareOwner     string
+	compareRepo      string
+	compareBase      string
+	compareHead      string
+	compareCalls     int
 	jobs             []*gh.WorkflowJob
 	jobsErr          error
 	jobLog           string
@@ -2599,6 +2608,15 @@ type mockGHClientFull struct {
 	commentNumber int
 	commentBody   string
 	commentErr    error
+
+	// Review-comment recording.
+	reviewCommentCalls    int
+	reviewCommentPR       int
+	reviewCommentCommitID string
+	reviewCommentPath     string
+	reviewCommentLine     int
+	reviewCommentBody     string
+	reviewCommentErr      error
 
 	// Create-PR controls.
 	createdPR   *gh.PullRequest    // returned by CreatePR when createErr is nil
@@ -2660,7 +2678,7 @@ func (m *mockGHClientFull) ListPRs(_ context.Context, _, _ string, _ *gh.PullReq
 
 func (m *mockGHClientFull) GetPR(_ context.Context, _, _ string, _ int) (*gh.PullRequest, error) {
 	m.getPRCalls++
-	return nil, nil
+	return m.pr, m.prErr
 }
 
 func (m *mockGHClientFull) GetPRFiles(_ context.Context, _, _ string, _ int) ([]*gh.CommitFile, error) {
@@ -2699,6 +2717,16 @@ func (m *mockGHClientFull) DeleteBranch(_ context.Context, _, _, _ string) error
 
 func (m *mockGHClientFull) CommentOnPR(_ context.Context, _, _ string, _ int, _, _ string, _ int) error {
 	return nil
+}
+
+func (m *mockGHClientFull) CreateReviewComment(_ context.Context, _, _ string, number int, commitID, path string, line int, body string) error {
+	m.reviewCommentCalls++
+	m.reviewCommentPR = number
+	m.reviewCommentCommitID = commitID
+	m.reviewCommentPath = path
+	m.reviewCommentLine = line
+	m.reviewCommentBody = body
+	return m.reviewCommentErr
 }
 
 func (m *mockGHClientFull) SubmitReview(_ context.Context, _, _ string, _ int, _ *gh.PullRequestReviewRequest) error {
@@ -2788,6 +2816,15 @@ func (m *mockGHClientFull) GetRelease(_ context.Context, _, _ string, _ int64) (
 
 func (m *mockGHClientFull) GetReleaseByTag(_ context.Context, _, _, _ string) (*gh.RepositoryRelease, error) {
 	return nil, nil
+}
+
+func (m *mockGHClientFull) CompareCommits(_ context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error) {
+	m.compareCalls++
+	m.compareOwner = owner
+	m.compareRepo = repo
+	m.compareBase = base
+	m.compareHead = head
+	return m.comparison, m.compareErr
 }
 
 func (m *mockGHClientFull) ListIssuesPage(_ context.Context, _, _ string, opts *gh.IssueListByRepoOptions) ([]*gh.Issue, ghclient.PageResult, error) {

@@ -443,6 +443,22 @@ func (c *clientImpl) CommentOnPR(ctx context.Context, owner, repo string, number
 	return nil
 }
 
+func (c *clientImpl) CreateReviewComment(ctx context.Context, owner, repo string, number int, commitID, path string, line int, body string) error {
+	comment := &gh.PullRequestComment{
+		Body:     gh.Ptr(body),
+		CommitID: gh.Ptr(commitID),
+		Path:     gh.Ptr(path),
+		Line:     gh.Ptr(line),
+		Side:     gh.Ptr("RIGHT"),
+	}
+	_, _, err := c.gh.PullRequests.CreateComment(ctx, owner, repo, number, comment)
+	if err != nil {
+		return fmt.Errorf("create review comment on PR #%d: %w", number, err)
+	}
+	c.cache.Invalidate(fmt.Sprintf("pr-comments:%s/%s:%d", owner, repo, number))
+	return nil
+}
+
 func (c *clientImpl) SubmitReview(ctx context.Context, owner, repo string, number int, review *gh.PullRequestReviewRequest) error {
 	_, _, err := c.gh.PullRequests.CreateReview(ctx, owner, repo, number, review)
 	if err != nil {
@@ -802,6 +818,25 @@ func (c *clientImpl) GetReleaseByTag(ctx context.Context, owner, repo, tag strin
 
 	c.cache.Set(key, release)
 	return release, nil
+}
+
+func (c *clientImpl) CompareCommits(ctx context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error) {
+	key := fmt.Sprintf("compare:%s/%s:%s...%s", owner, repo, base, head)
+	if v, ok := c.cache.Get(key); ok {
+		comparison, ok := v.(*gh.CommitsComparison)
+		if !ok {
+			return nil, fmt.Errorf("unexpected cache type for commit comparison")
+		}
+		return comparison, nil
+	}
+
+	comparison, _, err := c.gh.Repositories.CompareCommits(ctx, owner, repo, base, head, nil)
+	if err != nil {
+		return nil, fmt.Errorf("compare commits %s...%s: %w", base, head, err)
+	}
+
+	c.cache.Set(key, comparison)
+	return comparison, nil
 }
 
 // ---------------------------------------------------------------------------

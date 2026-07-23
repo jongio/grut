@@ -513,7 +513,12 @@ func (p *Panel) switchActiveTab(tab tabID) {
 }
 
 func (p *Panel) canFilterActiveTab() bool {
-	return p.mode != ModeGitHub && isGitTab(p.activeTab)
+	return (p.mode != ModeGitHub && isGitTab(p.activeTab)) ||
+		(p.mode != ModeGit && isGitHubFilterTab(p.activeTab))
+}
+
+func isGitHubFilterTab(tab tabID) bool {
+	return tab == tabIssues || tab == tabPRs
 }
 
 func (p *Panel) activeItemCount() int {
@@ -966,8 +971,12 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, p.loadData()
 	case panels.RepoChangedMsg:
 		return p.handleRepoChanged(msg)
+	case panels.PostPRReviewCommentMsg:
+		return p, p.postPRReviewCommentCmd(msg)
 	case prDetailsLoadedMsg:
 		return p.handlePRDetailsLoaded(msg)
+	case releaseCompareLoadedMsg:
+		return p.handleReleaseCompareLoaded(msg)
 	case actionJobsLoadedMsg:
 		return p.handleActionJobsLoaded(msg)
 	case actionLogLoadedMsg:
@@ -987,6 +996,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRMergeResult(msg)
 	case commentResultMsg:
 		return p.handleCommentResult(msg)
+	case prReviewCommentResultMsg:
+		return p.handlePRReviewCommentResult(msg)
 	case prBranchDeleteResultMsg:
 		return p.handlePRBranchDeleteResult(msg)
 	case prCreateResultMsg:
@@ -1185,7 +1196,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
-		{Key: "/", Description: "Filter list", Action: "filter"},
+		{Key: "/", Description: "Filter list / Issues / PRs", Action: "filter"},
 		{Key: "=", Description: "Pin/clear compare base", Action: "compare_base"},
 		{Key: "g", Description: "Go to first item", Action: actionFirst},
 		{Key: "G", Description: "Go to last item", Action: actionLast},
@@ -1205,7 +1216,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "C", Description: "Comment on issue/PR", Action: "item_comment"},
-			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue", Action: "checkout_pr_or_close_issue"},
+			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue / compare release", Action: "checkout_pr_close_issue_or_compare_release"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
 			panels.KeyBinding{Key: "V", Description: "Toggle live log follow (Actions tab)", Action: "actions_follow"},
@@ -1537,6 +1548,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doAssignSelf()
 		}
 	case "c":
+		if p.activeTab == tabReleases && p.gh.client != nil {
+			return p.compareRelease()
+		}
 		if p.activeTab == tabPRs && p.gh.client != nil {
 			return p.checkoutPR()
 		}
@@ -1654,7 +1668,13 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 				func() tea.Msg { return panels.SubmoduleDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
-		case tabWorkflows, tabReleases, tabNotifications:
+		case tabReleases:
+			p.switchActiveTab(defaultTab)
+			return p, tea.Batch(
+				func() tea.Msg { return panels.ReleaseCompareDeselectedMsg{} },
+				p.activeTabSelectionCmd(),
+			)
+		case tabWorkflows, tabNotifications:
 			p.switchActiveTab(defaultTab)
 			return p, p.activeTabSelectionCmd()
 		case tabBranches, tabTags:

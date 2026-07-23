@@ -130,26 +130,33 @@ type viewportState struct {
 // filterState holds all git/commit/PR/branch filter mode fields. These
 // control which subset of files the tree displays.
 type filterState struct {
-	commitChanged *changedFiles // commit-changed files + dirs
-	prChanged     *changedFiles // PR-changed files + dirs
-	branchChanged *changedFiles // branch-changed files + dirs
-	commitHash    string        // short hash for display
-	commitLabel   string        // e.g. "abc1234 Fix auth bug"
-	prLabel       string
-	branchName    string   // selected branch name
-	branchLabel   string   // e.g. "branch: feature/auth"
-	branchBaseRef string   // base ref for branch comparison (e.g., "main")
-	baseBranch    string   // configured default/base branch for "b" toggle
-	commitFiles   []string // relative paths from diff-tree
-	branchFiles   []string // relative paths from branch diff
-	prFiles       []panels.PRFile
-	prNumber      int
+	commitChanged  *changedFiles // commit-changed files + dirs
+	prChanged      *changedFiles // PR-changed files + dirs
+	releaseChanged *changedFiles // release comparison files + dirs
+	branchChanged  *changedFiles // branch-changed files + dirs
+	commitHash     string        // short hash for display
+	commitLabel    string        // e.g. "abc1234 Fix auth bug"
+	prLabel        string
+	releaseLabel   string
+	releaseBase    string
+	releaseHead    string
+	branchName     string   // selected branch name
+	branchLabel    string   // e.g. "branch: feature/auth"
+	branchBaseRef  string   // base ref for branch comparison (e.g., "main")
+	baseBranch     string   // configured default/base branch for "b" toggle
+	commitFiles    []string // relative paths from diff-tree
+	branchFiles    []string // relative paths from branch diff
+	prFiles        []panels.PRFile
+	prNumber       int
+	releaseFiles   []panels.PRFile
 	// Git-aware filtering state.
 	gitFilter bool // when true, only show git-changed files
 	// Commit-files mode: shows files changed by a specific commit.
 	commitFilesMode bool // when true, view shows commit-changed files
 	// PR-files mode: shows files changed in a pull request.
 	prFilesMode bool
+	// Release-compare mode: shows files changed between release tags.
+	releaseCompareMode bool
 	// Branch-files mode: shows files changed on a selected branch.
 	branchFilesMode bool
 	// Branch-diff filter: user toggled "b" to see origination diff.
@@ -492,6 +499,11 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.PRDeselectedMsg:
 		ft.exitPRFilesMode()
 		return ft, ft.emitCursorFileSelected()
+	case panels.ReleaseCompareFilesLoadedMsg:
+		return ft.handleReleaseCompareFilesLoaded(msg)
+	case panels.ReleaseCompareDeselectedMsg:
+		ft.exitReleaseCompareMode()
+		return ft, ft.emitCursorFileSelected()
 	case panels.BranchSelectedMsg:
 		return ft.handleBranchSelected(msg)
 	case panels.BranchDeselectedMsg:
@@ -592,6 +604,9 @@ func (ft *FileTree) Title() string {
 	}
 	if ft.filter.prFilesMode {
 		return "Files: " + ft.filter.prLabel
+	}
+	if ft.filter.releaseCompareMode {
+		return "Files: release " + ft.filter.releaseLabel
 	}
 	if ft.filter.gitFilter {
 		return "Files (git changed)"
@@ -696,6 +711,11 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 		ft.filter.branchBaseRef = ""
 		ft.filter.branchChanged = nil
 	}
+	if ft.filter.releaseCompareMode {
+		ft.filter.releaseCompareMode = false
+		ft.filter.releaseFiles = nil
+		ft.filter.releaseChanged = nil
+	}
 	// Save cursor position so we can restore it on exit.
 	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
@@ -753,6 +773,11 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		ft.filter.branchBaseRef = ""
 		ft.filter.branchChanged = nil
 	}
+	if ft.filter.releaseCompareMode {
+		ft.filter.releaseCompareMode = false
+		ft.filter.releaseFiles = nil
+		ft.filter.releaseChanged = nil
+	}
 	// Save cursor position so we can restore it on exit.
 	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
 		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
@@ -780,6 +805,63 @@ func (ft *FileTree) exitPRFilesMode() {
 	ft.filter.prNumber = 0
 	ft.filter.prLabel = ""
 	ft.filter.prChanged = nil
+	ft.rebuildVisible()
+	ft.restoreCursorToPath(ft.savedCursorPath)
+	ft.savedCursorPath = ""
+}
+
+// ---------------------------------------------------------------------------
+// Release-compare mode
+// ---------------------------------------------------------------------------
+
+func (ft *FileTree) handleReleaseCompareFilesLoaded(msg panels.ReleaseCompareFilesLoadedMsg) (panels.Panel, tea.Cmd) {
+	ft.filter.releaseCompareMode = true
+	ft.filter.releaseFiles = msg.Files
+	ft.filter.releaseBase = msg.BaseTag
+	ft.filter.releaseHead = msg.HeadTag
+	ft.filter.releaseLabel = fmt.Sprintf("%s..%s", msg.BaseTag, msg.HeadTag)
+	if ft.filter.commitFilesMode {
+		ft.filter.commitFilesMode = false
+		ft.filter.commitFiles = nil
+		ft.filter.commitChanged = nil
+	}
+	if ft.filter.prFilesMode {
+		ft.filter.prFilesMode = false
+		ft.filter.prFiles = nil
+		ft.filter.prChanged = nil
+	}
+	if ft.filter.branchFilesMode {
+		ft.filter.branchFilesMode = false
+		ft.filter.branchDiffFilter = false
+		ft.filter.branchFiles = nil
+		ft.filter.branchName = ""
+		ft.filter.branchLabel = ""
+		ft.filter.branchBaseRef = ""
+		ft.filter.branchChanged = nil
+	}
+	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
+		ft.savedCursorPath = ft.visible[ft.viewport.cursor].path
+	}
+	paths := make(map[string]bool, len(msg.Files))
+	for _, f := range msg.Files {
+		abs := filepath.Clean(filepath.Join(ft.rootPath, f.Filename))
+		paths[abs] = true
+	}
+	ft.filter.releaseChanged = newChangedFiles(paths, ft.rootPath)
+	ft.expandDirsInSet(ft.root, ft.filter.releaseChanged.dirs)
+	ft.rebuildVisible()
+	ft.viewport.cursor = 0
+	ft.viewport.offset = 0
+	return ft, ft.emitCursorFileSelected()
+}
+
+func (ft *FileTree) exitReleaseCompareMode() {
+	ft.filter.releaseCompareMode = false
+	ft.filter.releaseFiles = nil
+	ft.filter.releaseLabel = ""
+	ft.filter.releaseBase = ""
+	ft.filter.releaseHead = ""
+	ft.filter.releaseChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(ft.savedCursorPath)
 	ft.savedCursorPath = ""
@@ -847,6 +929,11 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 		ft.filter.prFilesMode = false
 		ft.filter.prFiles = nil
 		ft.filter.prChanged = nil
+	}
+	if ft.filter.releaseCompareMode {
+		ft.filter.releaseCompareMode = false
+		ft.filter.releaseFiles = nil
+		ft.filter.releaseChanged = nil
 	}
 	// Save cursor position so we can restore it on exit.
 	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
@@ -993,6 +1080,10 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	// In PR-files mode, Escape returns to normal tree view.
 	if ft.filter.prFilesMode && msg.String() == keyEsc {
 		ft.exitPRFilesMode()
+		return ft, ft.emitCursorFileSelected()
+	}
+	if ft.filter.releaseCompareMode && msg.String() == keyEsc {
+		ft.exitReleaseCompareMode()
 		return ft, ft.emitCursorFileSelected()
 	}
 	// In branch-files mode, Escape returns to normal tree view.
@@ -1258,6 +1349,12 @@ func (ft *FileTree) emitCursorFileSelectedAtLine(line int) tea.Cmd {
 	case ft.filter.prFilesMode:
 		dc = &panels.DiffContext{
 			Type: panels.DiffContextPR,
+		}
+	case ft.filter.releaseCompareMode && ft.filter.releaseBase != "" && ft.filter.releaseHead != "":
+		dc = &panels.DiffContext{
+			Type:    panels.DiffContextCommit,
+			CommitA: ft.filter.releaseBase,
+			CommitB: ft.filter.releaseHead,
 		}
 	case ft.filter.branchFilesMode && ft.filter.branchBaseRef != "":
 		dc = &panels.DiffContext{

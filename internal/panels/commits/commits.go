@@ -130,12 +130,14 @@ type Panel struct {
 	selectedHash    string
 	selectedSubject string
 	prLabel         string
+	releaseLabel    string
 	pendingOp       string // operation awaiting modal result
 	pendingName     string // item type name for first-use confirm
 	commits         []git.Commit
 	filteredIdx     []int
 	detailLines     []string
 	prCommits       []panels.PRCommit
+	releaseCommits  []panels.PRCommit
 	cursor          int
 	offset          int
 	// Contextual filter state.
@@ -162,10 +164,12 @@ type Panel struct {
 	detailMode bool
 	// PR-commits mode: shows commits in a pull request.
 	prCommitsMode bool
-	focused       bool
-	colors        panelColors
-	clStyles      commitrender.Styles
-	theme         *theme.Theme
+	// Release-compare mode: shows commits between release tags.
+	releaseCompareMode bool
+	focused            bool
+	colors             panelColors
+	clStyles           commitrender.Styles
+	theme              *theme.Theme
 }
 
 // Compile-time interface check.
@@ -262,6 +266,10 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handlePRCommitsLoaded(msg)
 	case panels.PRDeselectedMsg:
 		return p.exitPRCommitsMode()
+	case panels.ReleaseCompareCommitsLoadedMsg:
+		return p.handleReleaseCompareCommitsLoaded(msg)
+	case panels.ReleaseCompareDeselectedMsg:
+		return p.exitReleaseCompareMode()
 	case panels.ShowCommitDetailMsg:
 		return p.handleShowCommitDetail(msg)
 	case panels.ChangeDirectoryMsg:
@@ -334,6 +342,8 @@ func (p *Panel) Title() string {
 	switch {
 	case p.prCommitsMode:
 		base = title + ": " + p.prLabel
+	case p.releaseCompareMode:
+		base = title + ": release " + p.releaseLabel
 	case p.selectedHash != "":
 		short := p.selectedHash
 		if len(short) > git.ShortHashLen {
@@ -609,6 +619,62 @@ func (p *Panel) exitPRCommitsMode() (panels.Panel, tea.Cmd) {
 	p.selectedHash = ""
 	p.selectedSubject = ""
 	// Reload branch commits.
+	p.resetState()
+	return p, p.loadCommitsCmd(0, false)
+}
+
+func (p *Panel) handleReleaseCompareCommitsLoaded(msg panels.ReleaseCompareCommitsLoadedMsg) (panels.Panel, tea.Cmd) {
+	p.releaseCompareMode = true
+	p.releaseCommits = msg.Commits
+	p.releaseLabel = fmt.Sprintf("%s..%s", msg.BaseTag, msg.HeadTag)
+	p.prCommitsMode = false
+	p.prCommits = nil
+	p.prNumber = 0
+	p.prLabel = ""
+	p.commits = nil
+	for _, c := range msg.Commits {
+		subject := c.Message
+		if idx := strings.Index(subject, "\n"); idx > 0 {
+			subject = subject[:idx]
+		}
+		short := c.SHA
+		if len(short) > git.ShortHashLen {
+			short = short[:git.ShortHashLen]
+		}
+		var dt time.Time
+		if c.Date != "" {
+			if t, err := time.Parse(time.RFC3339, c.Date); err == nil {
+				dt = t
+			}
+		}
+		p.commits = append(p.commits, git.Commit{
+			Hash:      c.SHA,
+			ShortHash: short,
+			Author:    c.Author,
+			Date:      dt,
+			Subject:   subject,
+		})
+	}
+	p.cursor = 0
+	p.offset = 0
+	p.selectedHash = ""
+	p.selectedSubject = ""
+	p.searchMode = false
+	p.detailMode = false
+	p.loading = false
+	p.allLoaded = true
+	return p, nil
+}
+
+func (p *Panel) exitReleaseCompareMode() (panels.Panel, tea.Cmd) {
+	if !p.releaseCompareMode {
+		return p, nil
+	}
+	p.releaseCompareMode = false
+	p.releaseCommits = nil
+	p.releaseLabel = ""
+	p.selectedHash = ""
+	p.selectedSubject = ""
 	p.resetState()
 	return p, p.loadCommitsCmd(0, false)
 }
@@ -925,6 +991,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 		if p.prCommitsMode {
 			return p.exitPRCommitsMode()
+		}
+		if p.releaseCompareMode {
+			return p.exitReleaseCompareMode()
 		}
 		if p.selectedHash != "" {
 			return p.deselectCommit()

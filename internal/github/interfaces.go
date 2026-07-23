@@ -48,6 +48,7 @@ type PRWriter interface {
 	MergePR(ctx context.Context, owner, repo string, number int, msg string, opts *gh.PullRequestOptions) error
 	DeleteBranch(ctx context.Context, owner, repo, branch string) error
 	CommentOnPR(ctx context.Context, owner, repo string, number int, body string, path string, line int) error
+	CreateReviewComment(ctx context.Context, owner, repo string, number int, commitID, path string, line int, body string) error
 	SubmitReview(ctx context.Context, owner, repo string, number int, review *gh.PullRequestReviewRequest) error
 	RequestReviewers(ctx context.Context, owner, repo string, number int, reviewers []string) error
 }
@@ -79,6 +80,7 @@ type ReleaseReader interface {
 	ListReleasesPage(ctx context.Context, owner, repo string, opts *gh.ListOptions) ([]*gh.RepositoryRelease, PageResult, error)
 	GetRelease(ctx context.Context, owner, repo string, id int64) (*gh.RepositoryRelease, error)
 	GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*gh.RepositoryRelease, error)
+	CompareCommits(ctx context.Context, owner, repo, base, head string) (*gh.CommitsComparison, error)
 }
 
 // NotificationReader provides access to GitHub notifications.

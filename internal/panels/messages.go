@@ -714,6 +714,17 @@ type PRCommentAddedMsg struct {
 	ThreadID int64
 }
 
+// PostPRReviewCommentMsg requests posting a PR diff review comment. When
+// HasLine is false, handlers should fall back to a regular PR conversation
+// comment using Body.
+type PostPRReviewCommentMsg struct {
+	Body    string
+	Path    string
+	Number  int
+	Line    int
+	HasLine bool
+}
+
 // PRThreadResolvedMsg is sent when a review thread is resolved/unresolved.
 type PRThreadResolvedMsg struct {
 	Number   int
@@ -769,6 +780,29 @@ type PRCommit struct {
 	Author  string
 	Date    string
 }
+
+// ReleaseCompareFilesLoadedMsg carries files changed between two release tags.
+type ReleaseCompareFilesLoadedMsg struct {
+	Files   []PRFile
+	BaseTag string
+	HeadTag string
+}
+
+// ReleaseCompareCommitsLoadedMsg carries commits between two release tags.
+type ReleaseCompareCommitsLoadedMsg struct {
+	Commits []PRCommit
+	BaseTag string
+	HeadTag string
+}
+
+// ReleaseComparePreviewMsg carries a pre-formatted release comparison summary.
+type ReleaseComparePreviewMsg struct {
+	Title   string
+	Content string
+}
+
+// ReleaseCompareDeselectedMsg exits release comparison views.
+type ReleaseCompareDeselectedMsg struct{}
 
 // ActionRunSelectedMsg is sent when the user selects a workflow run in the Actions tab.
 // Preview pane should show job steps and logs.
