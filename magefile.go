@@ -324,6 +324,7 @@ var deadcodeAllowlist = []string{
 	"MockClient.WorktreeList",
 	"MockClient.WorktreeAdd",
 	"MockClient.WorktreeRemove",
+	"MockClient.Submodules",
 	"MockClient.StashList",
 	"MockClient.StashShow",
 	"MockClient.StashPush",
