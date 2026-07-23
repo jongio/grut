@@ -14,12 +14,10 @@ import (
 )
 
 func (p *Panel) doReflogCheckout() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[tabReflog]
-	cursor := p.tabCursor[tabReflog]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	hash := item.reflog.Hash
 	if len(hash) > 10 {
 		hash = hash[:10]

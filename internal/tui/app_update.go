@@ -80,6 +80,19 @@ func (m Model) handleBranchMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleCompareBaseMsg updates the app-level pinned compare-base indicator
+// while continuing to broadcast the message to panels.
+func (m Model) handleCompareBaseMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case panels.SetCompareBaseMsg:
+		m.compareBase = msg.Ref
+	case panels.ClearCompareBaseMsg:
+		m.compareBase = ""
+	}
+	cmd := m.engine.Update(msg)
+	return m, cmd
+}
+
 // handleNotifyMsg routes notification messages to the notify manager,
 // or to a pending app-level action for modal results.
 func (m Model) handleNotifyMsg(msg tea.Msg) (tea.Model, tea.Cmd) {

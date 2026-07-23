@@ -117,6 +117,7 @@ const (
 const (
 	actionFirst = "first"
 	actionLast  = "last"
+	keyEnter    = "enter"
 )
 
 // Default branch and remote fallbacks.

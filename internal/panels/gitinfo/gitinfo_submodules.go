@@ -11,12 +11,10 @@ import (
 )
 
 func (p *Panel) selectedSubmodule() *git.Submodule {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return nil
 	}
-	item := items[cursor]
 	if item.kind != kindSubmodule {
 		return nil
 	}

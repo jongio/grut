@@ -180,11 +180,12 @@ type FileTree struct {
 	watcher          *watcher          // filesystem watcher
 	rootPath         string
 	// Cursor path saved across async boundaries (e.g. toggleGitFilter → GitChangedFilesMsg).
-	savedCursorPath string
-	visible         []*node // flattened list of currently visible nodes
-	cfg             Config
-	colors          panelColors
-	theme           *theme.Theme
+	savedCursorPath   string
+	visible           []*node // flattened list of currently visible nodes
+	cfg               Config
+	colors            panelColors
+	theme             *theme.Theme
+	defaultBaseBranch string
 	// File operation state.
 	clip              clipboard // cut/copy clipboard
 	batchRename       batchRenameState
@@ -244,6 +245,7 @@ func (ft *FileTree) SetGitClient(gc git.StatusReader) {
 // (branch diff filter). Typically set from config.GitConfig.DefaultBranch.
 func (ft *FileTree) SetBaseBranch(branch string) {
 	ft.filter.baseBranch = branch
+	ft.defaultBaseBranch = branch
 }
 
 // handleRepoChanged replaces the git client so git-aware features (file
@@ -495,6 +497,10 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	case panels.BranchDeselectedMsg:
 		ft.exitBranchFilesMode()
 		return ft, ft.emitCursorFileSelected()
+	case panels.SetCompareBaseMsg:
+		return ft.handleSetCompareBase(msg.Ref)
+	case panels.ClearCompareBaseMsg:
+		return ft.handleClearCompareBase()
 	case branchFilesLoadedMsg:
 		return ft.handleBranchFilesLoaded(msg)
 	// CRUD actions dispatched via keymap.
@@ -805,6 +811,17 @@ func (ft *FileTree) handleBranchSelected(msg panels.BranchSelectedMsg) (panels.P
 // handleBranchFilesLoaded enters branch-files mode with the loaded file list.
 func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Panel, tea.Cmd) {
 	if msg.err != nil {
+		if ft.filter.branchDiffFilter {
+			base := msg.branch
+			ft.exitBranchFilesMode()
+			return ft, tea.Batch(
+				ft.emitCursorFileSelected(),
+				func() tea.Msg { return panels.BranchDiffFilterActiveMsg{Active: false} },
+				func() tea.Msg {
+					return notify.ShowToastMsg{Message: "Compare base " + base + " not found", Level: notify.Warn}
+				},
+			)
+		}
 		errMsg := msg.err.Error()
 		return ft, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "branch diff: " + errMsg, Level: notify.Error}
@@ -856,6 +873,25 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 		})
 	}
 	return ft, tea.Batch(cmds...)
+}
+
+func (ft *FileTree) handleSetCompareBase(ref string) (panels.Panel, tea.Cmd) {
+	if ref == "" {
+		return ft, nil
+	}
+	ft.filter.baseBranch = ref
+	if ft.filter.branchDiffFilter {
+		return ft.activateBranchDiffFilter()
+	}
+	return ft, nil
+}
+
+func (ft *FileTree) handleClearCompareBase() (panels.Panel, tea.Cmd) {
+	ft.filter.baseBranch = ft.defaultBaseBranch
+	if ft.filter.branchDiffFilter {
+		return ft.activateBranchDiffFilter()
+	}
+	return ft, nil
 }
 
 // exitBranchFilesMode restores the normal file tree view.
