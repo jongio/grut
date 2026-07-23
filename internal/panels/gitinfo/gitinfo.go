@@ -164,6 +164,7 @@ const (
 	opPRCreateBase                       // awaiting create-PR base branch
 	opPRCreateTitle                      // awaiting create-PR title
 	opPRCreateBody                       // awaiting create-PR body (optional, final step)
+	opPRCheckout                         // awaiting PR checkout target selection
 	opIssuePRComment                     // awaiting comment body for an issue or PR
 	opIssueCreateTitle                   // awaiting new issue title (step 1)
 	opIssueCreateBody                    // awaiting new issue body (step 2)
@@ -391,6 +392,7 @@ type Panel struct {
 	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp     // operation awaiting modal result
 	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
+	pendingPRCheckout ghPRItem      // PR captured for the checkout action picker
 	actionsWatchFrame int           // current animation frame index into watchFrames
 	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
@@ -1172,7 +1174,7 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 			panels.KeyBinding{Key: "R", Description: "Request reviewers (PRs tab)", Action: "pr_request_reviewers"},
 			panels.KeyBinding{Key: "A", Description: "Assign to me (Issues/PRs tab)", Action: "assign_self"},
 			panels.KeyBinding{Key: "C", Description: "Comment on issue/PR", Action: "item_comment"},
-			panels.KeyBinding{Key: "c", Description: "Close/reopen issue (Issues tab)", Action: "close_reopen_issue"},
+			panels.KeyBinding{Key: "c", Description: "Checkout PR / close-reopen issue", Action: "checkout_pr_or_close_issue"},
 			panels.KeyBinding{Key: "S", Description: "Cycle state filter (Issues/PRs tab)", Action: "cycle_state_filter"},
 			panels.KeyBinding{Key: "N", Description: "Notifications tab", Action: "tab_notifications"},
 			panels.KeyBinding{Key: "m", Description: "Merge PR / Mark notification read", Action: "notification_mark_read"},
@@ -1216,6 +1218,23 @@ func (p *Panel) handleOpResult(msg opResultMsg) (panels.Panel, tea.Cmd) {
 			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
 			func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Switched to " + name, Level: notify.Success}
+			},
+		)
+	case eventPRCheckout:
+		cmds = append(
+			cmds,
+			func() tea.Msg { return panels.BranchChangedMsg{Name: name} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Checked out PR branch: " + name, Level: notify.Success}
+			},
+		)
+	case eventPRWorktree:
+		cmds = append(
+			cmds,
+			func() tea.Msg { return panels.WorktreeChangedMsg{} },
+			func() tea.Msg { return panels.ChangeDirectoryMsg{Path: name} },
+			func() tea.Msg {
+				return notify.ShowToastMsg{Message: "Created PR worktree: " + name, Level: notify.Success}
 			},
 		)
 	case "checkout_stashed":
@@ -1477,6 +1496,9 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doAssignSelf()
 		}
 	case "c":
+		if p.activeTab == tabPRs && p.gh.client != nil {
+			return p.checkoutPR()
+		}
 		if p.activeTab == tabIssues && p.gh.client != nil {
 			return p.doCloseReopenIssue()
 		}
@@ -2564,6 +2586,7 @@ func (p *Panel) clearPending() {
 	p.pending = opNone
 	p.pendingName = ""
 	p.pendingPath = ""
+	p.pendingPRCheckout = ghPRItem{}
 	p.gh.issueDraftTitle = ""
 	p.gh.issueDraftBody = ""
 }
@@ -2574,6 +2597,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	pendingPath := p.pendingPath
 	issueTitle := p.gh.issueDraftTitle
 	issueBody := p.gh.issueDraftBody
+	prCheckout := p.pendingPRCheckout
 	p.clearPending()
 	if !msg.Accept {
 		// Abort any in-progress create-PR flow so a later run starts clean.
@@ -2586,6 +2610,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		pendingPath: pendingPath,
 		issueTitle:  issueTitle,
 		issueBody:   issueBody,
+		prCheckout:  prCheckout,
 		git:         p.git,
 		ctx:         p.ctx,
 	}
@@ -2650,6 +2675,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handlePRCreateTitle(a)
 	case opPRCreateBody:
 		return p.handlePRCreateBody(a)
+	case opPRCheckout:
+		return p.handlePRCheckout(a)
 	case opIssuePRComment:
 		return p.handleIssuePRComment(a)
 	case opIssueCreateTitle:

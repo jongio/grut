@@ -54,6 +54,12 @@ const (
 	opFetched  = "fetched"
 )
 
+// PR checkout action picker IDs.
+const (
+	actionPRCheckoutCurrent  = "current"
+	actionPRCheckoutWorktree = "worktree"
+)
+
 // Git event types used in opResultMsg.op switch cases.
 const (
 	eventBranchCreated   = "branch_created"
@@ -73,6 +79,8 @@ const (
 	eventWorktreeAdded   = "worktree_added"
 	eventWorktreeRemoved = "worktree_removed"
 	eventWorktreeSwitch  = "worktree_switch"
+	eventPRCheckout      = "pr_checkout"
+	eventPRWorktree      = "pr_worktree"
 )
 
 // Merge strategy IDs used in the PR merge action picker.

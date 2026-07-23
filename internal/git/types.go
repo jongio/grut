@@ -220,10 +220,11 @@ type PullOpts struct {
 
 // FetchOpts configures a git fetch operation.
 type FetchOpts struct {
-	Remote string
-	Prune  bool
-	Tags   bool
-	All    bool
+	Remote  string
+	Refspec string
+	Prune   bool
+	Tags    bool
+	All     bool
 }
 
 // StashOpts configures a git stash push operation.

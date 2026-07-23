@@ -25,15 +25,22 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockGitOps struct {
-	branches   []git.Branch
-	worktrees  []git.Worktree
-	remotes    []git.Remote
-	stashes    []git.StashEntry
-	tags       []git.Tag
-	submodules []git.Submodule
-	pullFunc   func(context.Context, git.PullOpts) error
-	pushFunc   func(context.Context, git.PushOpts) error
-	branchErr  error
+	branches     []git.Branch
+	worktrees    []git.Worktree
+	remotes      []git.Remote
+	stashes      []git.StashEntry
+	tags         []git.Tag
+	submodules   []git.Submodule
+	pullFunc     func(context.Context, git.PullOpts) error
+	pushFunc     func(context.Context, git.PushOpts) error
+	fetches      []git.FetchOpts
+	checkouts    []string
+	status       []git.FileStatus
+	worktreeAdds []struct {
+		path   string
+		branch string
+	}
+	branchErr error
 }
 
 type countingGitOps struct {
@@ -55,22 +62,37 @@ func (m *mockGitOps) BranchDelete(_ context.Context, _ string, _ bool) error {
 	return nil
 }
 func (m *mockGitOps) BranchRename(_ context.Context, _, _ string) error { return nil }
-func (m *mockGitOps) Checkout(_ context.Context, _ string) error        { return nil }
+func (m *mockGitOps) Checkout(_ context.Context, ref string) error {
+	m.checkouts = append(m.checkouts, ref)
+	return nil
+}
+
 func (m *mockGitOps) Status(_ context.Context) ([]git.FileStatus, error) {
-	return nil, nil
+	return m.status, nil
 }
 func (m *mockGitOps) StashPush(_ context.Context, _ git.StashOpts) error { return nil }
 func (m *mockGitOps) WorktreeList(_ context.Context) ([]git.Worktree, error) {
 	return m.worktrees, nil
 }
-func (m *mockGitOps) WorktreeAdd(_ context.Context, _, _ string) error         { return nil }
+
+func (m *mockGitOps) WorktreeAdd(_ context.Context, path, branch string) error {
+	m.worktreeAdds = append(m.worktreeAdds, struct {
+		path   string
+		branch string
+	}{path: path, branch: branch})
+	return nil
+}
 func (m *mockGitOps) WorktreeRemove(_ context.Context, _ string, _ bool) error { return nil }
 func (m *mockGitOps) RemoteList(_ context.Context) ([]git.Remote, error) {
 	return m.remotes, nil
 }
 func (m *mockGitOps) RemoteAdd(_ context.Context, _, _ string) error { return nil }
 func (m *mockGitOps) RemoteRemove(_ context.Context, _ string) error { return nil }
-func (m *mockGitOps) Fetch(_ context.Context, _ git.FetchOpts) error { return nil }
+func (m *mockGitOps) Fetch(_ context.Context, opts git.FetchOpts) error {
+	m.fetches = append(m.fetches, opts)
+	return nil
+}
+
 func (m *mockGitOps) Pull(ctx context.Context, opts git.PullOpts) error {
 	if m.pullFunc != nil {
 		return m.pullFunc(ctx, opts)

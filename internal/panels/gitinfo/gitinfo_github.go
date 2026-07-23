@@ -4,6 +4,7 @@ package gitinfo
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	gh "github.com/google/go-github/v89/github"
+	"github.com/jongio/grut/internal/git"
 	ghclient "github.com/jongio/grut/internal/github"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
@@ -35,9 +37,11 @@ type ghPRItem struct {
 	Title            string
 	State            string // "open", "closed", "merged", "draft"
 	HeadBranch       string
+	HeadRepoOwner    string
 	Author           string
 	HTMLURL          string // GitHub web URL
 	Number           int
+	IsFork           bool
 	MergeableState   string // "clean", "dirty", "unstable", "blocked", "unknown", ""
 	ActionStatus     string // matched action run status: "success", "failure", "in_progress", "queued", ""
 	ActionConclusion string // matched action run conclusion
@@ -51,6 +55,35 @@ const (
 	prStateOpen             = "open"
 	githubStaleToastMessage = "GitHub data may be stale — refresh failed"
 )
+
+func ghPRItemFromPullRequest(pr *gh.PullRequest, fallbackBaseOwner string) ghPRItem {
+	state := pr.GetState()
+	if pr.GetDraft() {
+		state = stateDraft
+	}
+	if pr.GetMerged() {
+		state = prStateMerged
+	}
+	author := ""
+	if pr.User != nil {
+		author = pr.User.GetLogin()
+	}
+	headOwner := pr.GetHead().GetRepo().GetOwner().GetLogin()
+	baseOwner := pr.GetBase().GetRepo().GetOwner().GetLogin()
+	if baseOwner == "" {
+		baseOwner = fallbackBaseOwner
+	}
+	return ghPRItem{
+		Number:        pr.GetNumber(),
+		Title:         pr.GetTitle(),
+		State:         state,
+		HeadBranch:    pr.GetHead().GetRef(),
+		HeadRepoOwner: headOwner,
+		Author:        author,
+		HTMLURL:       pr.GetHTMLURL(),
+		IsFork:        headOwner != "" && baseOwner != "" && headOwner != baseOwner,
+	}
+}
 
 // ghActionItem holds display data for a GitHub Actions workflow run.
 type ghActionItem struct {
@@ -625,25 +658,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 		} else {
 			result.prsOK = true
 			for _, pr := range prs {
-				state := pr.GetState()
-				if pr.GetDraft() {
-					state = stateDraft //nolint:goconst // inline string is more readable here
-				}
-				if pr.GetMerged() {
-					state = prStateMerged
-				}
-				author := ""
-				if pr.User != nil {
-					author = pr.User.GetLogin()
-				}
-				result.prs = append(result.prs, ghPRItem{
-					Number:     pr.GetNumber(),
-					Title:      pr.GetTitle(),
-					State:      state,
-					HeadBranch: pr.GetHead().GetRef(),
-					Author:     author,
-					HTMLURL:    pr.GetHTMLURL(),
-				})
+				result.prs = append(result.prs, ghPRItemFromPullRequest(pr, owner))
 			}
 		}
 		// Fetch action runs.
@@ -947,25 +962,7 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 		}
 		var items []ghPRItem
 		for _, ghPR := range prs {
-			state := ghPR.GetState()
-			if ghPR.GetDraft() {
-				state = stateDraft
-			}
-			if ghPR.GetMerged() {
-				state = prStateMerged
-			}
-			author := ""
-			if ghPR.User != nil {
-				author = ghPR.User.GetLogin()
-			}
-			items = append(items, ghPRItem{
-				Number:     ghPR.GetNumber(),
-				Title:      ghPR.GetTitle(),
-				State:      state,
-				HeadBranch: ghPR.GetHead().GetRef(),
-				Author:     author,
-				HTMLURL:    ghPR.GetHTMLURL(),
-			})
+			items = append(items, ghPRItemFromPullRequest(ghPR, owner))
 		}
 		return ghPRsPageMsg{prs: items, nextPage: pr.NextPage, replace: replace}
 	}
@@ -2101,6 +2098,104 @@ func (p *Panel) doMergePR() (panels.Panel, tea.Cmd) {
 	title := fmt.Sprintf("Merge PR #%d", pr.Number)
 	message := pr.Title
 	return p, notify.ShowActionPickerWithMessage(title, message, mergeActions)
+}
+
+func (p *Panel) selectedPR() (ghPRItem, bool) {
+	item, ok := p.currentItem()
+	if !ok || item.kind != kindPR {
+		return ghPRItem{}, false
+	}
+	return item.pr, true
+}
+
+func (p *Panel) checkoutPR() (panels.Panel, tea.Cmd) {
+	pr, ok := p.selectedPR()
+	if !ok {
+		return p, nil
+	}
+	p.clearPending()
+	p.pending = opPRCheckout
+	p.pendingPRCheckout = pr
+
+	actions := []notify.ActionOption{
+		{ID: actionPRCheckoutCurrent, Label: "Current worktree"},
+		{ID: actionPRCheckoutWorktree, Label: "Sibling worktree"},
+	}
+	title := fmt.Sprintf("Check out PR #%d", pr.Number)
+	message := fmt.Sprintf("%s\nBranch: %s", pr.Title, prCheckoutBranch(pr))
+	return p, notify.ShowActionPickerWithMessage(title, message, actions)
+}
+
+func prCheckoutBranch(pr ghPRItem) string {
+	if pr.IsFork {
+		return fmt.Sprintf("pr-%d", pr.Number)
+	}
+	return pr.HeadBranch
+}
+
+func prFetchRefspec(pr ghPRItem) string {
+	return fmt.Sprintf("pull/%d/head:%s", pr.Number, prCheckoutBranch(pr))
+}
+
+func prWorktreePath(repoRoot string, number int) string {
+	parent := filepath.Dir(repoRoot)
+	repoName := filepath.Base(repoRoot)
+	return filepath.Join(parent, fmt.Sprintf("%s-pr-%d", repoName, number))
+}
+
+func (p *Panel) handlePRCheckout(a modalArgs) (panels.Panel, tea.Cmd) {
+	pr := a.prCheckout
+	branch := prCheckoutBranch(pr)
+	switch a.msg.Value {
+	case actionPRCheckoutCurrent:
+		return p, p.prCheckoutCurrentCmd(pr, branch)
+	case actionPRCheckoutWorktree:
+		path := prWorktreePath(p.repoRoot, pr.Number)
+		return p, p.prCheckoutWorktreeCmd(pr, branch, path)
+	default:
+		return p, nil
+	}
+}
+
+func (p *Panel) prCheckoutCurrentCmd(pr ghPRItem, branch string) tea.Cmd {
+	g, ctx := p.git, p.ctx
+	refspec := prFetchRefspec(pr)
+	return func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic during PR checkout", "number", pr.Number, "panic", r)
+			}
+		}()
+		files, err := g.Status(ctx)
+		if err != nil {
+			return opResultMsg{op: eventPRCheckout, name: branch, err: err}
+		}
+		if len(files) > 0 {
+			return opResultMsg{op: eventPRCheckout, name: branch, err: fmt.Errorf("dirty worktree; choose sibling worktree checkout")}
+		}
+		if err := g.Fetch(ctx, git.FetchOpts{Remote: remoteOrigin, Refspec: refspec}); err != nil {
+			return opResultMsg{op: eventPRCheckout, name: branch, err: err}
+		}
+		err = g.Checkout(ctx, branch)
+		return opResultMsg{op: eventPRCheckout, name: branch, err: err}
+	}
+}
+
+func (p *Panel) prCheckoutWorktreeCmd(pr ghPRItem, branch, path string) tea.Cmd {
+	g, ctx := p.git, p.ctx
+	refspec := prFetchRefspec(pr)
+	return func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic during PR worktree checkout", "number", pr.Number, "path", path, "panic", r)
+			}
+		}()
+		if err := g.Fetch(ctx, git.FetchOpts{Remote: remoteOrigin, Refspec: refspec}); err != nil {
+			return opResultMsg{op: eventPRWorktree, name: path, err: err}
+		}
+		err := g.WorktreeAdd(ctx, path, branch)
+		return opResultMsg{op: eventPRWorktree, name: path, err: err}
+	}
 }
 
 // mergePRCmd returns a tea.Cmd that executes the merge asynchronously.

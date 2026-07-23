@@ -91,6 +91,12 @@ func (c *Client) Fetch(ctx context.Context, opts FetchOpts) error {
 		}
 		args = append(args, opts.Remote)
 	}
+	if opts.Refspec != "" {
+		if err := ValidateRefspec(opts.Refspec); err != nil {
+			return fmt.Errorf("fetch refspec: %w", err)
+		}
+		args = append(args, opts.Refspec)
+	}
 
 	_, err := c.run(ctx, args...)
 	if err != nil {
