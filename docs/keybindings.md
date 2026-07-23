@@ -124,6 +124,7 @@ Git Info panel (panel 2).
 | `o` | Open in browser |
 | `y` | Copy to clipboard |
 | `f` | Fetch / filter |
+| `/` | Filter list |
 | `p` | Pull selected branch |
 | `B` | Pull selected branch with rebase |
 | `P` | Push selected branch (Branches tab) / Push tag (Tags tab) |

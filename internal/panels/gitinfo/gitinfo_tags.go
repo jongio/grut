@@ -17,12 +17,11 @@ import (
 // ---------------------------------------------------------------------------
 // copyHashToClipboard copies the hash of the item under cursor to clipboard.
 func (p *Panel) copyHashToClipboard() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	hash := items[cursor].hash
+	hash := item.hash
 	if hash == "" {
 		return p, nil
 	}
@@ -39,12 +38,10 @@ func (p *Panel) copyHashToClipboard() (panels.Panel, tea.Cmd) {
 
 // doTagPush prompts for push confirmation and pushes the tag under the cursor.
 func (p *Panel) doTagPush() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	if item.kind != kindTag && item.kind != kindRemoteTag {
 		return p, nil
 	}
@@ -58,12 +55,10 @@ func (p *Panel) doTagPush() (panels.Panel, tea.Cmd) {
 
 // doTagDelete prompts for delete confirmation and deletes the tag under the cursor.
 func (p *Panel) doTagDelete() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	if item.kind == kindRemoteTag {
 		return p, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot delete remote-only tag locally", Level: notify.Warn}

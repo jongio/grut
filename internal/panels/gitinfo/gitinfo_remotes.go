@@ -12,15 +12,14 @@ import (
 
 // selectedRemote returns the remote at the cursor, or nil.
 func (p *Panel) selectedRemote() *git.Remote {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return nil
 	}
-	if items[cursor].kind != kindRemote {
+	if item.kind != kindRemote {
 		return nil
 	}
-	r := items[cursor].remote
+	r := item.remote
 	return &r
 }
 

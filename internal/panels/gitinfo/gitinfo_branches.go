@@ -16,12 +16,10 @@ import (
 
 // selectedBranch returns the branch at the cursor, or nil.
 func (p *Panel) selectedBranch() *git.Branch {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return nil
 	}
-	item := items[cursor]
 	if item.kind != kindLocalBranch && item.kind != kindRemoteBranch {
 		return nil
 	}

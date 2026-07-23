@@ -14,15 +14,14 @@ import (
 
 // selectedWorktree returns the worktree at the cursor, or nil.
 func (p *Panel) selectedWorktree() *git.Worktree {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return nil
 	}
-	if items[cursor].kind != kindWorktree {
+	if item.kind != kindWorktree {
 		return nil
 	}
-	wt := items[cursor].worktree
+	wt := item.worktree
 	return &wt
 }
 

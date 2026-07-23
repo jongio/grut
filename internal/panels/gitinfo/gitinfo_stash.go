@@ -16,15 +16,14 @@ func (p *Panel) stashSelectedCmd() tea.Cmd {
 	if p.activeTab != tabStash {
 		return nil
 	}
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return nil
 	}
-	if items[cursor].kind != kindStashEntry {
+	if item.kind != kindStashEntry {
 		return nil
 	}
-	s := items[cursor].stash
+	s := item.stash
 	idx := s.Index
 	hash := s.Hash
 	return func() tea.Msg {

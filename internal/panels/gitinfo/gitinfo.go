@@ -374,6 +374,8 @@ type Panel struct {
 	tabOffset         [tabCount]int // viewport offset per tab
 	mode              PanelMode     // which tab subset to display
 	activeTab         tabID         // currently active tab
+	filterQuery       string        // incremental filter query for the active git list tab
+	filteredIdx       []int         // indices into tabItems[activeTab]; nil = no filter
 	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
 	pending           pendingOp     // operation awaiting modal result
 	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
@@ -381,6 +383,7 @@ type Panel struct {
 	lastWidth         int           // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
+	filterMode      bool // true while the active git list filter input is focused
 	// Per-tab pagination state for lazy-loading GitHub tabs.
 	tabPaging [tabCount]tabPagination
 }
@@ -438,6 +441,7 @@ func (p *Panel) tabBarHeight() int {
 // SetActiveTab switches the active tab by name.
 // Valid names: "branches", "worktrees", "remotes", "stash", "tags", "reflog", "issues", "prs", "actions".
 func (p *Panel) SetActiveTab(name string) {
+	previous := p.activeTab
 	switch name {
 	case sectionBranches:
 		p.activeTab = tabBranches
@@ -465,6 +469,127 @@ func (p *Panel) SetActiveTab(name string) {
 		p.activeTab = tabReleases
 	case sectionNotifications:
 		p.activeTab = tabNotifications
+	}
+	if p.activeTab != previous {
+		p.clearFilter()
+	}
+}
+
+func (p *Panel) clearFilter() {
+	p.filterMode = false
+	p.filterQuery = ""
+	p.filteredIdx = nil
+	p.tabCursor[p.activeTab] = 0
+	p.tabOffset[p.activeTab] = 0
+}
+
+func (p *Panel) switchActiveTab(tab tabID) {
+	if p.activeTab == tab {
+		return
+	}
+	p.activeTab = tab
+	p.clearFilter()
+}
+
+func (p *Panel) canFilterActiveTab() bool {
+	return p.mode != ModeGitHub && isGitTab(p.activeTab)
+}
+
+func (p *Panel) activeItemCount() int {
+	if p.filteredIdx != nil {
+		return len(p.filteredIdx)
+	}
+	return len(p.tabItems[p.activeTab])
+}
+
+func (p *Panel) activeItemAt(index int) (listItem, bool) {
+	if index < 0 {
+		return listItem{}, false
+	}
+	items := p.tabItems[p.activeTab]
+	if p.filteredIdx != nil {
+		if index >= len(p.filteredIdx) {
+			return listItem{}, false
+		}
+		index = p.filteredIdx[index]
+	}
+	if index >= len(items) {
+		return listItem{}, false
+	}
+	return items[index], true
+}
+
+func (p *Panel) currentItem() (listItem, bool) {
+	return p.activeItemAt(p.tabCursor[p.activeTab])
+}
+
+func (p *Panel) filterText(item listItem) string {
+	switch item.kind {
+	case kindLocalBranch, kindRemoteBranch:
+		return item.branch.Name
+	case kindWorktree:
+		return item.worktree.Path + " " + item.worktree.Branch + " " + item.worktree.Head
+	case kindRemote:
+		return item.remote.Name + " " + item.remote.FetchURL + " " + item.remote.PushURL
+	case kindRemoteSub:
+		return item.text
+	case kindStashEntry:
+		return fmt.Sprintf("stash@{%d}: %s", item.stash.Index, item.stash.Message)
+	case kindTag, kindRemoteTag:
+		return item.tag.Name + " " + item.tag.Hash + " " + item.tag.Message + " " + item.tag.Tagger
+	case kindReflogEntry:
+		return item.reflog.Hash + " " + item.reflog.Action + " " + item.reflog.Message
+	case kindSubmodule:
+		return item.submodule.Path + " " + item.submodule.Commit + " " + item.submodule.Describe + " " + item.submodule.State()
+	case kindIssue:
+		return fmt.Sprintf("#%d %s", item.issue.Number, item.issue.Title)
+	case kindPR:
+		return fmt.Sprintf("#%d %s %s", item.pr.Number, item.pr.Title, item.pr.HeadBranch)
+	case kindActionRun:
+		return fmt.Sprintf("#%d %s %s", item.actionRun.RunNumber, item.actionRun.WorkflowName, item.actionRun.Status)
+	case kindWorkflow:
+		return item.workflow.Name
+	case kindRelease:
+		return item.release.TagName + " " + item.release.Name
+	case kindNotification:
+		return item.notif.Title + " " + item.notif.RepoFullName
+	default:
+		return ""
+	}
+}
+
+func (p *Panel) applyFilter() {
+	if p.filterQuery == "" {
+		p.filteredIdx = nil
+		p.clampActiveCursor()
+		return
+	}
+	query := strings.ToLower(p.filterQuery)
+	p.filteredIdx = p.filteredIdx[:0]
+	for i, item := range p.tabItems[p.activeTab] {
+		if strings.Contains(strings.ToLower(p.filterText(item)), query) {
+			p.filteredIdx = append(p.filteredIdx, i)
+		}
+	}
+	p.clampActiveCursor()
+}
+
+func (p *Panel) clampActiveCursor() {
+	tab := p.activeTab
+	count := p.activeItemCount()
+	if count == 0 {
+		p.tabCursor[tab] = 0
+		p.tabOffset[tab] = 0
+		return
+	}
+	if p.tabCursor[tab] >= count {
+		p.tabCursor[tab] = count - 1
+	}
+	if p.tabCursor[tab] < 0 {
+		p.tabCursor[tab] = 0
+	}
+	if p.tabOffset[tab] > p.tabCursor[tab] {
+		p.tabOffset[tab] = p.tabCursor[tab]
 	}
 }
 
@@ -865,13 +990,23 @@ func (p *Panel) View(width, height int) string {
 	tbh := p.tabBarHeight()
 	tabBar := p.renderTabBar(width)
 	contentHeight := height - tbh
+	filterBar := ""
+	if p.filterMode {
+		filterBar = p.renderFilterBar(width)
+		contentHeight--
+	}
 	if contentHeight <= 0 {
+		if filterBar != "" {
+			return tabBar + "\n" + filterBar
+		}
 		return tabBar
 	}
-	items := p.tabItems[p.activeTab]
-	if len(items) == 0 {
+	itemCount := p.activeItemCount()
+	if itemCount == 0 {
 		label := "No items"
 		switch {
+		case p.filteredIdx != nil:
+			label = "No matches"
 		case p.activeTab == tabNotifications && p.gh.notifErr != nil:
 			label = "Notifications unavailable"
 		case p.activeTab == tabNotifications && p.gh.notifLoading:
@@ -888,17 +1023,24 @@ func (p *Panel) View(width, height int) string {
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(lipgloss.Color(p.colors.Dim)).
 			Render(label)
+		if filterBar != "" {
+			return tabBar + "\n" + empty + "\n" + filterBar
+		}
 		return tabBar + "\n" + empty
 	}
 	cursor := p.tabCursor[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
 	lines := make([]string, 0, contentHeight)
 	end := offset + contentHeight
-	if end > len(items) {
-		end = len(items)
+	if end > itemCount {
+		end = itemCount
 	}
 	for i := offset; i < end; i++ {
-		lines = append(lines, p.renderLine(items[i], width, i == cursor))
+		item, ok := p.activeItemAt(i)
+		if !ok {
+			continue
+		}
+		lines = append(lines, p.renderLine(item, width, i == cursor))
 	}
 	// Loading indicator for GitHub tabs.
 	if p.activeTab >= tabIssues && p.activeTab <= tabReleases && p.tabPaging[p.activeTab].loading && len(lines) < contentHeight {
@@ -913,7 +1055,22 @@ func (p *Panel) View(width, height int) string {
 	for len(lines) < contentHeight {
 		lines = append(lines, emptyLine)
 	}
-	return tabBar + "\n" + strings.Join(lines, "\n")
+	body := tabBar + "\n" + strings.Join(lines, "\n")
+	if filterBar != "" {
+		body += "\n" + filterBar
+	}
+	return body
+}
+
+func (p *Panel) renderFilterBar(width int) string {
+	filterStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(p.colors.CursorBg)).
+		Foreground(lipgloss.Color(p.colors.Local))
+	prompt := " /" + p.filterQuery
+	if p.filterQuery != "" {
+		prompt += fmt.Sprintf("  [%d matches]", len(p.filteredIdx))
+	}
+	return filterStyle.Width(width).Render(prompt)
 }
 
 // Title implements panels.Panel, overriding BasePanel.
@@ -943,13 +1100,14 @@ func (p *Panel) KeyBindings() []panels.KeyBinding {
 		{Key: "k/↑", Description: "Move cursor up", Action: "cursor_up"},
 		{Key: "PgDn", Description: "Page down", Action: "page_down"},
 		{Key: "PgUp", Description: "Page up", Action: "page_up"},
-		{Key: "enter", Description: "Context action", Action: "action"},
+		{Key: keyEnter, Description: "Context action", Action: "action"},
 		{Key: "n", Description: "Create new item", Action: "item_create"},
 		{Key: "x", Description: "Delete / Cancel action", Action: "item_delete"},
 		{Key: "e/F2", Description: "Edit/rename item", Action: "item_edit"},
 		{Key: "o", Description: "Open in browser", Action: "item_open"},
 		{Key: "y", Description: "Copy to clipboard", Action: "item_copy"},
 		{Key: "f", Description: "Fetch / Filter", Action: "fetch_or_filter"},
+		{Key: "/", Description: "Filter list", Action: "filter"},
 		{Key: "g", Description: "Go to first item", Action: actionFirst},
 		{Key: "G", Description: "Go to last item", Action: actionLast},
 		{Key: "p", Description: "Pull branch", Action: "pull_branch"},
@@ -989,6 +1147,9 @@ func (p *Panel) handleDataLoaded(msg dataLoadedMsg) (panels.Panel, tea.Cmd) {
 		}
 	}
 	p.buildItems(msg.branches, msg.worktrees, msg.remotes, msg.stashes, msg.tags, msg.reflog, msg.submodules)
+	if p.filteredIdx != nil {
+		p.applyFilter()
+	}
 	return p, nil
 }
 
@@ -1152,12 +1313,15 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	if !p.Focused {
 		return p, nil
 	}
+	if p.filterMode {
+		return p.handleFilterKey(msg)
+	}
 	switch msg.String() {
 	case "tab":
 		tabs := p.visibleTabs()
 		for i, t := range tabs {
 			if t == p.activeTab {
-				p.activeTab = tabs[(i+1)%len(tabs)]
+				p.switchActiveTab(tabs[(i+1)%len(tabs)])
 				return p, p.activeTabSelectionCmd()
 			}
 		}
@@ -1166,20 +1330,20 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		tabs := p.visibleTabs()
 		for i, t := range tabs {
 			if t == p.activeTab {
-				p.activeTab = tabs[(i-1+len(tabs))%len(tabs)]
+				p.switchActiveTab(tabs[(i-1+len(tabs))%len(tabs)])
 				return p, p.activeTabSelectionCmd()
 			}
 		}
 		return p, nil
 	case "b":
-		p.activeTab = tabBranches
+		p.switchActiveTab(tabBranches)
 		return p, p.activeTabSelectionCmd()
 	case "w":
 		if p.mode == ModeGitHub {
-			p.activeTab = tabWorkflows
+			p.switchActiveTab(tabWorkflows)
 			return p, p.activeTabSelectionCmd()
 		}
-		p.activeTab = tabWorktrees
+		p.switchActiveTab(tabWorktrees)
 		return p, p.activeTabSelectionCmd()
 	case "r":
 		if p.activeTab == tabActions && p.gh.client != nil {
@@ -1189,7 +1353,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.doRefreshNotifications()
 		}
 		if p.mode != ModeGitHub {
-			p.activeTab = tabRemotes
+			p.switchActiveTab(tabRemotes)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "x":
@@ -1199,22 +1363,22 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.doDelete()
 	case "s":
 		if p.mode != ModeGitHub {
-			p.activeTab = tabStash
+			p.switchActiveTab(tabStash)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "t":
-		p.activeTab = tabTags
+		p.switchActiveTab(tabTags)
 		return p, p.activeTabSelectionCmd()
 	case "l":
 		if p.mode == ModeGitHub {
-			p.activeTab = tabReleases
+			p.switchActiveTab(tabReleases)
 			return p, p.activeTabSelectionCmd()
 		}
-		p.activeTab = tabReflog
+		p.switchActiveTab(tabReflog)
 		return p, p.activeTabSelectionCmd()
 	case "i":
 		if p.mode != ModeGit && p.gh.client != nil {
-			p.activeTab = tabIssues
+			p.switchActiveTab(tabIssues)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "p":
@@ -1222,12 +1386,12 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 			return p.requestPull()
 		}
 		if p.mode != ModeGit && p.gh.client != nil {
-			p.activeTab = tabPRs
+			p.switchActiveTab(tabPRs)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "a":
 		if p.mode != ModeGit && p.gh.client != nil {
-			p.activeTab = tabActions
+			p.switchActiveTab(tabActions)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "B":
@@ -1236,7 +1400,7 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		}
 	case "N":
 		if p.mode != ModeGit && p.gh.client != nil {
-			p.activeTab = tabNotifications
+			p.switchActiveTab(tabNotifications)
 			return p, p.activeTabSelectionCmd()
 		}
 	case "D":
@@ -1284,13 +1448,20 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 		return p.doOpenInBrowser()
 	case "y":
 		return p.copyHashToClipboard()
+	case "/":
+		if p.canFilterActiveTab() {
+			p.filterMode = true
+			p.filterQuery = ""
+			p.applyFilter()
+		}
+		return p, nil
 	case "j", "down":
 		p.moveCursorDown()
 		return p, tea.Batch(p.activeTabSelectionCmd(), p.loadMoreIfNeeded())
 	case "k", "up":
 		p.moveCursorUp()
 		return p, p.activeTabSelectionCmd()
-	case "enter":
+	case keyEnter:
 		if p.activeTab == tabReflog {
 			return p.doReflogCheckout()
 		}
@@ -1349,37 +1520,58 @@ func (p *Panel) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 					p.activeTabSelectionCmd(),
 				)
 			}
-			p.activeTab = defaultTab
+			p.switchActiveTab(defaultTab)
 			return p, tea.Batch(
 				func() tea.Msg { return panels.IssueDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
 		case tabPRs:
-			p.activeTab = defaultTab
+			p.switchActiveTab(defaultTab)
 			return p, tea.Batch(
 				func() tea.Msg { return panels.PRDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
 		case tabActions:
-			p.activeTab = defaultTab
+			p.switchActiveTab(defaultTab)
 			return p, tea.Batch(
 				func() tea.Msg { return panels.ActionRunDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
 		case tabSubmodules:
-			p.activeTab = defaultTab
+			p.switchActiveTab(defaultTab)
 			return p, tea.Batch(
 				func() tea.Msg { return panels.SubmoduleDeselectedMsg{} },
 				p.activeTabSelectionCmd(),
 			)
 		case tabWorkflows, tabReleases, tabNotifications:
-			p.activeTab = defaultTab
+			p.switchActiveTab(defaultTab)
 			return p, p.activeTabSelectionCmd()
 		case tabBranches, tabTags:
 			if p.mode == ModeGitHub {
-				p.activeTab = defaultTab
+				p.switchActiveTab(defaultTab)
 				return p, p.activeTabSelectionCmd()
 			}
+		}
+	}
+	return p, nil
+}
+
+func (p *Panel) handleFilterKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		p.filterMode = false
+	case "escape", "esc":
+		p.clearFilter()
+	case "backspace":
+		if len(p.filterQuery) > 0 {
+			p.filterQuery = p.filterQuery[:len(p.filterQuery)-1]
+			p.applyFilter()
+		}
+	default:
+		ch := msg.String()
+		if len(ch) == 1 && ch[0] >= ' ' {
+			p.filterQuery += ch
+			p.applyFilter()
 		}
 	}
 	return p, nil
@@ -1409,10 +1601,9 @@ func (p *Panel) handleMouseClick(msg panels.PanelMouseClickMsg) (panels.Panel, t
 		return p, p.activeTabSelectionCmd()
 	}
 	// Content area click — select the item at the clicked row.
-	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
 	idx := offset + (msg.ContentRow - tbh)
-	if idx < 0 || idx >= len(items) {
+	if idx < 0 || idx >= p.activeItemCount() {
 		return p, nil
 	}
 	p.tabCursor[p.activeTab] = idx
@@ -1433,10 +1624,9 @@ func (p *Panel) handleMouseDoubleClick(msg panels.PanelMouseDoubleClickMsg) (pan
 		return p, nil
 	}
 	// Content area double-click — move cursor then execute action.
-	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
 	idx := offset + (msg.ContentRow - tbh)
-	if idx < 0 || idx >= len(items) {
+	if idx < 0 || idx >= p.activeItemCount() {
 		return p, nil
 	}
 	p.tabCursor[p.activeTab] = idx
@@ -1450,15 +1640,17 @@ func (p *Panel) handleMouseRightClick(msg panels.PanelMouseRightClickMsg) (panel
 	if msg.ContentRow < tbh {
 		return p, nil
 	}
-	items := p.tabItems[p.activeTab]
 	offset := p.tabOffset[p.activeTab]
 	idx := offset + (msg.ContentRow - tbh)
-	if idx < 0 || idx >= len(items) {
+	if idx < 0 || idx >= p.activeItemCount() {
 		return p, nil
 	}
 	p.tabCursor[p.activeTab] = idx
 	p.ensureCursorVisible()
-	item := items[idx]
+	item, ok := p.activeItemAt(idx)
+	if !ok {
+		return p, nil
+	}
 	itemType := p.itemTypeForKind(item.kind)
 	if itemType == "" {
 		return p, nil
@@ -1567,7 +1759,7 @@ func (p *Panel) handleTabBarClick(col int) {
 		w := p.ghTabLabelWidth(t.name, t.short, t.count, useShort)
 		end := pos + w
 		if col >= pos && col < end {
-			p.activeTab = t.id
+			p.switchActiveTab(t.id)
 			return
 		}
 		if i < len(tabs)-1 {
@@ -1580,8 +1772,7 @@ func (p *Panel) handleTabBarClick(col int) {
 // Navigation
 // ---------------------------------------------------------------------------
 func (p *Panel) moveCursorDown() {
-	items := p.tabItems[p.activeTab]
-	if p.tabCursor[p.activeTab] < len(items)-1 {
+	if p.tabCursor[p.activeTab] < p.activeItemCount()-1 {
 		p.tabCursor[p.activeTab]++
 		p.ensureCursorVisible()
 	}
@@ -1600,24 +1791,23 @@ func (p *Panel) moveToFirst() {
 }
 
 func (p *Panel) moveToLast() {
-	items := p.tabItems[p.activeTab]
-	if len(items) > 0 {
-		p.tabCursor[p.activeTab] = len(items) - 1
+	count := p.activeItemCount()
+	if count > 0 {
+		p.tabCursor[p.activeTab] = count - 1
 	}
 	p.ensureCursorVisible()
 }
 
 // pageDown moves the cursor down by one page (viewport height minus tab bar).
 func (p *Panel) pageDown() {
-	tbh := p.tabBarHeight()
-	viewH := p.Height - tbh
+	viewH := p.activeViewportHeight()
 	if viewH <= 0 {
 		return
 	}
-	items := p.tabItems[p.activeTab]
 	p.tabCursor[p.activeTab] += viewH
-	if p.tabCursor[p.activeTab] >= len(items) {
-		p.tabCursor[p.activeTab] = len(items) - 1
+	count := p.activeItemCount()
+	if p.tabCursor[p.activeTab] >= count {
+		p.tabCursor[p.activeTab] = count - 1
 	}
 	if p.tabCursor[p.activeTab] < 0 {
 		p.tabCursor[p.activeTab] = 0
@@ -1627,8 +1817,7 @@ func (p *Panel) pageDown() {
 
 // pageUp moves the cursor up by one page (viewport height minus tab bar).
 func (p *Panel) pageUp() {
-	tbh := p.tabBarHeight()
-	viewH := p.Height - tbh
+	viewH := p.activeViewportHeight()
 	if viewH <= 0 {
 		return
 	}
@@ -1640,13 +1829,8 @@ func (p *Panel) pageUp() {
 }
 
 func (p *Panel) ensureCursorVisible() {
-	if p.Height <= 0 {
-		return
-	}
 	tab := p.activeTab
-	// Account for tab bar height.
-	tbh := p.tabBarHeight()
-	viewH := p.Height - tbh
+	viewH := p.activeViewportHeight()
 	if viewH <= 0 {
 		return
 	}
@@ -1656,6 +1840,17 @@ func (p *Panel) ensureCursorVisible() {
 	if p.tabCursor[tab] >= p.tabOffset[tab]+viewH {
 		p.tabOffset[tab] = p.tabCursor[tab] - viewH + 1
 	}
+}
+
+func (p *Panel) activeViewportHeight() int {
+	if p.Height <= 0 {
+		return 0
+	}
+	viewH := p.Height - p.tabBarHeight()
+	if p.filterMode {
+		viewH--
+	}
+	return viewH
 }
 
 // activeTabSelectionCmd returns the selection Cmd for the currently active tab.
@@ -1695,12 +1890,10 @@ func (p *Panel) doAction() (panels.Panel, tea.Cmd) {
 	if p.pending != opNone {
 		return p, nil
 	}
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	// Determine the item type for the action registry.
 	itemType := p.itemTypeForKind(item.kind)
 	if itemType == "" {
@@ -1846,12 +2039,10 @@ func (p *Panel) executeAction(item listItem) (panels.Panel, tea.Cmd) {
 // executeRightClickAction dispatches a right-click action based on the
 // current item kind and the selected action ID.
 func (p *Panel) executeRightClickAction(action actions.ActionID) (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:
 		switch action { //nolint:exhaustive // only relevant cases handled
@@ -2067,12 +2258,10 @@ func (p *Panel) copyAndToast(text string) (panels.Panel, tea.Cmd) {
 // copyMarkdownLink copies the selected issue or pull request to the clipboard
 // as a markdown link of the form "[#<number> <title>](<url>)".
 func (p *Panel) copyMarkdownLink() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 
 	var link string
 	switch item.kind { //nolint:exhaustive // only issues and PRs support markdown links
@@ -2163,12 +2352,10 @@ func (p *Panel) doCreate() (panels.Panel, tea.Cmd) {
 }
 
 func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:
 		b := item.branch
@@ -2214,12 +2401,10 @@ func (p *Panel) doDelete() (panels.Panel, tea.Cmd) {
 // doOpenInBrowser opens the selected item in the default browser.
 // The behaviour varies by active tab and item kind.
 func (p *Panel) doOpenInBrowser() (panels.Panel, tea.Cmd) {
-	items := p.tabItems[p.activeTab]
-	cursor := p.tabCursor[p.activeTab]
-	if cursor < 0 || cursor >= len(items) {
+	item, ok := p.currentItem()
+	if !ok {
 		return p, nil
 	}
-	item := items[cursor]
 	var url, label string
 	switch item.kind { //nolint:exhaustive // only relevant cases handled
 	case kindLocalBranch:

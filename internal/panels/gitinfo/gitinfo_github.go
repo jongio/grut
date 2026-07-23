@@ -412,7 +412,7 @@ func (p *Panel) handleGitHubTabBarClick(col int) {
 		w := p.ghTabLabelWidth(t.name, t.short, t.count, useShort)
 		end := pos + w
 		if col >= pos && col < end {
-			p.activeTab = t.id
+			p.switchActiveTab(t.id)
 			return
 		}
 		if i < len(tabs)-1 {
@@ -1329,7 +1329,7 @@ func (p *Panel) handleIssueCreateResult(msg issueCreateResultMsg) (panels.Panel,
 		}
 	}
 	// Make sure the refreshed list is visible and reset pagination for a page-1 reload.
-	p.activeTab = tabIssues
+	p.switchActiveTab(tabIssues)
 	p.gh.pendingSelectIssue = msg.number
 	p.tabPaging[tabIssues] = tabPagination{loading: true, nextPage: 1}
 	return p, tea.Batch(
