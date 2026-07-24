@@ -127,6 +127,11 @@ func summarizeCommandError(stderr string, err error) string {
 	if before, _, ok := strings.Cut(summary, "\n"); ok {
 		summary = before
 	}
+	// Redact credentials embedded in remote URLs (e.g. https://user:token@host)
+	// that git can echo in error text, so the command-log overlay never
+	// surfaces secrets. Redact before truncating so a cut cannot expose a
+	// partial credential.
+	summary = urlUserinfoRe.ReplaceAllString(summary, `${1}***@${3}`)
 	if len(summary) > 240 {
 		summary = summary[:240]
 	}

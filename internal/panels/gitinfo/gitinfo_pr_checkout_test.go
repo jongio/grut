@@ -1,16 +1,70 @@
 package gitinfo
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	gh "github.com/google/go-github/v89/github"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/notify"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGhPRItemFromPullRequestForkDetection(t *testing.T) {
+	t.Parallel()
+	repo := func(owner string) *gh.Repository {
+		return &gh.Repository{Owner: &gh.User{Login: gh.Ptr(owner)}}
+	}
+	base := &gh.PullRequestBranch{Repo: repo("acme")}
+
+	tests := []struct {
+		name       string
+		head       *gh.PullRequestBranch
+		wantIsFork bool
+	}{
+		{
+			name:       "same-repo PR reuses head branch",
+			head:       &gh.PullRequestBranch{Ref: gh.Ptr("feature"), Repo: repo("acme")},
+			wantIsFork: false,
+		},
+		{
+			name:       "cross-fork PR is a fork",
+			head:       &gh.PullRequestBranch{Ref: gh.Ptr("feature"), Repo: repo("attacker")},
+			wantIsFork: true,
+		},
+		{
+			name:       "deleted-fork PR (nil head repo) is treated as a fork",
+			head:       &gh.PullRequestBranch{Ref: gh.Ptr("main")},
+			wantIsFork: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pr := &gh.PullRequest{
+				Number: gh.Ptr(7),
+				Title:  gh.Ptr("t"),
+				State:  gh.Ptr(prStateOpen),
+				Head:   tt.head,
+				Base:   base,
+			}
+			item := ghPRItemFromPullRequest(pr, "acme")
+			assert.Equal(t, tt.wantIsFork, item.IsFork)
+			if tt.wantIsFork {
+				// Forks (and anything we cannot confirm as same-repo) must be
+				// checked out under a synthetic branch so a malicious head ref
+				// cannot clobber a local branch such as "main".
+				assert.Equal(t, fmt.Sprintf("pr-%d", item.Number), prCheckoutBranch(item))
+			} else {
+				assert.Equal(t, item.HeadBranch, prCheckoutBranch(item))
+			}
+		})
+	}
+}
 
 func testPRCheckoutPanel(t *testing.T, mock *mockGitOps, pr ghPRItem) *Panel {
 	t.Helper()

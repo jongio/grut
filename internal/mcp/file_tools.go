@@ -125,6 +125,11 @@ func registerFileTools(s *Server) {
 			if err := IsSensitivePath(resolved); err != nil {
 				return mcplib.NewToolResultErrorf("path blocked (resolved): %v", err), nil
 			}
+			// Enforce the optional allowed_write_paths narrowing policy on top
+			// of the repository jail.
+			if err := s.writePathAllowed(resolved); err != nil {
+				return mcplib.NewToolResultErrorf("path blocked by allowed_write_paths: %v", err), nil
+			}
 
 			// Ensure parent directory exists.
 			// SA-004: Validate that the parent directory is within jail

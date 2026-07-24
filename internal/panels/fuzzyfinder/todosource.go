@@ -62,6 +62,13 @@ func (ts *TodoSource) Items() []Item {
 		if len(items) >= maxTodoItems {
 			return filepath.SkipAll
 		}
+		// Do not follow symlinks. A symlink in the tree can point outside the
+		// repository root, and reading its target would leak content from an
+		// arbitrary local file (CWE-59). Skipping keeps results scoped to the
+		// tracked tree, consistent with this source's contract.
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
 		name := d.Name()
 		if name == dirGit && d.IsDir() {
 			return filepath.SkipDir

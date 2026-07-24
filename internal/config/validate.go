@@ -382,7 +382,17 @@ func appendEnumErr(errs []error, field, value string, allowed ...string) []error
 			return errs
 		}
 	}
-	return append(errs, fieldErr(field, "must be one of %v, got %q", allowed, value))
+	return append(errs, fieldErr(field, "must be one of %v, got %q", allowed, redactSecretValue(value)))
+}
+
+// redactSecretValue replaces a value that looks like an API key/token with a
+// placeholder so validation errors (surfaced by `grut doctor` and `grut
+// config`) never echo a secret a user mistakenly placed in a config field.
+func redactSecretValue(value string) string {
+	if apiKeyPatterns.MatchString(value) {
+		return "[redacted]"
+	}
+	return value
 }
 
 // appendEnumOrPathErr is like appendEnumErr but also accepts custom file paths
@@ -397,7 +407,7 @@ func appendEnumOrPathErr(errs []error, field, value string, allowed ...string) [
 		// Accept file paths but reject UNC paths.
 		return rejectUNCPath(errs, field, value)
 	}
-	return append(errs, fieldErr(field, "must be one of %v or a file path, got %q", allowed, value))
+	return append(errs, fieldErr(field, "must be one of %v or a file path, got %q", allowed, redactSecretValue(value)))
 }
 
 // apiKeyPatterns matches common API key prefixes that must never appear in

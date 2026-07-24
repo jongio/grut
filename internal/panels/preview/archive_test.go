@@ -87,6 +87,31 @@ func TestArchiveManifestSupportedTypes(t *testing.T) {
 	}
 }
 
+func TestArchiveManifestTarTruncatesEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "large.tar")
+	entries := make([]testArchiveEntry, 0, maxArchiveEntries+2)
+	for i := range maxArchiveEntries + 2 {
+		entries = append(entries, testArchiveEntry{
+			name:    fmt.Sprintf("file-%04d.txt", i),
+			content: testArchiveContent,
+			modTime: testArchiveModTime,
+		})
+	}
+	writeTestTarArchive(t, path, entries)
+
+	lines, err := archiveManifest(path)
+
+	require.NoError(t, err)
+	// The tar scanner stops at the display cap instead of counting every
+	// remaining entry, so the total is reported as "N+" and a truncation note
+	// is appended.
+	assert.Contains(t, lines, fmt.Sprintf("Entries: %d+", maxArchiveEntries))
+	assert.Equal(t, "... additional entries omitted (archive too large to list fully)", lines[len(lines)-1])
+	assert.True(t, lineContainsAll(lines, "file-0000.txt"))
+	assert.False(t, lineContainsAll(lines, fmt.Sprintf("file-%04d.txt", maxArchiveEntries+1)))
+}
+
 func TestArchiveManifestTruncatesEntries(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "large.zip")

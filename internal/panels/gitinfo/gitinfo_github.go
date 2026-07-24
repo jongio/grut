@@ -73,6 +73,13 @@ func ghPRItemFromPullRequest(pr *gh.PullRequest, fallbackBaseOwner string) ghPRI
 	if baseOwner == "" {
 		baseOwner = fallbackBaseOwner
 	}
+	// Only treat a PR as same-repo (and reuse its raw head branch name on
+	// checkout) when both owners are known and identical. A deleted-fork PR
+	// reports an empty head owner; treating it as same-repo would fetch the
+	// PR head into a local branch named after the attacker-controlled head ref
+	// (e.g. "main"), clobbering it. Anything we cannot confirm as same-repo is
+	// checked out under the synthetic "pr-N" branch instead.
+	sameRepo := headOwner != "" && baseOwner != "" && headOwner == baseOwner
 	return ghPRItem{
 		Number:        pr.GetNumber(),
 		Title:         pr.GetTitle(),
@@ -81,7 +88,7 @@ func ghPRItemFromPullRequest(pr *gh.PullRequest, fallbackBaseOwner string) ghPRI
 		HeadRepoOwner: headOwner,
 		Author:        author,
 		HTMLURL:       pr.GetHTMLURL(),
-		IsFork:        headOwner != "" && baseOwner != "" && headOwner != baseOwner,
+		IsFork:        !sameRepo,
 	}
 }
 

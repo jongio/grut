@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jongio/grut/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -146,6 +147,56 @@ func TestFileTool_WriteAbsoluteOutsideJail(t *testing.T) {
 		"content": "should not write",
 	})
 	assert.True(t, result.IsError)
+}
+
+func TestFileTool_WriteRespectsAllowedWritePaths(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "allowed"), 0o755))
+	mock := &mockGitClient{}
+	cfg := &config.Config{
+		MCP: config.MCPConfig{
+			Security: config.MCPSecurityConfig{
+				RateLimitRead:     10000,
+				RateLimitWrite:    10000,
+				AuditLog:          false,
+				AllowedWritePaths: []string{"allowed"},
+			},
+		},
+	}
+	srv, err := NewServer(mock, root, cfg)
+	require.NoError(t, err)
+
+	// A path inside an allowed subtree is writable.
+	okRes := callTool(t, srv, "file_write", map[string]any{
+		"path":    "allowed/ok.txt",
+		"content": "ok",
+	})
+	assert.False(t, okRes.IsError, resultText(t, okRes))
+	data, err := os.ReadFile(filepath.Join(root, "allowed", "ok.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "ok", string(data))
+
+	// A path inside the jail but outside every allowed entry is blocked.
+	blockedRes := callTool(t, srv, "file_write", map[string]any{
+		"path":    "other/blocked.txt",
+		"content": "no",
+	})
+	assert.True(t, blockedRes.IsError)
+	assert.Contains(t, resultText(t, blockedRes), "allowed_write_paths")
+	_, statErr := os.Stat(filepath.Join(root, "other", "blocked.txt"))
+	assert.True(t, os.IsNotExist(statErr), "blocked file must not be created")
+}
+
+func TestFileTool_WriteEmptyAllowedWritePathsAllowsAll(t *testing.T) {
+	root := t.TempDir()
+	mock := &mockGitClient{}
+	// stubConfig leaves AllowedWritePaths empty → jail is the only boundary.
+	srv := newTestServer(t, mock, root)
+	res := callTool(t, srv, "file_write", map[string]any{
+		"path":    "anywhere.txt",
+		"content": "ok",
+	})
+	assert.False(t, res.IsError, resultText(t, res))
 }
 
 func TestFileTool_WriteMissingParams(t *testing.T) {

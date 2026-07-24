@@ -159,6 +159,49 @@ func (s *Server) isCommandAllowed(name string) bool {
 	return false
 }
 
+// writePathAllowed enforces the optional mcp.security.allowed_write_paths
+// narrowing policy for filesystem writes. The repository jail is always the
+// outer boundary; this is an additional restriction that confines writes to an
+// explicit subset of the repository. An empty list means no additional
+// restriction (any in-jail path is writable). When non-empty, resolvedAbs (a
+// jail-validated, symlink-resolved absolute path) must lie within at least one
+// configured entry. Entries are interpreted relative to the repository root
+// unless absolute and have already been validated to reject traversal and UNC
+// paths (see config.Validate).
+func (s *Server) writePathAllowed(resolvedAbs string) error {
+	allowed := s.cfg.MCP.Security.AllowedWritePaths
+	if len(allowed) == 0 {
+		return nil
+	}
+	for _, entry := range allowed {
+		base := entry
+		if !filepath.IsAbs(base) {
+			base = filepath.Join(s.jail.Root(), base)
+		}
+		base = filepath.Clean(base)
+		// Resolve symlinks so the comparison happens in the same canonical
+		// namespace as resolvedAbs. Non-existent entries fall back to their
+		// cleaned form.
+		if canonical, err := filepath.EvalSymlinks(base); err == nil {
+			base = canonical
+		}
+		if pathWithin(base, resolvedAbs) {
+			return nil
+		}
+	}
+	return fmt.Errorf("path is not within any allowed_write_paths entry")
+}
+
+// pathWithin reports whether target is root itself or nested inside root.
+// Both paths are expected to be absolute and canonical.
+func pathWithin(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
 // jsonResult marshals data to JSON and returns it as a text tool result.
 func jsonResult(data any) (*mcplib.CallToolResult, error) {
 	b, err := json.Marshal(data)

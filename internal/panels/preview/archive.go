@@ -16,6 +16,13 @@ import (
 const (
 	maxArchiveEntries    = 1000
 	archiveModTimeLayout = "2006-01-02 15:04"
+	// maxArchiveScanBytes caps how many (decompressed) bytes are read while
+	// listing a tar/tar.gz table of contents. It guards against decompression
+	// bombs (a tiny gzip stream expanding to gigabytes) and archives with a
+	// pathological number of entries, both of which would otherwise make the
+	// scan consume unbounded CPU/time. Zip listings read only the central
+	// directory and are bounded separately by maxArchiveEntries.
+	maxArchiveScanBytes = 256 << 20 // 256 MiB
 )
 
 type archiveType string
@@ -38,12 +45,12 @@ func archiveManifest(path string) ([]string, error) {
 		return nil, errUnsupportedArchive
 	}
 
-	entries, omitted, err := readArchiveEntries(path, archiveType)
+	entries, omitted, truncated, err := readArchiveEntries(path, archiveType)
 	if err != nil {
 		return nil, err
 	}
 
-	return buildArchiveManifestLines(path, archiveType, entries, omitted), nil
+	return buildArchiveManifestLines(path, archiveType, entries, omitted, truncated), nil
 }
 
 func archiveErrorLines(path string, err error) []string {
@@ -69,34 +76,37 @@ func detectArchiveType(path string) (archiveType, bool) {
 	}
 }
 
-func readArchiveEntries(path string, archiveType archiveType) ([]archiveEntry, int, error) {
+func readArchiveEntries(path string, archiveType archiveType) ([]archiveEntry, int, bool, error) {
 	switch archiveType {
 	case archiveTypeZip:
-		return readZipEntries(path)
+		entries, omitted, err := readZipEntries(path)
+		return entries, omitted, false, err
 	case archiveTypeTar:
 		file, err := os.Open(path)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		defer file.Close()
 
-		return readTarEntries(file)
+		entries, truncated, err := readTarEntries(file)
+		return entries, 0, truncated, err
 	case archiveTypeTarGZ:
 		file, err := os.Open(path)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		defer file.Close()
 
 		gzipReader, err := gzip.NewReader(file)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		defer gzipReader.Close()
 
-		return readTarEntries(gzipReader)
+		entries, truncated, err := readTarEntries(gzipReader)
+		return entries, 0, truncated, err
 	default:
-		return nil, 0, errUnsupportedArchive
+		return nil, 0, false, errUnsupportedArchive
 	}
 }
 
@@ -121,10 +131,11 @@ func readZipEntries(path string) ([]archiveEntry, int, error) {
 	return entries, entryCount - limit, nil
 }
 
-func readTarEntries(reader io.Reader) ([]archiveEntry, int, error) {
-	tarReader := tar.NewReader(reader)
+func readTarEntries(reader io.Reader) ([]archiveEntry, bool, error) {
+	// Bound the number of (decompressed) bytes read so a decompression bomb or
+	// an archive with a huge number of entries cannot consume unbounded CPU.
+	tarReader := tar.NewReader(io.LimitReader(reader, maxArchiveScanBytes))
 	entries := make([]archiveEntry, 0, maxArchiveEntries)
-	omitted := 0
 
 	for {
 		header, err := tarReader.Next()
@@ -132,31 +143,42 @@ func readTarEntries(reader io.Reader) ([]archiveEntry, int, error) {
 			break
 		}
 		if err != nil {
-			return nil, 0, err
+			// A malformed archive, or one that exceeds the scan-byte budget
+			// (e.g. a decompression bomb). Show whatever was gathered so far
+			// rather than failing the whole preview, and flag it as truncated.
+			if len(entries) == 0 {
+				return nil, false, err
+			}
+			return entries, true, nil
 		}
 
 		// Include directory headers so the manifest mirrors the archive table of contents.
-		if len(entries) < maxArchiveEntries {
-			entries = append(entries, archiveEntry{
-				path:    header.Name,
-				size:    header.Size,
-				modTime: header.ModTime,
-			})
-			continue
+		if len(entries) >= maxArchiveEntries {
+			// Stop at the display cap; scanning the remainder is unnecessary
+			// and unbounded for archives with many entries.
+			return entries, true, nil
 		}
-		omitted++
+		entries = append(entries, archiveEntry{
+			path:    header.Name,
+			size:    header.Size,
+			modTime: header.ModTime,
+		})
 	}
 
-	return entries, omitted, nil
+	return entries, false, nil
 }
 
-func buildArchiveManifestLines(path string, archiveType archiveType, entries []archiveEntry, omitted int) []string {
-	totalEntries := len(entries) + omitted
+func buildArchiveManifestLines(path string, archiveType archiveType, entries []archiveEntry, omitted int, truncated bool) []string {
 	lines := make([]string, 0, len(entries)+4)
+	entriesLabel := fmt.Sprintf("%d", len(entries)+omitted)
+	if truncated {
+		// The total is unknown because scanning stopped at a safety limit.
+		entriesLabel = fmt.Sprintf("%d+", len(entries))
+	}
 	lines = append(
 		lines,
 		fmt.Sprintf("Archive: %s (%s)", filepath.Base(path), archiveType),
-		fmt.Sprintf("Entries: %d", totalEntries),
+		"Entries: "+entriesLabel,
 		"",
 		"Size       Modified          Path",
 	)
@@ -164,7 +186,10 @@ func buildArchiveManifestLines(path string, archiveType archiveType, entries []a
 	for _, entry := range entries {
 		lines = append(lines, fmt.Sprintf("%-10s %-16s  %s", formatSize(entry.size), formatArchiveModTime(entry.modTime), entry.path))
 	}
-	if omitted > 0 {
+	switch {
+	case truncated:
+		lines = append(lines, "... additional entries omitted (archive too large to list fully)")
+	case omitted > 0:
 		lines = append(lines, fmt.Sprintf("... and %d more entries", omitted))
 	}
 

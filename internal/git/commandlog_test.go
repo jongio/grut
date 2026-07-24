@@ -91,6 +91,16 @@ func TestCommandLogRecordsFailedEntry(t *testing.T) {
 	assert.Equal(t, "fatal: bad revision", entries[0].ErrSummary)
 }
 
+func TestSummarizeCommandErrorRedactsCredentials(t *testing.T) {
+	got := summarizeCommandError(
+		"fatal: unable to access 'https://user:ghp_secrettoken@github.com/o/r.git/': failed",
+		nil,
+	)
+	assert.NotContains(t, got, "ghp_secrettoken")
+	assert.NotContains(t, got, "user:")
+	assert.Contains(t, got, "https://***@github.com")
+}
+
 func TestCommandLogConcurrentRecord(t *testing.T) {
 	t.Parallel()
 	log := NewCommandLog(100)

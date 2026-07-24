@@ -313,6 +313,17 @@ func TestValidate_RejectUNCPaths(t *testing.T) {
 // rejectUNCPath unit test
 // ---------------------------------------------------------------------------
 
+func TestValidate_EnumErrorRedactsSecretValue(t *testing.T) {
+	cfg := validCfg(t)
+	cfg.AI.Provider = "sk-abcdefghijklmnopqrstuvwxyz012345"
+	err := Validate(cfg)
+	require.Error(t, err)
+	// The mistyped secret must never be echoed back in the validation error,
+	// which `grut doctor`/`grut config` print to the terminal.
+	assert.NotContains(t, err.Error(), "sk-abcdefghijklmnopqrstuvwxyz012345")
+	assert.Contains(t, err.Error(), "[redacted]")
+}
+
 func TestRejectUNCPath(t *testing.T) {
 	tests := []struct {
 		name    string
