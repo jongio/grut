@@ -15,7 +15,11 @@ import (
 	"github.com/jongio/grut/internal/terminal"
 )
 
-const shellPwshExe = "pwsh.exe"
+const (
+	shellPwshExe       = "pwsh.exe"
+	shellFlagNoProfile = "-NoProfile"
+	shellFlagCommand   = "-Command"
+)
 
 // Result describes a completed custom action run.
 type Result struct {
@@ -39,7 +43,7 @@ func shellInvocationForGOOS(goos, shell, command string) (string, []string) {
 	if goos == "windows" {
 		switch base {
 		case "powershell", "powershell.exe", "pwsh", shellPwshExe:
-			return shell, []string{"-NoProfile", "-Command", command}
+			return shell, []string{shellFlagNoProfile, shellFlagCommand, command}
 		default:
 			return shell, []string{"/c", command}
 		}
