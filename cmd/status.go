@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,6 +57,7 @@ tools can parse.`,
 		RunE: runStatus,
 	}
 	cmd.Flags().Bool("json", false, "Output the status as JSON")
+	cmd.Flags().Bool("check", false, "Exit with an error when the working tree is not clean")
 	return cmd
 }
 
@@ -87,11 +89,21 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 	asJSON, _ := cmd.Flags().GetBool("json")
 	if asJSON {
-		return writeStatusJSON(cmd.OutOrStdout(), report)
+		if err := writeStatusJSON(cmd.OutOrStdout(), report); err != nil {
+			return err
+		}
+	} else {
+		writeStatusText(cmd.OutOrStdout(), report)
 	}
-	writeStatusText(cmd.OutOrStdout(), report)
+
+	check, _ := cmd.Flags().GetBool("check")
+	if check && !report.Clean {
+		return errStatusDirty
+	}
 	return nil
 }
+
+var errStatusDirty = errors.New("working tree has changes")
 
 // buildStatusReport classifies file entries into staged, unstaged, untracked,
 // and conflicted buckets. A file may be both staged and unstaged (for example

@@ -19,6 +19,7 @@ func TestNewStatusCmd_Wiring(t *testing.T) {
 	assert.Equal(t, "status", cmd.Use)
 	assert.NotEmpty(t, cmd.Short)
 	require.NotNil(t, cmd.Flags().Lookup("json"), "--json flag should be registered")
+	require.NotNil(t, cmd.Flags().Lookup("check"), "--check flag should be registered")
 }
 
 func TestBuildStatusReport_Clean(t *testing.T) {
@@ -122,6 +123,47 @@ func TestWriteStatusJSON_RoundTrip(t *testing.T) {
 	require.Len(t, decoded.Staged, 1)
 	assert.Equal(t, "a.go", decoded.Staged[0].Path)
 	assert.Equal(t, "A", decoded.Staged[0].Status)
+}
+
+func TestRunStatus_CheckCleanRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("hi"), 0o644))
+	runGit(t, dir, "add", "tracked.txt")
+	runGit(t, dir, "commit", "-m", "initial")
+
+	t.Chdir(dir)
+	cmd := newStatusCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Flags().Set("check", "true"))
+
+	require.NoError(t, runStatus(cmd, nil))
+	assert.Contains(t, out.String(), "Working tree clean")
+}
+
+func TestRunStatus_CheckDirtyRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "loose.txt"), []byte("hi"), 0o644))
+
+	t.Chdir(dir)
+	cmd := newStatusCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Flags().Set("check", "true"))
+
+	err := runStatus(cmd, nil)
+	require.ErrorIs(t, err, errStatusDirty)
+	assert.Contains(t, out.String(), "Untracked (1):")
 }
 
 // ---------------------------------------------------------------------------
