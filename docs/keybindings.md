@@ -28,6 +28,7 @@ Always active regardless of focused panel.
 | `ctrl+g` | Git command log |
 | `,` | Settings |
 | `/` | Fuzzy finder |
+| `ctrl+shift+f` | Search repository text |
 | `:` | Command palette |
 | `~` | Change directory |
 | `T` | Find TODO/FIXME markers |

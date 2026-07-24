@@ -497,6 +497,11 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		_, cmd := m.fuzzyFinder.Update(msg)
 		return m, cmd
 	}
+	// If repo text search overlay is shown, route keys to it.
+	if m.textSearch != nil {
+		_, cmd := m.textSearch.Update(msg)
+		return m, cmd
+	}
 	// If chat footer is focused, route ALL keys to it so that
 	// typing characters (?, !, letters, Enter, etc.) are consumed
 	// by the chat's text input and do NOT leak to the parent

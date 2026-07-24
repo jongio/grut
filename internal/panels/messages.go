@@ -65,6 +65,9 @@ type RevealFileMsg struct {
 // this message has no effect (opening is handled by specific actions).
 type ToggleFuzzyFinderMsg struct{}
 
+// ToggleTextSearchMsg is sent to close the repo text search overlay.
+type ToggleTextSearchMsg struct{}
+
 // CommandSelectedMsg is sent when the user selects a command from the
 // command palette. The Action field holds the action identifier to execute
 // (e.g. "quit", "focus_next").
