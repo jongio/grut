@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -100,7 +101,13 @@ func buildGitHistory(dir string) error {
 			"GIT_COMMITTER_NAME="+name,
 			"GIT_COMMITTER_EMAIL="+email,
 		)
-		return proctree.Run(cmd)
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := proctree.Run(cmd); err != nil {
+			return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(out.String()))
+		}
+		return nil
 	}
 	alice := func(args ...string) error { return runAs("Alice Chen", "alice@example.com", args...) }
 	bob := func(args ...string) error { return runAs("Bob Kumar", "bob@example.com", args...) }
@@ -203,16 +210,35 @@ func buildGitHistory(dir string) error {
 	_ = bob("commit", "-m", "Add environment config template")
 
 	// ---- Create fix branch BEFORE the conflict commit ----
-	_ = dev("checkout", "-b", "fix/rate-limit-bypass")
-	_ = write("src/middleware/ratelimit.go", ratelimitGoFix)
-	_ = dev("add", ".")
-	_ = dev("commit", "-m", "Fix rate limit edge case")
+	// These steps establish the diverging change the conflict-resolution demo
+	// scenario relies on, so a failure here must surface rather than silently
+	// leaving the repository without the expected conflict.
+	if err := dev("checkout", "-b", "fix/rate-limit-bypass"); err != nil {
+		return fmt.Errorf("create fix branch: %w", err)
+	}
+	if err := write("src/middleware/ratelimit.go", ratelimitGoFix); err != nil {
+		return err
+	}
+	if err := dev("add", "."); err != nil {
+		return fmt.Errorf("stage fix change: %w", err)
+	}
+	if err := dev("commit", "-m", "Fix rate limit edge case"); err != nil {
+		return fmt.Errorf("commit fix change: %w", err)
+	}
 
 	// ---- Back to main: commit 16 creates the conflict ----
-	_ = dev("checkout", "main")
-	_ = write("src/middleware/ratelimit.go", ratelimitGoV2)
-	_ = carol("add", ".")
-	_ = carol("commit", "-m", "Refactor rate limiter to use in-place cleanup")
+	if err := dev("checkout", "main"); err != nil {
+		return fmt.Errorf("checkout main: %w", err)
+	}
+	if err := write("src/middleware/ratelimit.go", ratelimitGoV2); err != nil {
+		return err
+	}
+	if err := carol("add", "."); err != nil {
+		return fmt.Errorf("stage conflict change: %w", err)
+	}
+	if err := carol("commit", "-m", "Refactor rate limiter to use in-place cleanup"); err != nil {
+		return fmt.Errorf("commit conflict change: %w", err)
+	}
 
 	// ---- Tags ----
 	_ = dev("tag", "-a", "v0.1.0", "-m", "Release v0.1.0", "HEAD~15")

@@ -156,31 +156,47 @@ func writeScenarioGuide(dir string, scenario Scenario) (string, error) {
 
 func setupConflictResolutionScenario(dir string) error {
 	if err := runDemoGit(dir, "reset", "--hard"); err != nil {
-		return err
+		return fmt.Errorf("reset working tree: %w", err)
 	}
-	err := runDemoGit(dir, "merge", "fix/rate-limit-bypass")
+	mergeOut, err := demoGitOutput(dir, "merge", "fix/rate-limit-bypass")
 	if err == nil {
-		return fmt.Errorf("expected merge conflict")
+		return fmt.Errorf("expected merge conflict but merge succeeded: %s", strings.TrimSpace(mergeOut))
 	}
 	status, statusErr := demoGitOutput(dir, "status", "--porcelain")
 	if statusErr != nil {
 		return statusErr
 	}
 	if !strings.Contains(status, "UU src/middleware/ratelimit.go") {
-		return fmt.Errorf("expected ratelimit.go conflict, got status: %s", strings.TrimSpace(status))
+		return fmt.Errorf("expected ratelimit.go conflict; merge output: %q; status: %q",
+			strings.TrimSpace(mergeOut), strings.TrimSpace(status))
 	}
 	return nil
+}
+
+// demoGitEnv returns the process environment with a demo git identity so git
+// commands that create commits (e.g. a clean merge) succeed on machines and CI
+// runners that have no global user.name/user.email configured.
+func demoGitEnv() []string {
+	return append(
+		os.Environ(),
+		"GIT_AUTHOR_NAME=grut demo",
+		"GIT_AUTHOR_EMAIL=demo@grut.dev",
+		"GIT_COMMITTER_NAME=grut demo",
+		"GIT_COMMITTER_EMAIL=demo@grut.dev",
+	)
 }
 
 func runDemoGit(dir string, args ...string) error {
 	cmd := proctree.Command(context.Background(), "git", args...)
 	cmd.Dir = dir
+	cmd.Env = demoGitEnv()
 	return proctree.Run(cmd)
 }
 
 func demoGitOutput(dir string, args ...string) (string, error) {
 	cmd := proctree.Command(context.Background(), "git", args...)
 	cmd.Dir = dir
+	cmd.Env = demoGitEnv()
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
