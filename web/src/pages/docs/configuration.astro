@@ -20,7 +20,7 @@ import Screenshot from '../../components/Screenshot.astro';
   </ul>
   <p>
     If the file does not exist, grüt uses built-in defaults. You can create the
-    file manually or run <code>grut --init-config</code> to generate one with
+    file manually or run <code>grut config defaults --output ~/.config/grut/config.toml</code> to generate one with
     all defaults.
   </p>
 
@@ -35,19 +35,19 @@ show_first_run_help = true      # show help overlay on first launch</code></pre>
   <h2>[file_tree]</h2>
   <p>Controls the file explorer panel.</p>
   <pre><code>[file_tree]
-show_hidden           = false     # show dotfiles and hidden directories
+show_hidden           = true      # show dotfiles and hidden directories
 icon_mode             = "auto"    # "nerd" | "ascii" | "auto" (detect Nerd Font)
 sort_directories_first = true     # directories before files in the tree
 git_status_markers    = true      # show ●/✗/? markers next to files
-max_depth             = 0         # max tree depth (0 = unlimited)</code></pre>
+max_depth             = 20        # max tree depth (0 = unlimited)</code></pre>
 
   <h2>[preview]</h2>
   <p>Controls the file preview panel.</p>
   <pre><code>[preview]
 enabled             = true
-width               = 50          # percentage of available width (20–80)
+width               = 40          # percentage of available width (20–80)
 syntax_highlighting = true
-max_file_size       = "1MB"       # skip preview for files larger than this
+max_file_size       = 1048576     # bytes; skip preview for files larger than this
 line_numbers        = true
 word_wrap           = false</code></pre>
 
@@ -56,7 +56,7 @@ word_wrap           = false</code></pre>
   <pre><code>[git]
 refresh_method       = "fsnotify"   # "fsnotify" | "poll"
 default_branch       = "main"       # fallback when origin/HEAD is unavailable
-worktree_first       = false        # prefer worktrees over branches
+worktree_first       = true         # prefer worktrees over branches
 worktree_merge_method = "merge"     # "merge" | "rebase" | "squash"
 auto_fetch_interval  = "5m"         # auto-fetch period (0 = disabled)
 show_commit_graph    = true         # show graph lines in log view
@@ -69,13 +69,13 @@ sign_commits         = false        # GPG/SSH sign commits</code></pre>
 shell       = ""          # shell binary (empty = system default)
 scrollback  = 10000       # scrollback buffer lines
 render_fps  = 30          # terminal render frames per second
-prefix_key  = "ctrl+a"   # prefix key for terminal commands</code></pre>
+prefix_key  = "ctrl+b"   # prefix key for terminal commands</code></pre>
 
   <h2>[ai]</h2>
   <p>AI integration and context builder settings.</p>
   <pre><code>[ai]
-auto_install_deps = true          # auto-install AI tool dependencies
-context_mode      = "selection"   # "selection" | "git-diff" | "full-tree"
+auto_install_deps = false         # auto-install AI tool dependencies
+context_mode      = "manual"      # "manual" | "smart"
 token_model       = "gpt-4"      # model used for token counting</code></pre>
 
   <h2>[theme]</h2>
@@ -88,7 +88,7 @@ name = "default"   # "default" | "catppuccin" | "tokyonight" | "gruvbox"
   <p>Session persistence settings.</p>
   <pre><code>[session]
 enabled  = true
-max_age  = "30d"   # auto-delete sessions older than this</code></pre>
+max_age  = 30      # days; auto-delete sessions older than this</code></pre>
 
   <h2>[bookmarks]</h2>
   <p>Pinned directories for quick navigation.</p>

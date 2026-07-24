@@ -78,7 +78,7 @@ import Screenshot from '../../components/Screenshot.astro';
     <code>Dockerfile</code>, <code>Makefile</code>, <code>.gitignore</code>).
     If your terminal does not support Nerd Fonts, switch to ASCII mode:
   </p>
-  <pre><code>[explorer]
+  <pre><code>[file_tree]
 icon_mode = "ascii"   # Options: "nerd", "ascii", "auto" (default: "auto")</code></pre>
   <p>
     In <code>auto</code> mode, grüt attempts to detect Nerd Font support and
@@ -120,9 +120,9 @@ icon_mode = "ascii"   # Options: "nerd", "ascii", "auto" (default: "auto")</code
   </p>
 
   <h2>Configuration</h2>
-  <pre><code>[explorer]
+  <pre><code>[file_tree]
 icon_mode = "auto"              # "nerd", "ascii", or "auto"
-show_hidden = false             # Show dotfiles and hidden directories
+show_hidden = true              # Show dotfiles and hidden directories
 sort_directories_first = true   # Directories appear before files
 git_status_markers = true       # Show git status markers on files
 max_depth = 0                   # Max tree depth (0 = unlimited)

@@ -177,6 +177,38 @@ max_backups = 3                  # Max backup log files (≥ 0)
 
 ---
 
+## MCP Server Security
+
+`grut mcp` runs an MCP (Model Context Protocol) server that exposes git and file
+operations as tools for AI agents. Every file operation is confined to the
+repository root (a "path jail" that rejects `..` traversal, UNC paths, and — by
+default — symlinks). These settings tighten what the server allows.
+
+```toml
+[mcp.security]
+allowed_commands = []         # Tool allowlist; empty = all tools allowed
+require_confirmation = true   # Write tools require an explicit "_confirmed": true argument
+allowed_write_paths = []      # Restrict file_write to these repo paths; empty = anywhere in the jail
+rate_limit_read = 1000        # Max read tool calls per minute
+rate_limit_write = 100        # Max write tool calls per minute
+follow_symlinks = false       # When false, reject paths that traverse a symlink
+audit_log = true              # Record tool invocations to an audit log
+audit_log_path = ""           # Audit log file (empty = <data dir>/mcp-audit.log)
+max_agent_processes = 5       # Max concurrent agent processes
+agent_timeout = 1800          # Agent process timeout in seconds
+```
+
+`allowed_write_paths` entries are interpreted relative to the repository root
+(absolute paths are also accepted) and may not contain `..` or UNC prefixes.
+When the list is non-empty, `file_write` is refused for any path that resolves
+outside every listed location — this narrowing applies on top of the always-on
+repository jail. An empty list (the default) leaves the jail as the only
+boundary.
+
+> **Note:** `socket_auth` is reserved and not yet enforced ([#174](https://github.com/jongio/grut/issues/174)); setting it currently has no effect.
+
+---
+
 ## Example: Full Config
 
 ```toml

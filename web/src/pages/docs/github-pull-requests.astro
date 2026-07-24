@@ -23,12 +23,17 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <h2>Keybindings</h2>
   <KeybindingTable bindings={[
     { key: 'Enter', action: 'Select PR and activate triple-panel sync' },
+    { key: 'n', action: 'Create pull request' },
     { key: 'm', action: 'Merge PR (strategy picker with delete-branch option)' },
     { key: 'o', action: 'Open PR in browser' },
     { key: 'y', action: 'Copy PR URL to clipboard' },
+    { key: 'M', action: 'Copy PR as a markdown link' },
     { key: 'c', action: 'Checkout PR branch locally' },
-    { key: 'f', action: 'Filter pull requests' },
-    { key: 'R', action: 'Refresh PR list' },
+    { key: 'A', action: 'Assign PR to me' },
+    { key: 'R', action: 'Request reviewers' },
+    { key: 'C', action: 'Comment on PR' },
+    { key: 'S', action: 'Cycle state filter (open / closed / all)' },
+    { key: '/', action: 'Filter loaded PRs by title or number' },
   ]} />
 
   <h2>Merging Pull Requests</h2>
