@@ -17,6 +17,7 @@ type Theme struct {
 	Colors  Colors
 	Name    string
 	Variant string
+	Mode    Mode
 }
 
 // Colors defines every color slot used throughout the TUI.

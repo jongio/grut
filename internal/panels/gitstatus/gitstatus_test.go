@@ -700,6 +700,7 @@ func TestView_RendersContent(t *testing.T) {
 	assert.Contains(t, view, "main.go")
 	assert.Contains(t, view, "Untracked")
 	assert.Contains(t, view, "README.md")
+	assert.Contains(t, view, "▸")
 }
 
 func TestStatusCodeLabel(t *testing.T) {

@@ -135,6 +135,10 @@ func Validate(cfg *Config) error {
 		errs = append(errs, fieldErr("terminal.render_fps", "must be <= %d, got %d", maxRenderFPS, cfg.Terminal.RenderFPS))
 	}
 
+	// --- theme ---
+	errs = appendEnumErr(errs, "theme.color_mode",
+		cfg.Theme.ColorMode, "auto", "color", "mono")
+
 	// --- ai ---
 	errs = appendEnumErr(errs, "ai.context_mode",
 		cfg.AI.ContextMode, "manual", "smart")

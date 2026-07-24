@@ -134,6 +134,7 @@ token_model = "gpt-4"            # Token counting model
 ```toml
 [theme]
 name = "default"                 # "default", "catppuccin", "tokyonight", "gruvbox", or path to .toml
+color_mode = "auto"              # "auto" honors NO_COLOR, "color" forces color, "mono" forces markers-only color-safe mode
 ```
 
 Custom themes are loaded from `~/.config/grut/themes/`.

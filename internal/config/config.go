@@ -260,7 +260,8 @@ type SessionConfig struct {
 
 // ThemeConfig holds UI theme selection.
 type ThemeConfig struct {
-	Name string `toml:"name"`
+	Name      string `toml:"name"`
+	ColorMode string `toml:"color_mode"`
 }
 
 // ShortcutsConfig controls AI-powered git workflow shortcuts.

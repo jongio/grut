@@ -70,6 +70,7 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 
 	assert.False(t, cfg.Bookmarks.ShowInSidebar)
 	assert.Equal(t, "default", cfg.Theme.Name)
+	assert.Equal(t, "auto", cfg.Theme.ColorMode)
 }
 
 func TestDefaultsTOMLReturnsCopy(t *testing.T) {
@@ -164,6 +165,11 @@ func TestValidateEnumFields(t *testing.T) {
 			name:   "invalid log level",
 			mutate: func(c *Config) { c.Logging.Level = "trace" },
 			errMsg: "logging.level",
+		},
+		{
+			name:   "invalid theme color mode",
+			mutate: func(c *Config) { c.Theme.ColorMode = "sepia" },
+			errMsg: "theme.color_mode",
 		},
 	}
 

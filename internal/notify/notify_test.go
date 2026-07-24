@@ -740,9 +740,22 @@ func TestLevelColor(t *testing.T) {
 }
 
 func TestLevelIcon(t *testing.T) {
-	for _, l := range []Level{Info, Warn, Error, Success, Level(99)} {
-		icon := levelIcon(l)
-		assert.NotEmpty(t, icon, "levelIcon should return an icon for %v", l)
+	tests := []struct {
+		name string
+		l    Level
+		want string
+	}{
+		{name: "info", l: Info, want: "ℹ"},
+		{name: "warn", l: Warn, want: "⚠"},
+		{name: "error", l: Error, want: "✗"},
+		{name: "success", l: Success, want: "✓"},
+		{name: "unknown", l: Level(99), want: "•"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, levelIcon(tt.l))
+		})
 	}
 }
 
