@@ -47,11 +47,13 @@ type Model struct {
 	engine             layout.PanelManager
 	theme              *theme.Theme
 	keys               *keymap.Keymap
+	nav                navHistory
 	notify             *notify.Manager               // F27: integrated notification manager
 	bookmarkMgr        *bm.Manager                   // bookmark persistence
 	overlays           OverlayCreator                // factory for overlay panels
 	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
 	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	textSearch         panels.Panel                  // overlay repo text search (nil = hidden)
 	commandLogPanel    panels.Panel                  // overlay git command log panel (nil = hidden)
 	commandLogShown    bool                          // whether git command log overlay is visible
 	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
@@ -253,6 +255,9 @@ func (m Model) loadBranchInfo() tea.Cmd {
 // and handles global key bindings.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer crashlog.GuardTUI("tui.Update")
+	if entry, ok := navEntryFromMsg(msg); ok {
+		m.nav.record(entry)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSizeMsg(msg), nil
@@ -278,7 +283,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.ToggleBlameMsg:
 		return m.handleToggleBlame(msg)
 	case panels.ShowCommitDetailMsg:
-		m.engine.FocusByName("commits")
+		m.engine.FocusByName(panelCommits)
 		return m, m.engine.Update(msg)
 
 	// Undo / redo.
@@ -298,13 +303,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		panels.SetRightClickActionMsg, panels.ResetActionPromptsMsg:
 		return m.handleOverlayMsg(msg)
 
-	// Fuzzy finder.
-	case panels.ToggleFuzzyFinderMsg, panels.CommandSelectedMsg, panels.FileSelectedMsg:
+	// Fuzzy finder and text search.
+	case panels.ToggleFuzzyFinderMsg, panels.CommandSelectedMsg:
 		return m.handleFuzzyFinderMsg(msg)
+	case panels.ToggleTextSearchMsg, panels.FileSelectedMsg:
+		return m.handleTextSearchMsg(msg)
 
 	// Chat.
 	case panels.ChatFocusMsg, panels.ChatRefreshMsg, panels.ChatNavigateMsg:
 		return m.handleChatMsg(msg)
+	case panels.AIExplainMsg:
+		return m.handleAIExplainMsg(msg)
 	case chat.StreamChunkMsg, chat.ToolCallMsg, chat.ToolResultMsg,
 		chat.SendMessageCmd:
 		if m.chat != nil {
@@ -389,6 +398,18 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "focus_right":
 		m.engine.FocusNext()
 		return m, nil
+	case actionNavBack:
+		entry, ok := m.nav.back()
+		if !ok {
+			return m, nil
+		}
+		return m.restoreNavigation(entry)
+	case actionNavForward:
+		entry, ok := m.nav.forward()
+		if !ok {
+			return m, nil
+		}
+		return m.restoreNavigation(entry)
 	case "zoom_toggle":
 		m.engine.ToggleZoom()
 		return m, nil
@@ -414,6 +435,8 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openFuzzyFinder("files"), nil
 	case "command_palette":
 		return m.openFuzzyFinder("commands"), nil
+	case "text_search":
+		return m.openTextSearch(), nil
 	case "change_directory":
 		return m.openFuzzyFinder("directories"), nil
 	case "todo_finder":
@@ -438,16 +461,16 @@ func (m Model) handleAction(action string, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFetch()
 	// Direct panel focus (1-5 number keys).
 	case "focus_panel_1":
-		m.engine.FocusByName("filetree")
+		m.engine.FocusByName(panelFileTree)
 		return m, nil
 	case "focus_panel_2":
 		m.engine.FocusByName("gitinfo")
 		return m, nil
 	case "focus_panel_3":
-		m.engine.FocusByName("github")
+		m.engine.FocusByName(panelGitHub)
 		return m, nil
 	case "focus_panel_4":
-		m.engine.FocusByName("commits")
+		m.engine.FocusByName(panelCommits)
 		return m, nil
 	case "focus_panel_5":
 		m.engine.FocusByName("preview")
@@ -552,6 +575,21 @@ func (m Model) toggleChatFocus() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) handleAIExplainMsg(msg panels.AIExplainMsg) (tea.Model, tea.Cmd) {
+	if m.chat == nil {
+		return m, func() tea.Msg {
+			return notify.ShowToastMsg{Message: "AI chat is disabled (--no-ai)", Level: notify.Info}
+		}
+	}
+	if !m.chat.Focused() {
+		m.chat.Focus()
+		if m.keys != nil {
+			m.keys.SetMode(keymap.ModeInput)
+		}
+	}
+	return m.handleChatStreamMsg(chat.SendMessageCmd{Content: msg.Content})
 }
 
 // handleGlobalRefresh refreshes all data sources and forces preview to re-render.
@@ -984,6 +1022,26 @@ func (m Model) handleSwitchOrCreateTab(presetName string) (tea.Model, tea.Cmd) {
 	return m.handleNewTab(presetName)
 }
 
+// handleTextSearchMsg routes text search selection and dismiss messages.
+func (m Model) handleTextSearchMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case panels.ToggleTextSearchMsg:
+		m.textSearch = nil
+		return m, nil
+	case panels.FileSelectedMsg:
+		if m.textSearch == nil {
+			return m.handleFuzzyFinderMsg(msg)
+		}
+		m.textSearch = nil
+		cmd := m.engine.Update(msg)
+		return m, tea.Batch(
+			cmd,
+			func() tea.Msg { return panels.RevealFileMsg{Path: msg.Path, Line: msg.Line} },
+		)
+	}
+	return m, nil
+}
+
 // handleCloseTab closes the currently active tab.
 func (m Model) handleCloseTab() (tea.Model, tea.Cmd) {
 	if err := m.engine.CloseActiveTab(); err != nil {
@@ -1056,9 +1114,24 @@ func (m Model) openFuzzyFinder(mode string) Model {
 	return m
 }
 
+// openTextSearch creates and shows the repository text search overlay.
+func (m Model) openTextSearch() Model {
+	ts := m.overlays.NewTextSearch()
+	ts.Focus()
+	w, h := m.textSearchDims()
+	ts.SetSize(w, h)
+	m.textSearch = ts
+	return m
+}
+
 // fuzzyFinderDims returns the content dimensions for the fuzzy finder overlay.
 func (m Model) fuzzyFinderDims() (int, int) {
 	return m.overlayDims(5, 40, 3, 5, 10)
+}
+
+// textSearchDims returns the content dimensions for the text search overlay.
+func (m Model) textSearchDims() (int, int) {
+	return m.overlayDims(5, 50, 3, 5, 12)
 }
 
 // View implements tea.Model. Composes all panels and the status bar
@@ -1087,6 +1160,11 @@ func (m Model) View() tea.View {
 	if m.fuzzyFinder != nil {
 		w, h := m.fuzzyFinderDims()
 		content = m.renderOverlayBox(m.fuzzyFinder, w, h, lipgloss.NormalBorder(), m.fuzzyFinder.Title())
+	}
+	// Repo text search overlay.
+	if m.textSearch != nil {
+		w, h := m.textSearchDims()
+		content = m.renderOverlayBox(m.textSearch, w, h, lipgloss.NormalBorder(), m.textSearch.Title())
 	}
 	// Bookmarks overlay.
 	if m.bookmarksShown && m.bookmarkPanel != nil {
@@ -1735,13 +1813,13 @@ func (m Model) renderHintsBar() string {
 	// Panel-specific hints.
 	var hints []string
 	switch focusedName {
-	case "filetree":
+	case panelFileTree:
 		hints = []string{"h/l:collapse/expand", hintFind, hintHelp}
 	case "gitstatus":
 		hints = []string{"s:stage", "u:unstage", "d:discard", "c:commit", "P:push", "p:pull", "F:fetch", hintHelp}
 	case "preview":
 		hints = []string{hintScroll, hintTabFocus, hintFind, hintHelp}
-	case "branches":
+	case panelBranches:
 		hints = []string{"enter:checkout", "n:new branch", "d:delete", hintHelp}
 	case "gitlog":
 		hints = []string{"enter:details", hintScroll, "/:search", hintHelp}

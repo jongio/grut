@@ -17,6 +17,7 @@ import (
 	"github.com/jongio/grut/internal/panels/fuzzyfinder"
 	helppanel "github.com/jongio/grut/internal/panels/help"
 	settingspanel "github.com/jongio/grut/internal/panels/settings"
+	textsearchpanel "github.com/jongio/grut/internal/panels/textsearch"
 	welcomepanel "github.com/jongio/grut/internal/panels/welcome"
 	"github.com/jongio/grut/internal/theme"
 )
@@ -63,6 +64,15 @@ func (f *Factory) NewSettingsPanel(
 	actionsCfg config.ActionsConfig,
 ) panels.Panel {
 	return settingspanel.New(currentPos, currentTheme, themeNames, actionsCfg, f.theme)
+}
+
+// NewTextSearch creates a repository-wide text search overlay.
+func (f *Factory) NewTextSearch() panels.Panel {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	return textsearchpanel.New(cwd, f.theme)
 }
 
 // NewFuzzyFinder creates a fuzzy finder overlay for the given mode.

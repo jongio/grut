@@ -2,8 +2,26 @@ package tui
 
 // Action name constants used in handleAction dispatching and AsyncOpDoneMsg descriptions.
 const (
-	actionPush  = "push"
-	actionFetch = "fetch"
+	actionPush       = "push"
+	actionFetch      = "fetch"
+	actionNavBack    = "nav_back"
+	actionNavForward = "nav_forward"
+)
+
+const (
+	panelFileTree = "filetree"
+	panelBranches = "branches"
+	panelCommits  = "commits"
+	panelGitHub   = "github"
+)
+
+const (
+	navKindFile     = "file"
+	navKindCommit   = pendingActionCommit
+	navKindBranch   = "branch"
+	navKindIssue    = "issue"
+	navKindPR       = "pr"
+	navKindWorkflow = "workflow"
 )
 
 // Keyboard hint strings shown in the status bar.

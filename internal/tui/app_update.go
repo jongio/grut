@@ -216,6 +216,7 @@ func (m Model) handleChangeDirectoryMsg(msg panels.ChangeDirectoryMsg) (tea.Mode
 			}
 		}
 	}
+	m.nav.reset()
 	// Reinitialize git client for the new directory.
 	newClient, gitErr := git.NewClient(targetPath)
 	if gitErr != nil {
@@ -494,6 +495,11 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If fuzzy finder overlay is shown, route keys to it.
 	if m.fuzzyFinder != nil {
 		_, cmd := m.fuzzyFinder.Update(msg)
+		return m, cmd
+	}
+	// If repo text search overlay is shown, route keys to it.
+	if m.textSearch != nil {
+		_, cmd := m.textSearch.Update(msg)
 		return m, cmd
 	}
 	// If chat footer is focused, route ALL keys to it so that

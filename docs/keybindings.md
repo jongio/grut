@@ -19,6 +19,8 @@ Always active regardless of focused panel.
 |-----|--------|
 | `1-5` | Focus panel by number |
 | `ctrl+b z` | Zoom focused panel |
+| `alt+left` | Navigate back |
+| `alt+right` | Navigate forward |
 | `R` | Refresh all data + preview |
 | `P` | Push to remote |
 | `F` | Fetch all remotes |
@@ -26,6 +28,7 @@ Always active regardless of focused panel.
 | `ctrl+g` | Git command log |
 | `,` | Settings |
 | `/` | Fuzzy finder |
+| `ctrl+shift+f` | Search repository text |
 | `:` | Command palette |
 | `~` | Change directory |
 | `T` | Find TODO/FIXME markers |
@@ -176,6 +179,7 @@ Commits panel (panel 4).
 |-----|--------|
 | `Enter` | View commit detail |
 | `Esc` | Back to list |
+| `E` | Explain commit in AI chat |
 | `o` | Open commit on GitHub |
 | `y` | Copy SHA |
 | `a` | Filter the commit log by the selected commit's author |
@@ -196,6 +200,7 @@ Preview panel (panel 5).
 | Key | Action |
 |-----|--------|
 | `e` | Edit file inline |
+| `E` | Explain current file, diff, or commit in AI chat |
 | `f` | Toggle diff view |
 | `c` | Comment on the selected PR diff line (PR diff context) |
 | `j/k` | Scroll content |
