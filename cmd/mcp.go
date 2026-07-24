@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -76,12 +77,13 @@ const mcpToolsUse = "tools"
 
 func newMCPToolsCmd() *cobra.Command {
 	var jsonOut bool
+	var filter string
 
 	cmd := &cobra.Command{
 		Use:   mcpToolsUse,
 		Short: "List grut MCP tools",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tools := grut_mcp.ToolInventory()
+			tools := filterMCPTools(grut_mcp.ToolInventory(), filter)
 			w := cmd.OutOrStdout()
 			if jsonOut {
 				enc := json.NewEncoder(w)
@@ -96,5 +98,23 @@ func newMCPToolsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print tools as JSON")
+	cmd.Flags().StringVar(&filter, "filter", "", "Only show tools matching this text")
 	return cmd
+}
+
+func filterMCPTools(tools []grut_mcp.ToolInfo, filter string) []grut_mcp.ToolInfo {
+	query := strings.TrimSpace(strings.ToLower(filter))
+	if query == "" {
+		return tools
+	}
+
+	out := []grut_mcp.ToolInfo{}
+	for _, tool := range tools {
+		if strings.Contains(strings.ToLower(tool.Name), query) ||
+			strings.Contains(strings.ToLower(tool.Category), query) ||
+			strings.Contains(strings.ToLower(tool.Description), query) {
+			out = append(out, tool)
+		}
+	}
+	return out
 }
