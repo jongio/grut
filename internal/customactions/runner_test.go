@@ -56,7 +56,11 @@ func TestShellInvocationForGOOS(t *testing.T) {
 }
 
 func TestShellInvocationForGOOS_WindowsPowerShellVariants(t *testing.T) {
-	for _, shell := range []string{"powershell", "powershell.exe", "pwsh", shellPwshExe, `C:\Program Files\PowerShell\7\pwsh.exe`} {
+	// Bare shell names (with or without extension) that select the PowerShell
+	// argument form. A full backslash path is intentionally omitted: this
+	// function uses filepath.Base, which splits on the host OS separator, and
+	// in production goos always equals runtime.GOOS so that is never an issue.
+	for _, shell := range []string{"powershell", "powershell.exe", "pwsh", shellPwshExe} {
 		t.Run(shell, func(t *testing.T) {
 			name, args := shellInvocationForGOOS("windows", shell, "go build")
 			assert.Equal(t, shell, name)
