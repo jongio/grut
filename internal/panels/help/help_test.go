@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/panels"
+	"github.com/jongio/grut/internal/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,7 +105,7 @@ func TestView_ContainsPreviewSection(t *testing.T) {
 
 func TestView_ContainsCloseHint(t *testing.T) {
 	p := newTestPanel(t)
-	view := p.View(60, 220)
+	view := p.View(60, p.lineCount())
 	assert.Contains(t, view, "? or Esc to close")
 }
 
@@ -118,6 +119,22 @@ func TestView_ContainsKeyBindings(t *testing.T) {
 	assert.Contains(t, view, "j/k")
 	assert.Contains(t, view, "Cursor down/up")
 	assert.Contains(t, view, "ctrl+c")
+}
+
+func TestView_ContainsStatusLegend(t *testing.T) {
+	th := &theme.Theme{Mode: theme.ModeMono}
+	p := New(th)
+	view := p.View(60, 40)
+
+	assert.Contains(t, view, "Status Legend (mono)")
+	assert.Contains(t, view, "staged")
+	assert.Contains(t, view, theme.StatusMarker(theme.StatusStaged))
+	assert.Contains(t, view, "conflict")
+	assert.Contains(t, view, theme.StatusMarker(theme.StatusConflict))
+	assert.Contains(t, view, "warning")
+	assert.Contains(t, view, theme.StatusMarker(theme.StatusWarning))
+	assert.Contains(t, view, "error")
+	assert.Contains(t, view, theme.StatusMarker(theme.StatusError))
 	assert.Contains(t, view, "Quit")
 }
 

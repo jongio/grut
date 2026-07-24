@@ -149,7 +149,9 @@ func categoriesForPrefix(prefix byte) (map[string]bool, string, bool) {
 	case 'd', 'D':
 		return categorySet(categoryDirectory), sourceNameDirectories, true
 	case 'c', 'C':
-		return categorySet(categoryCommand), sourceNameCommands, true
+		return categorySet(categoryCommand, categoryCustomAction), sourceNameCommands, true
+	case 'a', 'A':
+		return categorySet(categoryCustomAction), sourceNameCustomActions, true
 	case 'b', 'B':
 		return categorySet(categoryBookmark), sourceNameBookmarks, true
 	case 'g', 'G':
@@ -180,6 +182,8 @@ func sourceLabelForCategories(categories map[string]bool) string {
 		return sourceNameDirectories
 	case categories[categoryCommand]:
 		return sourceNameCommands
+	case categories[categoryCustomAction]:
+		return sourceNameCustomActions
 	case categories[categoryBookmark]:
 		return sourceNameBookmarks
 	case categories[categoryGitChanged]:
@@ -380,8 +384,8 @@ func (ff *FuzzyFinder) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 }
 
 // selectCurrent emits messages for the currently selected match.
-// It sends ToggleFuzzyFinderMsg to close the overlay, plus either
-// FileSelectedMsg or CommandSelectedMsg based on the item category.
+// It sends ToggleFuzzyFinderMsg to close the overlay, plus a selection message
+// based on the item category.
 func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 	if len(ff.matches) == 0 || ff.cursor >= len(ff.matches) {
 		return nil
@@ -398,6 +402,12 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 					return nil
 				}
 				return panels.CommandSelectedMsg{Action: action}
+			case categoryCustomAction:
+				name, ok := item.Value.(string)
+				if !ok {
+					return nil
+				}
+				return panels.RunCustomActionMsg{Name: name}
 			default:
 				path, ok := item.Value.(string)
 				if !ok {
@@ -407,7 +417,7 @@ func (ff *FuzzyFinder) selectCurrent() tea.Cmd {
 			}
 		},
 		func() tea.Msg {
-			if item.Category != categoryCommand {
+			if item.Category != categoryCommand && item.Category != categoryCustomAction {
 				path, ok := item.Value.(string)
 				if !ok {
 					return nil

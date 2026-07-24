@@ -25,14 +25,19 @@ import (
 // Factory constructs overlay panels (bookmarks, fuzzy finder, help,
 // settings, welcome) behind the panels.Panel interface.
 type Factory struct {
-	theme       *theme.Theme
-	bookmarkMgr *bm.Manager
+	theme         *theme.Theme
+	bookmarkMgr   *bm.Manager
+	customActions []config.CustomAction
 }
 
 // New creates a Factory wired with the shared dependencies that overlay
 // panels need.
-func New(th *theme.Theme, bmMgr *bm.Manager) *Factory {
-	return &Factory{theme: th, bookmarkMgr: bmMgr}
+func New(th *theme.Theme, bmMgr *bm.Manager, customActions ...[]config.CustomAction) *Factory {
+	var actions []config.CustomAction
+	if len(customActions) > 0 {
+		actions = append([]config.CustomAction(nil), customActions[0]...)
+	}
+	return &Factory{theme: th, bookmarkMgr: bmMgr, customActions: actions}
 }
 
 // NewBookmarkPanel creates the bookmarks overlay panel.
@@ -87,6 +92,7 @@ func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.
 		fuzzyfinder.NewFileSource(cwd),
 		fuzzyfinder.NewDirectorySource(cwd, fuzzyfinder.DefaultDirectorySourceMaxDepth),
 		fuzzyfinder.NewCommandSource(bindings),
+		fuzzyfinder.NewCustomActionSource(f.customActions),
 		fuzzyfinder.NewBookmarkSource(f.bookmarkMgr),
 		fuzzyfinder.NewGitChangedSource(cwd),
 		fuzzyfinder.NewTodoSource(cwd),
@@ -96,7 +102,7 @@ func (f *Factory) NewFuzzyFinder(mode string, bindings []keymap.Binding) panels.
 	case "files":
 		defaultCategories = []string{fuzzyfinder.DefaultCategoryFile()}
 	case "commands":
-		defaultCategories = []string{fuzzyfinder.DefaultCategoryCommand()}
+		defaultCategories = []string{fuzzyfinder.DefaultCategoryCommand(), fuzzyfinder.DefaultCategoryCustomAction()}
 	case "directories":
 		defaultCategories = []string{fuzzyfinder.DefaultCategoryDirectory()}
 	case "todos":

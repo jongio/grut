@@ -365,6 +365,7 @@ func parse(name string, data []byte) (*Theme, error) {
 		Variant: tf.Meta.Variant,
 		Colors:  colors,
 		Styles:  buildStyles(colors),
+		Mode:    ModeColor,
 	}, nil
 }
 

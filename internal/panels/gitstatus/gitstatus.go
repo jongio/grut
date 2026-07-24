@@ -1458,11 +1458,11 @@ func (p *GitStatus) renderRow(r *row, width int, isCursor bool, rs *rowStyles) s
 	case rowSection:
 		content = p.renderSectionHeader(r, width)
 	case rowFile:
-		content = p.renderFileRow(r, width)
+		content = p.renderFileRow(r, width, isCursor)
 	case rowHunk:
-		content = p.renderHunkRow(r, width)
+		content = p.renderHunkRow(r, width, isCursor)
 	case rowDiffLine:
-		content = p.renderDiffLineRow(r, width)
+		content = p.renderDiffLineRow(r, width, isCursor)
 	}
 	if isCursor {
 		return rs.cursor.Render(content)
@@ -1478,13 +1478,17 @@ func (p *GitStatus) renderSectionHeader(r *row, width int) string {
 	return p.styleSectionHeader.Width(width).Render(label)
 }
 
-func (p *GitStatus) renderFileRow(r *row, width int) string {
+func (p *GitStatus) renderFileRow(r *row, width int, isCursor bool) string {
 	if r.file == nil {
 		return ""
 	}
 	var b strings.Builder
 	// Selection marker.
-	if r.selected {
+	if isCursor && r.selected {
+		b.WriteString("▸●")
+	} else if isCursor {
+		b.WriteString("▸ ")
+	} else if r.selected {
 		b.WriteString("● ")
 	} else {
 		b.WriteString("  ")
@@ -1521,21 +1525,29 @@ func (p *GitStatus) renderFileRow(r *row, width int) string {
 	return fgStyle.Render(b.String())
 }
 
-func (p *GitStatus) renderHunkRow(r *row, _ int) string {
+func (p *GitStatus) renderHunkRow(r *row, _ int, isCursor bool) string {
 	var b strings.Builder
-	b.WriteString("  ")
+	if isCursor {
+		b.WriteString("▸ ")
+	} else {
+		b.WriteString("  ")
+	}
 	if r.hunkEntry != nil {
 		b.WriteString(r.hunkEntry.Header)
 	}
 	return p.styleHunkHeader.Render(b.String())
 }
 
-func (p *GitStatus) renderDiffLineRow(r *row, _ int) string {
+func (p *GitStatus) renderDiffLineRow(r *row, _ int, isCursor bool) string {
 	if r.diffLine == nil {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("    ")
+	if isCursor {
+		b.WriteString("▸   ")
+	} else {
+		b.WriteString("    ")
+	}
 	var style lipgloss.Style
 	switch r.diffLine.Type {
 	case git.DiffLineAdded:
@@ -1559,7 +1571,7 @@ func statusIndicator(f *git.FileStatus, sec section) string {
 	case sectionUnstaged:
 		return statusCodeLabel(f.WorktreeStatus)
 	case sectionUntracked:
-		return "?"
+		return theme.StatusMarker(theme.StatusUntracked)
 	default:
 		return " "
 	}
@@ -1578,9 +1590,9 @@ func statusCodeLabel(sc git.StatusCode) string {
 	case git.StatusCopied:
 		return "C"
 	case git.StatusUntracked:
-		return "?"
+		return theme.StatusMarker(theme.StatusUntracked)
 	case git.StatusConflict:
-		return "U"
+		return theme.StatusMarker(theme.StatusConflict)
 	default:
 		return " "
 	}

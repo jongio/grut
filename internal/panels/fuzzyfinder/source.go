@@ -13,6 +13,7 @@ import (
 	"time"
 
 	bm "github.com/jongio/grut/internal/bookmarks"
+	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
 	"github.com/jongio/grut/internal/keymap"
 	ignore "github.com/sabhiram/go-gitignore"
@@ -464,6 +465,42 @@ func (cs *CommandSource) Items() []Item {
 			Description: desc,
 			Category:    categoryCommand,
 			Value:       b.Action,
+		})
+	}
+	return items
+}
+
+// ---------------------------------------------------------------------------
+// CustomActionSource
+// ---------------------------------------------------------------------------
+
+// CustomActionSource exposes user-defined shell commands to the command palette.
+type CustomActionSource struct {
+	actions []config.CustomAction
+}
+
+// NewCustomActionSource creates a source from configured custom actions.
+func NewCustomActionSource(actions []config.CustomAction) *CustomActionSource {
+	copied := append([]config.CustomAction(nil), actions...)
+	return &CustomActionSource{actions: copied}
+}
+
+// Name implements Source.
+func (cas *CustomActionSource) Name() string { return sourceNameCustomActions }
+
+// Items implements Source.
+func (cas *CustomActionSource) Items() []Item {
+	items := make([]Item, 0, len(cas.actions))
+	for _, action := range cas.actions {
+		desc := action.Command
+		if action.Key != "" {
+			desc += " (" + action.Key + ")"
+		}
+		items = append(items, Item{
+			Text:        action.Name,
+			Description: desc,
+			Category:    categoryCustomAction,
+			Value:       action.Name,
 		})
 	}
 	return items

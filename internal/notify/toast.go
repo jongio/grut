@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/jongio/grut/internal/theme"
 )
 
 // toast is an auto-dismissing notification that displays briefly and
@@ -42,14 +44,14 @@ func (t *toast) view(width int) string {
 func levelIcon(l Level) string {
 	switch l {
 	case Info:
-		return "ℹ"
+		return theme.StatusMarker(theme.StatusInfo)
 	case Warn:
-		return "⚠"
+		return theme.StatusMarker(theme.StatusWarning)
 	case Error:
-		return "✗"
+		return theme.StatusMarker(theme.StatusError)
 	case Success:
-		return "✓"
+		return theme.StatusMarker(theme.StatusSuccess)
 	default:
-		return "•"
+		return theme.StatusMarker("")
 	}
 }

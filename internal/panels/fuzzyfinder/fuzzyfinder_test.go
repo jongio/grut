@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/keymap"
 	"github.com/jongio/grut/internal/panels"
 	"github.com/stretchr/testify/assert"
@@ -86,6 +87,30 @@ func TestFileSourceEmptyDirectory(t *testing.T) {
 	src := NewFileSource(dir)
 	items := src.Items()
 	assert.Empty(t, items)
+}
+
+func TestCustomActionSourceListsConfiguredActions(t *testing.T) {
+	src := NewCustomActionSource([]config.CustomAction{
+		{Name: "Test", Command: "go test ./...", Key: "ctrl+t"},
+		{Name: "Generate", Command: "go generate ./..."},
+	})
+
+	assert.Equal(t, "custom actions", src.Name())
+	items := src.Items()
+
+	require.Len(t, items, 2)
+	assert.Equal(t, Item{
+		Text:        "Test",
+		Description: "go test ./... (ctrl+t)",
+		Category:    "custom action",
+		Value:       "Test",
+	}, items[0])
+	assert.Equal(t, Item{
+		Text:        "Generate",
+		Description: "go generate ./...",
+		Category:    "custom action",
+		Value:       "Generate",
+	}, items[1])
 }
 
 // ---------------------------------------------------------------------------

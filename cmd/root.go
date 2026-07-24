@@ -213,6 +213,9 @@ Environment:
 			if err != nil {
 				return fmt.Errorf("load theme: %w", err)
 			}
+			resolvedMode := theme.ResolveEnvironmentColorMode(cfg.Theme.ColorMode)
+			appliedTheme := theme.ApplyColorMode(*th, resolvedMode)
+			th = &appliedTheme
 
 			// Create panel registry with defaults
 			reg := layout.NewRegistry()
@@ -286,7 +289,7 @@ Environment:
 			}
 
 			// Create and run the TUI
-			model := tui.New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr)).
+			model := tui.New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr, cfg.CustomActions)).
 				WithUndoManager(undoMgr).
 				WithGitClient(gitClient).
 				WithConfig(cfg).

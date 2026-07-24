@@ -84,6 +84,16 @@ func (p *Panel) buildLines() {
 	}
 
 	matchedSections := 0
+	if statusLegendMatches(query) {
+		matchedSections++
+		lines = append(lines, "section:Status Legend ("+p.colorModeLabel()+")")
+		lines = append(lines, "sep:"+strings.Repeat("─", len("Status Legend")))
+		for _, entry := range theme.StatusLegend() {
+			lines = append(lines, "legend:"+entry.Label+"\t"+entry.Marker)
+		}
+		lines = append(lines, "")
+	}
+
 	for i, sec := range secs {
 		sectionMatches := query == "" || strings.Contains(strings.ToLower(sec.Title), query)
 		matchingBindings := sec.Bindings
@@ -194,6 +204,21 @@ func (p *Panel) View(width, height int) string {
 				padded = key + strings.Repeat(" ", 12-keyWidth)
 			}
 			styled = "  " + keyStyle.Render(padded) + descStyle.Render(desc)
+		case strings.HasPrefix(line, "legend:"):
+			parts := strings.SplitN(strings.TrimPrefix(line, "legend:"), "\t", 2)
+			label := parts[0]
+			marker := ""
+			if len(parts) > 1 {
+				marker = parts[1]
+			}
+			padded := label
+			labelWidth := lipgloss.Width(label)
+			if labelWidth < 10 {
+				padded += strings.Repeat(" ", 10-labelWidth)
+			} else {
+				padded += " "
+			}
+			styled = "  " + descStyle.Render(padded) + keyStyle.Render(marker)
 		case strings.HasPrefix(line, "filter:"):
 			text := strings.TrimPrefix(line, "filter:")
 			styled = "  " + dimStyle.Render(text)
@@ -216,6 +241,17 @@ func (p *Panel) View(width, height int) string {
 }
 
 const keyEscape = "escape"
+
+func (p *Panel) colorModeLabel() string {
+	if p.theme != nil && p.theme.Mode == theme.ModeMono {
+		return "mono"
+	}
+	return "color"
+}
+
+func statusLegendMatches(query string) bool {
+	return query == "" || query == "status" || query == "legend" || query == "status legend"
+}
 
 // KeyBindings implements panels.Panel.
 func (p *Panel) KeyBindings() []panels.KeyBinding {

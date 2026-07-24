@@ -32,6 +32,7 @@ const (
 	maxRedactPatterns   = 100       // AI redact pattern count
 	maxReviewCategories = 50        // AI review category count
 	maxCustomShortcuts  = 100       // custom shortcut definitions
+	maxCustomActions    = 100       // custom shell action definitions
 	maxBookmarkPaths    = 1000      // bookmark entries
 	maxEditorTabSize    = 16        // editor tab size
 	maxLogSizeMB        = 1000      // log file max size
@@ -133,6 +134,10 @@ func Validate(cfg *Config) error {
 	if cfg.Terminal.RenderFPS > maxRenderFPS {
 		errs = append(errs, fieldErr("terminal.render_fps", "must be <= %d, got %d", maxRenderFPS, cfg.Terminal.RenderFPS))
 	}
+
+	// --- theme ---
+	errs = appendEnumErr(errs, "theme.color_mode",
+		cfg.Theme.ColorMode, "auto", "color", "mono")
 
 	// --- ai ---
 	errs = appendEnumErr(errs, "ai.context_mode",
@@ -273,6 +278,10 @@ func Validate(cfg *Config) error {
 	if len(cfg.Shortcuts.Custom) > maxCustomShortcuts {
 		errs = append(errs, fieldErr("shortcuts.custom", "too many entries: %d (max %d)", len(cfg.Shortcuts.Custom), maxCustomShortcuts))
 	}
+	if len(cfg.CustomActions) > maxCustomActions {
+		errs = append(errs, fieldErr("custom_actions", "too many entries: %d (max %d)", len(cfg.CustomActions), maxCustomActions))
+	}
+	errs = validateCustomActions(errs, cfg.CustomActions)
 
 	// --- path security ---
 	if cfg.Logging.File != "" {
@@ -295,6 +304,38 @@ func Validate(cfg *Config) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func validateCustomActions(errs []error, actions []CustomAction) []error {
+	names := make(map[string]int, len(actions))
+	keys := make(map[string]int, len(actions))
+	for i, action := range actions {
+		field := fmt.Sprintf("custom_actions[%d]", i)
+		name := strings.TrimSpace(action.Name)
+		command := strings.TrimSpace(action.Command)
+		key := strings.TrimSpace(action.Key)
+		if name == "" {
+			errs = append(errs, fieldErr(field+".name", "must not be empty"))
+		} else if prev, ok := names[name]; ok {
+			errs = append(errs, fieldErr(field+".name", "duplicates custom_actions[%d].name %q", prev, name))
+		} else {
+			names[name] = i
+		}
+		if command == "" {
+			errs = append(errs, fieldErr(field+".command", "must not be empty"))
+		}
+		if key != "" {
+			if prev, ok := keys[key]; ok {
+				errs = append(errs, fieldErr(field+".key", "duplicates custom_actions[%d].key %q", prev, key))
+			} else {
+				keys[key] = i
+			}
+		}
+		if action.WorkDir != "" {
+			errs = rejectUNCPath(errs, field+".cwd", action.WorkDir)
+		}
+	}
+	return errs
 }
 
 // rejectUNCPath appends an error if value looks like a UNC path

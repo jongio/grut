@@ -41,56 +41,57 @@ const (
 // Model is the top-level TUI model for grut. It composes panels via
 // the layout engine, routes keyboard events, and renders the final view.
 type Model struct {
-	lastStatusBarClick time.Time     // for double-click detection on the status bar
-	gitClient          git.GitClient // git client for app-level operations (nil = no git)
-	ctx                context.Context
-	engine             layout.PanelManager
-	theme              *theme.Theme
-	keys               *keymap.Keymap
-	nav                navHistory
-	notify             *notify.Manager               // F27: integrated notification manager
-	bookmarkMgr        *bm.Manager                   // bookmark persistence
-	overlays           OverlayCreator                // factory for overlay panels
-	bookmarkPanel      panels.Panel                  // overlay panel (nil = hidden)
-	fuzzyFinder        panels.Panel                  // overlay fuzzy finder (nil = hidden)
-	textSearch         panels.Panel                  // overlay repo text search (nil = hidden)
-	commandLogPanel    panels.Panel                  // overlay git command log panel (nil = hidden)
-	commandLogShown    bool                          // whether git command log overlay is visible
-	helpPanel          panels.Panel                  // overlay help panel (nil = hidden)
-	helpShown          bool                          // whether help overlay is visible
-	welcomePanel       panels.Panel                  // overlay welcome panel (nil = hidden)
-	welcomeShown       bool                          // whether welcome overlay is visible
-	settingsPanel      panels.Panel                  // overlay settings panel (nil = hidden)
-	undoMgr            *git.UndoManager              // undo/redo manager (nil = disabled)
-	cfg                *config.Config                // app config (nil = defaults)
-	sessionMgr         *session.Manager              // session persistence (nil = disabled)
-	chat               *chat.Model                   // AI chat footer (nil if AI disabled)
-	asyncCancel        context.CancelFunc            // cancel the running async operation
-	aiCommitSuggestion *panels.AICommitSuggestionMsg // AI-generated commit message suggestion
-	cancel             context.CancelFunc
-	asyncOp            string // current async operation label ("pushing...", etc.)
-	pendingAction      string // action waiting for modal input ("commit")
-	pendingDiscardPath string // file path for pending discard confirmation
-	pendingRevertHash  string // full commit hash for pending revert confirmation
-	currentBranch      string // cached git branch name for status bar
-	compareBase        string // pinned branch-diff compare base for status bar
-	cwdEditValue       string // editable path text
-	initialFile        string // file to open + focus in preview at startup (empty = none)
-	initialFocusPanel  string // panel to focus after startup file reveal (empty = default)
-	branchAhead        int    // commits ahead of upstream (needs push)
-	branchBehind       int    // commits behind upstream (needs pull)
-	width              int
-	height             int
-	initialLine        int    // 1-based line to scroll the preview to at startup (0 = none)
-	cwdEditCursor      int    // cursor position (rune index) within cwdEditValue
-	branchInfoGen      uint64 // generation counter - invalidates stale branchLoadedMsg
-	bookmarksShown     bool   // whether bookmark overlay is visible
-	settingsShown      bool   // whether settings overlay is visible
-	gitDirty           bool   // true when working tree has uncommitted changes
-	ready              bool   // true after first WindowSizeMsg
-	cwdEditing         bool   // true when status bar CWD is in inline-edit mode
-	previewEditing     bool   // true when preview panel is in edit mode
-	previewInput       bool   // true when preview panel has an inline prompt open (e.g. go-to-line)
+	lastStatusBarClick  time.Time     // for double-click detection on the status bar
+	gitClient           git.GitClient // git client for app-level operations (nil = no git)
+	ctx                 context.Context
+	engine              layout.PanelManager
+	theme               *theme.Theme
+	keys                *keymap.Keymap
+	nav                 navHistory
+	notify              *notify.Manager               // F27: integrated notification manager
+	bookmarkMgr         *bm.Manager                   // bookmark persistence
+	overlays            OverlayCreator                // factory for overlay panels
+	bookmarkPanel       panels.Panel                  // overlay panel (nil = hidden)
+	fuzzyFinder         panels.Panel                  // overlay fuzzy finder (nil = hidden)
+	textSearch          panels.Panel                  // overlay repo text search (nil = hidden)
+	commandLogPanel     panels.Panel                  // overlay git command log panel (nil = hidden)
+	commandLogShown     bool                          // whether git command log overlay is visible
+	helpPanel           panels.Panel                  // overlay help panel (nil = hidden)
+	helpShown           bool                          // whether help overlay is visible
+	welcomePanel        panels.Panel                  // overlay welcome panel (nil = hidden)
+	welcomeShown        bool                          // whether welcome overlay is visible
+	settingsPanel       panels.Panel                  // overlay settings panel (nil = hidden)
+	undoMgr             *git.UndoManager              // undo/redo manager (nil = disabled)
+	cfg                 *config.Config                // app config (nil = defaults)
+	sessionMgr          *session.Manager              // session persistence (nil = disabled)
+	chat                *chat.Model                   // AI chat footer (nil if AI disabled)
+	asyncCancel         context.CancelFunc            // cancel the running async operation
+	aiCommitSuggestion  *panels.AICommitSuggestionMsg // AI-generated commit message suggestion
+	cancel              context.CancelFunc
+	asyncOp             string // current async operation label ("pushing...", etc.)
+	pendingAction       string // action waiting for modal input ("commit")
+	pendingCustomAction string // custom action waiting for modal confirmation
+	pendingDiscardPath  string // file path for pending discard confirmation
+	pendingRevertHash   string // full commit hash for pending revert confirmation
+	currentBranch       string // cached git branch name for status bar
+	compareBase         string // pinned branch-diff compare base for status bar
+	cwdEditValue        string // editable path text
+	initialFile         string // file to open + focus in preview at startup (empty = none)
+	initialFocusPanel   string // panel to focus after startup file reveal (empty = default)
+	branchAhead         int    // commits ahead of upstream (needs push)
+	branchBehind        int    // commits behind upstream (needs pull)
+	width               int
+	height              int
+	initialLine         int    // 1-based line to scroll the preview to at startup (0 = none)
+	cwdEditCursor       int    // cursor position (rune index) within cwdEditValue
+	branchInfoGen       uint64 // generation counter - invalidates stale branchLoadedMsg
+	bookmarksShown      bool   // whether bookmark overlay is visible
+	settingsShown       bool   // whether settings overlay is visible
+	gitDirty            bool   // true when working tree has uncommitted changes
+	ready               bool   // true after first WindowSizeMsg
+	cwdEditing          bool   // true when status bar CWD is in inline-edit mode
+	previewEditing      bool   // true when preview panel is in edit mode
+	previewInput        bool   // true when preview panel has an inline prompt open (e.g. go-to-line)
 }
 
 // New creates a new TUI model with the given panel manager, theme, keymap,
@@ -304,8 +305,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleOverlayMsg(msg)
 
 	// Fuzzy finder and text search.
-	case panels.ToggleFuzzyFinderMsg, panels.CommandSelectedMsg:
+	case panels.ToggleFuzzyFinderMsg, panels.CommandSelectedMsg, panels.RunCustomActionMsg:
 		return m.handleFuzzyFinderMsg(msg)
+	case customActionDoneMsg:
+		return m.handleCustomActionDone(msg)
 	case panels.ToggleTextSearchMsg, panels.FileSelectedMsg:
 		return m.handleTextSearchMsg(msg)
 

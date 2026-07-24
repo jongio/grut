@@ -70,6 +70,7 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 
 	assert.False(t, cfg.Bookmarks.ShowInSidebar)
 	assert.Equal(t, "default", cfg.Theme.Name)
+	assert.Equal(t, "auto", cfg.Theme.ColorMode)
 }
 
 func TestDefaultsTOMLReturnsCopy(t *testing.T) {
@@ -85,6 +86,39 @@ func TestLoadEmbeddedDefaultsValidate(t *testing.T) {
 	cfg := &Config{}
 	require.NoError(t, toml.Unmarshal(defaultsTOML, cfg))
 	require.NoError(t, Validate(cfg))
+}
+
+func TestCustomActionsParseFromTOML(t *testing.T) {
+	data := []byte(`
+[[custom_actions]]
+name = "Test"
+command = "go test ./..."
+cwd = "services/api"
+key = "ctrl+t"
+prompt = "Run tests?"
+confirm = true
+
+[[custom_actions]]
+name = "Generate"
+command = "go generate ./..."
+`)
+
+	cfg := &Config{}
+	require.NoError(t, toml.Unmarshal(data, cfg))
+
+	require.Len(t, cfg.CustomActions, 2)
+	assert.Equal(t, CustomAction{
+		Name:    "Test",
+		Command: "go test ./...",
+		WorkDir: "services/api",
+		Key:     "ctrl+t",
+		Prompt:  "Run tests?",
+		Confirm: true,
+	}, cfg.CustomActions[0])
+	assert.Equal(t, CustomAction{
+		Name:    "Generate",
+		Command: "go generate ./...",
+	}, cfg.CustomActions[1])
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +166,11 @@ func TestValidateEnumFields(t *testing.T) {
 			mutate: func(c *Config) { c.Logging.Level = "trace" },
 			errMsg: "logging.level",
 		},
+		{
+			name:   "invalid theme color mode",
+			mutate: func(c *Config) { c.Theme.ColorMode = "sepia" },
+			errMsg: "theme.color_mode",
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,6 +178,59 @@ func TestValidateEnumFields(t *testing.T) {
 			cfg := validConfig(t)
 			tt.mutate(cfg)
 			err := Validate(cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+func TestValidateCustomActions(t *testing.T) {
+	tests := []struct {
+		name    string
+		actions []CustomAction
+		errMsg  string
+	}{
+		{
+			name:    "valid",
+			actions: []CustomAction{{Name: "Test", Command: "go test ./...", Key: "ctrl+t"}},
+		},
+		{
+			name:    "missing name",
+			actions: []CustomAction{{Command: "go test ./..."}},
+			errMsg:  "custom_actions[0].name",
+		},
+		{
+			name:    "missing command",
+			actions: []CustomAction{{Name: "Test"}},
+			errMsg:  "custom_actions[0].command",
+		},
+		{
+			name: "duplicate name",
+			actions: []CustomAction{
+				{Name: "Test", Command: "go test ./..."},
+				{Name: "Test", Command: "go vet ./..."},
+			},
+			errMsg: "duplicates custom_actions[0].name",
+		},
+		{
+			name: "duplicate key",
+			actions: []CustomAction{
+				{Name: "Test", Command: "go test ./...", Key: "ctrl+t"},
+				{Name: "Vet", Command: "go vet ./...", Key: "ctrl+t"},
+			},
+			errMsg: "duplicates custom_actions[0].key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig(t)
+			cfg.CustomActions = tt.actions
+			err := Validate(cfg)
+			if tt.errMsg == "" {
+				require.NoError(t, err)
+				return
+			}
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errMsg)
 		})
