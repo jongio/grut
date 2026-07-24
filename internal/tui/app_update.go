@@ -319,6 +319,9 @@ func (m Model) handleFuzzyFinderMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.CommandSelectedMsg:
 		m.fuzzyFinder = nil // close fuzzy finder
 		return m.handleAction(msg.Action, msg)
+	case panels.RunCustomActionMsg:
+		m.fuzzyFinder = nil // close fuzzy finder
+		return m.handleRunCustomAction(msg.Name)
 	case panels.FileSelectedMsg:
 		m.fuzzyFinder = nil // close fuzzy finder
 		// If the selected path is a directory (from directory fuzzy finder),
@@ -523,6 +526,9 @@ func (m Model) handleKeyPressMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.keys.HasPending() {
 			return m, nil
 		}
+	}
+	if action, ok := m.customActionForKey(msg.String()); ok {
+		return m.handleRunCustomAction(action.Name)
 	}
 	// Global refresh: R refreshes all panels + forces preview re-render.
 	if msg.String() == "R" {

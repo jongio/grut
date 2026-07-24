@@ -8,6 +8,8 @@ const (
 	actionNavForward = "nav_forward"
 )
 
+const pendingActionCustom = "custom_action"
+
 const (
 	panelFileTree = "filetree"
 	panelBranches = "branches"

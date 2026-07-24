@@ -607,7 +607,9 @@ func (m Model) handleAsyncOpDone(msg panels.AsyncOpDoneMsg) (tea.Model, tea.Cmd)
 // (currently only "commit"). Clears pendingAction regardless of outcome.
 func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cmd) {
 	action := m.pendingAction
+	customName := m.pendingCustomAction
 	m.pendingAction = ""
+	m.pendingCustomAction = ""
 
 	if !msg.Accept {
 		return m, nil
@@ -624,6 +626,8 @@ func (m Model) handlePendingAction(msg notify.ModalResultMsg) (tea.Model, tea.Cm
 		return m.executeDiscardFile()
 	case pendingActionRevert:
 		return m.executeRevert()
+	case pendingActionCustom:
+		return m.executeCustomAction(customName)
 	default:
 		return m, nil
 	}

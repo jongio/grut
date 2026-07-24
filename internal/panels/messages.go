@@ -75,6 +75,12 @@ type CommandSelectedMsg struct {
 	Action string
 }
 
+// RunCustomActionMsg is sent when the user selects a configured custom action
+// from the command palette or presses its configured key.
+type RunCustomActionMsg struct {
+	Name string
+}
+
 // ToggleBookmarksMsg requests showing or hiding the bookmarks overlay panel.
 type ToggleBookmarksMsg struct{}
 

@@ -102,6 +102,22 @@ prefix_key = "ctrl+b"            # Prefix key for terminal commands
 
 ---
 
+## Custom Actions
+
+Custom actions are user-defined shell commands shown in the command palette. Set `confirm = true` for destructive actions; grut asks before running them. If `key` is set and does not collide with an existing binding, pressing it runs the same action.
+
+```toml
+[[custom_actions]]
+name = "Test"
+command = "go test ./..."
+cwd = "."
+key = "ctrl+t"
+prompt = "Run the full test suite?"
+confirm = true
+```
+
+---
+
 ## AI
 
 ```toml

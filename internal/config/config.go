@@ -31,22 +31,23 @@ func DefaultsTOML() []byte {
 
 // Config is the top-level configuration for grut.
 type Config struct {
-	Actions    ActionsConfig    `toml:"actions"`
-	Terminal   TerminalConfig   `toml:"terminal"`
-	Theme      ThemeConfig      `toml:"theme"`
-	AI         AIConfig         `toml:"ai"`
-	General    GeneralConfig    `toml:"general"`
-	Shortcuts  ShortcutsConfig  `toml:"shortcuts"`
-	MCP        MCPConfig        `toml:"mcp"`
-	GitHub     GitHubConfig     `toml:"github"`
-	Preview    PreviewConfig    `toml:"preview"`
-	Editor     EditorConfig     `toml:"editor"`
-	Logging    LoggingConfig    `toml:"logging"`
-	FileTree   FileTreeConfig   `toml:"file_tree"`
-	Bookmarks  BookmarksConfig  `toml:"bookmarks"`
-	Extensions ExtensionsConfig `toml:"extensions"`
-	Git        GitConfig        `toml:"git"`
-	Session    SessionConfig    `toml:"session"`
+	Actions       ActionsConfig    `toml:"actions"`
+	Terminal      TerminalConfig   `toml:"terminal"`
+	Theme         ThemeConfig      `toml:"theme"`
+	AI            AIConfig         `toml:"ai"`
+	General       GeneralConfig    `toml:"general"`
+	Shortcuts     ShortcutsConfig  `toml:"shortcuts"`
+	CustomActions []CustomAction   `toml:"custom_actions"`
+	MCP           MCPConfig        `toml:"mcp"`
+	GitHub        GitHubConfig     `toml:"github"`
+	Preview       PreviewConfig    `toml:"preview"`
+	Editor        EditorConfig     `toml:"editor"`
+	Logging       LoggingConfig    `toml:"logging"`
+	FileTree      FileTreeConfig   `toml:"file_tree"`
+	Bookmarks     BookmarksConfig  `toml:"bookmarks"`
+	Extensions    ExtensionsConfig `toml:"extensions"`
+	Git           GitConfig        `toml:"git"`
+	Session       SessionConfig    `toml:"session"`
 }
 
 // GeneralConfig holds top-level UI and session preferences.
@@ -276,6 +277,17 @@ type CustomShortcut struct {
 	Name        string   `toml:"name"`
 	Description string   `toml:"description"`
 	Steps       []string `toml:"steps"`
+}
+
+// CustomAction defines a user-created shell command exposed in the command
+// palette and optionally bound to a key.
+type CustomAction struct {
+	Name    string `toml:"name"`
+	Command string `toml:"command"`
+	WorkDir string `toml:"cwd"`
+	Key     string `toml:"key"`
+	Prompt  string `toml:"prompt"`
+	Confirm bool   `toml:"confirm"`
 }
 
 // ActionsConfig controls double-click action overrides and first-use

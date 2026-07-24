@@ -286,7 +286,7 @@ Environment:
 			}
 
 			// Create and run the TUI
-			model := tui.New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr)).
+			model := tui.New(engine, th, km, bmMgr, overlayreg.New(th, bmMgr, cfg.CustomActions)).
 				WithUndoManager(undoMgr).
 				WithGitClient(gitClient).
 				WithConfig(cfg).
