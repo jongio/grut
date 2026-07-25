@@ -1,7 +1,8 @@
 ---
 title: Workflow-dispatch parameter picker and command-goroutine crash safety net
-status: draft
-issue: pending
+status: shipped
+issue: n/a (follow-up to #362)
+pr: https://github.com/jongio/grut/pull/370
 scope: P1
 ---
 
@@ -88,13 +89,14 @@ Dispatching a GitHub Actions workflow from the GitHub panel had two shortcomings
 
 <!-- Pipeline tracking (auto-managed, not part of product spec) -->
 ## Pipeline Status
-Phase: SHIPPING (late entry via `go verify`)
+Phase: SHIPPED (PR https://github.com/jongio/grut/pull/370)
 
 Certification (Phase 4): `go build`, `go vet ./...`, `golangci-lint ./...` (0 issues),
 `gofumpt -l .` (clean), `deadcode ./...` (0 new; all 210 findings pre-existing/allowlisted),
-`govulncheck ./...` (no vulnerabilities), full `go test ./...` (exit 0). Race/WSL/benchmark
-steps of `mage preflight` are CI-covered (need cgo/WSL unavailable locally). doc-check: astro
-GitHub-workflows page + CHANGELOG updated; keybindings unchanged (up-to-date test passes).
-Review: code-review (1 MEDIUM, fixed) + rubber-duck (crash-collision + stranded-loading fixed;
-async-identity/inputsKnown/blank-trim assessed as pre-existing or intentional — see test-plan
-triage). Test plan COVERED, 0 gaps.
+`govulncheck ./...` (no vulnerabilities), full `go test ./...` (exit 0, pre- and post-rebase).
+Race/WSL/benchmark steps of `mage preflight` are CI-covered (need cgo/WSL unavailable locally).
+doc-check: astro GitHub-workflows page + CHANGELOG updated; keybindings unchanged (up-to-date
+test passes). Review: code-review (1 MEDIUM, fixed) + rubber-duck (crash-collision +
+stranded-loading fixed; async-identity/inputsKnown/blank-trim assessed as pre-existing or
+intentional — see test-plan triage). Test plan COVERED, 0 gaps. Rebased cleanly onto origin/main
+(dep bump #363); full suite green post-rebase.
