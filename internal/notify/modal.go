@@ -750,20 +750,6 @@ func ShowMultilineInput(title, placeholder string) tea.Cmd {
 	}
 }
 
-// ShowMultilineInputWithValue returns a tea.Cmd that produces a ShowModalMsg
-// for a multi-line text composer pre-filled with the given value. Enter
-// inserts a newline, Ctrl+D submits, and Esc cancels.
-func ShowMultilineInputWithValue(title, placeholder, value string) tea.Cmd {
-	return func() tea.Msg {
-		return ShowModalMsg{
-			Title:       title,
-			Placeholder: placeholder,
-			Value:       value,
-			Kind:        ModalMultilineInput,
-		}
-	}
-}
-
 // ShowConfirmWithCheckbox returns a tea.Cmd that produces a ShowModalMsg
 // for a confirmation dialog with a "remember this choice" checkbox.
 func ShowConfirmWithCheckbox(title, message, checkboxLabel string) tea.Cmd {
@@ -801,6 +787,35 @@ func ShowActionPickerWithMessage(title, message string, actions []ActionOption) 
 			Actions: actions,
 		}
 	}
+}
+
+// ShowActionPickerWithSelection returns a tea.Cmd that produces a
+// ShowModalMsg for an action picker whose cursor starts on the action with
+// the given ID. An empty or unknown selectedID starts on the first action.
+func ShowActionPickerWithSelection(title, message string, actions []ActionOption, selectedID string) tea.Cmd {
+	return func() tea.Msg {
+		return ShowModalMsg{
+			Kind:       ModalActionPicker,
+			Title:      title,
+			Message:    message,
+			Actions:    actions,
+			SelectedID: selectedID,
+		}
+	}
+}
+
+// actionIndexByID returns the index of the action with the given ID, or 0
+// when the ID is empty or absent.
+func actionIndexByID(actions []ActionOption, id string) int {
+	if id == "" {
+		return 0
+	}
+	for i, a := range actions {
+		if a.ID == id {
+			return i
+		}
+	}
+	return 0
 }
 
 // renderCheckbox renders the checkbox toggle for a ConfirmWithCheckbox modal.

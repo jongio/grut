@@ -331,15 +331,17 @@ func (p *Panel) handleWorkflowDispatch(a modalArgs) (panels.Panel, tea.Cmd) {
 	owner, repo := p.gh.owner, p.gh.repo
 	ghClient := p.gh.client
 	ctx := a.ctx
-	return p, func() tea.Msg {
+	return p, guardedGitHubCmd("gitinfo.getWorkflowInputs", func() tea.Msg {
 		var wfInputs []ghclient.WorkflowInput
+		inputsKnown := false
 		if ghClient != nil && workflowPath != "" {
 			fetched, err := ghClient.GetWorkflowInputs(ctx, owner, repo, workflowPath, ref)
 			if err != nil {
-				// Non-fatal: fall back to generic dialog.
-				_ = err
+				// Non-fatal: fall back to the free-form key=value composer.
+				slog.Warn("github: fetch workflow inputs failed", "path", workflowPath, "err", err)
 			} else {
 				wfInputs = fetched
+				inputsKnown = true
 			}
 		}
 		return workflowInputsFetchedMsg{
@@ -347,13 +349,36 @@ func (p *Panel) handleWorkflowDispatch(a modalArgs) (panels.Panel, tea.Cmd) {
 			workflowName: workflowName,
 			ref:          ref,
 			inputs:       wfInputs,
+			inputsKnown:  inputsKnown,
 		}
-	}
+	})
 }
 
+// handleWorkflowDispatchInputs records the value entered (or picked) for the
+// current workflow_dispatch input and advances to the next input, firing the
+// dispatch once every input has been collected. An empty value keeps the
+// workflow's declared default.
 func (p *Panel) handleWorkflowDispatchInputs(a modalArgs) (panels.Panel, tea.Cmd) {
-	// Step 2 complete: got the inputs. Parse and dispatch.
-	// pendingName format: "id:name:ref"
+	d := &p.wfDispatch
+	if d.idx >= len(d.inputs) {
+		// Defensive: no input to record (stale state) — just fire.
+		return p.fireWorkflowDispatch()
+	}
+	input := d.inputs[d.idx]
+	if value := strings.TrimSpace(a.msg.Value); value != "" {
+		if d.values == nil {
+			d.values = make(map[string]any)
+		}
+		d.values[input.Name] = value
+	}
+	d.idx++
+	return p.promptNextWorkflowInput()
+}
+
+// handleWorkflowDispatchRaw dispatches a workflow using free-form key=value
+// inputs entered in the fallback composer (used when the workflow's declared
+// inputs could not be read). pendingName format: "id:name:ref".
+func (p *Panel) handleWorkflowDispatchRaw(a modalArgs) (panels.Panel, tea.Cmd) {
 	var workflowID int64
 	var workflowName, ref string
 	parts := strings.SplitN(a.name, ":", 3)
@@ -362,42 +387,31 @@ func (p *Panel) handleWorkflowDispatchInputs(a modalArgs) (panels.Panel, tea.Cmd
 		workflowName = parts[1]
 		ref = parts[2]
 	}
-	if workflowID == 0 || ref == "" {
-		return p, nil
+	return p, p.dispatchWorkflowCmd(workflowID, workflowName, ref, parseKeyValueInputs(a.msg.Value))
+}
+
+// parseKeyValueInputs parses free-form "key=value" lines into a dispatch input
+// map. Blank lines and lines without an "=" are ignored. Returns nil when no
+// valid pairs are present.
+func parseKeyValueInputs(s string) map[string]any {
+	text := strings.TrimSpace(s)
+	if text == "" {
+		return nil
 	}
-	// Parse inputs from "key=value" lines.
-	var inputs map[string]any
-	inputText := strings.TrimSpace(a.msg.Value)
-	if inputText != "" {
-		inputs = make(map[string]any)
-		for _, line := range strings.Split(inputText, "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
-				inputs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-			}
+	inputs := make(map[string]any)
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-		if len(inputs) == 0 {
-			inputs = nil
-		}
-	}
-	owner, repo := p.gh.owner, p.gh.repo
-	ghClient := p.gh.client
-	ctx := a.ctx
-	if ghClient == nil {
-		// Defensive: the dispatch flow should not start without a client,
-		// but guard here so a nil client surfaces as a failure toast rather
-		// than a nil dereference that crashes the TUI.
-		return p, func() tea.Msg {
-			return workflowDispatchResultMsg{workflowName: workflowName, err: errGitHubClientUnavailable}
+		if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
+			inputs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 		}
 	}
-	return p, func() tea.Msg {
-		err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
-		return workflowDispatchResultMsg{workflowName: workflowName, err: err}
+	if len(inputs) == 0 {
+		return nil
 	}
+	return inputs
 }
 
 func (p *Panel) handlePRMergeStrategy(a modalArgs) (panels.Panel, tea.Cmd) {

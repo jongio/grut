@@ -938,10 +938,10 @@ func TestHandleModalResult_WorkflowDispatch_MalformedName(t *testing.T) {
 	assert.Nil(t, cmd, "malformed pendingName should return nil cmd")
 }
 
-func TestHandleModalResult_WorkflowDispatchInputs(t *testing.T) {
+func TestHandleModalResult_WorkflowDispatchRaw(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(t, defaultMock())
-	p.pending = opWorkflowDispatchInputs
+	p.pending = opWorkflowDispatchRaw
 	p.pendingName = "456:Deploy:main"
 	p.gh.client = &mockGHClientFull{} // non-nil to avoid panic
 
@@ -954,10 +954,10 @@ func TestHandleModalResult_WorkflowDispatchInputs(t *testing.T) {
 	assert.NoError(t, result.err)
 }
 
-func TestHandleModalResult_WorkflowDispatchInputs_EmptyInputs(t *testing.T) {
+func TestHandleModalResult_WorkflowDispatchRaw_EmptyInputs(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(t, defaultMock())
-	p.pending = opWorkflowDispatchInputs
+	p.pending = opWorkflowDispatchRaw
 	p.pendingName = "456:Deploy:main"
 	p.gh.client = &mockGHClientFull{}
 
@@ -969,20 +969,20 @@ func TestHandleModalResult_WorkflowDispatchInputs_EmptyInputs(t *testing.T) {
 	assert.Equal(t, "Deploy", result.workflowName)
 }
 
-func TestHandleModalResult_WorkflowDispatchInputs_InvalidID(t *testing.T) {
+func TestHandleModalResult_WorkflowDispatchRaw_InvalidID(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(t, defaultMock())
-	p.pending = opWorkflowDispatchInputs
+	p.pending = opWorkflowDispatchRaw
 	p.pendingName = "0:Deploy:main" // workflowID=0
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "key=val"})
 	assert.Nil(t, cmd, "workflowID=0 should return nil cmd")
 }
 
-func TestHandleModalResult_WorkflowDispatchInputs_MissingRef(t *testing.T) {
+func TestHandleModalResult_WorkflowDispatchRaw_MissingRef(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(t, defaultMock())
-	p.pending = opWorkflowDispatchInputs
+	p.pending = opWorkflowDispatchRaw
 	p.pendingName = "456:Deploy" // only 2 parts, ref missing → ref=""
 
 	_, cmd := p.handleModalResult(notify.ModalResultMsg{Accept: true, Value: "key=val"})
@@ -1085,6 +1085,7 @@ func TestHandleWorkflowInputsFetched_WithInputs(t *testing.T) {
 		workflowID:   42,
 		workflowName: "Deploy",
 		ref:          "main",
+		inputsKnown:  true,
 		inputs: []ghclient.WorkflowInput{
 			{Name: "environment", Default: "staging"},
 			{Name: "version", Default: "latest"},
@@ -1092,26 +1093,29 @@ func TestHandleWorkflowInputsFetched_WithInputs(t *testing.T) {
 	})
 	require.NotNil(t, cmd)
 	assert.Equal(t, opWorkflowDispatchInputs, p.pending)
-	assert.Equal(t, "42:Deploy:main", p.pendingName)
+	require.Len(t, p.wfDispatch.inputs, 2)
+	assert.Equal(t, 0, p.wfDispatch.idx)
 
 	msg := cmd()
 	modal, ok := msg.(notify.ShowModalMsg)
 	require.True(t, ok)
 	assert.Contains(t, modal.Title, "Deploy")
+	assert.Equal(t, "staging", modal.Value, "first input's default pre-fills the field")
 }
 
 func TestHandleWorkflowInputsFetched_NoInputs(t *testing.T) {
 	t.Parallel()
 	p := newTestPanel(t, defaultMock())
 
+	// Inputs could not be read → free-form composer fallback.
 	_, cmd := p.handleWorkflowInputsFetched(workflowInputsFetchedMsg{
 		workflowID:   42,
 		workflowName: "CI",
 		ref:          "main",
-		inputs:       nil,
+		inputsKnown:  false,
 	})
 	require.NotNil(t, cmd)
-	assert.Equal(t, opWorkflowDispatchInputs, p.pending)
+	assert.Equal(t, opWorkflowDispatchRaw, p.pending)
 }
 
 // ---------------------------------------------------------------------------

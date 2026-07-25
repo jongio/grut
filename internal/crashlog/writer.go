@@ -8,12 +8,27 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/jongio/grut/internal/config"
 )
 
 // maxCrashFiles is the default retention limit for crash report files.
 const maxCrashFiles = 20
+
+// writeMu serialises Write (and the pruneOld it calls) so concurrent crash
+// reports cannot interleave their os.WriteFile / os.Remove calls. This matters
+// because CaptureCmdPanic keeps the process alive and is invoked from Bubble
+// Tea command goroutines that run concurrently (tea.Batch), unlike the
+// pre-existing callers that wrote a single report immediately before exit.
+var writeMu sync.Mutex
+
+// writeSeq is a process-local monotonic counter that guarantees crash report
+// filenames are unique even when several reports are written within the same
+// clock tick (the timestamp and the short ID alone are not fine-grained enough
+// on coarse-resolution clocks, e.g. Windows).
+var writeSeq atomic.Uint64
 
 // crashDir returns the directory where crash reports are stored.
 func crashDir() string {
@@ -24,6 +39,9 @@ func crashDir() string {
 // directory. It returns the full path of the created file. Old reports
 // beyond the retention limit are pruned automatically.
 func Write(report *CrashReport) (string, error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+
 	dir := crashDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("creating crash directory: %w", err)
@@ -34,7 +52,11 @@ func Write(report *CrashReport) (string, error) {
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-	filename := fmt.Sprintf("crash-%s-%s.json", ts, shortID)
+	// The atomic sequence disambiguates reports written within the same second
+	// (the timestamp is second-resolution and shortID is stable for ~100s), so
+	// concurrent command-goroutine panics do not overwrite each other's report.
+	seq := writeSeq.Add(1)
+	filename := fmt.Sprintf("crash-%s-%s-%d.json", ts, shortID, seq)
 	path := filepath.Join(dir, filename)
 
 	data, err := json.MarshalIndent(report, "", "  ")

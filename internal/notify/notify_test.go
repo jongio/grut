@@ -534,23 +534,16 @@ func TestShowMultilineInput(t *testing.T) {
 	assert.Equal(t, ModalMultilineInput, smm.Kind)
 }
 
-func TestShowMultilineInputWithValue(t *testing.T) {
-	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod\nversion=1.0")
-	require.NotNil(t, cmd)
-
-	msg := cmd()
-	smm, ok := msg.(ShowModalMsg)
-	require.True(t, ok)
-	assert.Equal(t, "Inputs for Deploy", smm.Title)
-	assert.Equal(t, "edit values", smm.Placeholder)
-	assert.Equal(t, "env=prod\nversion=1.0", smm.Value)
-	assert.Equal(t, ModalMultilineInput, smm.Kind)
-}
-
-func TestShowMultilineInputWithValueSubmitsEditedValue(t *testing.T) {
+// TestMultilineInputSubmitsEditedValue verifies a multi-line modal pre-filled
+// with a value (via ShowModalMsg) starts the cursor at the end of the value,
+// inserts a newline on Enter, and submits the composed value on Ctrl+D.
+func TestMultilineInputSubmitsEditedValue(t *testing.T) {
 	m := NewManager()
-	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod")
-	m.Update(cmd())
+	m.Update(ShowModalMsg{
+		Title: "Inputs for Deploy",
+		Value: "env=prod",
+		Kind:  ModalMultilineInput,
+	})
 	require.True(t, m.HasModal())
 
 	// Cursor starts at end of the pre-filled value; add a second input line.
@@ -1236,6 +1229,43 @@ func TestShowActionPickerConstructor(t *testing.T) {
 	assert.Equal(t, ModalActionPicker, smm.Kind)
 	assert.Len(t, smm.Actions, 3)
 	assert.Equal(t, "checkout", smm.Actions[0].ID)
+}
+
+func TestShowActionPickerWithSelection(t *testing.T) {
+	actions := testActions()
+	cmd := ShowActionPickerWithSelection("Pick", "sub", actions, actions[2].ID)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	smm, ok := msg.(ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, ModalActionPicker, smm.Kind)
+	assert.Equal(t, "Pick", smm.Title)
+	assert.Equal(t, "sub", smm.Message)
+	assert.Equal(t, actions[2].ID, smm.SelectedID)
+}
+
+// TestShowActionPickerWithSelection_PreselectsCursor verifies the manager
+// starts the picker cursor on the selected action, not always the first.
+func TestShowActionPickerWithSelection_PreselectsCursor(t *testing.T) {
+	actions := testActions()
+	m := NewManager()
+	m.Update(ShowModalMsg{
+		Kind:       ModalActionPicker,
+		Title:      "Pick",
+		Actions:    actions,
+		SelectedID: actions[2].ID,
+	})
+	require.NotNil(t, m.modal)
+	assert.Equal(t, 2, m.modal.actionCursor, "cursor should start on the selected action")
+}
+
+func TestActionIndexByID(t *testing.T) {
+	actions := testActions()
+	assert.Equal(t, 0, actionIndexByID(actions, ""), "empty id → first action")
+	assert.Equal(t, 0, actionIndexByID(actions, "does-not-exist"), "unknown id → first action")
+	assert.Equal(t, 2, actionIndexByID(actions, actions[2].ID))
+	assert.Equal(t, 0, actionIndexByID(nil, "anything"))
 }
 
 // --- Tab key tests ---

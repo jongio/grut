@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	gh "github.com/google/go-github/v89/github"
+	"github.com/jongio/grut/internal/crashlog"
 	"github.com/jongio/grut/internal/git"
 	ghclient "github.com/jongio/grut/internal/github"
 	"github.com/jongio/grut/internal/notify"
@@ -247,6 +248,21 @@ type workflowInputsFetchedMsg struct {
 	ref          string
 	inputs       []ghclient.WorkflowInput
 	workflowID   int64
+	inputsKnown  bool // true when the workflow inputs were read successfully
+}
+
+// workflow_dispatch input type identifiers (GitHub Actions).
+const (
+	inputTypeChoice  = "choice"
+	inputTypeBoolean = "boolean"
+	boolTrue         = "true"
+	boolFalse        = "false"
+)
+
+// boolActions is the picker option set for a boolean workflow_dispatch input.
+var boolActions = []notify.ActionOption{
+	{ID: boolTrue, Label: boolTrue},
+	{ID: boolFalse, Label: boolFalse},
 }
 
 // githubPollTickMsg triggers periodic GitHub data refresh.
@@ -634,7 +650,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadGitHubData", func() tea.Msg {
 		var result ghDataLoadedMsg
 		// Fetch repo metadata (visibility).
 		repoInfo, err := client.RepoInfo(ctx, owner, repo)
@@ -790,7 +806,7 @@ func (p *Panel) loadGitHubData() tea.Cmd {
 			}
 		}
 		return result
-	}
+	})
 }
 
 func (p *Panel) handleGHDataLoaded(msg ghDataLoadedMsg) (panels.Panel, tea.Cmd) {
@@ -911,7 +927,7 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadGitHubMeta", func() tea.Msg {
 		var result ghMetaLoadedMsg
 		repoInfo, err := client.RepoInfo(ctx, owner, repo)
 		if err != nil {
@@ -927,7 +943,7 @@ func (p *Panel) loadGitHubMeta() tea.Cmd {
 			result.user = *user.Login
 		}
 		return result
-	}
+	})
 }
 
 // loadIssuesPage fetches a single page of issues.
@@ -940,7 +956,7 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
 	state := p.gh.issueState.apiValue()
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadIssuesPage", func() tea.Msg {
 		issues, pr, err := client.ListIssuesPage(ctx, owner, repo, &gh.IssueListByRepoOptions{
 			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
@@ -980,7 +996,7 @@ func (p *Panel) loadIssuesPage(page int, replace bool) tea.Cmd {
 			})
 		}
 		return ghIssuesPageMsg{issues: items, nextPage: pr.NextPage, replace: replace}
-	}
+	})
 }
 
 // loadPRsPage fetches a single page of pull requests.
@@ -993,7 +1009,7 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
 	state := p.gh.prState.apiValue()
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadPRsPage", func() tea.Msg {
 		prs, pr, err := client.ListPRsPage(ctx, owner, repo, &gh.PullRequestListOptions{
 			State:       state,
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
@@ -1007,7 +1023,7 @@ func (p *Panel) loadPRsPage(page int, replace bool) tea.Cmd {
 			items = append(items, ghPRItemFromPullRequest(ghPR, owner))
 		}
 		return ghPRsPageMsg{prs: items, nextPage: pr.NextPage, replace: replace}
-	}
+	})
 }
 
 // loadActionsPage fetches a single page of workflow runs.
@@ -1019,7 +1035,7 @@ func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadActionsPage", func() tea.Msg {
 		runs, pr, err := client.ListWorkflowRunsPage(ctx, owner, repo, &gh.ListWorkflowRunsOptions{
 			ListOptions: gh.ListOptions{Page: page, PerPage: pageSize},
 		})
@@ -1041,7 +1057,7 @@ func (p *Panel) loadActionsPage(page int, replace bool) tea.Cmd {
 			})
 		}
 		return ghActionsPageMsg{actions: items, nextPage: pr.NextPage, replace: replace}
-	}
+	})
 }
 
 // loadWorkflowsPage fetches a single page of workflow definitions.
@@ -1053,7 +1069,7 @@ func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadWorkflowsPage", func() tea.Msg {
 		workflows, pr, err := client.ListWorkflowsPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
 			slog.Warn("github: fetch workflows page failed", "owner", owner, "repo", repo, "page", page, "err", err)
@@ -1070,7 +1086,7 @@ func (p *Panel) loadWorkflowsPage(page int, replace bool) tea.Cmd {
 			})
 		}
 		return ghWorkflowsPageMsg{workflows: items, nextPage: pr.NextPage, replace: replace}
-	}
+	})
 }
 
 // loadReleasesPage fetches a single page of releases.
@@ -1082,7 +1098,7 @@ func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	pageSize := p.gh.pageSize
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadReleasesPage", func() tea.Msg {
 		releases, pr, err := client.ListReleasesPage(ctx, owner, repo, &gh.ListOptions{Page: page, PerPage: pageSize})
 		if err != nil {
 			slog.Warn("github: fetch releases page failed", "owner", owner, "repo", repo, "page", page, "err", err)
@@ -1116,7 +1132,7 @@ func (p *Panel) loadReleasesPage(page int, replace bool) tea.Cmd {
 			})
 		}
 		return ghReleasesPageMsg{releases: items, nextPage: pr.NextPage, replace: replace}
-	}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -2291,6 +2307,9 @@ func (p *Panel) handleActionRerunResult(msg actionRerunResultMsg) (panels.Panel,
 // cancelWorkflowRunCmd returns a Cmd that cancels a workflow run.
 func (p *Panel) cancelWorkflowRunCmd(runID int64) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -2375,30 +2394,173 @@ func (p *Panel) handleWorkflowDispatchResult(msg workflowDispatchResultMsg) (pan
 	)
 }
 
-// handleWorkflowInputsFetched receives the parsed workflow_dispatch inputs
-// from the YAML file and shows a pre-populated input dialog.
+// handleWorkflowInputsFetched receives the parsed workflow_dispatch inputs and
+// begins collecting values. When the inputs are known it prompts once per
+// input — a picker for choice/boolean inputs (so the user selects a valid
+// value), a text field for free-form inputs (so the user can enter a custom
+// value) — then dispatches. A workflow with no inputs dispatches immediately.
+// When the inputs could not be read (fetch/parse failed) it falls back to a
+// free-form key=value composer so the user can still pass inputs.
 func (p *Panel) handleWorkflowInputsFetched(msg workflowInputsFetchedMsg) (panels.Panel, tea.Cmd) {
-	// Wire up pending state so the next modal result hits opWorkflowDispatchInputs.
+	if !msg.inputsKnown {
+		// Inputs unreadable — offer the free-form composer as a fallback.
+		p.pending = opWorkflowDispatchRaw
+		p.pendingName = fmt.Sprintf("%d:%s:%s", msg.workflowID, msg.workflowName, msg.ref)
+		title := fmt.Sprintf("Inputs for %s", msg.workflowName)
+		return p, notify.ShowMultilineInput(title, "key=value per line (empty to skip) • ctrl+d submit")
+	}
+	p.wfDispatch = workflowDispatchDraft{
+		workflowID:   msg.workflowID,
+		workflowName: msg.workflowName,
+		ref:          msg.ref,
+		inputs:       msg.inputs,
+		values:       make(map[string]any),
+	}
+	return p.promptNextWorkflowInput()
+}
+
+// promptNextWorkflowInput advances the workflow-dispatch flow: it prompts for
+// the next declared input, or fires the dispatch once every input has been
+// collected. Choice and boolean inputs use an action picker preselected on the
+// declared default; free-form inputs use a text field pre-filled with the
+// default so the user can accept it or type a custom value.
+func (p *Panel) promptNextWorkflowInput() (panels.Panel, tea.Cmd) {
+	d := &p.wfDispatch
+	if d.idx >= len(d.inputs) {
+		return p.fireWorkflowDispatch()
+	}
+	input := d.inputs[d.idx]
 	p.pending = opWorkflowDispatchInputs
-	p.pendingName = fmt.Sprintf("%d:%s:%s", msg.workflowID, msg.workflowName, msg.ref)
-	// Build pre-populated value with actual field names and defaults.
-	var prePopulated string
-	if len(msg.inputs) > 0 {
-		lines := make([]string, 0, len(msg.inputs))
-		for _, input := range msg.inputs {
-			lines = append(lines, input.Name+"="+input.Default)
+	title := fmt.Sprintf("%s — input %d of %d", d.workflowName, d.idx+1, len(d.inputs))
+	prompt := workflowInputPrompt(input)
+	switch {
+	case input.Type == inputTypeChoice && len(input.Options) > 0:
+		return p, notify.ShowActionPickerWithSelection(title, prompt, optionsToActions(input.Options), input.Default)
+	case input.Type == inputTypeBoolean:
+		selected := boolFalse
+		if input.Default == boolTrue {
+			selected = boolTrue
 		}
-		prePopulated = strings.Join(lines, "\n")
+		return p, notify.ShowActionPickerWithSelection(title, prompt, boolActions, selected)
+	default:
+		return p, notify.ShowInputWithValue(title, prompt, input.Default)
 	}
-	title := fmt.Sprintf("Inputs for %s", msg.workflowName)
-	placeholder := "key=value per line (empty to skip)"
-	if len(msg.inputs) > 0 {
-		placeholder = "edit values below (empty to skip)"
+}
+
+// fireWorkflowDispatch dispatches the workflow with the values collected across
+// the per-input prompts, then resets the draft.
+func (p *Panel) fireWorkflowDispatch() (panels.Panel, tea.Cmd) {
+	d := p.wfDispatch
+	p.wfDispatch = workflowDispatchDraft{}
+	var inputs map[string]any
+	if len(d.values) > 0 {
+		inputs = d.values
 	}
-	// The content is one key=value per line, so use a multi-line composer
-	// (Enter=newline, Ctrl+D=submit). A single-line input can neither hold
-	// nor let the user add newlines, so multi-input workflows were unusable.
-	return p, notify.ShowMultilineInputWithValue(title, placeholder, prePopulated)
+	return p, p.dispatchWorkflowCmd(d.workflowID, d.workflowName, d.ref, inputs)
+}
+
+// dispatchWorkflowCmd builds the command that dispatches a workflow run. It
+// returns nil when the target is incomplete (missing id/ref), and surfaces a
+// nil client as a failure toast rather than a nil dereference that would crash
+// the TUI. Shared by the per-input flow and the free-form fallback.
+func (p *Panel) dispatchWorkflowCmd(workflowID int64, workflowName, ref string, inputs map[string]any) tea.Cmd {
+	if workflowID == 0 || ref == "" {
+		return nil
+	}
+	owner, repo := p.gh.owner, p.gh.repo
+	ghClient := p.gh.client
+	ctx := p.ctx
+	if ghClient == nil {
+		return func() tea.Msg {
+			return workflowDispatchResultMsg{workflowName: workflowName, err: errGitHubClientUnavailable}
+		}
+	}
+	return guardedGitHubCmd("gitinfo.dispatchWorkflow", func() tea.Msg {
+		err := ghClient.DispatchWorkflow(ctx, owner, repo, workflowID, ref, inputs)
+		return workflowDispatchResultMsg{workflowName: workflowName, err: err}
+	})
+}
+
+// workflowInputPrompt builds the prompt line shown while collecting a single
+// workflow_dispatch input, favouring the description and flagging required
+// inputs.
+func workflowInputPrompt(in ghclient.WorkflowInput) string {
+	label := in.Description
+	if label == "" {
+		label = in.Name
+	}
+	if in.Name != "" && label != in.Name {
+		label = in.Name + ": " + label
+	}
+	if in.Required {
+		label += " (required)"
+	}
+	return label
+}
+
+// optionsToActions converts declared choice options into picker actions.
+func optionsToActions(opts []string) []notify.ActionOption {
+	actions := make([]notify.ActionOption, 0, len(opts))
+	for _, o := range opts {
+		actions = append(actions, notify.ActionOption{ID: o, Label: o})
+	}
+	return actions
+}
+
+// ghCmdPanicMsg is emitted by guardedGitHubCmd when a GitHub command goroutine
+// panics (after the panic is captured to a crash report). The panel handles it
+// by clearing any in-flight loading state — which the panicking command's
+// normal typed result would otherwise have cleared — so the panel is not left
+// stuck showing "Loading…", and by surfacing an error toast.
+type ghCmdPanicMsg struct{ label string }
+
+// guardedGitHubCmd wraps a GitHub command closure so a panic in the Bubble Tea
+// command goroutine is captured to a crash report and surfaced as an error
+// toast, instead of killing the whole TUI. crashlog.GuardTUI only covers the
+// model's Init/Update/View on the main goroutine; command goroutines (run by
+// Bubble Tea's execBatchMsg) are otherwise unprotected, so an unexpected panic
+// on the GitHub data path — e.g. a nil field in live API data — would abort the
+// program with a swallowed stack (issue #361).
+func guardedGitHubCmd(label string, fn func() tea.Msg) tea.Cmd {
+	return func() (msg tea.Msg) {
+		defer func() {
+			if r := recover(); r != nil {
+				crashlog.CaptureCmdPanic(r, label)
+				msg = ghCmdPanicMsg{label: label}
+			}
+		}()
+		return fn()
+	}
+}
+
+// handleGHCmdPanic clears any in-flight loading state stranded by a panicking
+// GitHub command (its normal typed result never arrived to clear it) and shows
+// an error toast. The crash report was already written by guardedGitHubCmd.
+func (p *Panel) handleGHCmdPanic(_ ghCmdPanicMsg) (panels.Panel, tea.Cmd) {
+	for i := range p.tabPaging {
+		p.tabPaging[i].loading = false
+	}
+	p.gh.notifLoading = false
+	return p, func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: "GitHub request failed unexpectedly — details saved to the crash log",
+			Level:   notify.Error,
+		}
+	}
+}
+
+// ghClientUnavailableCmd surfaces a failure toast when a GitHub action is
+// attempted with no client configured, instead of dereferencing a nil client
+// in a command goroutine and crashing the TUI. Its loader siblings return nil
+// (silent no-op); an explicit action instead tells the user why nothing
+// happened.
+func ghClientUnavailableCmd() tea.Cmd {
+	return func() tea.Msg {
+		return notify.ShowToastMsg{
+			Message: errGitHubClientUnavailable.Error(),
+			Level:   notify.Error,
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -2562,6 +2724,9 @@ func (p *Panel) prCheckoutWorktreeCmd(pr ghPRItem, branch, path string) tea.Cmd 
 // mergePRCmd returns a tea.Cmd that executes the merge asynchronously.
 func (p *Panel) mergePRCmd(number int, strategy string, headBranch string) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -2684,6 +2849,9 @@ func (p *Panel) doCommentOnItem() (panels.Panel, tea.Cmd) {
 // commentCmd returns a tea.Cmd that posts the comment asynchronously.
 func (p *Panel) commentCmd(number int, body, kind string) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -2891,6 +3059,9 @@ func parseReviewerLogins(input string) []string {
 // requestReviewersCmd returns a tea.Cmd that requests reviewers asynchronously.
 func (p *Panel) requestReviewersCmd(number int, reviewers []string) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -2989,6 +3160,9 @@ func parseIssueStateName(name string) (number int, state string, ok bool) {
 // closeReopenIssueCmd returns a tea.Cmd that closes or reopens an issue.
 func (p *Panel) closeReopenIssueCmd(number int, targetState string) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -3119,6 +3293,9 @@ func (p *Panel) branchIsPushed(name string) bool {
 // createPRCmd returns a tea.Cmd that opens the pull request asynchronously.
 func (p *Panel) createPRCmd(head, base, title, body string) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	return func() tea.Msg {
@@ -3621,6 +3798,9 @@ func parseAssignSelfName(name string) (kind string, number int, ok bool) {
 // current user login is not cached, it is fetched first.
 func (p *Panel) assignSelfCmd(kind string, number int) tea.Cmd {
 	client := p.gh.client
+	if client == nil {
+		return ghClientUnavailableCmd()
+	}
 	owner, repo := p.gh.owner, p.gh.repo
 	ctx := p.ctx
 	login := p.gh.user
