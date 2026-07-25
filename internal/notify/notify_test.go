@@ -534,23 +534,16 @@ func TestShowMultilineInput(t *testing.T) {
 	assert.Equal(t, ModalMultilineInput, smm.Kind)
 }
 
-func TestShowMultilineInputWithValue(t *testing.T) {
-	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod\nversion=1.0")
-	require.NotNil(t, cmd)
-
-	msg := cmd()
-	smm, ok := msg.(ShowModalMsg)
-	require.True(t, ok)
-	assert.Equal(t, "Inputs for Deploy", smm.Title)
-	assert.Equal(t, "edit values", smm.Placeholder)
-	assert.Equal(t, "env=prod\nversion=1.0", smm.Value)
-	assert.Equal(t, ModalMultilineInput, smm.Kind)
-}
-
-func TestShowMultilineInputWithValueSubmitsEditedValue(t *testing.T) {
+// TestMultilineInputSubmitsEditedValue verifies a multi-line modal pre-filled
+// with a value (via ShowModalMsg) starts the cursor at the end of the value,
+// inserts a newline on Enter, and submits the composed value on Ctrl+D.
+func TestMultilineInputSubmitsEditedValue(t *testing.T) {
 	m := NewManager()
-	cmd := ShowMultilineInputWithValue("Inputs for Deploy", "edit values", "env=prod")
-	m.Update(cmd())
+	m.Update(ShowModalMsg{
+		Title: "Inputs for Deploy",
+		Value: "env=prod",
+		Kind:  ModalMultilineInput,
+	})
 	require.True(t, m.HasModal())
 
 	// Cursor starts at end of the pre-filled value; add a second input line.
