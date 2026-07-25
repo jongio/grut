@@ -196,6 +196,51 @@ func TestRunReport_ShowFlag_NonexistentID(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestFindCrashReport_ExactID(t *testing.T) {
+	reports := []*crashlog.CrashReport{
+		{ID: "123456789"},
+		{ID: "123400000"},
+	}
+
+	report, err := findCrashReport("123456789", reports)
+
+	require.NoError(t, err)
+	assert.Equal(t, "123456789", report.ID)
+}
+
+func TestFindCrashReport_UnambiguousPrefix(t *testing.T) {
+	reports := []*crashlog.CrashReport{
+		{ID: "123456789"},
+		{ID: "987654321"},
+	}
+
+	report, err := findCrashReport("1234", reports)
+
+	require.NoError(t, err)
+	assert.Equal(t, "123456789", report.ID)
+}
+
+func TestFindCrashReport_AmbiguousPrefix(t *testing.T) {
+	reports := []*crashlog.CrashReport{
+		{ID: "123456789"},
+		{ID: "123400000"},
+	}
+
+	_, err := findCrashReport("1234", reports)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "matches 2 reports")
+}
+
+func TestFindCrashReport_MissingPrefix(t *testing.T) {
+	reports := []*crashlog.CrashReport{{ID: "123456789"}}
+
+	_, err := findCrashReport("999", reports)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
 func TestRunReport_JSONWithoutListReturnsError(t *testing.T) {
 	cmd := newReportCmd()
 	cmd.SetArgs([]string{"--json"})
