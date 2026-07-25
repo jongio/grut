@@ -156,7 +156,8 @@ const (
 	opTagPush                            // awaiting tag push confirmation
 	opTagCheckout                        // awaiting tag checkout confirmation (detached HEAD)
 	opWorkflowDispatch                   // awaiting workflow dispatch ref input
-	opWorkflowDispatchInputs             // awaiting workflow dispatch inputs (key=value)
+	opWorkflowDispatchInputs             // awaiting the value for one declared workflow_dispatch input
+	opWorkflowDispatchRaw                // awaiting free-form key=value inputs (workflow YAML unreadable)
 	opPRMergeStrategy                    // awaiting merge strategy selection
 	opPRMergeConfirm                     // awaiting merge confirmation
 	opPRDeleteBranchAfterMerge           // awaiting post-merge branch deletion confirmation
@@ -363,6 +364,18 @@ type prCreateDraft struct {
 	title string
 }
 
+// workflowDispatchDraft holds the state of the multi-step workflow dispatch
+// flow. After the ref is chosen, grut prompts once per declared
+// workflow_dispatch input, then fires the dispatch with the collected values.
+type workflowDispatchDraft struct {
+	values       map[string]any // collected input values, keyed by input name
+	workflowName string
+	ref          string
+	inputs       []ghclient.WorkflowInput
+	workflowID   int64
+	idx          int // index of the input currently being prompted
+}
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
@@ -382,19 +395,20 @@ type Panel struct {
 	cfg               config.GitConfig
 	colors            panelColors
 	theme             *theme.Theme
-	tabCursor         [tabCount]int // cursor per tab
-	tabOffset         [tabCount]int // viewport offset per tab
-	mode              PanelMode     // which tab subset to display
-	activeTab         tabID         // currently active tab
-	filterQuery       string        // incremental filter query for the active git list tab
-	filteredIdx       []int         // indices into tabItems[activeTab]; nil = no filter
-	compareBase       string        // currently pinned diff compare base
-	remoteCount       int           // actual number of remotes (distinct from tabItems len which includes sub-rows)
-	pending           pendingOp     // operation awaiting modal result
-	prDraft           prCreateDraft // in-progress fields for the multi-step create-PR flow
-	pendingPRCheckout ghPRItem      // PR captured for the checkout action picker
-	actionsWatchFrame int           // current animation frame index into watchFrames
-	lastWidth         int           // last rendered width, used for click zone calculation
+	tabCursor         [tabCount]int         // cursor per tab
+	tabOffset         [tabCount]int         // viewport offset per tab
+	mode              PanelMode             // which tab subset to display
+	activeTab         tabID                 // currently active tab
+	filterQuery       string                // incremental filter query for the active git list tab
+	filteredIdx       []int                 // indices into tabItems[activeTab]; nil = no filter
+	compareBase       string                // currently pinned diff compare base
+	remoteCount       int                   // actual number of remotes (distinct from tabItems len which includes sub-rows)
+	pending           pendingOp             // operation awaiting modal result
+	prDraft           prCreateDraft         // in-progress fields for the multi-step create-PR flow
+	wfDispatch        workflowDispatchDraft // in-progress fields for the multi-step workflow dispatch flow
+	pendingPRCheckout ghPRItem              // PR captured for the checkout action picker
+	actionsWatchFrame int                   // current animation frame index into watchFrames
+	lastWidth         int                   // last rendered width, used for click zone calculation
 	// CI watch animation state — animated indicator when in-progress runs exist.
 	actionsWatching bool // true when in-progress/queued runs exist AND polling is active
 	// Live GitHub Actions log follow state. The followed job is the first failed
@@ -991,6 +1005,8 @@ func (p *Panel) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p.handleWorkflowDispatchResult(msg)
 	case workflowInputsFetchedMsg:
 		return p.handleWorkflowInputsFetched(msg)
+	case ghCmdPanicMsg:
+		return p.handleGHCmdPanic(msg)
 
 	case prMergeResultMsg:
 		return p.handlePRMergeResult(msg)
@@ -2663,6 +2679,7 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 	if !msg.Accept {
 		// Abort any in-progress create-PR flow so a later run starts clean.
 		p.prDraft = prCreateDraft{}
+		p.wfDispatch = workflowDispatchDraft{}
 		return p, nil
 	}
 	a := modalArgs{
@@ -2722,6 +2739,8 @@ func (p *Panel) handleModalResult(msg notify.ModalResultMsg) (panels.Panel, tea.
 		return p.handleWorkflowDispatch(a)
 	case opWorkflowDispatchInputs:
 		return p.handleWorkflowDispatchInputs(a)
+	case opWorkflowDispatchRaw:
+		return p.handleWorkflowDispatchRaw(a)
 	case opPRMergeStrategy:
 		return p.handlePRMergeStrategy(a)
 	case opPRMergeConfirm:

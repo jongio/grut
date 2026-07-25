@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Dispatching a GitHub Actions workflow now prompts for each `workflow_dispatch` input in turn: `choice` and `boolean` inputs are picked from their valid values (preselected on the workflow's default) and free-form inputs are pre-filled with the default and accept a custom value, instead of a single free-form `key=value` text blob.
+
+### Fixed
+- grut no longer crashes when dispatching a GitHub Actions workflow. Panics inside Bubble Tea command goroutines (which the model-level panic guard cannot catch) are now captured to a crash report and surfaced as an error toast instead of killing the TUI, across the GitHub data and dispatch paths.
+- Several GitHub actions (cancel run, merge PR, comment, request reviewers, close/reopen issue, create PR, assign self) now show a clear error instead of risking a crash when no GitHub client is available.
+
 ## [0.3.0] - 2026-05-18
 
 ### Contributors

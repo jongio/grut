@@ -179,7 +179,7 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 			selected:      msg.Kind == ModalConfirm || msg.Kind == ModalConfirmWithCheckbox,
 			checkboxLabel: msg.CheckboxLabel,
 			actions:       msg.Actions,
-			actionCursor:  0,
+			actionCursor:  actionIndexByID(msg.Actions, msg.SelectedID),
 		}
 		m.mu.Unlock()
 		return nil

@@ -31,8 +31,10 @@ import KeybindingTable from '../../components/KeybindingTable.astro';
   <p>
     When you select a workflow, the preview panel shows the workflow YAML
     definition alongside its recent run history. Dispatching a workflow
-    opens an input form where you can provide parameter values before
-    triggering the run.
+    prompts you for the ref, then for each declared input in turn: choice and
+    boolean inputs are presented as a picker of their valid values (preselected
+    on the workflow's default), while free-form inputs offer a text field
+    pre-filled with the default so you can accept it or enter a custom value.
   </p>
 </Docs>
 

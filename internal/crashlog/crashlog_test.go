@@ -497,6 +497,48 @@ func TestWriteRecovery_WithLogTail(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// CaptureCmdPanic
+// ---------------------------------------------------------------------------
+
+func TestCaptureCmdPanic_WritesReportAndRecordsPath(t *testing.T) {
+	setTestDataHome(t)
+
+	path := CaptureCmdPanic("cmd boom", "gitinfo.loadGitHubData")
+	require.NotEmpty(t, path, "should return the crash report path")
+	assert.Equal(t, path, LastCrashPath(), "should record the last crash path")
+
+	reports, err := List()
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "cmd boom", reports[0].PanicValue)
+	assert.Equal(t, "gitinfo.loadGitHubData", reports[0].Context)
+}
+
+// TestCaptureCmdPanic_ConcurrentReportsAreDistinct verifies that concurrent
+// command-goroutine panics each get a distinct crash file (no same-second
+// filename collision) and that the write path is race-free (run with -race).
+// CaptureCmdPanic keeps the process alive, so — unlike the pre-existing
+// write-then-exit callers — Write can be invoked concurrently and repeatedly.
+func TestCaptureCmdPanic_ConcurrentReportsAreDistinct(t *testing.T) {
+	setTestDataHome(t)
+
+	const n = 15 // below maxCrashFiles (20) so none are pruned
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			CaptureCmdPanic(fmt.Sprintf("panic-%d", i), "concurrent-ctx")
+		}(i)
+	}
+	wg.Wait()
+
+	reports, err := List()
+	require.NoError(t, err)
+	assert.Len(t, reports, n, "each concurrent report must get its own file (no overwrite)")
+}
+
+// ---------------------------------------------------------------------------
 // RecoverAndReport
 // ---------------------------------------------------------------------------
 

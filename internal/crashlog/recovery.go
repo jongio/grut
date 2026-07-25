@@ -59,6 +59,39 @@ func WriteRecovery(panicVal any, ctx string, tail *LogTailHandler) {
 	fmt.Fprintf(os.Stderr, "Run 'grut report' to file a GitHub issue.\n")
 }
 
+// CaptureCmdPanic writes a crash report for a panic recovered inside a Bubble
+// Tea command goroutine and records it as the last crash path. Unlike
+// WriteRecovery it prints nothing to stderr: the TUI still owns the terminal
+// (alternate screen, raw mode), so stray output would corrupt the display.
+// It returns the crash report path, or "" if the report could not be written.
+//
+// Bubble Tea runs each command in its own goroutine and turns any panic there
+// into a fatal ErrProgramPanic that tears the whole program down. GuardTUI only
+// covers the model's Init/Update/View on the main goroutine, so a command that
+// panics — e.g. on a nil field in live API data — would otherwise kill the TUI.
+// Recovering in the command closure and reporting via this function keeps the
+// TUI alive while preserving the stack for diagnosis. Use it from a deferred
+// recover in the command:
+//
+//	return func() (msg tea.Msg) {
+//		defer func() {
+//			if r := recover(); r != nil {
+//				crashlog.CaptureCmdPanic(r, "gitinfo.loadGitHubData")
+//				msg = errorToast(r)
+//			}
+//		}()
+//		...
+//	}
+func CaptureCmdPanic(panicVal any, ctx string) string {
+	report := NewReport(panicVal, debug.Stack(), ctx)
+	path, err := Write(report)
+	if err != nil {
+		return ""
+	}
+	lastCrashPath.Store(&path)
+	return path
+}
+
 // lastCrashPath records the path of the most recent crash report written by
 // GuardTUI. It lets the program surface the report location after Bubble Tea
 // has restored the terminal, since anything GuardTUI itself prints would land

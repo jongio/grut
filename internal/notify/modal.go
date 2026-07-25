@@ -803,6 +803,35 @@ func ShowActionPickerWithMessage(title, message string, actions []ActionOption) 
 	}
 }
 
+// ShowActionPickerWithSelection returns a tea.Cmd that produces a
+// ShowModalMsg for an action picker whose cursor starts on the action with
+// the given ID. An empty or unknown selectedID starts on the first action.
+func ShowActionPickerWithSelection(title, message string, actions []ActionOption, selectedID string) tea.Cmd {
+	return func() tea.Msg {
+		return ShowModalMsg{
+			Kind:       ModalActionPicker,
+			Title:      title,
+			Message:    message,
+			Actions:    actions,
+			SelectedID: selectedID,
+		}
+	}
+}
+
+// actionIndexByID returns the index of the action with the given ID, or 0
+// when the ID is empty or absent.
+func actionIndexByID(actions []ActionOption, id string) int {
+	if id == "" {
+		return 0
+	}
+	for i, a := range actions {
+		if a.ID == id {
+			return i
+		}
+	}
+	return 0
+}
+
 // renderCheckbox renders the checkbox toggle for a ConfirmWithCheckbox modal.
 func (ms *modalState) renderCheckbox(width int) string {
 	icon := "○" // unchecked

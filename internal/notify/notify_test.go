@@ -1238,6 +1238,43 @@ func TestShowActionPickerConstructor(t *testing.T) {
 	assert.Equal(t, "checkout", smm.Actions[0].ID)
 }
 
+func TestShowActionPickerWithSelection(t *testing.T) {
+	actions := testActions()
+	cmd := ShowActionPickerWithSelection("Pick", "sub", actions, actions[2].ID)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	smm, ok := msg.(ShowModalMsg)
+	require.True(t, ok)
+	assert.Equal(t, ModalActionPicker, smm.Kind)
+	assert.Equal(t, "Pick", smm.Title)
+	assert.Equal(t, "sub", smm.Message)
+	assert.Equal(t, actions[2].ID, smm.SelectedID)
+}
+
+// TestShowActionPickerWithSelection_PreselectsCursor verifies the manager
+// starts the picker cursor on the selected action, not always the first.
+func TestShowActionPickerWithSelection_PreselectsCursor(t *testing.T) {
+	actions := testActions()
+	m := NewManager()
+	m.Update(ShowModalMsg{
+		Kind:       ModalActionPicker,
+		Title:      "Pick",
+		Actions:    actions,
+		SelectedID: actions[2].ID,
+	})
+	require.NotNil(t, m.modal)
+	assert.Equal(t, 2, m.modal.actionCursor, "cursor should start on the selected action")
+}
+
+func TestActionIndexByID(t *testing.T) {
+	actions := testActions()
+	assert.Equal(t, 0, actionIndexByID(actions, ""), "empty id → first action")
+	assert.Equal(t, 0, actionIndexByID(actions, "does-not-exist"), "unknown id → first action")
+	assert.Equal(t, 2, actionIndexByID(actions, actions[2].ID))
+	assert.Equal(t, 0, actionIndexByID(nil, "anything"))
+}
+
 // --- Tab key tests ---
 
 func TestModalConfirmTab(t *testing.T) {

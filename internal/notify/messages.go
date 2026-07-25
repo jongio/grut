@@ -53,6 +53,7 @@ type ShowModalMsg struct {
 	Placeholder   string         // used only for input modals
 	Value         string         // initial value for input modals (pre-fill)
 	CheckboxLabel string         // label for the checkbox (ConfirmWithCheckbox only)
+	SelectedID    string         // action ID to preselect (ModalActionPicker only; empty = first)
 	Actions       []ActionOption // list of actions (ModalActionPicker only)
 	Kind          ModalKind      // confirm, input, confirmWithCheckbox, or actionPicker
 }

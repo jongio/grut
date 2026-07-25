@@ -48,7 +48,7 @@ func (p *Panel) loadNotifications() tea.Cmd {
 		return nil
 	}
 	ctx := p.ctx
-	return func() tea.Msg {
+	return guardedGitHubCmd("gitinfo.loadNotifications", func() tea.Msg {
 		var result ghNotificationsLoadedMsg
 		notifs, err := client.ListNotifications(ctx, &gh.NotificationListOptions{All: false})
 		if err != nil {
@@ -71,7 +71,7 @@ func (p *Panel) loadNotifications() tea.Cmd {
 			})
 		}
 		return result
-	}
+	})
 }
 
 // handleNotificationsLoaded stores loaded notifications into the tab.
