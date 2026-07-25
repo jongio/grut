@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,6 +99,57 @@ func TestCleanMissingDirsForce(t *testing.T) {
 	out := execClean(t, dataDir, "--force")
 
 	assert.Contains(t, out, "Reclaimed 0 B.")
+}
+
+func TestCleanJSONPreviewReportsTargetsWithoutDeleting(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out := execClean(t, dataDir, "--json")
+
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.False(t, report.Forced)
+	assert.Equal(t, int64(len("session")+len("diag")), report.TotalBytes)
+	assert.Equal(t, 2, report.PresentCount)
+	require.Len(t, report.Targets, 2)
+	assert.Equal(t, "sessions", report.Targets[0].Label)
+	assert.True(t, report.Targets[0].Exists)
+	assert.False(t, report.Targets[0].Removed)
+	assert.DirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.DirExists(t, filepath.Join(dataDir, "diagnostics"))
+}
+
+func TestCleanJSONForceReportsRemovedTargets(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out := execClean(t, dataDir, "--force", "--json")
+
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.True(t, report.Forced)
+	assert.Equal(t, 2, report.PresentCount)
+	for _, target := range report.Targets {
+		assert.True(t, target.Exists)
+		assert.True(t, target.Removed)
+	}
+	assert.NoDirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.NoDirExists(t, filepath.Join(dataDir, "diagnostics"))
+}
+
+func TestCleanJSONMissingDirs(t *testing.T) {
+	dataDir := t.TempDir()
+
+	out := execClean(t, dataDir, "--json")
+
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.Equal(t, int64(0), report.TotalBytes)
+	assert.Equal(t, 0, report.PresentCount)
+	require.Len(t, report.Targets, 2)
+	for _, target := range report.Targets {
+		assert.False(t, target.Exists)
+		assert.False(t, target.Removed)
+	}
 }
 
 func TestCleanRejectsArgs(t *testing.T) {
