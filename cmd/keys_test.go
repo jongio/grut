@@ -35,6 +35,48 @@ func TestKeysCommandFiltersBindings(t *testing.T) {
 	assert.NotContains(t, out.String(), "File Tree\n")
 }
 
+func TestKeysCommandFiltersBySection(t *testing.T) {
+	cmd := newKeysCmd()
+	cmd.SetArgs([]string{"--section", "filetree"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "File Tree")
+	assert.NotContains(t, out.String(), "Global\n")
+}
+
+func TestKeysCommandFiltersBySectionJSON(t *testing.T) {
+	cmd := newKeysCmd()
+	cmd.SetArgs([]string{"--section", "global", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var sections []keybindings.Section
+	require.NoError(t, json.Unmarshal(out.Bytes(), &sections))
+	require.Len(t, sections, 1)
+	assert.Equal(t, "global", sections[0].ID)
+}
+
+func TestKeysCommandUnknownSectionReturnsEmptyJSON(t *testing.T) {
+	cmd := newKeysCmd()
+	cmd.SetArgs([]string{"--section", "missing", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var sections []keybindings.Section
+	require.NoError(t, json.Unmarshal(out.Bytes(), &sections))
+	assert.Empty(t, sections)
+}
+
 func TestKeysCommandPrintsJSON(t *testing.T) {
 	cmd := newKeysCmd()
 	cmd.SetArgs([]string{"--filter", "global", "--json"})
