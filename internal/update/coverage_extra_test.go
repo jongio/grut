@@ -324,7 +324,22 @@ func TestWriteCache_ParentIsFile(t *testing.T) {
 
 // --- RunUpdate coverage ---
 
+// isolateUserConfigDir points os.UserConfigDir at a temp directory so tests
+// that call RunUpdate don't contend for the real user-level update lock.
+// go test runs package binaries concurrently, so without this the cmd
+// package's update tests race with these over the same lock file and one
+// side fails with "another update is already in progress".
+func isolateUserConfigDir(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)         // Windows
+	t.Setenv("XDG_CONFIG_HOME", dir) // Unix
+	t.Setenv("HOME", dir)            // macOS, and Unix fallback
+}
+
 func TestRunUpdate_AlreadyUpToDate(t *testing.T) {
+	isolateUserConfigDir(t)
+
 	// Mock API returns the same version as current.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -341,6 +356,8 @@ func TestRunUpdate_AlreadyUpToDate(t *testing.T) {
 }
 
 func TestRunUpdate_FetchFailure(t *testing.T) {
+	isolateUserConfigDir(t)
+
 	// Mock API returns an error.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -357,6 +374,8 @@ func TestRunUpdate_FetchFailure(t *testing.T) {
 }
 
 func TestRunUpdate_InvalidVersionFromAPI(t *testing.T) {
+	isolateUserConfigDir(t)
+
 	// Mock API returns a non-semver version.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -374,7 +393,9 @@ func TestRunUpdate_InvalidVersionFromAPI(t *testing.T) {
 }
 
 func TestRunUpdate_DownloadFailure(t *testing.T) {
-	// Mock API returns a newer version — RunUpdate will try to download
+	isolateUserConfigDir(t)
+
+	// Mock API returns a newer version. RunUpdate will try to download
 	// the release archive from downloadBaseURL which will fail since
 	// the version doesn't exist.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
