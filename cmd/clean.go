@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -19,6 +20,21 @@ type dataDirFunc func() string
 type cleanTarget struct {
 	label string
 	path  string
+}
+
+type cleanTargetReport struct {
+	Label   string `json:"label"`
+	Path    string `json:"path"`
+	Exists  bool   `json:"exists"`
+	Bytes   int64  `json:"bytes"`
+	Removed bool   `json:"removed"`
+}
+
+type cleanReport struct {
+	Forced       bool                `json:"forced"`
+	TotalBytes   int64               `json:"total_bytes"`
+	PresentCount int                 `json:"present_count"`
+	Targets      []cleanTargetReport `json:"targets"`
 }
 
 // cleanTargets returns the transient directories clean manages, rooted at
@@ -54,50 +70,76 @@ clean never touches your config file, installed extensions, crash reports
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			force, _ := cmd.Flags().GetBool("force")
-			return runClean(cmd.OutOrStdout(), cleanTargets(dataDir()), force)
+			asJSON, _ := cmd.Flags().GetBool("json")
+			return runClean(cmd.OutOrStdout(), cleanTargets(dataDir()), force, asJSON)
 		},
 	}
 	cmd.Flags().Bool("force", false, "Delete the transient data (without this flag, clean only previews)")
+	cmd.Flags().Bool("json", false, "Print the clean report as JSON")
 	return cmd
 }
 
 // runClean scans each target, then either previews it or removes it. A
 // missing target is reported and skipped rather than treated as an error, so
 // running clean on a fresh machine is a no-op.
-func runClean(out io.Writer, targets []cleanTarget, force bool) error {
-	var total int64
-	present := 0
+func runClean(out io.Writer, targets []cleanTarget, force, asJSON bool) error {
+	report := cleanReport{
+		Forced:  force,
+		Targets: make([]cleanTargetReport, 0, len(targets)),
+	}
 	for _, t := range targets {
 		size, exists, err := dirSize(t.path)
 		if err != nil {
 			return fmt.Errorf("scanning %s: %w", t.label, err)
 		}
+		targetReport := cleanTargetReport{
+			Label:  t.label,
+			Path:   t.path,
+			Exists: exists,
+			Bytes:  size,
+		}
 		if !exists {
-			fmt.Fprintf(out, "  %-12s not present\n", t.label)
+			report.Targets = append(report.Targets, targetReport)
+			if !asJSON {
+				fmt.Fprintf(out, "  %-12s not present\n", t.label)
+			}
 			continue
 		}
-		present++
-		total += size
+		report.PresentCount++
+		report.TotalBytes += size
 		if force {
 			if err := os.RemoveAll(t.path); err != nil {
 				return fmt.Errorf("removing %s: %w", t.label, err)
 			}
-			fmt.Fprintf(out, "  %-12s removed  %s\n", t.label, humanizeBytes(size))
+			targetReport.Removed = true
+			report.Targets = append(report.Targets, targetReport)
+			if !asJSON {
+				fmt.Fprintf(out, "  %-12s removed  %s\n", t.label, humanizeBytes(size))
+			}
 			continue
 		}
-		fmt.Fprintf(out, "  %-12s %-10s %s\n", t.label, humanizeBytes(size), t.path)
+		report.Targets = append(report.Targets, targetReport)
+		if !asJSON {
+			fmt.Fprintf(out, "  %-12s %-10s %s\n", t.label, humanizeBytes(size), t.path)
+		}
+	}
+
+	if asJSON {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
 	}
 
 	fmt.Fprintln(out)
 	if force {
-		fmt.Fprintf(out, "Reclaimed %s.\n", humanizeBytes(total))
+		fmt.Fprintf(out, "Reclaimed %s.\n", humanizeBytes(report.TotalBytes))
 		return nil
 	}
-	if present == 0 {
+	if report.PresentCount == 0 {
 		fmt.Fprintln(out, "Nothing to clean.")
 		return nil
 	}
-	fmt.Fprintf(out, "%s across %d location(s). Run with --force to delete.\n", humanizeBytes(total), present)
+	fmt.Fprintf(out, "%s across %d location(s). Run with --force to delete.\n", humanizeBytes(report.TotalBytes), report.PresentCount)
 	return nil
 }
 
