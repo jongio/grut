@@ -11,8 +11,9 @@ import (
 
 func newKeysCmd() *cobra.Command {
 	var (
-		filter string
-		asJSON bool
+		filter  string
+		section string
+		asJSON  bool
 	)
 
 	keysCmd := &cobra.Command{
@@ -20,7 +21,8 @@ func newKeysCmd() *cobra.Command {
 		Short: "Print keybindings",
 		Long:  "Print the built-in keybinding reference without starting the TUI.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sections := filterKeybindingSections(keybindings.Sections(), filter)
+			sections := filterKeybindingSectionsByID(keybindings.Sections(), section)
+			sections = filterKeybindingSections(sections, filter)
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -32,8 +34,22 @@ func newKeysCmd() *cobra.Command {
 	}
 
 	keysCmd.Flags().StringVar(&filter, "filter", "", "Only show sections, keys, or actions matching this text")
+	keysCmd.Flags().StringVar(&section, "section", "", "Only show the section with this id")
 	keysCmd.Flags().BoolVar(&asJSON, "json", false, "Print keybindings as JSON")
 	return keysCmd
+}
+
+func filterKeybindingSectionsByID(sections []keybindings.Section, section string) []keybindings.Section {
+	query := strings.TrimSpace(strings.ToLower(section))
+	if query == "" {
+		return sections
+	}
+	for _, item := range sections {
+		if strings.ToLower(item.ID) == query {
+			return []keybindings.Section{item}
+		}
+	}
+	return []keybindings.Section{}
 }
 
 func filterKeybindingSections(sections []keybindings.Section, filter string) []keybindings.Section {
