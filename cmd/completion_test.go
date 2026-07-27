@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -22,6 +24,25 @@ func TestCompletionCmd_GeneratesPowerShell(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "Register-ArgumentCompleter")
+}
+
+func TestCompletionCmd_WritesOutputFile(t *testing.T) {
+	root := &cobra.Command{Use: "app"}
+	root.AddCommand(newCompletionCmd())
+	outPath := filepath.Join(t.TempDir(), "nested", "app.ps1")
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"completion", "powershell", "--output", outPath})
+
+	err := root.Execute()
+
+	require.NoError(t, err)
+	assert.Empty(t, out.String())
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "Register-ArgumentCompleter")
 }
 
 func TestCompletionCmd_RejectsUnsupportedShell(t *testing.T) {
