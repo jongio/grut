@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/jongio/grut/internal/theme"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,6 +34,41 @@ func TestThemeListCommandPrintsJSON(t *testing.T) {
 	var names []string
 	require.NoError(t, json.Unmarshal(out.Bytes(), &names))
 	assert.Equal(t, []string{"default", "gruvbox"}, names)
+}
+
+func TestThemeShowCommandPrintsText(t *testing.T) {
+	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
+		return &theme.Theme{Name: "default", Variant: "dark", Mode: theme.ModeColor, Colors: theme.Colors{Background: "#000000"}}, nil
+	})
+	cmd.SetArgs([]string{"default"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Name:    default")
+	assert.Contains(t, out.String(), "Variant: dark")
+	assert.Contains(t, out.String(), "Mode:    color")
+}
+
+func TestThemeShowCommandPrintsJSON(t *testing.T) {
+	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
+		return &theme.Theme{Name: "gruvbox", Variant: "dark", Mode: theme.ModeColor, Colors: theme.Colors{Background: "#282828"}}, nil
+	})
+	cmd.SetArgs([]string{"gruvbox", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var report themeShowReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	assert.Equal(t, "gruvbox", report.Name)
+	assert.Equal(t, "dark", report.Variant)
+	assert.Equal(t, "color", report.Mode)
+	assert.Equal(t, "#282828", report.Colors.Background)
 }
 
 func TestRootRegistersThemeListCommand(t *testing.T) {
