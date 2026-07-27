@@ -92,6 +92,8 @@ func runConfigCheck(cmd *cobra.Command, load configLoadFunc, path configPathFunc
 			if encodeErr := writeConfigCheckJSON(cmd.OutOrStdout(), report); encodeErr != nil {
 				return encodeErr
 			}
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", cfgPath)
 		}
 		return fmt.Errorf("config check failed: keybindings: %w", err)
 	}

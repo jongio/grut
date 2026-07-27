@@ -141,6 +141,26 @@ func TestConfigCheckReportsKeybindingConflicts(t *testing.T) {
 	assert.Contains(t, out.String(), "two")
 }
 
+func TestConfigCheckKeymapLoadFailurePrintsConfigPath(t *testing.T) {
+	cmd := newConfigCheckCmdWithKeymap(
+		func() (*config.Config, error) {
+			return &config.Config{General: config.GeneralConfig{KeybindingScheme: "custom"}}, nil
+		},
+		func() string { return windowsConfigPath },
+		func(string) (*keymap.Keymap, error) {
+			return nil, errors.New("scheme not found")
+		},
+	)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "keybindings")
+	assert.Contains(t, out.String(), windowsConfigPath)
+}
+
 func TestConfigPathPrintsResolvedPaths(t *testing.T) {
 	tests := []struct {
 		name       string
