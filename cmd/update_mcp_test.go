@@ -26,6 +26,15 @@ func TestUpdateCmd_HasLongDescription(t *testing.T) {
 }
 
 func TestUpdateCmd_ErrorWrapping(t *testing.T) {
+	// Point os.UserConfigDir at a temp directory. RunUpdate takes an
+	// exclusive lock under the user config dir, and go test runs package
+	// binaries concurrently, so without this the internal/update package's
+	// RunUpdate tests race with this one over the same lock file.
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)         // Windows
+	t.Setenv("XDG_CONFIG_HOME", dir) // Unix
+	t.Setenv("HOME", dir)            // macOS, and Unix fallback
+
 	// Running "grut update" will call update.RunUpdate which fails for
 	// dev builds. This exercises the error wrapping path in RunE.
 	root, cleanup := buildRootCommand()

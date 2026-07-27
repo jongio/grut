@@ -64,7 +64,7 @@ func TestRegistryOverwrite(t *testing.T) {
 
 func TestRegisterDefaults(t *testing.T) {
 	r := NewRegistry()
-	cfg, err := config.Load()
+	cfg, err := config.LoadDefaults()
 	require.NoError(t, err)
 	RegisterDefaults(context.Background(), r, cfg, nil, nil)
 

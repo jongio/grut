@@ -361,9 +361,13 @@ func TestStartDetachedFn_ReaperTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err)
-	// StartDetachedFn should return almost immediately (well under 1s),
-	// NOT block for the full duration of the command.
-	assert.Less(t, elapsed, 2*time.Second, "StartDetachedFn should not block on long-running commands")
+	// StartDetachedFn hands the child to a background reaper, so elapsed time
+	// tracks process-spawn cost, not the child's ~10s lifetime. The bound is
+	// deliberately loose: spawning a process on a loaded machine can take a
+	// couple of seconds, while a regression that reintroduced a blocking Wait
+	// would push elapsed past 9s. 5s separates the two cases cleanly.
+	const maxSpawnTime = 5 * time.Second
+	assert.Less(t, elapsed, maxSpawnTime, "StartDetachedFn should not block on long-running commands")
 }
 
 func TestStartDetachedFn_NilCmd(t *testing.T) {
