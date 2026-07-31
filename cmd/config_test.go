@@ -34,6 +34,71 @@ func TestConfigCheckSuccess(t *testing.T) {
 	assert.Contains(t, out.String(), "OK")
 }
 
+func TestConfigCheckJSONSuccess(t *testing.T) {
+	cmd := newConfigCheckCmd(
+		func() (*config.Config, error) { return &config.Config{}, nil },
+		func() string { return windowsConfigPath },
+	)
+	cmd.SetArgs([]string{"--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var report configCheckReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	assert.True(t, report.OK)
+	assert.Equal(t, windowsConfigPath, report.ConfigPath)
+	assert.Empty(t, report.KeybindingConflicts)
+}
+
+func TestConfigCheckJSONFailure(t *testing.T) {
+	cmd := newConfigCheckCmd(
+		func() (*config.Config, error) { return nil, errors.New("config preview.width: must be 1-100") },
+		func() string { return windowsConfigPath },
+	)
+	cmd.SetArgs([]string{"--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	var report configCheckReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	assert.False(t, report.OK)
+	assert.Equal(t, windowsConfigPath, report.ConfigPath)
+	assert.Contains(t, report.Error, "preview.width")
+}
+
+func TestConfigCheckJSONReportsKeybindingConflicts(t *testing.T) {
+	cmd := newConfigCheckCmdWithKeymap(
+		func() (*config.Config, error) {
+			return &config.Config{General: config.GeneralConfig{KeybindingScheme: "custom"}}, nil
+		},
+		func() string { return windowsConfigPath },
+		func(string) (*keymap.Keymap, error) {
+			return keymap.NewKeymapFromBindings([]keymap.Binding{
+				{Key: "x", Mode: keymap.ModePanel, Action: "one"},
+				{Key: "x", Mode: keymap.ModePanel, Action: "two"},
+			}), nil
+		},
+	)
+	cmd.SetArgs([]string{"--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	var report configCheckReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	require.Len(t, report.KeybindingConflicts, 1)
+	assert.Equal(t, "x", report.KeybindingConflicts[0].Key)
+	assert.Equal(t, []string{"one", "two"}, report.KeybindingConflicts[0].Actions)
+}
+
 func TestConfigCheckFailure(t *testing.T) {
 	cmd := newConfigCheckCmd(
 		func() (*config.Config, error) { return nil, errors.New("config preview.width: must be 1-100") },
@@ -74,6 +139,26 @@ func TestConfigCheckReportsKeybindingConflicts(t *testing.T) {
 	assert.Contains(t, out.String(), `key "x"`)
 	assert.Contains(t, out.String(), "one")
 	assert.Contains(t, out.String(), "two")
+}
+
+func TestConfigCheckKeymapLoadFailurePrintsConfigPath(t *testing.T) {
+	cmd := newConfigCheckCmdWithKeymap(
+		func() (*config.Config, error) {
+			return &config.Config{General: config.GeneralConfig{KeybindingScheme: "custom"}}, nil
+		},
+		func() string { return windowsConfigPath },
+		func(string) (*keymap.Keymap, error) {
+			return nil, errors.New("scheme not found")
+		},
+	)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "keybindings")
+	assert.Contains(t, out.String(), windowsConfigPath)
 }
 
 func TestConfigPathPrintsResolvedPaths(t *testing.T) {

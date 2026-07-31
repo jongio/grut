@@ -42,23 +42,80 @@ func newConfigCheckCmd(load configLoadFunc, path configPathFunc) *cobra.Command 
 }
 
 func newConfigCheckCmdWithKeymap(load configLoadFunc, path configPathFunc, loadKeymap keymapLoadFunc) *cobra.Command {
-	return &cobra.Command{
-		Use:   "check",
-		Short: "Validate the active grut configuration",
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:          "check",
+		Short:        "Validate the active grut configuration",
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfgPath := path()
-			cfg, err := load()
-			if err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", cfgPath)
-				return fmt.Errorf("config check failed: %w", err)
-			}
-			if err := checkKeybindings(cmd, cfg, cfgPath, loadKeymap); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nOK\n", cfgPath)
-			return nil
+			return runConfigCheck(cmd, load, path, loadKeymap, asJSON)
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output the config check report as JSON")
+	return cmd
+}
+
+type configCheckReport struct {
+	OK                  bool                 `json:"ok"`
+	ConfigPath          string               `json:"config_path"`
+	Error               string               `json:"error,omitempty"`
+	KeybindingConflicts []keybindingConflict `json:"keybinding_conflicts"`
+}
+
+type keybindingConflict struct {
+	Key     string   `json:"key"`
+	Mode    string   `json:"mode"`
+	Context string   `json:"context"`
+	Actions []string `json:"actions"`
+}
+
+func runConfigCheck(cmd *cobra.Command, load configLoadFunc, path configPathFunc, loadKeymap keymapLoadFunc, asJSON bool) error {
+	cfgPath := path()
+	report := configCheckReport{ConfigPath: cfgPath, KeybindingConflicts: []keybindingConflict{}}
+	cfg, err := load()
+	if err != nil {
+		report.Error = err.Error()
+		if asJSON {
+			if encodeErr := writeConfigCheckJSON(cmd.OutOrStdout(), report); encodeErr != nil {
+				return encodeErr
+			}
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", cfgPath)
+		}
+		return fmt.Errorf("config check failed: %w", err)
+	}
+
+	conflicts, err := detectConfigKeybindingConflicts(cfg, loadKeymap)
+	if err != nil {
+		report.Error = fmt.Sprintf("keybindings: %v", err)
+		if asJSON {
+			if encodeErr := writeConfigCheckJSON(cmd.OutOrStdout(), report); encodeErr != nil {
+				return encodeErr
+			}
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", cfgPath)
+		}
+		return fmt.Errorf("config check failed: keybindings: %w", err)
+	}
+	report.KeybindingConflicts = conflicts
+	if len(conflicts) > 0 {
+		report.Error = fmt.Sprintf("%d keybinding conflict(s) found", len(conflicts))
+		if asJSON {
+			if encodeErr := writeConfigCheckJSON(cmd.OutOrStdout(), report); encodeErr != nil {
+				return encodeErr
+			}
+		} else {
+			writeKeybindingConflicts(cmd.OutOrStdout(), cfgPath, conflicts)
+		}
+		return fmt.Errorf("config check failed: %d keybinding conflict(s) found", len(conflicts))
+	}
+
+	report.OK = true
+	if asJSON {
+		return writeConfigCheckJSON(cmd.OutOrStdout(), report)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nOK\n", cfgPath)
+	return nil
 }
 
 const configPathCommandName = "path"
@@ -93,25 +150,43 @@ type configPaths struct {
 
 const defaultKeybindingScheme = "default"
 
-func checkKeybindings(cmd *cobra.Command, cfg *config.Config, cfgPath string, loadKeymap keymapLoadFunc) error {
+func detectConfigKeybindingConflicts(cfg *config.Config, loadKeymap keymapLoadFunc) ([]keybindingConflict, error) {
 	scheme := cfg.General.KeybindingScheme
 	if scheme == "" {
 		scheme = defaultKeybindingScheme
 	}
 	km, err := loadKeymap(scheme)
 	if err != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", cfgPath)
-		return fmt.Errorf("config check failed: keybindings: %w", err)
+		return nil, err
 	}
 	conflicts := keymap.DetectConflicts(km.Bindings())
-	if len(conflicts) == 0 {
-		return nil
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nKeybinding conflicts:\n", cfgPath)
+	out := make([]keybindingConflict, 0, len(conflicts))
 	for _, conflict := range conflicts {
-		fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", conflict.String())
+		out = append(out, keybindingConflict{
+			Key:     conflict.Key,
+			Mode:    conflict.Mode.String(),
+			Context: conflict.Context,
+			Actions: conflict.Actions,
+		})
 	}
-	return fmt.Errorf("config check failed: %d keybinding conflict(s) found", len(conflicts))
+	return out, nil
+}
+
+func writeKeybindingConflicts(out io.Writer, cfgPath string, conflicts []keybindingConflict) {
+	fmt.Fprintf(out, "Config: %s\nKeybinding conflicts:\n", cfgPath)
+	for _, conflict := range conflicts {
+		ctx := conflict.Context
+		if ctx == "" {
+			ctx = "(all)"
+		}
+		fmt.Fprintf(out, "- key %q in mode %s context %s: actions %v\n", conflict.Key, conflict.Mode, ctx, conflict.Actions)
+	}
+}
+
+func writeConfigCheckJSON(out io.Writer, report configCheckReport) error {
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(report)
 }
 
 // newConfigGetCmd builds the "config get" subcommand, which prints a single
