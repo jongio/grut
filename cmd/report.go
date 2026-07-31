@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jongio/grut/internal/crashlog"
@@ -140,9 +141,13 @@ func writeCrashReportListJSON(w io.Writer, reports []*crashlog.CrashReport) erro
 }
 
 func runReportShow(id string) error {
-	report, err := crashlog.Read(id)
+	reports, err := crashlog.List()
 	if err != nil {
-		return fmt.Errorf("reading crash report %q: %w", id, err)
+		return fmt.Errorf("listing crash reports: %w", err)
+	}
+	report, err := findCrashReport(id, reports)
+	if err != nil {
+		return err
 	}
 
 	data, err := json.MarshalIndent(report, "", "  ")
@@ -151,6 +156,33 @@ func runReportShow(id string) error {
 	}
 	fmt.Println(string(data))
 	return nil
+}
+
+func findCrashReport(id string, reports []*crashlog.CrashReport) (*crashlog.CrashReport, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("crash report ID is required")
+	}
+	for _, report := range reports {
+		if report.ID == id {
+			return report, nil
+		}
+	}
+
+	var matches []*crashlog.CrashReport
+	for _, report := range reports {
+		if strings.HasPrefix(report.ID, id) {
+			matches = append(matches, report)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return nil, fmt.Errorf("crash report with id %q not found", id)
+	default:
+		return nil, fmt.Errorf("crash report id %q matches %d reports; use a longer ID", id, len(matches))
+	}
 }
 
 func runReportLatest(noBrowser bool) error {
