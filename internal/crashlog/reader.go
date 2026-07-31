@@ -54,43 +54,6 @@ func List() ([]*CrashReport, error) {
 	return reports, nil
 }
 
-// Read loads a single crash report by its ID. It returns an error if no
-// report with the given ID exists.
-func Read(id string) (*CrashReport, error) {
-	if len(id) > 64 {
-		return nil, fmt.Errorf("invalid crash report ID")
-	}
-	dir := crashDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no crash reports found")
-		}
-		return nil, fmt.Errorf("reading crash directory: %w", err)
-	}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "crash-") || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			slog.Warn("skipping unreadable crash report", "file", e.Name(), "error", err)
-			continue
-		}
-		var r CrashReport
-		if err := json.Unmarshal(data, &r); err != nil {
-			slog.Warn("skipping malformed crash report", "file", e.Name(), "error", err)
-			continue
-		}
-		if r.ID == id {
-			return &r, nil
-		}
-	}
-
-	return nil, fmt.Errorf("crash report with id %q not found", id)
-}
-
 // Clear deletes all crash report files from the crash directory and
 // returns the number of files removed.
 func Clear() (int, error) {

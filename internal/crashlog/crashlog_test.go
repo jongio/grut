@@ -136,7 +136,7 @@ func TestFormatGitHubIssueBody(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Write / Read / List / Clear / PruneOld
+// Write / List / Clear / PruneOld
 // ---------------------------------------------------------------------------
 
 func TestWriteAndRead(t *testing.T) {
@@ -147,10 +147,11 @@ func TestWriteAndRead(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 
-	got, err := Read(r.ID)
+	reports, err := List()
 	require.NoError(t, err)
-	assert.Equal(t, r.PanicValue, got.PanicValue)
-	assert.Equal(t, r.ID, got.ID)
+	require.Len(t, reports, 1)
+	assert.Equal(t, r.PanicValue, reports[0].PanicValue)
+	assert.Equal(t, r.ID, reports[0].ID)
 }
 
 func TestWriteAndList(t *testing.T) {
@@ -600,27 +601,6 @@ func TestList_MalformedJSON(t *testing.T) {
 	// The valid report should be returned; the malformed one skipped.
 	assert.Len(t, reports, 1)
 	assert.Equal(t, "valid", reports[0].PanicValue)
-}
-
-func TestRead_NotFound(t *testing.T) {
-	setTestDataHome(t)
-
-	// Write a report so the directory exists.
-	r := NewReport("exists", []byte("stack"), "ctx")
-	_, err := Write(r)
-	require.NoError(t, err)
-
-	_, err = Read("nonexistent-id")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
-}
-
-func TestRead_NoDirectory(t *testing.T) {
-	setTestDataHome(t)
-
-	_, err := Read("any-id")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no crash reports found")
 }
 
 func TestClear_EmptyDirectory(t *testing.T) {
