@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -113,6 +114,24 @@ func TestConfigPathPrintsResolvedPaths(t *testing.T) {
 	}
 }
 
+func TestConfigPathPrintsJSON(t *testing.T) {
+	cmd := newConfigPathCmd(
+		func() string { return windowsConfigPath },
+		func() string { return windowsDataPath },
+	)
+	cmd.SetArgs([]string{"--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var paths configPaths
+	require.NoError(t, json.Unmarshal(out.Bytes(), &paths))
+	assert.Equal(t, windowsConfigPath, paths.Config)
+	assert.Equal(t, windowsDataPath, paths.Data)
+}
+
 func TestRootRegistersConfigCheck(t *testing.T) {
 	root, cleanup := newRootCommand()
 	defer cleanup()
@@ -136,6 +155,7 @@ func TestRootRegistersConfigPath(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, pathCmd)
 	assert.Equal(t, configPathCommandName, pathCmd.Name())
+	require.NotNil(t, pathCmd.Flags().Lookup("json"), "--json flag should be registered")
 }
 
 func TestRootRegistersConfigGet(t *testing.T) {

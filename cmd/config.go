@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -63,14 +64,31 @@ func newConfigCheckCmdWithKeymap(load configLoadFunc, path configPathFunc, loadK
 const configPathCommandName = "path"
 
 func newConfigPathCmd(path configPathFunc, dataPath dataPathFunc) *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	pathCmd := &cobra.Command{
 		Use:   configPathCommandName,
 		Short: "Print resolved grut config and data paths",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nData:   %s\n", path(), dataPath())
+			paths := configPaths{
+				Config: path(),
+				Data:   dataPath(),
+			}
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(paths)
+			}
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\nData:   %s\n", paths.Config, paths.Data)
 			return err
 		},
 	}
+	pathCmd.Flags().BoolVar(&asJSON, "json", false, "Print resolved paths as JSON")
+	return pathCmd
+}
+
+type configPaths struct {
+	Config string `json:"config"`
+	Data   string `json:"data"`
 }
 
 const defaultKeybindingScheme = "default"
