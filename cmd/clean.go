@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -71,18 +72,21 @@ clean never touches your config file, installed extensions, crash reports
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			force, _ := cmd.Flags().GetBool("force")
 			asJSON, _ := cmd.Flags().GetBool("json")
-			return runClean(cmd.OutOrStdout(), cleanTargets(dataDir()), force, asJSON)
+			check, _ := cmd.Flags().GetBool("check")
+			return runClean(cmd.OutOrStdout(), cleanTargets(dataDir()), force, asJSON, check)
 		},
 	}
 	cmd.Flags().Bool("force", false, "Delete the transient data (without this flag, clean only previews)")
 	cmd.Flags().Bool("json", false, "Print the clean report as JSON")
+	cmd.Flags().Bool("check", false, "Exit with an error when transient data is present")
 	return cmd
 }
 
 // runClean scans each target, then either previews it or removes it. A
 // missing target is reported and skipped rather than treated as an error, so
 // running clean on a fresh machine is a no-op.
-func runClean(out io.Writer, targets []cleanTarget, force, asJSON bool) error {
+func runClean(out io.Writer, targets []cleanTarget, force, asJSON, check bool) error {
+	force = force && !check
 	report := cleanReport{
 		Forced:  force,
 		Targets: make([]cleanTargetReport, 0, len(targets)),
@@ -127,7 +131,13 @@ func runClean(out io.Writer, targets []cleanTarget, force, asJSON bool) error {
 	if asJSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(report)
+		if err := enc.Encode(report); err != nil {
+			return err
+		}
+		if check && report.PresentCount > 0 {
+			return errCleanTargetsPresent
+		}
+		return nil
 	}
 
 	fmt.Fprintln(out)
@@ -140,8 +150,13 @@ func runClean(out io.Writer, targets []cleanTarget, force, asJSON bool) error {
 		return nil
 	}
 	fmt.Fprintf(out, "%s across %d location(s). Run with --force to delete.\n", humanizeBytes(report.TotalBytes), report.PresentCount)
+	if check {
+		return errCleanTargetsPresent
+	}
 	return nil
 }
+
+var errCleanTargetsPresent = errors.New("transient data is present")
 
 // dirSize returns the total size of all files under path. The second return
 // value reports whether path exists; a missing path yields (0, false, nil).
