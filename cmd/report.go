@@ -19,7 +19,8 @@ const (
 	issueURL   = "https://github.com/" + githubRepo + "/issues/new"
 	maxURLLen  = 4000
 
-	reportJSONFlag = "json"
+	reportJSONFlag  = "json"
+	reportLimitFlag = "limit"
 )
 
 type crashReportSummary struct {
@@ -54,6 +55,7 @@ all stored reports, --show to inspect one, or --clear to remove them all.`,
 	cmd.Flags().Bool("clear", false, "Clear all crash reports")
 	cmd.Flags().Bool("no-browser", false, "Print the GitHub issue URL instead of opening the browser")
 	cmd.Flags().Bool(reportJSONFlag, false, "Print list output as JSON")
+	cmd.Flags().Int(reportLimitFlag, 0, "Limit list output to the newest N crash reports (0 for all)")
 
 	return cmd
 }
@@ -94,9 +96,17 @@ func runReportClear() error {
 }
 
 func runReportList(cmd *cobra.Command, jsonOutput bool) error {
+	limit, _ := cmd.Flags().GetInt(reportLimitFlag)
+	if limit < 0 {
+		return fmt.Errorf("--limit must be 0 or greater")
+	}
+
 	reports, err := crashlog.List()
 	if err != nil {
 		return fmt.Errorf("listing crash reports: %w", err)
+	}
+	if limit > 0 && len(reports) > limit {
+		reports = reports[:limit]
 	}
 	if jsonOutput {
 		return writeCrashReportListJSON(cmd.OutOrStdout(), reports)

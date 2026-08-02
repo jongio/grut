@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/jongio/grut/internal/crashlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,6 +151,7 @@ func TestNewReportCmd_FlagsRegistered(t *testing.T) {
 		{"clear", "bool"},
 		{"no-browser", "bool"},
 		{"json", "bool"},
+		{"limit", "int"},
 	}
 
 	for _, tt := range tests {
@@ -251,6 +253,60 @@ func TestRunReport_JSONWithoutListReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "--json can only be used with --list")
 }
 
+func TestRunReportList_LimitTextNewestReports(t *testing.T) {
+	setReportTestDataHome(t)
+	writeReportFixture(t, "oldest-id", "oldest panic", time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "middle-id", "middle panic", time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "newest-id", "newest panic", time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC))
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--limit", "2"})
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	got := out.String()
+	assert.Contains(t, got, "Crash Reports (2 found)")
+	assert.Contains(t, got, "newest panic")
+	assert.Contains(t, got, "middle panic")
+	assert.NotContains(t, got, "oldest panic")
+	assert.Less(t, strings.Index(got, "newest panic"), strings.Index(got, "middle panic"))
+}
+
+func TestRunReportList_LimitZeroTextUnlimited(t *testing.T) {
+	setReportTestDataHome(t)
+	writeReportFixture(t, "oldest-id", "oldest panic", time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "middle-id", "middle panic", time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "newest-id", "newest panic", time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC))
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--limit", "0"})
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	got := out.String()
+	assert.Contains(t, got, "Crash Reports (3 found)")
+	assert.Contains(t, got, "newest panic")
+	assert.Contains(t, got, "middle panic")
+	assert.Contains(t, got, "oldest panic")
+}
+
+func TestRunReportList_NegativeLimitTextReturnsError(t *testing.T) {
+	setReportTestDataHome(t)
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--limit", "-1"})
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--limit must be 0 or greater")
+}
+
 func TestWriteCrashReportListJSON_Empty(t *testing.T) {
 	var out bytes.Buffer
 
@@ -288,6 +344,60 @@ func TestWriteCrashReportListJSON_SummaryFields(t *testing.T) {
 	assert.Equal(t, "preview render", got[0].Context)
 }
 
+func TestRunReportList_LimitJSONNewestReports(t *testing.T) {
+	setReportTestDataHome(t)
+	writeReportFixture(t, "oldest-id", "oldest panic", time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "middle-id", "middle panic", time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "newest-id", "newest panic", time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC))
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--json", "--limit", "2"})
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var got []crashReportSummary
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	require.Len(t, got, 2)
+	assert.Equal(t, "newest-id", got[0].ID)
+	assert.Equal(t, "middle-id", got[1].ID)
+}
+
+func TestRunReportList_LimitZeroJSONUnlimited(t *testing.T) {
+	setReportTestDataHome(t)
+	writeReportFixture(t, "oldest-id", "oldest panic", time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "middle-id", "middle panic", time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC))
+	writeReportFixture(t, "newest-id", "newest panic", time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC))
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--json", "--limit", "0"})
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var got []crashReportSummary
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	require.Len(t, got, 3)
+	assert.Equal(t, "newest-id", got[0].ID)
+	assert.Equal(t, "middle-id", got[1].ID)
+	assert.Equal(t, "oldest-id", got[2].ID)
+}
+
+func TestRunReportList_NegativeLimitJSONReturnsError(t *testing.T) {
+	setReportTestDataHome(t)
+	var out bytes.Buffer
+	cmd := newReportCmd()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--list", "--json", "--limit", "-1"})
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--limit must be 0 or greater")
+}
+
 func TestRunReport_LatestDefault_NoReports(t *testing.T) {
 	// Default behavior (no flags) when no crash reports exist should
 	// print "No crash reports found." and succeed.
@@ -295,6 +405,26 @@ func TestRunReport_LatestDefault_NoReports(t *testing.T) {
 	cmd.SetArgs([]string{})
 	err := cmd.Execute()
 	assert.NoError(t, err)
+}
+
+func setReportTestDataHome(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	orig := xdg.DataHome
+	xdg.DataHome = tmp
+	t.Cleanup(func() { xdg.DataHome = orig })
+}
+
+func writeReportFixture(t *testing.T, id, panicValue string, timestamp time.Time) {
+	t.Helper()
+	_, err := crashlog.Write(&crashlog.CrashReport{
+		ID:         id,
+		Timestamp:  timestamp,
+		Version:    "test-version",
+		PanicValue: panicValue,
+		Context:    "test context",
+	})
+	require.NoError(t, err)
 }
 
 func TestRunReport_LatestWithNoBrowser_NoReports(t *testing.T) {
