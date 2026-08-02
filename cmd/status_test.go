@@ -20,6 +20,7 @@ func TestNewStatusCmd_Wiring(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	require.NotNil(t, cmd.Flags().Lookup("json"), "--json flag should be registered")
 	require.NotNil(t, cmd.Flags().Lookup("check"), "--check flag should be registered")
+	require.NotNil(t, cmd.Flags().Lookup("short"), "--short flag should be registered")
 }
 
 func TestBuildStatusReport_Clean(t *testing.T) {
@@ -106,6 +107,37 @@ func TestWriteStatusText_DetachedHead(t *testing.T) {
 	assert.Contains(t, buf.String(), "HEAD detached")
 }
 
+func TestWriteStatusShort_Clean(t *testing.T) {
+	var buf bytes.Buffer
+	writeStatusShort(&buf, git.StatusBranch{Head: "main", Upstream: "origin/main", Ahead: 2}, nil, true)
+	assert.Equal(t, "## main...origin/main [ahead 2] clean\n", buf.String())
+}
+
+func TestWriteStatusShort_CompactFiles(t *testing.T) {
+	files := []git.FileStatus{
+		{Path: "staged.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusUnmodified},
+		{Path: "unstaged.go", StagedStatus: git.StatusUnmodified, WorktreeStatus: git.StatusModified},
+		{Path: "both.go", StagedStatus: git.StatusModified, WorktreeStatus: git.StatusModified},
+		{Path: "new.txt", StagedStatus: git.StatusUntracked, WorktreeStatus: git.StatusUntracked},
+		{Path: "conflict.txt", StagedStatus: git.StatusConflict, WorktreeStatus: git.StatusConflict},
+		{Path: "new-name.go", OrigPath: "old-name.go", StagedStatus: git.StatusRenamed, WorktreeStatus: git.StatusUnmodified},
+	}
+
+	var buf bytes.Buffer
+	writeStatusShort(&buf, git.StatusBranch{Head: "main"}, files, false)
+
+	assert.Equal(t, strings.Join([]string{
+		"## main",
+		"M  staged.go",
+		" M unstaged.go",
+		"MM both.go",
+		"?? new.txt",
+		"UU conflict.txt",
+		"R  old-name.go -> new-name.go",
+		"",
+	}, "\n"), buf.String())
+}
+
 func TestWriteStatusJSON_RoundTrip(t *testing.T) {
 	files := []git.FileStatus{
 		{Path: "a.go", StagedStatus: git.StatusAdded, WorktreeStatus: git.StatusUnmodified},
@@ -164,6 +196,58 @@ func TestRunStatus_CheckDirtyRepo(t *testing.T) {
 	err := runStatus(cmd, nil)
 	require.ErrorIs(t, err, errStatusDirty)
 	assert.Contains(t, out.String(), "Untracked (1):")
+}
+
+func TestRunStatus_ShortCleanRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("hi"), 0o644))
+	runGit(t, dir, "add", "tracked.txt")
+	runGit(t, dir, "commit", "-m", "initial")
+
+	t.Chdir(dir)
+	cmd := newStatusCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--short"})
+
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "## main clean\n", out.String())
+}
+
+func TestRunStatus_ShortCheckDirtyRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "loose.txt"), []byte("hi"), 0o644))
+
+	t.Chdir(dir)
+	cmd := newStatusCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--short", "--check"})
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, errStatusDirty)
+	assert.Equal(t, "## main\n?? loose.txt\n", out.String())
+}
+
+func TestRunStatus_ShortJSONMutualExclusion(t *testing.T) {
+	cmd := newStatusCmd()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"--short", "--json"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--short cannot be combined with --json")
 }
 
 // ---------------------------------------------------------------------------
