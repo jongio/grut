@@ -53,14 +53,13 @@ func filterKeybindingSectionsByID(sections []keybindings.Section, section string
 }
 
 func filterKeybindingSections(sections []keybindings.Section, filter string) []keybindings.Section {
-	query := strings.TrimSpace(strings.ToLower(filter))
-	if query == "" {
+	if textFilterMatches(filter) {
 		return sections
 	}
 
 	var out []keybindings.Section
 	for _, section := range sections {
-		if keybindingSectionMatches(section, query) {
+		if keybindingSectionMatches(section, filter) {
 			out = append(out, section)
 			continue
 		}
@@ -68,8 +67,7 @@ func filterKeybindingSections(sections []keybindings.Section, filter string) []k
 		filtered := section
 		filtered.Bindings = nil
 		for _, binding := range section.Bindings {
-			if strings.Contains(strings.ToLower(binding.Key), query) ||
-				strings.Contains(strings.ToLower(binding.Action), query) {
+			if textFilterMatches(filter, binding.Key, binding.Action) {
 				filtered.Bindings = append(filtered.Bindings, binding)
 			}
 		}
@@ -81,9 +79,7 @@ func filterKeybindingSections(sections []keybindings.Section, filter string) []k
 }
 
 func keybindingSectionMatches(section keybindings.Section, query string) bool {
-	return strings.Contains(strings.ToLower(section.ID), query) ||
-		strings.Contains(strings.ToLower(section.Title), query) ||
-		strings.Contains(strings.ToLower(section.Description), query)
+	return textFilterMatches(query, section.ID, section.Title, section.Description)
 }
 
 func printKeybindingSections(cmd *cobra.Command, sections []keybindings.Section, filter string) {
