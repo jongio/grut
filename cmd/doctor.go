@@ -86,24 +86,28 @@ func newDoctorCmdWithDeps(deps doctorCommandDeps) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report := runDoctor(cmd.Context(), deps)
+			check, _ := cmd.Flags().GetBool("check")
 			var err error
 			if asJSON {
 				err = writeDoctorJSON(cmd.OutOrStdout(), report)
-			} else {
+			} else if !check {
 				writeDoctorText(cmd.OutOrStdout(), report)
 			}
 			if err != nil {
 				return err
 			}
 			if !report.OK {
-				return errors.New("doctor found failed required checks")
+				return errDoctorRequiredChecksFailed
 			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output the doctor report as JSON")
+	cmd.Flags().Bool("check", false, "Exit with an error when required doctor checks fail")
 	return cmd
 }
+
+var errDoctorRequiredChecksFailed = errors.New("doctor found failed required checks")
 
 func defaultDoctorDeps() doctorCommandDeps {
 	return doctorCommandDeps{

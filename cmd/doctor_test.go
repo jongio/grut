@@ -26,6 +26,14 @@ func TestDoctorPassingConfig(t *testing.T) {
 	assert.Contains(t, out, "All required checks passed.")
 }
 
+func TestNewDoctorCmd_Wiring(t *testing.T) {
+	cmd := newDoctorCmd()
+	assert.Equal(t, "doctor", cmd.Use)
+	assert.NotEmpty(t, cmd.Short)
+	require.NotNil(t, cmd.Flags().Lookup("json"), "--json flag should be registered")
+	require.NotNil(t, cmd.Flags().Lookup("check"), "--check flag should be registered")
+}
+
 func TestDoctorInvalidConfigFailsRequiredCheck(t *testing.T) {
 	deps := doctorTestDeps(nil)
 	deps.loadConfig = func() (*config.Config, error) {
@@ -88,6 +96,47 @@ func TestDoctorRequiredFailureExitsNonZero(t *testing.T) {
 	assert.Contains(t, out, "Git")
 	assert.Contains(t, out, "FAIL")
 	assert.Contains(t, out, "One or more required checks failed.")
+}
+
+func TestDoctorCheckPassingRequiredChecksPrintsNothing(t *testing.T) {
+	out, err := runDoctorTest(t, doctorTestDeps(&config.Config{
+		Theme: config.ThemeConfig{Name: "default"},
+		AI:    config.AIConfig{Enabled: false, Provider: "none"},
+	}), []string{"--check"})
+
+	require.NoError(t, err)
+	assert.Empty(t, out)
+}
+
+func TestDoctorCheckRequiredFailureExitsNonZeroAndPrintsNothing(t *testing.T) {
+	deps := doctorTestDeps(&config.Config{
+		Theme: config.ThemeConfig{Name: "default"},
+		AI:    config.AIConfig{Enabled: false, Provider: "none"},
+	})
+	deps.runCommand = func(_ context.Context, name string, args ...string) (string, string, error) {
+		if name == "git" && len(args) == 1 && args[0] == "--version" {
+			return "", "git missing", errors.New("not found")
+		}
+		return fakeDoctorCommand(name, args...)
+	}
+
+	out, err := runDoctorTest(t, deps, []string{"--check"})
+
+	require.ErrorIs(t, err, errDoctorRequiredChecksFailed)
+	assert.Empty(t, out)
+}
+
+func TestDoctorCheckJSONStillPrintsJSON(t *testing.T) {
+	out, err := runDoctorTest(t, doctorTestDeps(&config.Config{
+		Theme: config.ThemeConfig{Name: "default"},
+		AI:    config.AIConfig{Enabled: false, Provider: "none"},
+	}), []string{"--check", "--json"})
+
+	require.NoError(t, err)
+	var report doctorReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.True(t, report.OK)
+	assert.NotEmpty(t, report.Checks)
 }
 
 func TestDoctorJSONStableFields(t *testing.T) {
