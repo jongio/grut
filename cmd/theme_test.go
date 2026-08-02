@@ -36,6 +36,68 @@ func TestThemeListCommandPrintsJSON(t *testing.T) {
 	assert.Equal(t, []string{"default", "gruvbox"}, names)
 }
 
+func TestThemeListCommandFiltersNames(t *testing.T) {
+	cmd := newThemeListCmd(func() []string { return []string{"catppuccin", "custom", "Catwalk"} })
+	cmd.SetArgs([]string{"--filter", "cat"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Equal(t, "catppuccin\nCatwalk\n", out.String())
+}
+
+func TestThemeListCommandFiltersJSON(t *testing.T) {
+	cmd := newThemeListCmd(func() []string { return []string{"default", "Catppuccin", "gruvbox"} })
+	cmd.SetArgs([]string{"--filter", "CAT", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	var names []string
+	require.NoError(t, json.Unmarshal(out.Bytes(), &names))
+	assert.Equal(t, []string{"Catppuccin"}, names)
+}
+
+func TestThemeListCommandEmptyFilterPreservesNames(t *testing.T) {
+	cmd := newThemeListCmd(func() []string { return []string{"default", "gruvbox"} })
+	cmd.SetArgs([]string{"--filter", ""})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Equal(t, "default\ngruvbox\n", out.String())
+}
+
+func TestThemeListCommandFilterNoMatchesText(t *testing.T) {
+	cmd := newThemeListCmd(func() []string { return []string{"default", "gruvbox"} })
+	cmd.SetArgs([]string{"--filter", "cat"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Empty(t, out.String())
+}
+
+func TestThemeListCommandFilterNoMatchesJSON(t *testing.T) {
+	cmd := newThemeListCmd(func() []string { return []string{"default", "gruvbox"} })
+	cmd.SetArgs([]string{"--filter", "cat", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	err := cmd.Execute()
+
+	require.NoError(t, err)
+	assert.Equal(t, "[]\n", out.String())
+}
+
 func TestThemeShowCommandPrintsText(t *testing.T) {
 	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
 		return &theme.Theme{Name: "default", Variant: "dark", Mode: theme.ModeColor, Colors: theme.Colors{Background: "#000000"}}, nil
