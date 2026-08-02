@@ -172,7 +172,7 @@ grut is primarily a TUI, but it also exposes subcommands for scripting and setup
 | `grut status` | Print a summary of the working tree status |
 | `grut config` | Inspect configuration (`check`, `get <key>`, `defaults`) |
 | `grut theme` | Inspect themes (`theme list`) |
-| `grut keys` | Print keybindings (`--filter`, `--json`) |
+| `grut keys` | Print keybindings (`--filter`, `--section`, `--sections`, `--json`) |
 | `grut clean` | Remove transient session and diagnostic data |
 | `grut completion` | Generate shell completion scripts |
 | `grut run <shortcut>` | Execute an AI-powered git workflow shortcut |
