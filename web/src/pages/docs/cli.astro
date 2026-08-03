@@ -82,9 +82,12 @@ grut theme list</code></pre>
   <p>Print keybindings from the command line.</p>
   <pre><code>grut keys
 grut keys --filter commit
+grut keys --sections
 grut keys --json</code></pre>
   <KeybindingTable bindings={[
     { key: '--filter <text>', action: 'Only show sections, keys, or actions matching the text' },
+    { key: '--section <id>', action: 'Only show the section with this id' },
+    { key: '--sections', action: 'Print available keybinding section ids and titles' },
     { key: '--json', action: 'Print keybindings as JSON' },
   ]} />
 

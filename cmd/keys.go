@@ -11,9 +11,10 @@ import (
 
 func newKeysCmd() *cobra.Command {
 	var (
-		filter  string
-		section string
-		asJSON  bool
+		filter       string
+		section      string
+		sectionsOnly bool
+		asJSON       bool
 	)
 
 	keysCmd := &cobra.Command{
@@ -21,8 +22,22 @@ func newKeysCmd() *cobra.Command {
 		Short: "Print keybindings",
 		Long:  "Print the built-in keybinding reference without starting the TUI.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if sectionsOnly && strings.TrimSpace(section) != "" {
+				return fmt.Errorf("--section and --sections are mutually exclusive")
+			}
+
 			sections := filterKeybindingSectionsByID(keybindings.Sections(), section)
 			sections = filterKeybindingSections(sections, filter)
+			if sectionsOnly {
+				metadata := keybindingSectionMetadata(sections)
+				if asJSON {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(metadata)
+				}
+				printKeybindingSectionIndex(cmd, metadata)
+				return nil
+			}
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -35,8 +50,25 @@ func newKeysCmd() *cobra.Command {
 
 	keysCmd.Flags().StringVar(&filter, "filter", "", "Only show sections, keys, or actions matching this text")
 	keysCmd.Flags().StringVar(&section, "section", "", "Only show the section with this id")
+	keysCmd.Flags().BoolVar(&sectionsOnly, "sections", false, "Print available keybinding section ids and titles")
 	keysCmd.Flags().BoolVar(&asJSON, "json", false, "Print keybindings as JSON")
 	return keysCmd
+}
+
+type keybindingSectionInfo struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func keybindingSectionMetadata(sections []keybindings.Section) []keybindingSectionInfo {
+	out := make([]keybindingSectionInfo, 0, len(sections))
+	for _, section := range sections {
+		out = append(out, keybindingSectionInfo{
+			ID:    section.ID,
+			Title: section.Title,
+		})
+	}
+	return out
 }
 
 func filterKeybindingSectionsByID(sections []keybindings.Section, section string) []keybindings.Section {
@@ -105,5 +137,12 @@ func printKeybindingSections(cmd *cobra.Command, sections []keybindings.Section,
 		for _, binding := range section.Bindings {
 			_, _ = fmt.Fprintf(w, "  %-14s %s\n", binding.Key, binding.Action)
 		}
+	}
+}
+
+func printKeybindingSectionIndex(cmd *cobra.Command, sections []keybindingSectionInfo) {
+	w := cmd.OutOrStdout()
+	for _, section := range sections {
+		_, _ = fmt.Fprintf(w, "%-14s %s\n", section.ID, section.Title)
 	}
 }
