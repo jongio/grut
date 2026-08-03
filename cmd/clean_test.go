@@ -39,13 +39,21 @@ func writeFile(t *testing.T, path, content string) {
 
 func execClean(t *testing.T, dataDir string, args ...string) string {
 	t.Helper()
+	out, err := execCleanErr(t, dataDir, args...)
+	require.NoError(t, err)
+	return out
+}
+
+func execCleanErr(t *testing.T, dataDir string, args ...string) (string, error) {
+	t.Helper()
 	cmd := newCleanCmdWithDeps(func() string { return dataDir })
 	var out bytes.Buffer
+	var errOut bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd.SetErr(&errOut)
 	cmd.SetArgs(args)
-	require.NoError(t, cmd.Execute())
-	return out.String()
+	err := cmd.Execute()
+	return out.String(), err
 }
 
 func TestCleanPreviewListsTargetsWithoutDeleting(t *testing.T) {
@@ -101,6 +109,40 @@ func TestCleanMissingDirsForce(t *testing.T) {
 	assert.Contains(t, out, "Reclaimed 0 B.")
 }
 
+func TestCleanCheckMissingDirsSucceeds(t *testing.T) {
+	dataDir := t.TempDir()
+
+	out := execClean(t, dataDir, "--check")
+
+	assert.Contains(t, out, "not present")
+	assert.Contains(t, out, "Nothing to clean.")
+}
+
+func TestCleanCheckReturnsErrorWhenTargetsPresent(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out, err := execCleanErr(t, dataDir, "--check")
+
+	require.ErrorIs(t, err, errCleanTargetsPresent)
+	assert.Contains(t, out, "sessions")
+	assert.Contains(t, out, "diagnostics")
+	assert.Contains(t, out, "Run with --force to delete.")
+	assert.DirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.DirExists(t, filepath.Join(dataDir, "diagnostics"))
+}
+
+func TestCleanCheckForceDoesNotDelete(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out, err := execCleanErr(t, dataDir, "--check", "--force")
+
+	require.ErrorIs(t, err, errCleanTargetsPresent)
+	assert.NotContains(t, out, "removed")
+	assert.Contains(t, out, "Run with --force to delete.")
+	assert.DirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.DirExists(t, filepath.Join(dataDir, "diagnostics"))
+}
+
 func TestCleanJSONPreviewReportsTargetsWithoutDeleting(t *testing.T) {
 	dataDir := seedCleanData(t)
 
@@ -150,6 +192,53 @@ func TestCleanJSONMissingDirs(t *testing.T) {
 		assert.False(t, target.Exists)
 		assert.False(t, target.Removed)
 	}
+}
+
+func TestCleanJSONCheckSucceedsWhenNothingPresent(t *testing.T) {
+	dataDir := t.TempDir()
+
+	out := execClean(t, dataDir, "--check", "--json")
+
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.False(t, report.Forced)
+	assert.Equal(t, 0, report.PresentCount)
+}
+
+func TestCleanJSONCheckReturnsErrorWhenTargetsPresent(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out, err := execCleanErr(t, dataDir, "--check", "--json")
+
+	require.ErrorIs(t, err, errCleanTargetsPresent)
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.False(t, report.Forced)
+	assert.Equal(t, int64(len("session")+len("diag")), report.TotalBytes)
+	assert.Equal(t, 2, report.PresentCount)
+	for _, target := range report.Targets {
+		assert.True(t, target.Exists)
+		assert.False(t, target.Removed)
+	}
+	assert.DirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.DirExists(t, filepath.Join(dataDir, "diagnostics"))
+}
+
+func TestCleanJSONCheckForceDoesNotDelete(t *testing.T) {
+	dataDir := seedCleanData(t)
+
+	out, err := execCleanErr(t, dataDir, "--check", "--force", "--json")
+
+	require.ErrorIs(t, err, errCleanTargetsPresent)
+	var report cleanReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.False(t, report.Forced)
+	for _, target := range report.Targets {
+		assert.True(t, target.Exists)
+		assert.False(t, target.Removed)
+	}
+	assert.DirExists(t, filepath.Join(dataDir, "sessions"))
+	assert.DirExists(t, filepath.Join(dataDir, "diagnostics"))
 }
 
 func TestCleanRejectsArgs(t *testing.T) {
