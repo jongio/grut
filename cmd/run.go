@@ -23,6 +23,7 @@ func newRunCmd() *cobra.Command {
 	var (
 		listFlag     bool
 		describeFlag string
+		filterFlag   string
 		dryRunFlag   bool
 		noConfirm    bool
 		jsonFlag     bool
@@ -66,20 +67,11 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 
 			// Handle --list.
 			if listFlag {
-				all := engine.List()
+				all := filterShortcuts(engine.List(), filterFlag)
 				if jsonFlag {
 					return printShortcutListJSON(cmd, all)
 				}
-				if len(all) == 0 {
-					_, _ = fmt.Fprintln(w, "No shortcuts available.")
-					return nil
-				}
-				_, _ = fmt.Fprintln(w, "Available shortcuts:")
-				_, _ = fmt.Fprintln(w)
-				for _, s := range all {
-					src := shortcutSource(s)
-					_, _ = fmt.Fprintf(w, "  %-12s %-8s %s\n", s.Name, "["+src+"]", s.Description)
-				}
+				printShortcutList(cmd, all)
 				return nil
 			}
 
@@ -180,6 +172,7 @@ Use --list to see all available shortcuts, or --describe <name> to see details.`
 
 	runCmd.Flags().BoolVar(&listFlag, "list", false, "List available shortcuts")
 	runCmd.Flags().StringVar(&describeFlag, "describe", "", "Show details for a shortcut")
+	runCmd.Flags().StringVar(&filterFlag, "filter", "", "Only show shortcuts matching this text")
 	runCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show execution plan without running")
 	runCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Skip confirmation prompts")
 	runCmd.Flags().BoolVar(&jsonFlag, "json", false, "Print machine-readable JSON for list, describe, or dry-run")
@@ -239,6 +232,34 @@ func printShortcutListJSON(cmd *cobra.Command, shortcuts []shortcuts.Shortcut) e
 		return summaries[i].Name < summaries[j].Name
 	})
 	return writeJSON(cmd, summaries)
+}
+
+func printShortcutList(cmd *cobra.Command, shortcuts []shortcuts.Shortcut) {
+	w := cmd.OutOrStdout()
+	if len(shortcuts) == 0 {
+		_, _ = fmt.Fprintln(w, "No shortcuts available.")
+		return
+	}
+	_, _ = fmt.Fprintln(w, "Available shortcuts:")
+	_, _ = fmt.Fprintln(w)
+	for _, s := range shortcuts {
+		src := shortcutSource(s)
+		_, _ = fmt.Fprintf(w, "  %-12s %-8s %s\n", s.Name, "["+src+"]", s.Description)
+	}
+}
+
+func filterShortcuts(items []shortcuts.Shortcut, filter string) []shortcuts.Shortcut {
+	if textFilterMatches(filter) {
+		return items
+	}
+
+	out := []shortcuts.Shortcut{}
+	for _, s := range items {
+		if textFilterMatches(filter, s.Name, s.Description, shortcutSource(s)) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func printShortcutJSON(cmd *cobra.Command, s shortcuts.Shortcut) error {

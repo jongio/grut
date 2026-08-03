@@ -232,6 +232,7 @@ description = "Show me what I committed in the last 24 hours across all branches
 ```
 grut run <shortcut> [args...]       Execute a shortcut
 grut run --list                     List all available shortcuts
+grut run --list --filter <text>     Only show shortcuts matching this text
 grut run --describe <shortcut>      Show what a shortcut will do
 grut run --dry-run <shortcut>       Show execution plan without running
 grut run --no-confirm <shortcut>    Skip confirmation prompt

@@ -259,6 +259,7 @@ func TestNewRunCmd_FlagsRegistered(t *testing.T) {
 	}{
 		{"list", "bool"},
 		{"describe", "string"},
+		{"filter", "string"},
 		{"dry-run", "bool"},
 		{"no-confirm", "bool"},
 		{"json", "bool"},
@@ -270,6 +271,15 @@ func TestNewRunCmd_FlagsRegistered(t *testing.T) {
 			assert.Equal(t, tt.flagType, f.Value.Type(), "flag --%s type mismatch", tt.name)
 		}
 	}
+}
+
+func TestNewRunCmd_FilterFlagDescription(t *testing.T) {
+	cmd := newRunCmd()
+
+	f := cmd.Flags().Lookup("filter")
+
+	require.NotNil(t, f)
+	assert.Equal(t, "Only show shortcuts matching this text", f.Usage)
 }
 
 func TestPrintShortcutListJSON_SortedSummaries(t *testing.T) {
@@ -290,6 +300,83 @@ func TestPrintShortcutListJSON_SortedSummaries(t *testing.T) {
 	assert.Equal(t, "builtin", out[0].Source)
 	assert.Equal(t, "zeta", out[1].Name)
 	assert.Equal(t, "custom", out[1].Source)
+}
+
+func TestFilterShortcuts_MatchesNameDescriptionAndSource(t *testing.T) {
+	items := []shortcuts.Shortcut{
+		{Name: "stage-commit", Description: "Stage all changes", Builtin: true},
+		{Name: "ship", Description: "Deploy to production", Builtin: false},
+		{Name: "review", Description: "Inspect pull request", Builtin: true},
+	}
+
+	byName := filterShortcuts(items, "STAGE")
+	require.Len(t, byName, 1)
+	assert.Equal(t, "stage-commit", byName[0].Name)
+
+	byDescription := filterShortcuts(items, "production")
+	require.Len(t, byDescription, 1)
+	assert.Equal(t, "ship", byDescription[0].Name)
+
+	bySource := filterShortcuts(items, "custom")
+	require.Len(t, bySource, 1)
+	assert.Equal(t, "ship", bySource[0].Name)
+}
+
+func TestFilterShortcuts_EmptyFilterReturnsAll(t *testing.T) {
+	items := []shortcuts.Shortcut{
+		{Name: "stage-commit", Description: "Stage all changes", Builtin: true},
+		{Name: "ship", Description: "Deploy to production", Builtin: false},
+	}
+
+	out := filterShortcuts(items, "  ")
+
+	assert.Equal(t, items, out)
+}
+
+func TestPrintShortcutListJSON_FilteredOutput(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	items := []shortcuts.Shortcut{
+		{Name: "stage-commit", Description: "Stage all changes", Builtin: true},
+		{Name: "ship", Description: "Deploy to production", Builtin: false},
+	}
+
+	err := printShortcutListJSON(cmd, filterShortcuts(items, "custom"))
+
+	require.NoError(t, err)
+	var out []shortcutSummaryJSON
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	require.Len(t, out, 1)
+	assert.Equal(t, "ship", out[0].Name)
+	assert.Equal(t, "custom", out[0].Source)
+}
+
+func TestPrintShortcutListJSON_NoFilterMatchesReturnsEmptyArray(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	items := []shortcuts.Shortcut{
+		{Name: "stage-commit", Description: "Stage all changes", Builtin: true},
+	}
+
+	err := printShortcutListJSON(cmd, filterShortcuts(items, "missing"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "[]\n", buf.String())
+}
+
+func TestPrintShortcutList_NoFilterMatchesUsesEmptyListText(t *testing.T) {
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	items := []shortcuts.Shortcut{
+		{Name: "stage-commit", Description: "Stage all changes", Builtin: true},
+	}
+
+	printShortcutList(cmd, filterShortcuts(items, "missing"))
+
+	assert.Equal(t, "No shortcuts available.\n", buf.String())
 }
 
 func TestPrintShortcutJSON_IncludesArgsAndSteps(t *testing.T) {

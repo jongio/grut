@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/git"
@@ -103,16 +102,13 @@ func newMCPToolsCmd() *cobra.Command {
 }
 
 func filterMCPTools(tools []grut_mcp.ToolInfo, filter string) []grut_mcp.ToolInfo {
-	query := strings.TrimSpace(strings.ToLower(filter))
-	if query == "" {
+	if textFilterMatches(filter) {
 		return tools
 	}
 
 	out := []grut_mcp.ToolInfo{}
 	for _, tool := range tools {
-		if strings.Contains(strings.ToLower(tool.Name), query) ||
-			strings.Contains(strings.ToLower(tool.Category), query) ||
-			strings.Contains(strings.ToLower(tool.Description), query) {
+		if textFilterMatches(filter, tool.Name, tool.Category, tool.Description) {
 			out = append(out, tool)
 		}
 	}

@@ -163,6 +163,9 @@ grut run pr-review
 # List available shortcuts
 grut run --list
 
+# Filter available shortcuts
+grut run --list --filter review
+
 # Describe what a shortcut does
 grut run --describe pr-review
 
@@ -173,6 +176,7 @@ grut run --dry-run pr-review
 grut run --no-confirm pr-review</code></pre>
   <KeybindingTable bindings={[
     { key: '--list', action: 'List all available shortcuts' },
+    { key: '--filter <text>', action: 'Only show shortcuts matching this text' },
     { key: '--describe <name>', action: 'Show what a shortcut does without running it' },
     { key: '--dry-run', action: 'Preview the operations without executing them' },
     { key: '--no-confirm', action: 'Skip confirmation prompts' },
