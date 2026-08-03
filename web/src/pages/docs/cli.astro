@@ -113,6 +113,7 @@ grut completion powershell</code></pre>
   <p>View crash reports and file GitHub issues for them.</p>
   <pre><code># List all crash reports
 grut report --list
+grut report --list --limit 5
 
 # Show a specific report by ID
 grut report --show &lt;id&gt;
@@ -129,6 +130,7 @@ grut report --clear</code></pre>
     { key: '--clear', action: 'Clear all crash reports' },
     { key: '--no-browser', action: 'Print the issue URL instead of opening the browser' },
     { key: '--json', action: 'Print list output as JSON' },
+    { key: '--limit N', action: 'Limit list output to the newest N crash reports' },
   ]} />
 
   <h3>mcp</h3>
