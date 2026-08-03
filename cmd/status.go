@@ -45,23 +45,31 @@ type statusReport struct {
 // current repository state for humans or, with --json, for scripts.
 func newStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Print a summary of the working tree status",
+		Use:          "status",
+		Short:        "Print a summary of the working tree status",
+		SilenceUsage: true,
 		Long: `Print a summary of the current repository: branch, tracking
 information (ahead/behind), and the staged, unstaged, untracked, and
 conflicted files.
 
 Use --json for a stable, machine-readable document that scripts and other
-tools can parse.`,
+tools can parse. Use --short for compact branch and file status lines.`,
 		Args: cobra.NoArgs,
 		RunE: runStatus,
 	}
 	cmd.Flags().Bool("json", false, "Output the status as JSON")
 	cmd.Flags().Bool("check", false, "Exit with an error when the working tree is not clean")
+	cmd.Flags().Bool("short", false, "Output compact branch and file status lines")
 	return cmd
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {
+	asJSON, _ := cmd.Flags().GetBool("json")
+	asShort, _ := cmd.Flags().GetBool("short")
+	if asJSON && asShort {
+		return fmt.Errorf("--short cannot be combined with --json")
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
@@ -87,11 +95,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 	report := buildStatusReport(branch, files)
 
-	asJSON, _ := cmd.Flags().GetBool("json")
 	if asJSON {
 		if err := writeStatusJSON(cmd.OutOrStdout(), report); err != nil {
 			return err
 		}
+	} else if asShort {
+		writeStatusShort(cmd.OutOrStdout(), branch, files, report.Clean)
 	} else {
 		writeStatusText(cmd.OutOrStdout(), report)
 	}
@@ -210,6 +219,62 @@ func writeStatusText(w io.Writer, report statusReport) {
 			fmt.Fprintf(w, "  ? %s\n", p)
 		}
 	}
+}
+
+func writeStatusShort(w io.Writer, branch git.StatusBranch, files []git.FileStatus, clean bool) {
+	fmt.Fprint(w, shortBranchLine(branch))
+	if clean {
+		fmt.Fprint(w, " clean\n")
+		return
+	}
+	fmt.Fprintln(w)
+
+	for _, f := range files {
+		fmt.Fprintf(w, "%s %s\n", shortStatusCode(f), shortStatusPath(f))
+	}
+}
+
+func shortBranchLine(branch git.StatusBranch) string {
+	head := branch.Head
+	if head == "" || head == detachedHead {
+		head = "HEAD (detached)"
+	}
+
+	line := "## " + head
+	if branch.Upstream != "" {
+		line += "..." + branch.Upstream
+	}
+
+	switch {
+	case branch.Ahead > 0 && branch.Behind > 0:
+		line += fmt.Sprintf(" [ahead %d, behind %d]", branch.Ahead, branch.Behind)
+	case branch.Ahead > 0:
+		line += fmt.Sprintf(" [ahead %d]", branch.Ahead)
+	case branch.Behind > 0:
+		line += fmt.Sprintf(" [behind %d]", branch.Behind)
+	}
+
+	return line
+}
+
+func shortStatusCode(f git.FileStatus) string {
+	if f.StagedStatus == git.StatusUntracked && f.WorktreeStatus == git.StatusUntracked {
+		return "??"
+	}
+	if f.StagedStatus == git.StatusConflict || f.WorktreeStatus == git.StatusConflict {
+		return "UU"
+	}
+	if f.StagedStatus == git.StatusIgnored && f.WorktreeStatus == git.StatusIgnored {
+		return "!!"
+	}
+	return f.StagedStatus.String() + f.WorktreeStatus.String()
+}
+
+func shortStatusPath(f git.FileStatus) string {
+	if f.OrigPath != "" && (f.StagedStatus == git.StatusRenamed || f.StagedStatus == git.StatusCopied) {
+		return f.OrigPath + " -> " + f.Path
+	}
+	return f.Path
 }
 
 func writeStatusSection(w io.Writer, label string, entries []statusEntry) {
