@@ -32,9 +32,10 @@ func List() ([]*CrashReport, error) {
 		}
 	}
 
-	// Sort descending so newest reports come first.
+	// Read every report first, then sort on the parsed timestamp. Sorting by
+	// filename is unreliable: the sequence suffix is not zero-padded, so
+	// "crash-...-10.json" sorts before "crash-...-9.json".
 	slices.Sort(names)
-	slices.Reverse(names)
 
 	var reports []*CrashReport
 	for _, name := range names {
@@ -50,6 +51,11 @@ func List() ([]*CrashReport, error) {
 		}
 		reports = append(reports, &r)
 	}
+
+	// Sort descending so newest reports come first.
+	slices.SortStableFunc(reports, func(a, b *CrashReport) int {
+		return b.Timestamp.Compare(a.Timestamp)
+	})
 
 	return reports, nil
 }

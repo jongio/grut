@@ -603,6 +603,32 @@ func TestList_MalformedJSON(t *testing.T) {
 	assert.Equal(t, "valid", reports[0].PanicValue)
 }
 
+func TestList_SortsByTimestampNotFilename(t *testing.T) {
+	setTestDataHome(t)
+
+	// Write more than 9 reports in a tight loop so the writer's unpadded
+	// sequence suffix crosses the 9 -> 10 boundary. Sorting by filename
+	// ranks "-10.json" before "-9.json", which would return the wrong
+	// report as newest.
+	const total = 12
+	for i := range total {
+		r := NewReport(fmt.Sprintf("panic-%02d", i), []byte("stack"), "ctx")
+		r.Timestamp = time.Date(2026, 1, 1, 0, 0, 0, i, time.UTC)
+		_, err := Write(r)
+		require.NoError(t, err)
+	}
+
+	reports, err := List()
+	require.NoError(t, err)
+	require.Len(t, reports, total)
+
+	assert.Equal(t, "panic-11", reports[0].PanicValue, "newest report must be first")
+	for i := 1; i < len(reports); i++ {
+		assert.False(t, reports[i-1].Timestamp.Before(reports[i].Timestamp),
+			"reports must be ordered newest-first at index %d", i)
+	}
+}
+
 func TestClear_EmptyDirectory(t *testing.T) {
 	setTestDataHome(t)
 
