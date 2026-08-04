@@ -503,6 +503,31 @@ func TestToolResults_ErrorContent(t *testing.T) {
 	assert.True(t, found, "error tool result should include error prefix")
 }
 
+// Tool results carry file contents and git output, which can hold secrets from
+// files the filename denylist does not cover (a docker-compose.yml with an
+// inline password). They must be redacted before reaching the provider, the
+// same way user input is in sendMessage (CWE-201).
+func TestToolResults_RedactsSecrets(t *testing.T) {
+	m, _ := newTestChatModel(t)
+
+	results := []ToolResult{
+		{ToolID: "call_1", Content: "AWS_KEY=AKIAIOSFODNN7EXAMPLE\nport: 8080"},
+	}
+
+	m, _ = m.Update(ToolResultMsg{Results: results})
+
+	var toolMsg string
+	for _, msg := range m.messages {
+		if msg.Role == "tool" {
+			toolMsg = msg.Content
+		}
+	}
+	require.NotEmpty(t, toolMsg, "tool result should be added to messages")
+	assert.NotContains(t, toolMsg, "AKIAIOSFODNN7EXAMPLE",
+		"secret must not reach the AI provider")
+	assert.Contains(t, toolMsg, "port: 8080", "benign content should survive")
+}
+
 // ---------------------------------------------------------------------------
 // Tests: View rendering
 // ---------------------------------------------------------------------------

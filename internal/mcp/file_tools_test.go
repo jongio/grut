@@ -279,6 +279,33 @@ func TestFileTool_ListSkipsGitDir(t *testing.T) {
 	assert.NotContains(t, text, ".git/objects")
 }
 
+// file_read blocks sensitive paths, but listing them still leaked the names
+// and sizes of .env files, SSH keys, and credential stores (CWE-200).
+func TestFileTool_ListSkipsSensitivePaths(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ssh"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".ssh", "id_rsa"), []byte("key"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=1"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".env.production"), []byte("SECRET=2"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "server.pem"), []byte("cert"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "real.txt"), []byte("real"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules"), 0o644))
+
+	mock := &mockGitClient{}
+	srv := newTestServer(t, mock, root)
+
+	result := callTool(t, srv, "file_list", map[string]any{"recursive": true})
+	assert.False(t, result.IsError)
+
+	text := resultText(t, result)
+	assert.Contains(t, text, "real.txt")
+	assert.Contains(t, text, ".gitignore", "benign dot-files should still list")
+	assert.NotContains(t, text, "id_rsa")
+	assert.NotContains(t, text, ".ssh")
+	assert.NotContains(t, text, ".env")
+	assert.NotContains(t, text, "server.pem")
+}
+
 func TestFileTool_ListOutsideJail(t *testing.T) {
 	root := t.TempDir()
 	mock := &mockGitClient{}
