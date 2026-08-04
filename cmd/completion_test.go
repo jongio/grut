@@ -57,6 +57,27 @@ func TestCompletionCmd_RejectsUnsupportedShell(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported shell")
 }
 
+func TestCompletionCmd_UnsupportedShellDoesNotTouchOutputFile(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "grut.ps1")
+	require.NoError(t, os.WriteFile(existing, []byte("original contents"), 0o644))
+
+	root := &cobra.Command{Use: "app"}
+	root.AddCommand(newCompletionCmd())
+	root.SetArgs([]string{"completion", "xonsh", "-o", existing})
+
+	err := root.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported shell")
+
+	// The shell name must be validated before the output file is created,
+	// otherwise os.Create truncates a file the user asked us not to write.
+	data, readErr := os.ReadFile(existing)
+	require.NoError(t, readErr)
+	assert.Equal(t, "original contents", string(data))
+}
+
 func TestRootRegistersCompletionCommand(t *testing.T) {
 	root, cleanup := newRootCommand()
 	defer cleanup()

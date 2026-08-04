@@ -5,12 +5,22 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-const shellPowerShell = "powershell"
+const (
+	shellBash       = "bash"
+	shellZsh        = "zsh"
+	shellFish       = "fish"
+	shellPowerShell = "powershell"
+)
+
+// supportedShells is the single source of truth for completion targets: it
+// drives ValidArgs, argument validation, and the error message.
+var supportedShells = []string{shellBash, shellZsh, shellFish, shellPowerShell}
 
 func newCompletionCmd() *cobra.Command {
 	var output string
@@ -19,28 +29,35 @@ func newCompletionCmd() *cobra.Command {
 		Use:       "completion [bash|zsh|fish|powershell]",
 		Short:     "Generate shell completion scripts",
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"bash", "zsh", "fish", shellPowerShell},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		ValidArgs: supportedShells,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			shell := strings.ToLower(args[0])
+			if !slices.Contains(supportedShells, shell) {
+				return fmt.Errorf("unsupported shell %q (supported: %s)", args[0], strings.Join(supportedShells, ", "))
+			}
+
 			out, closeOut, err := completionOutput(cmd, output)
 			if err != nil {
 				return err
 			}
 			if closeOut != nil {
-				defer func() { _ = closeOut() }()
+				defer func() {
+					if cerr := closeOut(); err == nil {
+						err = cerr
+					}
+				}()
 			}
 			root := cmd.Root()
 
-			switch shell := strings.ToLower(args[0]); shell {
-			case "bash":
+			switch shell {
+			case shellBash:
 				return root.GenBashCompletion(out)
-			case "zsh":
+			case shellZsh:
 				return root.GenZshCompletion(out)
-			case "fish":
+			case shellFish:
 				return root.GenFishCompletion(out, true)
-			case shellPowerShell:
-				return root.GenPowerShellCompletion(out)
 			default:
-				return fmt.Errorf("unsupported shell %q (supported: bash, zsh, fish, %s)", args[0], shellPowerShell)
+				return root.GenPowerShellCompletion(out)
 			}
 		},
 	}
