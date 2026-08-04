@@ -42,7 +42,7 @@ func TestDoctorInvalidConfigFailsRequiredCheck(t *testing.T) {
 
 	out, err := runDoctorTest(t, deps, []string{"--json"})
 
-	require.Error(t, err)
+	require.NoError(t, err)
 	var report doctorReport
 	require.NoError(t, json.Unmarshal([]byte(out), &report))
 	assert.False(t, report.OK)
@@ -78,7 +78,7 @@ func TestDoctorMissingGitHubAuthWarnsWithoutFailing(t *testing.T) {
 	assert.Contains(t, out, "All required checks passed.")
 }
 
-func TestDoctorRequiredFailureExitsNonZero(t *testing.T) {
+func TestDoctorRequiredFailureReportsFailure(t *testing.T) {
 	deps := doctorTestDeps(&config.Config{
 		Theme: config.ThemeConfig{Name: "default"},
 		AI:    config.AIConfig{Enabled: false, Provider: "none"},
@@ -92,23 +92,25 @@ func TestDoctorRequiredFailureExitsNonZero(t *testing.T) {
 
 	out, err := runDoctorTest(t, deps, nil)
 
-	require.Error(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, out, "Git")
 	assert.Contains(t, out, "FAIL")
 	assert.Contains(t, out, "One or more required checks failed.")
 }
 
-func TestDoctorCheckPassingRequiredChecksPrintsNothing(t *testing.T) {
+// --check is an exit-code gate, matching "status --check" and "clean --check".
+// The report still prints; only the exit code changes.
+func TestDoctorCheckPassingRequiredChecksPrintsReport(t *testing.T) {
 	out, err := runDoctorTest(t, doctorTestDeps(&config.Config{
 		Theme: config.ThemeConfig{Name: "default"},
 		AI:    config.AIConfig{Enabled: false, Provider: "none"},
 	}), []string{"--check"})
 
 	require.NoError(t, err)
-	assert.Empty(t, out)
+	assert.Contains(t, out, "All required checks passed.")
 }
 
-func TestDoctorCheckRequiredFailureExitsNonZeroAndPrintsNothing(t *testing.T) {
+func TestDoctorCheckRequiredFailureExitsNonZeroAndStillPrints(t *testing.T) {
 	deps := doctorTestDeps(&config.Config{
 		Theme: config.ThemeConfig{Name: "default"},
 		AI:    config.AIConfig{Enabled: false, Provider: "none"},
@@ -123,8 +125,12 @@ func TestDoctorCheckRequiredFailureExitsNonZeroAndPrintsNothing(t *testing.T) {
 	out, err := runDoctorTest(t, deps, []string{"--check"})
 
 	require.ErrorIs(t, err, errDoctorRequiredChecksFailed)
-	assert.Empty(t, out)
+	assert.Contains(t, out, "One or more required checks failed.")
 }
+
+// Without --check, doctor is a diagnostic: it reports failures but exits 0 so
+// it stays usable mid-pipeline. Covered by
+// TestDoctorRequiredFailureReportsFailure above.
 
 func TestDoctorCheckJSONStillPrintsJSON(t *testing.T) {
 	out, err := runDoctorTest(t, doctorTestDeps(&config.Config{

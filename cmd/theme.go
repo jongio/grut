@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jongio/grut/internal/theme"
@@ -17,7 +18,7 @@ func newThemeCmd() *cobra.Command {
 		Short: "Inspect grut themes",
 	}
 	themeCmd.AddCommand(newThemeListCmd(theme.ListThemes))
-	themeCmd.AddCommand(newThemeShowCmd(theme.Load))
+	themeCmd.AddCommand(newThemeShowCmd(theme.Load, theme.ListThemes))
 	return themeCmd
 }
 
@@ -70,14 +71,24 @@ type themeShowReport struct {
 	Colors  theme.Colors `json:"colors"`
 }
 
-func newThemeShowCmd(load themeLoadFunc) *cobra.Command {
+func newThemeShowCmd(load themeLoadFunc, list themeListFunc) *cobra.Command {
 	var asJSON bool
 	showCmd := &cobra.Command{
 		Use:   "show <name>",
 		Short: "Show resolved theme details",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resolved, err := load(args[0])
+			// theme.Load falls back to the default theme for an unknown name so
+			// a stale config value can't stop the TUI from launching. That is
+			// wrong for "show", where silently reporting the default theme
+			// hides the typo, so reject unknown names up front.
+			name := args[0]
+			available := list()
+			if !slices.Contains(available, name) {
+				return fmt.Errorf("unknown theme %q (available: %s)",
+					name, strings.Join(available, ", "))
+			}
+			resolved, err := load(name)
 			if err != nil {
 				return err
 			}

@@ -101,7 +101,7 @@ func TestThemeListCommandFilterNoMatchesJSON(t *testing.T) {
 func TestThemeShowCommandPrintsText(t *testing.T) {
 	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
 		return &theme.Theme{Name: "default", Variant: "dark", Mode: theme.ModeColor, Colors: theme.Colors{Background: "#000000"}}, nil
-	})
+	}, func() []string { return []string{"default", "gruvbox"} })
 	cmd.SetArgs([]string{"default"})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -117,7 +117,7 @@ func TestThemeShowCommandPrintsText(t *testing.T) {
 func TestThemeShowCommandPrintsJSON(t *testing.T) {
 	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
 		return &theme.Theme{Name: "gruvbox", Variant: "dark", Mode: theme.ModeColor, Colors: theme.Colors{Background: "#282828"}}, nil
-	})
+	}, func() []string { return []string{"default", "gruvbox"} })
 	cmd.SetArgs([]string{"gruvbox", "--json"})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -131,6 +131,29 @@ func TestThemeShowCommandPrintsJSON(t *testing.T) {
 	assert.Equal(t, "dark", report.Variant)
 	assert.Equal(t, "color", report.Mode)
 	assert.Equal(t, "#282828", report.Colors.Background)
+}
+
+// theme.Load falls back to the default theme for an unknown name, which would
+// make "theme show typo" print the default theme and exit 0. Assert the
+// command rejects the name before ever calling load.
+func TestThemeShowCommandUnknownThemeErrors(t *testing.T) {
+	loadCalled := false
+	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
+		loadCalled = true
+		return &theme.Theme{Name: "default", Variant: "dark", Mode: theme.ModeColor}, nil
+	}, func() []string { return []string{"default", "gruvbox"} })
+	cmd.SetArgs([]string{"grubvox"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SilenceUsage = true
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown theme "grubvox"`)
+	assert.Contains(t, err.Error(), "gruvbox")
+	assert.False(t, loadCalled, "load should not run for an unknown theme")
 }
 
 func TestRootRegistersThemeListCommand(t *testing.T) {

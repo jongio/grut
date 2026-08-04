@@ -86,17 +86,18 @@ func newDoctorCmdWithDeps(deps doctorCommandDeps) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report := runDoctor(cmd.Context(), deps)
-			check, _ := cmd.Flags().GetBool("check")
-			var err error
 			if asJSON {
-				err = writeDoctorJSON(cmd.OutOrStdout(), report)
-			} else if !check {
+				if err := writeDoctorJSON(cmd.OutOrStdout(), report); err != nil {
+					return err
+				}
+			} else {
 				writeDoctorText(cmd.OutOrStdout(), report)
 			}
-			if err != nil {
-				return err
-			}
-			if !report.OK {
+			// --check turns the report into an exit-code gate, matching
+			// "status --check" and "clean --check". Without it, doctor is a
+			// diagnostic that always succeeds so it stays usable mid-pipeline.
+			check, _ := cmd.Flags().GetBool("check")
+			if check && !report.OK {
 				return errDoctorRequiredChecksFailed
 			}
 			return nil
