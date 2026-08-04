@@ -78,6 +78,30 @@ func TestKeysCommandUnknownSectionReturnsEmptyJSON(t *testing.T) {
 	assert.Empty(t, sections)
 }
 
+func TestKeysCommandFilterNoMatchJSONEmitsEmptyArray(t *testing.T) {
+	cmd := newKeysCmd()
+	cmd.SetArgs([]string{"--filter", "zzz-no-such-binding", "--json"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	// Assert the raw text: unmarshalling "null" into a slice also succeeds,
+	// so a decoded-value check cannot distinguish [] from null.
+	assert.Equal(t, "[]", strings.TrimSpace(out.String()))
+}
+
+func TestKeysCommandSectionIndexFilterNoMatchPrintsMessage(t *testing.T) {
+	cmd := newKeysCmd()
+	cmd.SetArgs([]string{"--sections", "--filter", "zzz-no-such-binding"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+
+	require.NoError(t, cmd.Execute())
+
+	assert.Contains(t, out.String(), `No keybindings match "zzz-no-such-binding".`)
+}
+
 func TestKeysCommandPrintsJSON(t *testing.T) {
 	cmd := newKeysCmd()
 	cmd.SetArgs([]string{"--filter", "global", "--json"})

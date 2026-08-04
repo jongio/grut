@@ -35,7 +35,7 @@ func newKeysCmd() *cobra.Command {
 					enc.SetIndent("", "  ")
 					return enc.Encode(metadata)
 				}
-				printKeybindingSectionIndex(cmd, metadata)
+				printKeybindingSectionIndex(cmd, metadata, filter)
 				return nil
 			}
 			if asJSON {
@@ -89,7 +89,7 @@ func filterKeybindingSections(sections []keybindings.Section, filter string) []k
 		return sections
 	}
 
-	var out []keybindings.Section
+	out := []keybindings.Section{}
 	for _, section := range sections {
 		if keybindingSectionMatches(section, filter) {
 			out = append(out, section)
@@ -136,8 +136,16 @@ func printKeybindingSections(cmd *cobra.Command, sections []keybindings.Section,
 	}
 }
 
-func printKeybindingSectionIndex(cmd *cobra.Command, sections []keybindingSectionInfo) {
+func printKeybindingSectionIndex(cmd *cobra.Command, sections []keybindingSectionInfo, filter string) {
 	w := cmd.OutOrStdout()
+	if len(sections) == 0 {
+		if strings.TrimSpace(filter) == "" {
+			_, _ = fmt.Fprintln(w, "No keybindings available.")
+			return
+		}
+		_, _ = fmt.Fprintf(w, "No keybindings match %q.\n", filter)
+		return
+	}
 	for _, section := range sections {
 		_, _ = fmt.Fprintf(w, "%-14s %s\n", section.ID, section.Title)
 	}
