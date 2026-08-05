@@ -267,7 +267,7 @@ func TestBuiltinNamesReturnsCopy(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// looksLikePath
+// LooksLikePath
 // ---------------------------------------------------------------------------
 
 func TestLooksLikePath(t *testing.T) {
@@ -285,7 +285,7 @@ func TestLooksLikePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.want, looksLikePath(tt.input))
+			assert.Equal(t, tt.want, LooksLikePath(tt.input))
 		})
 	}
 }

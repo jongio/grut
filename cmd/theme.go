@@ -82,11 +82,18 @@ func newThemeShowCmd(load themeLoadFunc, list themeListFunc) *cobra.Command {
 			// a stale config value can't stop the TUI from launching. That is
 			// wrong for "show", where silently reporting the default theme
 			// hides the typo, so reject unknown names up front.
+			//
+			// Path forms are exempt: theme.Load reads those straight from disk
+			// and they never appear in ListThemes, so checking them against the
+			// built-in list would reject every custom theme file. Let Load
+			// handle them and surface its error.
 			name := args[0]
-			available := list()
-			if !slices.Contains(available, name) {
-				return fmt.Errorf("unknown theme %q (available: %s)",
-					name, strings.Join(available, ", "))
+			if !theme.LooksLikePath(name) {
+				available := list()
+				if !slices.Contains(available, name) {
+					return fmt.Errorf("unknown theme %q (available: %s)",
+						name, strings.Join(available, ", "))
+				}
 			}
 			resolved, err := load(name)
 			if err != nil {
