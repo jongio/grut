@@ -227,12 +227,19 @@ func registerFileTools(s *Server) {
 			if err != nil {
 				return mcplib.NewToolResultErrorf("walk directory: %v", err), nil
 			}
-			// Filter out entries starting with ".git/" for safety.
+			// Filter out entries starting with ".git/" for safety, and drop
+			// sensitive paths. file_read already blocks these, but listing them
+			// still leaks the names and sizes of .env files, SSH keys, and
+			// credential stores (CWE-200).
 			filtered := entries[:0]
 			for _, e := range entries {
-				if !strings.HasPrefix(e.Path, ".git/") && e.Path != ".git" {
-					filtered = append(filtered, e)
+				if strings.HasPrefix(e.Path, ".git/") || e.Path == ".git" {
+					continue
 				}
+				if IsSensitivePath(e.Path) != nil {
+					continue
+				}
+				filtered = append(filtered, e)
 			}
 			return jsonResult(filtered)
 		},

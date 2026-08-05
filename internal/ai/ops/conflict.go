@@ -167,30 +167,34 @@ func buildConflictUserPrompt(gitCtx ai.GitContext) string {
 		for i, region := range cf.ConflictMarkers {
 			fmt.Fprintf(&sb, "Conflict region %d (lines %d–%d):\n",
 				i+1, region.StartLine, region.EndLine)
-			sb.WriteString("  Ours:\n")
-			for _, line := range strings.Split(strings.TrimRight(region.Ours, "\n"), "\n") {
-				sb.WriteString("    ")
-				sb.WriteString(line)
-				sb.WriteString("\n")
-			}
-			sb.WriteString("  Theirs:\n")
-			for _, line := range strings.Split(strings.TrimRight(region.Theirs, "\n"), "\n") {
-				sb.WriteString("    ")
-				sb.WriteString(line)
-				sb.WriteString("\n")
-			}
+			// Region text is attacker-controllable (it comes from the branches
+			// being merged), so it gets the same boundary-marker treatment as
+			// the full file content above. Without this it was the one path
+			// where raw repository text reached the prompt unwrapped.
+			var regionText strings.Builder
+			writeConflictSide(&regionText, "Ours", region.Ours)
+			writeConflictSide(&regionText, "Theirs", region.Theirs)
 			if region.Base != "" {
-				sb.WriteString("  Base:\n")
-				for _, line := range strings.Split(strings.TrimRight(region.Base, "\n"), "\n") {
-					sb.WriteString("    ")
-					sb.WriteString(line)
-					sb.WriteString("\n")
-				}
+				writeConflictSide(&regionText, "Base", region.Base)
 			}
-			sb.WriteString("\n")
+			sb.WriteString(ai.SanitizeExternalContent(regionText.String()))
+			sb.WriteString("\n\n")
 		}
 	}
 	return sb.String()
+}
+
+// writeConflictSide writes one labelled side of a conflict region, indenting
+// each line so the model can tell the sides apart.
+func writeConflictSide(sb *strings.Builder, label, text string) {
+	sb.WriteString("  ")
+	sb.WriteString(label)
+	sb.WriteString(":\n")
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		sb.WriteString("    ")
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
 }
 
 // ---------------------------------------------------------------------------

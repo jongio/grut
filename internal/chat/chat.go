@@ -533,13 +533,20 @@ func (m Model) handleToolExecDone(msg toolExecDoneMsg) (Model, tea.Cmd) {
 func (m Model) handleToolResults(msg ToolResultMsg) (Model, tea.Cmd) {
 	// Add tool results to conversation history.
 	// Tool results contain repository-sourced content (file contents, git output)
-	// which could carry prompt injection payloads, so we sanitize them.
+	// which could carry prompt injection payloads, so we sanitize them. They can
+	// also carry secrets from files the filename denylist does not cover (a
+	// terraform.tfvars or docker-compose.yml holding credentials), so redact
+	// them too, fail-closed exactly as sendMessage does for user input.
 	for _, result := range msg.Results {
 		content := result.Content
 		if result.Error != "" {
 			content = "Error: " + result.Error
 		}
-		content = ai.SanitizeExternalContent(content)
+		redacted, _, err := m.redactor.RedactContent(content)
+		if err != nil {
+			redacted = ai.RedactionFailedPlaceholder
+		}
+		content = ai.SanitizeExternalContent(redacted)
 		m.messages = append(m.messages, ai.ChatMessage{
 			Role:    RoleTool,
 			Content: content,
