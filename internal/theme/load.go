@@ -226,7 +226,7 @@ func (tf *themeFile) toColors() Colors {
 // theme and logs a warning.
 func Load(name string) (*Theme, error) {
 	// File path — read directly from disk.
-	if looksLikePath(name) {
+	if LooksLikePath(name) {
 		// Defence-in-depth: clean the path and reject directory
 		// traversal so a malicious or misconfigured theme value
 		// cannot read arbitrary files outside intended directories.
@@ -464,10 +464,12 @@ func validateColors(c Colors) error {
 	return nil
 }
 
-// looksLikePath returns true if the name contains a path separator or
+// LooksLikePath returns true if the name contains a path separator or
 // common file extension, suggesting it is a file path rather than a
-// built-in theme name.
-func looksLikePath(name string) bool {
+// built-in theme name. Callers that validate a theme name against the
+// built-in list must use this to let path forms through, since those
+// will never appear in ListThemes.
+func LooksLikePath(name string) bool {
 	return strings.ContainsAny(name, `/\`) || strings.HasSuffix(name, ".toml")
 }
 

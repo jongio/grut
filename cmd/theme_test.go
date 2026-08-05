@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/jongio/grut/internal/theme"
@@ -154,6 +155,58 @@ func TestThemeShowCommandUnknownThemeErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), `unknown theme "grubvox"`)
 	assert.Contains(t, err.Error(), "gruvbox")
 	assert.False(t, loadCalled, "load should not run for an unknown theme")
+}
+
+// Custom theme files are loaded by path and never appear in ListThemes, so
+// validating a path form against the built-in list would reject every custom
+// theme. Assert path arguments reach load instead of being rejected.
+func TestThemeShowCommandAllowsPathForms(t *testing.T) {
+	paths := []string{
+		"my-theme.toml",
+		"./themes/custom.toml",
+		"/etc/grut/theme.toml",
+		`C:\themes\custom.toml`,
+	}
+
+	for _, p := range paths {
+		t.Run(p, func(t *testing.T) {
+			var gotName string
+			cmd := newThemeShowCmd(func(name string) (*theme.Theme, error) {
+				gotName = name
+				return &theme.Theme{Name: "custom", Variant: "dark", Mode: theme.ModeColor}, nil
+			}, func() []string { return []string{"default", "gruvbox"} })
+			cmd.SetArgs([]string{p})
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SilenceUsage = true
+
+			err := cmd.Execute()
+
+			require.NoError(t, err, "path form must not be rejected as an unknown theme")
+			assert.Equal(t, p, gotName, "the path should be passed through to load unchanged")
+			assert.Contains(t, out.String(), "Name:    custom")
+		})
+	}
+}
+
+// A path that load rejects must surface load's error, not a misleading
+// "unknown theme" message listing the built-in names.
+func TestThemeShowCommandPropagatesPathLoadError(t *testing.T) {
+	cmd := newThemeShowCmd(func(string) (*theme.Theme, error) {
+		return nil, errors.New("open missing.toml: no such file or directory")
+	}, func() []string { return []string{"default", "gruvbox"} })
+	cmd.SetArgs([]string{"missing.toml"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SilenceUsage = true
+
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file or directory")
+	assert.NotContains(t, err.Error(), "unknown theme")
 }
 
 func TestRootRegistersThemeListCommand(t *testing.T) {
