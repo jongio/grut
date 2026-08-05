@@ -40,7 +40,10 @@ var builtinSecretPatterns = []string{
 
 	// Generic API key / secret assignments
 	// (e.g. api_key = "sk_live_…", API-SECRET: "…").
-	`(?i)(api[_-]?key|apikey|api[_-]?secret)['":\s]*[=:]\s*['"]?[a-zA-Z0-9_\-]{20,}['"]?`,
+	// Separators are restricted to tabs and spaces rather than \s so that a
+	// keyword with an empty value cannot reach across a line break and consume
+	// the following line. See the note on the high-entropy pattern below.
+	`(?i)(api[_-]?key|apikey|api[_-]?secret)['":\t ]*[=:][\t ]*['"]?[a-zA-Z0-9_\-]{20,}['"]?`,
 
 	// PEM private-key blocks, including the BEGIN/END markers.
 	// The optional prefix (e.g. "RSA ", "EC ") uses (?:[A-Z]+ )* so that
@@ -57,7 +60,13 @@ var builtinSecretPatterns = []string{
 	// The value class uses [^\s'"]+ to capture passwords containing special
 	// characters (e.g. @, !, #) that are common in real-world secrets.
 	// Minimum length is 6 (not 16) because passwords can be short.
-	`(?i)(password|passwd|secret|token|access[_-]?key|private[_-]?key|auth[_-]?token)['":\s]*[=:]\s*['"]?[^\s'"]{6,}['"]?`,
+	//
+	// Separators and the value are both confined to a single line. Using \s
+	// here let "DB_PASSWORD=\nJWT_SECRET=change-me" match across the newline,
+	// so an empty value consumed the entire following line and deleted it
+	// rather than redacting a value. Matching must never span lines.
+	`(?i)(password|passwd|secret|token|access[_-]?key|private[_-]?key|auth[_-]?token)['":\t ]*[=:][\t ]*['"]?[^\s'"]{6,}['"]?`,
+	`(?i)(password|passwd|secret|token|access[_-]?key|private[_-]?key|auth[_-]?token)['":\t ]*[=:][\t ]*['"]?[^\s'"]{6,}['"]?`,
 
 	// Credentials embedded in HTTPS URLs (e.g. https://user:token@host).
 	`https?://[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+@[^\s'"]+`,

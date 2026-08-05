@@ -228,6 +228,77 @@ func TestRedactGenericSecretKeywords(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Redaction must never span newlines
+// ---------------------------------------------------------------------------
+
+// A secret keyword with an empty value must not swallow the following line.
+// The separator class previously used \s, which matches newlines, so
+// "DB_PASSWORD=\nJWT_SECRET=change-me" consumed the newline and the whole
+// next line, deleting it from the content handed back to the model.
+func TestRedactDoesNotSpanNewlines(t *testing.T) {
+	r := NewRedactor(nil)
+
+	input := "DB_PASSWORD=\nJWT_SECRET=change-me\nLOG_LEVEL=info\nPORT=3000"
+	got, _, _ := r.RedactContent(input)
+
+	assert.Equal(t, 4, len(strings.Split(got, "\n")),
+		"no line may be removed by redaction")
+	assert.Contains(t, got, "LOG_LEVEL=info")
+	assert.Contains(t, got, "PORT=3000")
+	assert.True(t, strings.HasPrefix(got, "DB_PASSWORD=\n"),
+		"an empty value must not consume the newline")
+	assert.NotContains(t, got, "change-me", "the real secret must still be redacted")
+}
+
+// Redaction must preserve line count for any input, including one where the
+// keyword line has no value at all.
+func TestRedactPreservesLineCount(t *testing.T) {
+	r := NewRedactor(nil)
+
+	inputs := []string{
+		"secret:\nnext line survives",
+		"token=\nkeep me",
+		"password:\n\nblank line between",
+		"access_key=\nauth_token=\nprivate_key=\ndone",
+	}
+
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			got, _, _ := r.RedactContent(in)
+			assert.Equal(t, strings.Count(in, "\n"), strings.Count(got, "\n"),
+				"redaction changed the number of lines")
+		})
+	}
+}
+
+// Guard against over-correcting the newline fix into a false negative: real
+// secrets on a single line must still be redacted.
+func TestRedactStillCatchesRealSecrets(t *testing.T) {
+	r := NewRedactor(nil)
+
+	tests := []struct {
+		name    string
+		input   string
+		leaked  string
+		survive string
+	}{
+		{"aws key with following line", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\nport: 8080", "AKIAIOSFODNN7EXAMPLE", "port: 8080"},
+		{"password with symbols", "DB_PASSWORD=s3cr3t!@#pass\nport: 8080", "s3cr3t!@#pass", "port: 8080"},
+		{"quoted api key", "api_key: \"sk_live_abcdefghijklmnop\"\nport: 8080", "sk_live_abcdefghijklmnop", "port: 8080"},
+		{"tab separated", "password:\ths3cretvalue\nport: 8080", "hs3cretvalue", "port: 8080"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, count, _ := r.RedactContent(tt.input)
+			assert.GreaterOrEqual(t, count, 1)
+			assert.NotContains(t, got, tt.leaked, "secret leaked through redaction")
+			assert.Contains(t, got, tt.survive, "adjacent line was destroyed")
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Non-secret content passes through unchanged
 // ---------------------------------------------------------------------------
 
