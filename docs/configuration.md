@@ -20,7 +20,7 @@ Config: C:\Users\me\AppData\Roaming\grut\config.toml
 Data:   C:\Users\me\AppData\Local\grut
 ```
 
-Run `grut doctor` to validate the active config, selected theme, terminal compatibility, Git/GitHub auth, AI provider readiness, and config/data directory writability. Use `grut doctor --json` to attach a stable machine-readable report to bug reports or CI logs. Use `grut doctor --check` for quiet shell gates that only need an exit code.
+Run `grut doctor` to validate the active config, selected theme, terminal compatibility, Git/GitHub auth, AI provider readiness, and config/data directory writability. Use `grut doctor --json` to attach a stable machine-readable report to bug reports or CI logs. Use `grut doctor --check` for shell gates: it prints the same report but exits non-zero when a required check fails, matching `grut status --check` and `grut clean --check`.
 
 ---
 

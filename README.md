@@ -168,7 +168,7 @@ grut is primarily a TUI, but it also exposes subcommands for scripting and setup
 | `grut [path]` | Launch the TUI in the current or given directory |
 | `grut version` | Print the version of grut |
 | `grut update` | Update grut to the latest release |
-| `grut doctor` | Check environment health (`--json` for reports, `--check` for quiet gates) |
+| `grut doctor` | Check environment health (`--json` for reports, `--check` to fail on required-check failures) |
 | `grut status` | Print a summary of the working tree status |
 | `grut config` | Inspect configuration (`check`, `get <key>`, `defaults`) |
 | `grut theme` | Inspect themes (`theme list`) |
