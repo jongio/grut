@@ -27,7 +27,7 @@ Hardware: see Test Environment section above
 | Slice backing array reuse | `internal/panels/gitdiff/gitdiff.go` | `lines = lines[:0]` reset instead of `nil` : retains capacity |
 | String builder in render loops | `internal/tui/app.go` | `strings.Builder` + `Reset()` instead of `+=` concatenation |
 | pprof flags | `cmd/root.go` | `--cpu-profile` / `--mem-profile` for on-demand profiling |
-| Benchmark methodology | Benchmark files and `gotuiperf.yaml` | Prewarmed steady-state paths, named cold paths, and explicit lifecycle workloads |
+| Benchmark methodology | Benchmark files and CI configuration | Prewarmed steady-state paths, named cold paths, and explicit lifecycle workloads |
 
 ---
 
@@ -79,8 +79,6 @@ State-reusing render benchmarks are prewarmed before timing so they measure stea
 
 Only standard Go benchmark metrics are reported: ns/op, B/op, and allocs/op. These metrics can identify performance regressions, but they cannot prove leak freedom. Leak investigations require purpose-built lifecycle tests, profiles, and observation over a controlled duration.
 
-`gotuiperf.yaml` uses distribution policies with 10 rounds and a 100ms benchmark time. This is a fast pull request screening policy, not high-power statistical analysis, and it does not prove leak freedom.
-
 ## Timing Results (sec/op)
 
 > **Note:** sec/op comparison between `bench_before.txt` and the current baseline is
@@ -117,7 +115,7 @@ CI runners (`ubuntu-latest`) are bare-metal Linux : expect better timing than WS
 
 ## CI Integration
 
-The benchmark package set is consistent across pull request CI, release snapshots, Mage, and `gotuiperf.yaml`:
+The benchmark package set is consistent across pull request CI, release snapshots, and Mage:
 
 1. `internal/ai`
 2. `internal/config`
@@ -130,7 +128,7 @@ The benchmark package set is consistent across pull request CI, release snapshot
 
 `.github/workflows/bench.yml` runs for filtered Go pull requests, main pushes, the weekly schedule, and manual dispatch. Pull requests compare base and head on the same runner. `.github/workflows/release.yml` captures all eight packages during the manual release workflow.
 
-The workflow comparison reports benchstat results and screens for statistically significant regressions. `gotuiperf.yaml` is the faster 10-round, 100ms pull request policy described above.
+The workflow comparison reports benchstat results and screens for statistically significant regressions.
 
 ## Local Commands
 
