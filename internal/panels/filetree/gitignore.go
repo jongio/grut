@@ -91,13 +91,13 @@ func (ft *FileTree) addToGitignore() (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: "Ignore failed: " + errMsg, Level: notify.Error}
 		}
 	}
-	ft.reloadTree()
+	reloadCmd := ft.reloadTree()
 	if !added {
-		return ft, func() tea.Msg {
+		return ft, tea.Batch(reloadCmd, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Already ignored: " + pattern, Level: notify.Info}
-		}
+		})
 	}
-	return ft, func() tea.Msg {
+	return ft, tea.Batch(reloadCmd, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Added to .gitignore: " + pattern, Level: notify.Success}
-	}
+	})
 }

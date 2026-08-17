@@ -3,9 +3,12 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/keymap"
@@ -15,6 +18,7 @@ import (
 	"github.com/jongio/grut/internal/theme"
 	"github.com/jongio/grut/internal/tui"
 	"github.com/jongio/grut/internal/update"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -502,6 +506,115 @@ func TestNewMCPCmd_SocketNotImplemented(t *testing.T) {
 	assert.Contains(t, err.Error(), "not yet implemented")
 }
 
+func TestNewMCPCmd_WatchdogLifecycleMatchesServer(t *testing.T) {
+	watchdog := newRecordingMCPWatchdog()
+	serverStarted := make(chan struct{})
+	releaseServer := make(chan struct{})
+	server := mcpCommandServerFunc(func(context.Context) error {
+		close(serverStarted)
+		<-releaseServer
+		return nil
+	})
+	cmd := newMCPCmdWithDeps(testMCPCommandDeps(server, watchdog))
+
+	result := make(chan error, 1)
+	go func() { result <- cmd.Execute() }()
+
+	select {
+	case <-serverStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("MCP server did not start")
+	}
+	select {
+	case <-watchdog.started:
+	default:
+		t.Fatal("watchdog was not started before serving MCP")
+	}
+	select {
+	case <-watchdog.stopped:
+		t.Fatal("watchdog stopped while MCP server was still running")
+	default:
+	}
+
+	close(releaseServer)
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("MCP command did not return")
+	}
+	select {
+	case <-watchdog.stopped:
+	default:
+		t.Fatal("watchdog was not stopped after MCP server returned")
+	}
+}
+
+func TestNewMCPCmd_CancellationStopsServerAndWatchdog(t *testing.T) {
+	watchdog := newRecordingMCPWatchdog()
+	serverStarted := make(chan struct{})
+	server := mcpCommandServerFunc(func(ctx context.Context) error {
+		close(serverStarted)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	cmd := newMCPCmdWithDeps(testMCPCommandDeps(server, watchdog))
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd.SetContext(ctx)
+
+	result := make(chan error, 1)
+	go func() { result <- cmd.Execute() }()
+	select {
+	case <-serverStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("MCP server did not start")
+	}
+
+	cancel()
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("MCP command did not stop after cancellation")
+	}
+	select {
+	case <-watchdog.stopped:
+	default:
+		t.Fatal("watchdog was not stopped after cancellation")
+	}
+}
+
+func TestStdioMCPServer_Cancellation(t *testing.T) {
+	input := newBlockingReader()
+	server := &stdioMCPServer{
+		server: mcpserver.NewStdioServer(mcpserver.NewMCPServer("test", "1.0.0")),
+		input:  input,
+		output: io.Discard,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- server.Serve(ctx) }()
+
+	select {
+	case <-input.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stdio server did not begin reading")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("stdio server did not stop after cancellation")
+	}
+	close(input.release)
+	select {
+	case <-input.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stdio reader goroutine did not exit")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Run subcommand — execution via root
 // ---------------------------------------------------------------------------
@@ -603,4 +716,65 @@ func TestInitChainSucceeds(t *testing.T) {
 	model := tui.New(engine, th, km, nil, overlayreg.New(th, nil)).
 		WithConfig(cfg)
 	assert.NotNil(t, model, "tui.New must produce a non-nil model")
+}
+
+type mcpCommandServerFunc func(context.Context) error
+
+func (f mcpCommandServerFunc) Serve(ctx context.Context) error {
+	return f(ctx)
+}
+
+type recordingMCPWatchdog struct {
+	started   chan struct{}
+	stopped   chan struct{}
+	startOnce sync.Once
+	stopOnce  sync.Once
+}
+
+func newRecordingMCPWatchdog() *recordingMCPWatchdog {
+	return &recordingMCPWatchdog{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+}
+
+func (w *recordingMCPWatchdog) Start(context.Context) func() {
+	w.startOnce.Do(func() { close(w.started) })
+	return func() {
+		w.stopOnce.Do(func() { close(w.stopped) })
+	}
+}
+
+func testMCPCommandDeps(server mcpCommandServer, watchdog mcpWatchdog) mcpCommandDeps {
+	return mcpCommandDeps{
+		buildServer: func(context.Context, *cobra.Command) (mcpCommandServer, error) {
+			return server, nil
+		},
+		newWatchdog: func() mcpWatchdog {
+			return watchdog
+		},
+		notifyContext: context.WithCancel,
+	}
+}
+
+type blockingReader struct {
+	started chan struct{}
+	release chan struct{}
+	done    chan struct{}
+	once    sync.Once
+}
+
+func newBlockingReader() *blockingReader {
+	return &blockingReader{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	defer close(r.done)
+	r.once.Do(func() { close(r.started) })
+	<-r.release
+	return 0, io.EOF
 }

@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/alecthomas/chroma/v2"
@@ -90,6 +91,7 @@ type Preview struct {
 	// selected, the preview shows the item detail instead of a file.
 	ghMode      bool // true when showing GitHub content instead of file
 	ghPlainText bool // true when ghContent is pre-formatted (not markdown)
+	ghRenderGen uint64
 	// Dual-mode preview: file content vs contextual diff.
 	diffMode    bool                // when true, show diff instead of file content
 	diffContext *panels.DiffContext // context for diff resolution (nil = working tree)
@@ -136,6 +138,11 @@ type diffLoadedMsg struct {
 	lines []string
 }
 
+type githubMarkdownRenderedMsg struct {
+	lines      []string
+	generation uint64
+}
+
 type pendingPRComment struct {
 	path    string
 	line    int
@@ -180,6 +187,7 @@ func (p *Preview) themeColors() theme.Colors {
 // handleRepoChanged replaces the git client and clears preview content
 // for the new repository after a directory change.
 func (p *Preview) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.Cmd) {
+	p.invalidateGitHubMarkdownRender()
 	client, err := git.NewClient(msg.Path)
 	if err != nil {
 		p.gitClient = nil
@@ -292,6 +300,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.editBuf = nil
 		}
 		// Clear GitHub content mode if active — file selection takes precedence.
+		p.invalidateGitHubMarkdownRender()
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -325,7 +334,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, tea.Batch(cmds...)
 	case fileLoadedMsg:
 		// Only apply if the loaded file matches current request.
-		if msg.path == p.filePath {
+		if msg.path == p.filePath && !p.ghMode {
 			p.loading = false
 			p.lines = msg.lines
 			p.fileContent = msg.content
@@ -346,6 +355,14 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			p.diffLines = msg.lines
 		}
 		return p, nil
+	case githubMarkdownRenderedMsg:
+		if msg.generation != p.ghRenderGen || !p.ghMode || p.ghPlainText {
+			return p, nil
+		}
+		p.loading = false
+		p.lines = msg.lines
+		p.clampScroll()
+		return p, nil
 	case panels.CommitSelectedMsg:
 		p.commitRef = msg.Hash
 		return p, nil
@@ -361,9 +378,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.ghTitle = fmt.Sprintf("#%d %s", msg.Number, safeTitle)
 		p.ghContent = renderIssuePreviewContent(msg, safeTitle)
 		p.scrollY = 0
-		p.lines = markdown.RenderStatic(p.ghContent, p.width)
-		return p, nil
+		p.loading = true
+		p.lines = nil
+		return p, p.renderGitHubMarkdownCmd(p.ghContent)
 	case panels.IssueDeselectedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -373,6 +393,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.PRSelectedMsg:
+		p.invalidateGitHubMarkdownRender()
 		p.clearSelection()
 		p.clearSearch()
 		p.prContext = true
@@ -387,9 +408,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		content := fmt.Sprintf("# PR #%d\n\n**%s**\n\nBranch: `%s`\nState: %s", msg.Number, safeTitle, safeBranch, safeState)
 		p.ghContent = content
 		p.scrollY = 0
+		p.loading = false
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
 	case panels.PRDeselectedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.prContext = false
 		p.prNumber = 0
 		p.pendingPRComment = nil
@@ -402,6 +426,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.ReleaseComparePreviewMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.clearSelection()
 		p.clearSearch()
 		p.ghMode = true
@@ -412,6 +438,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.lines = strings.Split(p.ghContent, "\n")
 		return p, nil
 	case panels.ReleaseCompareDeselectedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -421,6 +449,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.SubmoduleSelectedMsg:
+		p.invalidateGitHubMarkdownRender()
 		p.clearSelection()
 		p.clearSearch()
 		p.ghMode = true
@@ -436,9 +465,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		p.ghContent = content
 		p.scrollY = 0
+		p.loading = false
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
 	case panels.SubmoduleDeselectedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -448,6 +480,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return p, nil
 	case panels.ActionRunSelectedMsg:
+		p.invalidateGitHubMarkdownRender()
 		p.clearSelection()
 		p.clearSearch()
 		p.ghJobsContent = ""
@@ -459,9 +492,12 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		content := fmt.Sprintf("# %s\n\nStatus: %s\nRun ID: %d", safeWfName, safeStatus, msg.RunID)
 		p.ghContent = content
 		p.scrollY = 0
+		p.loading = false
 		p.lines = markdown.RenderStatic(content, p.width)
 		return p, nil
 	case panels.ActionRunDeselectedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.ghMode = false
 		p.ghTitle = ""
 		p.ghContent = ""
@@ -472,6 +508,7 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.WorkflowSelectedMsg:
 		// Show the workflow definition file in the preview pane.
+		p.invalidateGitHubMarkdownRender()
 		p.clearSelection()
 		p.clearSearch()
 		p.ghMode = false
@@ -490,6 +527,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		p.diffLines = nil
 		return p, p.loadFileCmd(msg.Path)
 	case panels.ActionJobsLoadedMsg:
+		p.invalidateGitHubMarkdownRender()
+		p.loading = false
 		p.clearSelection()
 		p.clearSearch()
 		p.ghMode = true
@@ -501,6 +540,8 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		return p, nil
 	case panels.ActionLogMsg:
 		if p.ghMode && msg.Log != "" {
+			p.invalidateGitHubMarkdownRender()
+			p.loading = false
 			p.clearSearch()
 			p.ghPlainText = true
 			logSection := renderActionLog(msg.Log, msg.Follow)
@@ -532,9 +573,13 @@ func (p *Preview) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if p.ghMode {
 			if p.ghContent != "" {
 				if p.ghPlainText {
+					p.invalidateGitHubMarkdownRender()
+					p.loading = false
 					p.lines = strings.Split(p.ghContent, "\n")
 				} else {
-					p.lines = markdown.RenderStatic(p.ghContent, p.width)
+					p.loading = true
+					p.lines = nil
+					return p, p.renderGitHubMarkdownCmd(p.ghContent)
 				}
 			}
 			return p, nil
@@ -1084,6 +1129,7 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 			result.err = err
 			return result
 		}
+
 		// Reject directories
 		if info.IsDir() {
 			result.lines = []string{fmt.Sprintf("Directory: %s", path)}
@@ -1164,6 +1210,41 @@ func (p *Preview) loadFileCmd(path string) tea.Cmd {
 		}
 		return result
 	}
+}
+
+func (p *Preview) renderGitHubMarkdownCmd(content string) tea.Cmd {
+	p.ghRenderGen++
+	generation := p.ghRenderGen
+	width := p.width
+	return func() tea.Msg {
+		return githubMarkdownRenderedMsg{
+			lines:      renderMarkdownStatic(content, width),
+			generation: generation,
+		}
+	}
+}
+
+func (p *Preview) invalidateGitHubMarkdownRender() {
+	p.ghRenderGen++
+}
+
+func renderMarkdownStatic(source string, width int) []string {
+	if width <= 0 {
+		width = 80
+	}
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(markdown.Style()),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return strings.Split(source, "\n")
+	}
+	rendered, err := renderer.Render(source)
+	if err != nil {
+		return strings.Split(source, "\n")
+	}
+	rendered = strings.TrimRight(rendered, "\n")
+	return strings.Split(rendered, "\n")
 }
 
 // loadDiffCmd returns a tea.Cmd that loads the git diff for a file asynchronously.

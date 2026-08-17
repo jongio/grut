@@ -102,7 +102,7 @@ func TestAddToGitignore_Handler(t *testing.T) {
 
 	_, cmd := ft.addToGitignore()
 	require.NotNil(t, cmd)
-	msg := cmd()
+	msg := runCmd(t, ft, cmd)
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok)
 	assert.Equal(t, notify.Success, toast.Level)
@@ -115,7 +115,7 @@ func TestAddToGitignore_Handler(t *testing.T) {
 	// Adding the same entry again is a no-op reported as Info.
 	_, cmd = ft.addToGitignore()
 	require.NotNil(t, cmd)
-	msg = cmd()
+	msg = runCmd(t, ft, cmd)
 	toast, ok = msg.(notify.ShowToastMsg)
 	require.True(t, ok)
 	assert.Equal(t, notify.Info, toast.Level)

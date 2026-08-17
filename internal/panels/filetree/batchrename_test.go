@@ -153,6 +153,7 @@ func TestBatchRenameSuccessfulRenameRefreshesTree(t *testing.T) {
 
 	_, resultCmd := ft.Update(msg)
 	require.NotNil(t, resultCmd)
+	applyFileTreeCmd(t, ft, resultCmd)
 
 	assert.NoFileExists(t, filepath.Join(root, "README.md"))
 	assert.FileExists(t, filepath.Join(root, "renamed.md"))

@@ -22,6 +22,7 @@ type AIGitClient struct {
 	inner    git.GitClient
 	registry *ai.Registry
 	builder  *ai.Builder
+	redactor *ai.Redactor
 	audit    *ai.AuditLogger
 	cfg      config.AIConfig
 }
@@ -37,10 +38,16 @@ func NewAIGitClient(
 	audit *ai.AuditLogger,
 	cfg config.AIConfig,
 ) *AIGitClient {
+	var redactor *ai.Redactor
+	if builder != nil {
+		redactor = builder.Redactor()
+	}
+
 	return &AIGitClient{
 		inner:    inner,
 		registry: registry,
 		builder:  builder,
+		redactor: redactor,
 		audit:    audit,
 		cfg:      cfg,
 	}
@@ -533,9 +540,8 @@ func (c *AIGitClient) logAudit(operation, result string, opErr error) {
 		// Redact error messages before storing in audit logs — API errors
 		// may contain secrets, tokens, or internal server details.
 		errMsg := opErr.Error()
-		if c.builder != nil {
-			redactor := ai.NewRedactor(nil)
-			redacted, _, redactErr := redactor.RedactContent(errMsg)
+		if c.redactor != nil {
+			redacted, _, redactErr := c.redactor.RedactContent(errMsg)
 			if redactErr != nil {
 				errMsg = ai.RedactionFailedPlaceholder
 			} else {

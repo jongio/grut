@@ -115,6 +115,7 @@ type node struct {
 	isSymlink     bool
 	isExecutable  bool
 	loaded        bool // true after first loadChildren call
+	loading       bool // true while a detached child load is in flight
 	expanded      bool
 }
 
@@ -194,12 +195,16 @@ type FileTree struct {
 	theme             *theme.Theme
 	defaultBaseBranch string
 	// File operation state.
-	clip              clipboard // cut/copy clipboard
-	batchRename       batchRenameState
-	focused           bool
-	showHidden        bool
-	listMode          bool // true = flat list with relative paths, false = tree view
-	statusLoadPending bool // prevents redundant loadGitFileStatus dispatches
+	clip               clipboard // cut/copy clipboard
+	batchRename        batchRenameState
+	focused            bool
+	showHidden         bool
+	listMode           bool // true = flat list with relative paths, false = tree view
+	statusLoadPending  bool // prevents redundant loadGitFileStatus dispatches
+	treeLoadGeneration uint64
+	treeLoadContext    context.Context
+	treeLoadCancel     context.CancelFunc
+	treeBuilder        treeBuilderFunc
 	// Self-contained double-click detection: the engine's detection relies on
 	// two consecutive MouseClickMsg events at the same position, but on Windows
 	// terminals the second press may not be delivered as a separate event.
@@ -258,6 +263,7 @@ func (ft *FileTree) SetBaseBranch(branch string) {
 // handleRepoChanged replaces the git client so git-aware features (file
 // status icons, git filter mode, ignored-file detection) use the new repo.
 func (ft *FileTree) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, tea.Cmd) {
+	ft.invalidateTreeLoads()
 	client, err := git.NewClient(msg.Path)
 	if err != nil {
 		ft.gitClient = nil
@@ -275,11 +281,6 @@ func (ft *FileTree) handleRepoChanged(msg panels.RepoChangedMsg) (panels.Panel, 
 		cmds = append(cmds, ft.loadGitFileStatus(), ft.loadGitIgnored())
 	}
 	return ft, tea.Batch(cmds...)
-}
-
-// rootLoadedMsg is sent when the initial directory load completes (F05).
-type rootLoadedMsg struct {
-	root *node
 }
 
 // commitFilesLoadedMsg carries the result of an async DiffTreeFiles call.
@@ -305,21 +306,9 @@ func (ft *FileTree) Init(ctx context.Context) tea.Cmd {
 	ft.ctx = ctx
 	ft.watcher = newWatcher(defaultDebounce, defaultPollInterval)
 	ft.watcher.addDir(ft.rootPath)
-	// Load root children asynchronously (F05).
-	rootPath := ft.rootPath
-	cfg := ft.cfg
 	return tea.Batch(
 		ft.watcher.start(ctx),
-		func() tea.Msg {
-			root := &node{
-				name:  filepath.Base(rootPath),
-				path:  rootPath,
-				isDir: true,
-				depth: -1,
-			}
-			loadChildrenStatic(root, cfg)
-			return rootLoadedMsg{root: root}
-		},
+		ft.requestRootLoad(treeLoadInitial, nil, false, "", false, "", 0),
 		ft.loadGitFileStatus(),
 		ft.loadGitIgnored(),
 	)
@@ -328,19 +317,8 @@ func (ft *FileTree) Init(ctx context.Context) tea.Cmd {
 // Update implements panels.Panel.
 func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case rootLoadedMsg:
-		ft.root = msg.root
-		if ft.filter.gitFilter && ft.gitChanged.loaded() {
-			// Git status arrived before root loaded — apply filter
-			// but keep all folders collapsed on startup.
-			ft.rebuildVisible()
-			return ft, nil
-		}
-		ft.rebuildVisible()
-		if ft.filter.gitFilter && !ft.gitChanged.loaded() && ft.gitClient != nil {
-			return ft, ft.loadGitChangedFiles()
-		}
-		return ft, nil
+	case treeLoadedMsg:
+		return ft.handleTreeLoaded(msg)
 	case gitFileStatusMsg:
 		ft.gitFileStatus = msg.status
 		ft.statusLoadPending = false
@@ -359,41 +337,40 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			ft.clip = clipboard{}
 			ft.selected = make(map[string]bool)
 		}
-		ft.reloadTree()
+		reloadCmd := ft.reloadTree()
 		if len(msg.errs) > 0 {
 			errMsg := strings.Join(msg.errs, "; ")
-			return ft, func() tea.Msg {
+			return ft, tea.Batch(reloadCmd, func() tea.Msg {
 				return notify.ShowToastMsg{
 					Message: "Paste error: " + errMsg,
 					Level:   notify.Error,
 				}
-			}
+			})
 		}
-		return ft, func() tea.Msg {
+		return ft, tea.Batch(reloadCmd, func() tea.Msg {
 			return notify.ShowToastMsg{
 				Message: fmt.Sprintf("%s %d item(s)", msg.action, msg.count),
 				Level:   notify.Success,
 			}
-		}
+		})
 	case deleteResultMsg:
 		for _, p := range msg.paths {
 			delete(ft.selected, p)
 		}
-		ft.reloadTree()
+		reloadCmd := ft.reloadTree()
 		if len(msg.errs) > 0 {
 			errMsg := strings.Join(msg.errs, "; ")
-			return ft, func() tea.Msg {
+			return ft, tea.Batch(reloadCmd, func() tea.Msg {
 				return notify.ShowToastMsg{Message: "Delete error: " + errMsg, Level: notify.Error}
-			}
+			})
 		}
-		return ft, func() tea.Msg {
+		return ft, tea.Batch(reloadCmd, func() tea.Msg {
 			return notify.ShowToastMsg{
 				Message: fmt.Sprintf("Deleted %d item(s)", msg.count),
 				Level:   notify.Success,
 			}
-		}
+		})
 	case renameResultMsg:
-		ft.reloadTree()
 		if msg.err != "" {
 			errMsg := msg.err
 			return ft, func() tea.Msg {
@@ -404,10 +381,11 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 			delete(ft.selected, msg.oldPath)
 			ft.selected[filepath.Join(filepath.Dir(msg.oldPath), msg.newName)] = true
 		}
+		reloadCmd := ft.reloadTree()
 		newName := msg.newName
-		return ft, func() tea.Msg {
+		return ft, tea.Batch(reloadCmd, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Renamed to " + newName, Level: notify.Success}
-		}
+		})
 	case tea.KeyPressMsg:
 		if ft.batchRename.enabled {
 			return ft.handleBatchRenameKey(msg)
@@ -467,14 +445,12 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		}
 		return ft, nil
 	case panels.GitChangedFilesMsg:
+		if !ft.filter.gitFilter {
+			return ft, nil
+		}
 		ft.gitChanged = newChangedFiles(msg.Paths, ft.rootPath)
 		if ft.root.loaded {
-			// Auto-expand every directory that contains git-changed
-			// files so the user sees the changed files immediately.
-			ft.expandGitChangedDirs()
 			ft.rebuildVisible()
-			ft.restoreCursorToPath(ft.savedCursorPath)
-			ft.savedCursorPath = ""
 		}
 		// Skip redundant loadGitFileStatus if already dispatched by the
 		// GitStatusChangedMsg handler in the same cascade.
@@ -482,11 +458,23 @@ func (ft *FileTree) Update(msg tea.Msg) (panels.Panel, tea.Cmd) {
 		if !ft.statusLoadPending {
 			cmds = append(cmds, ft.loadGitFileStatus())
 		}
+		if ft.root.loaded {
+			cursorPath := ft.savedCursorPath
+			ft.savedCursorPath = ""
+			expanded := ft.gitChanged.dirs
+			if ft.gitModeExpanded != nil {
+				expanded = mergePathSets(expanded, ft.gitModeExpanded)
+			}
+			cmds = append(cmds, ft.requestExpandedTreeLoad(
+				expanded,
+				cursorPath,
+				false,
+			))
+		}
 		ft.statusLoadPending = false
 		return ft, tea.Batch(cmds...)
 	case panels.RevealFileMsg:
-		ft.revealFile(msg.Path)
-		return ft, ft.emitCursorFileSelectedAtLine(msg.Line)
+		return ft, ft.requestReveal(msg.Path, msg.Line)
 	case panels.CommitSelectedMsg:
 		return ft.handleCommitSelected(msg)
 	case panels.CommitDeselectedMsg:
@@ -657,6 +645,9 @@ func (ft *FileTree) KeyBindings() []panels.KeyBinding {
 // Close implements panels.Closer. It stops the filesystem watcher and
 // releases associated resources (F29).
 func (ft *FileTree) Close() {
+	if ft.treeLoadCancel != nil {
+		ft.treeLoadCancel()
+	}
 	if ft.watcher != nil {
 		ft.watcher.stop()
 	}
@@ -727,17 +718,16 @@ func (ft *FileTree) handleCommitFilesLoaded(msg commitFilesLoadedMsg) (panels.Pa
 		paths[abs] = true
 	}
 	ft.filter.commitChanged = newChangedFiles(paths, ft.rootPath)
-	// Expand directories containing commit-changed files so the tree
-	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.filter.commitChanged.dirs)
-	ft.rebuildVisible()
-	ft.viewport.cursor = 0
-	ft.viewport.offset = 0
-	return ft, ft.emitCursorFileSelected()
+	return ft, ft.requestExpandedTreeLoad(
+		ft.filter.commitChanged.dirs,
+		"",
+		true,
+	)
 }
 
 // exitCommitFilesMode restores the normal file tree view.
 func (ft *FileTree) exitCommitFilesMode() {
+	ft.invalidateTreeLoads()
 	ft.filter.commitFilesMode = false
 	ft.filter.commitFiles = nil
 	ft.filter.commitHash = ""
@@ -789,17 +779,16 @@ func (ft *FileTree) handlePRFilesLoaded(msg panels.PRFilesLoadedMsg) (panels.Pan
 		paths[abs] = true
 	}
 	ft.filter.prChanged = newChangedFiles(paths, ft.rootPath)
-	// Expand directories containing PR-changed files so the tree
-	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.filter.prChanged.dirs)
-	ft.rebuildVisible()
-	ft.viewport.cursor = 0
-	ft.viewport.offset = 0
-	return ft, ft.emitCursorFileSelected()
+	return ft, ft.requestExpandedTreeLoad(
+		ft.filter.prChanged.dirs,
+		"",
+		true,
+	)
 }
 
 // exitPRFilesMode restores the normal file tree view.
 func (ft *FileTree) exitPRFilesMode() {
+	ft.invalidateTreeLoads()
 	ft.filter.prFilesMode = false
 	ft.filter.prFiles = nil
 	ft.filter.prNumber = 0
@@ -848,14 +837,15 @@ func (ft *FileTree) handleReleaseCompareFilesLoaded(msg panels.ReleaseCompareFil
 		paths[abs] = true
 	}
 	ft.filter.releaseChanged = newChangedFiles(paths, ft.rootPath)
-	ft.expandDirsInSet(ft.root, ft.filter.releaseChanged.dirs)
-	ft.rebuildVisible()
-	ft.viewport.cursor = 0
-	ft.viewport.offset = 0
-	return ft, ft.emitCursorFileSelected()
+	return ft, ft.requestExpandedTreeLoad(
+		ft.filter.releaseChanged.dirs,
+		"",
+		true,
+	)
 }
 
 func (ft *FileTree) exitReleaseCompareMode() {
+	ft.invalidateTreeLoads()
 	ft.filter.releaseCompareMode = false
 	ft.filter.releaseFiles = nil
 	ft.filter.releaseLabel = ""
@@ -946,13 +936,13 @@ func (ft *FileTree) handleBranchFilesLoaded(msg branchFilesLoadedMsg) (panels.Pa
 		paths[abs] = true
 	}
 	ft.filter.branchChanged = newChangedFiles(paths, ft.rootPath)
-	// Expand directories containing branch-changed files so the tree
-	// shows the full hierarchy immediately.
-	ft.expandDirsInSet(ft.root, ft.filter.branchChanged.dirs)
-	ft.rebuildVisible()
-	ft.viewport.cursor = 0
-	ft.viewport.offset = 0
-	cmds := []tea.Cmd{ft.emitCursorFileSelected()}
+	cmds := []tea.Cmd{
+		ft.requestExpandedTreeLoad(
+			ft.filter.branchChanged.dirs,
+			"",
+			true,
+		),
+	}
 	if ft.filter.branchDiffFilter {
 		baseBranch := ft.filter.branchBaseRef
 		cmds = append(cmds, func() tea.Msg {
@@ -983,6 +973,7 @@ func (ft *FileTree) handleClearCompareBase() (panels.Panel, tea.Cmd) {
 
 // exitBranchFilesMode restores the normal file tree view.
 func (ft *FileTree) exitBranchFilesMode() {
+	ft.invalidateTreeLoads()
 	ft.filter.branchFilesMode = false
 	ft.filter.branchDiffFilter = false
 	ft.filter.branchFiles = nil
@@ -1104,7 +1095,7 @@ func (ft *FileTree) handleKey(msg tea.KeyPressMsg) (panels.Panel, tea.Cmd) {
 	case "H":
 		ft.collapseAllDirs()
 	case "L":
-		ft.expandAllDirs()
+		return ft, ft.expandAllDirs()
 	case ".":
 		ft.toggleHidden()
 	case "f":
@@ -1445,23 +1436,17 @@ func (ft *FileTree) selectOrExpand() (panels.Panel, tea.Cmd) {
 	}
 	n := ft.visible[ft.viewport.cursor]
 	if n.isDir {
-		// Guard symlink expansion.
-		if n.isSymlink {
-			if !ft.cfg.GetFollowSymlinks() {
-				return ft, nil
-			}
-			if !ft.isPathSafe(n.path) || ft.isSymlinkLoop(n.path) {
-				return ft, nil
-			}
+		if n.isSymlink && !ft.cfg.GetFollowSymlinks() {
+			return ft, nil
 		}
 		// Toggle expand/collapse.
 		n.expanded = !n.expanded
-		if n.expanded {
-			ft.loadChildren(n)
-		}
 		ft.rebuildVisible()
 		if n.expanded {
-			return ft, func() tea.Msg { return DirChangedMsg{Path: n.path} }
+			if n.loaded {
+				return ft, func() tea.Msg { return DirChangedMsg{Path: n.path} }
+			}
+			return ft, ft.requestChildLoad(n)
 		}
 		return ft, nil
 	}
@@ -1535,6 +1520,7 @@ func (ft *FileTree) toggleGitFilter() (panels.Panel, tea.Cmd) {
 		)
 	}
 	// Unfilter: rebuild visible with all files
+	ft.invalidateTreeLoads()
 	ft.gitChanged = nil
 	ft.rebuildVisible()
 	ft.restoreCursorToPath(cursorPath)
@@ -1601,7 +1587,7 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 			// If we have a saved git-mode state, restore it.
 			if ft.gitModeExpanded != nil {
 				ft.collapseAll(ft.root)
-				ft.restoreExpanded(ft.root, ft.gitModeExpanded)
+				applyExpandedState(ft.root, ft.gitModeExpanded)
 			}
 			// Rebuild visible immediately so the tree shows all files
 			// while the async git status is loading (gitChanged
@@ -1625,43 +1611,19 @@ func (ft *FileTree) handleTabActivated(msg panels.TabActivatedMsg) (panels.Panel
 		// Restore explorer expand state.
 		ft.collapseAll(ft.root)
 		if ft.explorerExpanded != nil {
-			ft.restoreExpanded(ft.root, ft.explorerExpanded)
+			return ft, tea.Batch(
+				func() tea.Msg { return panels.GitFilterActiveMsg{Active: false} },
+				ft.requestExactExpandedTreeLoad(
+					treeLoadModeRestore,
+					ft.explorerExpanded,
+					cursorPath,
+				),
+			)
 		}
 		ft.rebuildVisible()
 		ft.restoreCursorToPath(cursorPath)
 	}
 	return ft, func() tea.Msg { return panels.GitFilterActiveMsg{Active: false} }
-}
-
-// expandGitChangedDirs walks the tree and expands every directory whose
-// path is in ft.gitChanged.dirs, loading children as needed.
-func (ft *FileTree) expandGitChangedDirs() {
-	if ft.gitChanged == nil || len(ft.gitChanged.dirs) == 0 {
-		return
-	}
-	ft.expandGitChangedDirsWalk(ft.root)
-}
-
-func (ft *FileTree) expandGitChangedDirsWalk(n *node) {
-	for _, child := range n.children {
-		if child.isDir && ft.gitChanged.hasDir(child.path) {
-			ft.loadChildren(child)
-			child.expanded = true
-			ft.expandGitChangedDirsWalk(child)
-		}
-	}
-}
-
-// expandDirsInSet walks the tree and expands every directory whose path is
-// in the given set, loading children as needed. Used by commit/PR/branch modes to auto-expand directories containing changed files.
-func (ft *FileTree) expandDirsInSet(n *node, dirs map[string]bool) {
-	for _, child := range n.children {
-		if child.isDir && dirs[child.path] {
-			ft.loadChildren(child)
-			child.expanded = true
-			ft.expandDirsInSet(child, dirs)
-		}
-	}
 }
 
 // collapseAll recursively collapses every directory under n.
@@ -1674,28 +1636,10 @@ func (ft *FileTree) collapseAll(n *node) {
 	}
 }
 
-// expandAll recursively expands and loads every directory under n. Symlinked
-// directories are only expanded when following symlinks is enabled and the
-// target is safe, matching the guards in selectOrExpand.
-func (ft *FileTree) expandAll(n *node) {
-	for _, child := range n.children {
-		if !child.isDir {
-			continue
-		}
-		if child.isSymlink {
-			if !ft.cfg.GetFollowSymlinks() || !ft.isPathSafe(child.path) || ft.isSymlinkLoop(child.path) {
-				continue
-			}
-		}
-		ft.loadChildren(child)
-		child.expanded = true
-		ft.expandAll(child)
-	}
-}
-
 // collapseAllDirs collapses every directory in the tree and keeps the cursor on
 // the nearest still-visible ancestor of its previous position.
 func (ft *FileTree) collapseAllDirs() {
+	ft.invalidateTreeLoads()
 	prev := ft.CursorPath()
 	ft.collapseAll(ft.root)
 	ft.rebuildVisible()
@@ -1704,11 +1648,8 @@ func (ft *FileTree) collapseAllDirs() {
 
 // expandAllDirs expands and loads every directory in the tree, keeping the
 // cursor on its previous node.
-func (ft *FileTree) expandAllDirs() {
-	prev := ft.CursorPath()
-	ft.expandAll(ft.root)
-	ft.rebuildVisible()
-	ft.restoreCursorToPath(prev)
+func (ft *FileTree) expandAllDirs() tea.Cmd {
+	return ft.requestExpandAll()
 }
 
 // cursorToPathOrAncestor positions the cursor on the node matching path, or on

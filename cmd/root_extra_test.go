@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/update"
@@ -74,6 +78,43 @@ func TestBuildRootCommand_PprofPortZero(t *testing.T) {
 	assert.NoError(t, err, "pprof port 0 should not prevent command execution")
 }
 
+func TestBuildRootCommand_PprofOccupiedPortReportsCommandStderr(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	root, cleanup := buildRootCommand()
+	defer cleanup()
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--pprof", strconv.Itoa(port), "version"})
+
+	require.NoError(t, root.Execute())
+	assert.Contains(t, stderr.String(), "could not bind pprof server")
+	assert.Contains(t, stderr.String(), strconv.Itoa(port))
+}
+
+func TestBuildRootCommand_PprofCleanupStopsServer(t *testing.T) {
+	port := reserveTCPPort(t)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	root, cleanup := buildRootCommand()
+	defer cleanup()
+	root.SetArgs([]string{"--pprof", strconv.Itoa(port), "version"})
+
+	require.NoError(t, root.Execute())
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	require.NoError(t, err, "pprof listener should be bound before command execution returns")
+	require.NoError(t, conn.Close())
+
+	cleanup()
+	conn, err = net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		t.Fatal("pprof listener remained reachable after cleanup")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // buildRootCommand — cleanup idempotency
 // ---------------------------------------------------------------------------
@@ -86,6 +127,32 @@ func TestBuildRootCommand_CleanupIdempotent(t *testing.T) {
 		cleanup()
 		cleanup()
 	}, "cleanup must be idempotent")
+}
+
+func TestBuildRootCommand_CleanupConcurrentSafe(t *testing.T) {
+	_, cleanup := buildRootCommand()
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cleanup()
+		}()
+	}
+	wg.Wait()
+}
+
+func TestBuildRootCommand_SamplingFlagsRegistered(t *testing.T) {
+	root, cleanup := buildRootCommand()
+	defer cleanup()
+
+	mutexFlag := root.PersistentFlags().Lookup("mutex-profile-fraction")
+	require.NotNil(t, mutexFlag)
+	assert.Equal(t, "int", mutexFlag.Value.Type())
+
+	blockFlag := root.PersistentFlags().Lookup("block-profile-rate")
+	require.NotNil(t, blockFlag)
+	assert.Equal(t, "int", blockFlag.Value.Type())
 }
 
 // ---------------------------------------------------------------------------
@@ -220,4 +287,13 @@ func TestShowUpdateNotification_ClosedChannel(t *testing.T) {
 	showUpdateNotification(&buf, ch)
 	assert.Contains(t, buf.String(), "0.1.0")
 	assert.Contains(t, buf.String(), "9.9.9")
+}
+
+func reserveTCPPort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	require.NoError(t, listener.Close())
+	return port
 }

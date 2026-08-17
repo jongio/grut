@@ -196,7 +196,7 @@ func TestNavigateToPath_ValidDir(t *testing.T) {
 
 	_, cmd := ft.navigateToPath(subDir)
 	require.NotNil(t, cmd)
-	msg := cmd()
+	msg := runCmd(t, ft, cmd)
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok)
 	assert.Equal(t, notify.Info, toast.Level)
@@ -276,7 +276,8 @@ func TestRevealFile_ExistingFile(t *testing.T) {
 	ft := newTestFT(t, defaultCfg(), dir)
 
 	target := filepath.Join(dir, "docs", "guide.md")
-	ft.revealFile(target)
+	_, cmd := ft.Update(panels.RevealFileMsg{Path: target})
+	applyFileTreeCmd(t, ft, cmd)
 
 	// After reveal, cursor should be on guide.md
 	path := ft.CursorPath()
@@ -287,7 +288,8 @@ func TestRevealFile_EmptyPath(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	ft.revealFile("")
+	_, cmd := ft.Update(panels.RevealFileMsg{})
+	assert.Nil(t, cmd)
 	// Should be a no-op
 	assert.NotNil(t, ft.root)
 }
@@ -296,7 +298,8 @@ func TestRevealFile_OutsideRoot(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	ft.revealFile("/completely/outside/path/file.txt")
+	_, cmd := ft.Update(panels.RevealFileMsg{Path: "/completely/outside/path/file.txt"})
+	assert.Nil(t, cmd)
 	// Should be a no-op — can't reveal files outside the tree root
 }
 
@@ -304,7 +307,8 @@ func TestRevealFile_NonexistentFile(t *testing.T) {
 	dir := createTestTree(t)
 	ft := newTestFT(t, defaultCfg(), dir)
 
-	ft.revealFile(filepath.Join(dir, "nonexistent", "file.go"))
+	_, cmd := ft.Update(panels.RevealFileMsg{Path: filepath.Join(dir, "nonexistent", "file.go")})
+	applyFileTreeCmd(t, ft, cmd)
 	// Should be a no-op — path segment not found
 }
 

@@ -46,6 +46,11 @@ const DefaultToastDuration = 3 * time.Second
 // When exceeded, the oldest entry is evicted to prevent unbounded growth.
 const maxInlineNotifications = 50
 
+const (
+	maxToastTimerGeneration int64 = 1<<63 - 1
+	minToastTimerMessageID  int64 = -1 << 63
+)
+
 // Notification holds the data for a single notification.
 type Notification struct {
 	CreatedAt time.Time
@@ -60,9 +65,14 @@ type Notification struct {
 type Manager struct {
 	inlines       map[string]*inlineNotification
 	modal         *modalState
-	toasts        []toast
+	toasts        toastQueue
 	nextID        int64
 	nextInlineSeq int64
+	now           func() time.Time
+	toastTimer    *time.Timer
+	timerDeadline time.Time
+	timerGen      int64
+	timerWaiting  bool
 	screenWidth   int // terminal width (set via SetSize)
 	screenHeight  int // terminal height (set via SetSize)
 	mu            sync.RWMutex
@@ -72,6 +82,8 @@ type Manager struct {
 func NewManager() *Manager {
 	return &Manager{
 		inlines: make(map[string]*inlineNotification),
+		toasts:  newToastQueue(),
+		now:     time.Now,
 	}
 }
 
@@ -87,21 +99,21 @@ func (m *Manager) AddToast(msg string, level Level) tea.Cmd {
 func (m *Manager) AddToastWithDuration(msg string, level Level, d time.Duration) tea.Cmd {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	now := m.now()
 	id := m.nextID
 	m.nextID++
-	t := toast{
+	t := &toast{
 		id: id,
 		notification: Notification{
 			Message:   msg,
 			Level:     level,
-			CreatedAt: time.Now(),
+			CreatedAt: now,
 			Duration:  d,
 		},
+		expiresAt: now.Add(d),
 	}
-	m.toasts = append(m.toasts, t)
-	return tea.Tick(d, func(_ time.Time) tea.Msg {
-		return ToastExpiredMsg{ID: id}
-	})
+	m.toasts.add(t)
+	return m.scheduleToastTimerLocked(now)
 }
 
 // AddInline adds a persistent inline notification identified by the given
@@ -158,9 +170,15 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case ToastExpiredMsg:
 		m.mu.Lock()
-		m.removeToast(msg.ID)
+		var cmd tea.Cmd
+		if generation, ok := toastTimerGeneration(msg.ID); ok {
+			cmd = m.handleToastTimerLocked(generation)
+		} else {
+			m.toasts.remove(msg.ID)
+			cmd = m.scheduleToastTimerLocked(m.now())
+		}
 		m.mu.Unlock()
-		return nil
+		return cmd
 	case ShowToastMsg:
 		d := msg.Duration
 		if d == 0 {
@@ -231,14 +249,76 @@ func (m *Manager) SetSize(width, height int) {
 	m.screenHeight = height
 }
 
-// removeToast removes a toast by its ID. Must be called with mu held.
-func (m *Manager) removeToast(id int64) {
-	for i, t := range m.toasts {
-		if t.id == id {
-			m.toasts = append(m.toasts[:i], m.toasts[i+1:]...)
-			return
+// scheduleToastTimerLocked arms or resets the single timer for the nearest
+// toast expiry. It returns a command only when no timer command is waiting.
+func (m *Manager) scheduleToastTimerLocked(now time.Time) tea.Cmd {
+	deadline, ok := m.toasts.nearestExpiry()
+	if !ok {
+		m.timerDeadline = time.Time{}
+		if m.toastTimer != nil && !m.timerWaiting {
+			m.toastTimer.Stop()
 		}
+		return nil
 	}
+
+	delay := deadline.Sub(now)
+	if delay < 0 {
+		delay = 0
+	}
+	needsReset := m.toastTimer == nil ||
+		!deadline.Equal(m.timerDeadline) ||
+		!m.timerWaiting
+	if needsReset {
+		if m.toastTimer == nil {
+			m.toastTimer = time.NewTimer(delay)
+		} else {
+			m.toastTimer.Reset(delay)
+		}
+		m.timerDeadline = deadline
+		m.advanceToastTimerGenerationLocked()
+	}
+	if m.timerWaiting {
+		return nil
+	}
+
+	m.timerWaiting = true
+	timer := m.toastTimer
+	return func() tea.Msg {
+		<-timer.C
+		m.mu.Lock()
+		generation := m.timerGen
+		m.timerWaiting = false
+		m.mu.Unlock()
+		return ToastExpiredMsg{ID: -generation}
+	}
+}
+
+// handleToastTimerLocked expires every toast due at the firing time and
+// schedules the next nearest expiry. Stale timer messages are ignored.
+func (m *Manager) handleToastTimerLocked(generation int64) tea.Cmd {
+	handledAt := m.now()
+	if generation != m.timerGen ||
+		(!m.timerDeadline.IsZero() && handledAt.Before(m.timerDeadline)) {
+		return m.scheduleToastTimerLocked(handledAt)
+	}
+	m.timerWaiting = false
+	m.toasts.removeExpired(handledAt)
+	return m.scheduleToastTimerLocked(handledAt)
+}
+
+func (m *Manager) advanceToastTimerGenerationLocked() {
+	if m.timerGen == maxToastTimerGeneration {
+		m.timerGen = 1
+		return
+	}
+	m.timerGen++
+}
+
+func toastTimerGeneration(id int64) (int64, bool) {
+	if id >= 0 || id == minToastTimerMessageID {
+		return 0, false
+	}
+	return -id, true
 }
 
 // dismissModal clears the current modal.
@@ -259,8 +339,8 @@ func (m *Manager) View(width int) string {
 	}
 	var parts []string
 	// Render toasts
-	for _, t := range m.toasts {
-		parts = append(parts, t.view(width))
+	for element := m.toasts.order.Front(); element != nil; element = element.Next() {
+		parts = append(parts, toastFromElement(element).view(width))
 	}
 	// Render inline notifications
 	for _, inl := range m.inlines {
@@ -289,7 +369,7 @@ func (m *Manager) ModalView(width, height int) string {
 func (m *Manager) ToastCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return len(m.toasts)
+	return m.toasts.len()
 }
 
 // InlineCount returns the number of active inline notifications.
@@ -307,32 +387,28 @@ func (m *Manager) InlineCount() int {
 func (m *Manager) toastDuration(i int) time.Duration {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.toasts[i].notification.Duration
+	return m.toasts.at(i).notification.Duration
 }
 
 // toastID returns the ID of the i-th toast.
 func (m *Manager) toastID(i int) int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.toasts[i].id
+	return m.toasts.at(i).id
 }
 
 // toastIDs returns all toast IDs.
 func (m *Manager) toastIDs() []int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	ids := make([]int64, len(m.toasts))
-	for i, t := range m.toasts {
-		ids[i] = t.id
-	}
-	return ids
+	return m.toasts.ids()
 }
 
 // toastMessage returns the message of the i-th toast.
 func (m *Manager) toastMessage(i int) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.toasts[i].notification.Message
+	return m.toasts.at(i).notification.Message
 }
 
 // inlineMessage returns the message of the inline notification with the given ID.

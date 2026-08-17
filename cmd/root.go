@@ -5,16 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
-	_ "net/http/pprof" //nolint:gosec // pprof server is opt-in via --pprof flag
 	"os"
 	"path/filepath"
-	"runtime"
-	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/ai"
@@ -47,17 +42,22 @@ func newRootCommand() (*cobra.Command, func()) {
 	return buildRootCommand()
 }
 
+func flagWasChanged(cmd *cobra.Command, name string) bool {
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		return flag.Changed
+	}
+	if flag := cmd.InheritedFlags().Lookup(name); flag != nil {
+		return flag.Changed
+	}
+	return false
+}
+
 // buildRootCommand creates the root command and returns a cleanup function
 // that must be deferred after cmd.Execute(). This guarantees profiling
 // resources are released even when RunE returns an error (Cobra does not
 // call PersistentPostRunE on RunE failure).
 func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
-	// cpuProfileFile is scoped to this function, not package-level,
-	// eliminating shared mutable state (CR-008).
-	var cpuProfileFile *os.File
-	// memstatsDone is closed by cleanup to stop the background memstats
-	// goroutine, preventing a goroutine leak when --pprof is used.
-	memstatsDone := make(chan struct{})
+	var profiler *diag.Profiler
 	var startupLayout string
 	var demoScenario string
 	var demoKeep bool
@@ -306,8 +306,7 @@ Environment:
 			// records a diagnostic (with a goroutine stack dump) to the data
 			// directory if either grows abnormally, so runaway resource use is
 			// captured even without GRUT_LOG enabled.
-			watchdogCtx, stopWatchdog := context.WithCancel(context.Background())
-			go diag.New().Run(watchdogCtx)
+			stopWatchdog := diag.New().Start(context.Background())
 			defer stopWatchdog()
 
 			p := tea.NewProgram(model)
@@ -343,67 +342,33 @@ Environment:
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cpuPath, _ := cmd.Flags().GetString("cpu-profile")
-		if cpuPath != "" {
-			f, err := os.Create(cpuPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not create CPU profile %q: %v\n", cpuPath, err)
-				return nil
-			}
-			if err := pprof.StartCPUProfile(f); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not start CPU profile: %v\n", err)
-				f.Close()
-				return nil
-			}
-			cpuProfileFile = f
+		memPath, _ := cmd.Flags().GetString("mem-profile")
+		options := diag.ProfilingOptions{
+			CPUProfilePath:    cpuPath,
+			MemoryProfilePath: memPath,
 		}
-
 		pprofPort, _ := cmd.Flags().GetString("pprof")
 		if pprofPort != "" {
 			port, err := strconv.Atoi(pprofPort)
 			if err != nil || port < 1 || port > 65535 {
-				fmt.Fprintf(os.Stderr, "Warning: invalid pprof port %q (must be 1-65535)\n", pprofPort)
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid pprof port %q (must be 1-65535)\n", pprofPort)
 			} else {
 				// Bind to 127.0.0.1 explicitly — "localhost" may resolve to
 				// an unexpected address on misconfigured systems.
-				addr := "127.0.0.1:" + pprofPort
-				go func() {
-					slog.Info("pprof server starting", "addr", "http://"+addr+"/debug/pprof/")
-					srv := &http.Server{ //nolint:gosec // pprof is opt-in dev tool
-						Addr:              addr,
-						ReadHeaderTimeout: 10 * time.Second,
-						ReadTimeout:       30 * time.Second,
-						WriteTimeout:      60 * time.Second,
-						IdleTimeout:       120 * time.Second,
-					}
-					if err := srv.ListenAndServe(); err != nil {
-						slog.Error("pprof server failed", "err", err)
-					}
-				}()
-
-				go func() {
-					ticker := time.NewTicker(30 * time.Second)
-					defer ticker.Stop()
-					for {
-						select {
-						case <-memstatsDone:
-							return
-						case <-ticker.C:
-							var ms runtime.MemStats
-							runtime.ReadMemStats(&ms)
-							slog.Info(
-								"memstats",
-								"heap_alloc_mb", fmt.Sprintf("%.1f", float64(ms.HeapAlloc)/(1024*1024)),
-								"heap_inuse_mb", fmt.Sprintf("%.1f", float64(ms.HeapInuse)/(1024*1024)),
-								"heap_objects", ms.HeapObjects,
-								"goroutines", runtime.NumGoroutine(),
-								"gc_cycles", ms.NumGC,
-							)
-						}
-					}
-				}()
+				options.PprofAddress = "127.0.0.1:" + pprofPort
 			}
 		}
 
+		if flagWasChanged(cmd, "mutex-profile-fraction") {
+			rate, _ := cmd.Flags().GetInt("mutex-profile-fraction")
+			options.MutexProfileFraction = diag.SamplingRate{Enabled: true, Rate: rate}
+		}
+		if flagWasChanged(cmd, "block-profile-rate") {
+			rate, _ := cmd.Flags().GetInt("block-profile-rate")
+			options.BlockProfileRate = diag.SamplingRate{Enabled: true, Rate: rate}
+		}
+
+		profiler = diag.StartProfiling(options, cmd.ErrOrStderr())
 		return nil
 	}
 
@@ -415,6 +380,8 @@ Environment:
 	rootCmd.PersistentFlags().String("cpu-profile", "", "write CPU profile to `file`")
 	rootCmd.PersistentFlags().String("mem-profile", "", "write memory profile to `file`")
 	rootCmd.PersistentFlags().String("pprof", "", "start pprof server on given port (e.g. 6060)")
+	rootCmd.PersistentFlags().Int("mutex-profile-fraction", 0, "sample 1 in `n` mutex contention events for pprof")
+	rootCmd.PersistentFlags().Int("block-profile-rate", 0, "sample blocking events at `nanoseconds` intervals for pprof")
 	rootCmd.PersistentFlags().Bool("no-ai", false, "Disable AI features for this operation")
 	rootCmd.PersistentFlags().Bool("demo", false, "Launch with a demo project to explore grut")
 	rootCmd.PersistentFlags().StringVar(&demoScenario, "scenario", "", "Demo scenario to launch (use \"list\" to show options)")
@@ -439,33 +406,9 @@ Environment:
 
 	// cleanup releases profiling resources. It is idempotent — safe to call
 	// multiple times (subsequent calls are no-ops).
-	var cleanupDone bool
 	cleanup = func() {
-		if cleanupDone {
-			return
-		}
-		cleanupDone = true
-
-		// Stop the memstats goroutine if it was started.
-		close(memstatsDone)
-
-		if cpuProfileFile != nil {
-			pprof.StopCPUProfile()
-			cpuProfileFile.Close()
-		}
-
-		memPath, _ := rootCmd.Flags().GetString("mem-profile")
-		if memPath != "" {
-			f, err := os.Create(memPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not create memory profile %q: %v\n", memPath, err)
-				return
-			}
-			defer f.Close()
-			runtime.GC()
-			if err := pprof.WriteHeapProfile(f); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not write memory profile: %v\n", err)
-			}
+		if profiler != nil {
+			profiler.Close()
 		}
 	}
 

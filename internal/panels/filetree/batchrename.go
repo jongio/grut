@@ -103,11 +103,10 @@ func (ft *FileTree) exitBatchRenameMode() {
 
 func (ft *FileTree) handleBatchRenameResult(msg batchRenameResultMsg) (panels.Panel, tea.Cmd) {
 	ft.selected = make(map[string]bool)
-	ft.reloadTree()
 
 	cmds := []tea.Cmd{
+		ft.reloadTree(),
 		ft.loadGitFileStatus(),
-		ft.emitCursorFileSelected(),
 		func() tea.Msg { return panels.RefreshGitStatusMsg{} },
 		func() tea.Msg { return panels.RefreshPreviewMsg{} },
 	}

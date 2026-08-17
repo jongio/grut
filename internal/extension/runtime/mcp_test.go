@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const blockingHelperTerm = "grut-mcp-runtime-test-helper"
+
+func TestMain(m *testing.M) {
+	if os.Getenv("TERM") == blockingHelperTerm {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -68,18 +79,14 @@ func buildHelper(t *testing.T, name, code string) string {
 	return bin
 }
 
-// buildBlockingHelper returns a binary that blocks reading from stdin.
+// buildBlockingHelper reuses the package test executable to avoid antivirus
+// heuristics that flag short-lived generated binaries on Windows.
 func buildBlockingHelper(t *testing.T) string {
 	t.Helper()
-	return buildHelper(t, "blocking", `package main
-
-import "os"
-
-func main() {
-	buf := make([]byte, 1)
-	os.Stdin.Read(buf)
-}
-`)
+	t.Setenv("TERM", blockingHelperTerm)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	return executable
 }
 
 // buildExitingHelper returns a binary that exits immediately.

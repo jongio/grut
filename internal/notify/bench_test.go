@@ -2,32 +2,64 @@ package notify_test
 
 import (
 	"fmt"
-	"runtime"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/notify"
 )
 
-// BenchmarkNotifyToastChurn measures allocation overhead of creating
-// many short-lived toasts (the common hot path in the TUI).
+const benchmarkInlineCap = 50
+
+var benchmarkNotifyCmd tea.Cmd
+
+// BenchmarkNotifyToastChurn measures the steady-state lifecycle of adding
+// a toast and processing its expiry while reusing manager slice capacity.
 func BenchmarkNotifyToastChurn(b *testing.B) {
 	mgr := notify.NewManager()
+	benchmarkNotifyCmd = mgr.AddToast("warmup", notify.Info)
+	mgr.Update(notify.ToastExpiredMsg{ID: 0})
+	nextID := int64(1)
+
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		cmd := mgr.AddToast("test message", notify.Info)
-		_ = cmd
+		benchmarkNotifyCmd = mgr.AddToast("test message", notify.Info)
+		mgr.Update(notify.ToastExpiredMsg{ID: nextID})
+		nextID++
+	}
+	b.StopTimer()
+	if count := mgr.ToastCount(); count != 0 {
+		b.Fatalf("toast count is %d after lifecycle, want 0", count)
 	}
 }
 
-// BenchmarkNotifyInlineCap verifies that the inline notification cap
-// prevents unbounded map growth when many distinct IDs are added.
+// BenchmarkNotifyToastLifecycleCold measures manager construction plus one
+// complete toast lifecycle.
+func BenchmarkNotifyToastLifecycleCold(b *testing.B) {
+	var lastManager *notify.Manager
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		lastManager = notify.NewManager()
+		benchmarkNotifyCmd = lastManager.AddToast("test message", notify.Info)
+		lastManager.Update(notify.ToastExpiredMsg{ID: 0})
+	}
+	b.StopTimer()
+	if count := lastManager.ToastCount(); count != 0 {
+		b.Fatalf("toast count is %d after cold lifecycle, want 0", count)
+	}
+}
+
+// BenchmarkNotifyInlineCap measures replacement pressure after the inline map
+// has reached its cap, including oldest-entry eviction on every operation.
 func BenchmarkNotifyInlineCap(b *testing.B) {
 	mgr := notify.NewManager()
-
-	runtime.GC()
-	var memBefore, memAfter runtime.MemStats
-	runtime.ReadMemStats(&memBefore)
+	for i := range benchmarkInlineCap {
+		mgr.AddInline(fmt.Sprintf("prefill-%d", i), "inline notification", notify.Warn)
+	}
+	if count := mgr.InlineCount(); count != benchmarkInlineCap {
+		b.Fatalf("inline prefill count is %d, want %d", count, benchmarkInlineCap)
+	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -36,14 +68,7 @@ func BenchmarkNotifyInlineCap(b *testing.B) {
 	}
 	b.StopTimer()
 
-	runtime.GC()
-	runtime.ReadMemStats(&memAfter)
-
-	heapDelta := int64(memAfter.HeapInuse) - int64(memBefore.HeapInuse)
-	b.ReportMetric(float64(heapDelta)/float64(b.N), "heap-inuse-b/op")
-
-	// After many inserts the map should be capped at maxInlineNotifications (50).
-	if count := mgr.InlineCount(); count > 50 {
-		b.Errorf("inline count %d exceeds cap of 50", count)
+	if count := mgr.InlineCount(); count != benchmarkInlineCap {
+		b.Fatalf("inline count is %d after churn, want %d", count, benchmarkInlineCap)
 	}
 }

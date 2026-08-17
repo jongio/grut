@@ -1,7 +1,7 @@
 package filetree
 
 import (
-	"os"
+	"context"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,69 +25,23 @@ var builderPool = sync.Pool{
 // Tree loading
 // ---------------------------------------------------------------------------
 
-// loadChildren populates n.children from the filesystem via os.ReadDir and
-// os.Lstat.  Loading is lazy — children are only loaded the first time a
-// directory is expanded.
+// loadChildren synchronously populates a node for benchmarks and tests.
+// Production Update paths use detached tree commands from loader.go.
 func (ft *FileTree) loadChildren(n *node) {
 	if n.loaded || !n.isDir {
 		return
 	}
-
-	// Max depth enforcement.
-	if n.depth+1 >= ft.cfg.GetMaxDepth() {
-		n.loaded = true
-		return
+	request := treeLoadRequest{
+		config:    snapshotTreeLoadConfig(ft.cfg),
+		expanded:  ft.collectExpanded(n),
+		name:      n.name,
+		path:      n.path,
+		rootPath:  ft.rootPath,
+		depth:     n.depth,
+		isSymlink: n.isSymlink,
 	}
-
-	entries, err := os.ReadDir(n.path)
-	if err != nil {
-		n.loadErr = err
-		n.loaded = true
-		return
-	}
-	n.loadErr = nil
-
-	children := make([]*node, 0, len(entries))
-	for _, entry := range entries {
-		name := entry.Name()
-		childPath := filepath.Join(n.path, name)
-
-		child := &node{
-			name:  name,
-			path:  childPath,
-			depth: n.depth + 1,
-		}
-
-		info, err := os.Lstat(childPath)
-		if err != nil {
-			continue // skip entries we cannot stat
-		}
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			child.isSymlink = true
-			if target, err := os.Readlink(childPath); err == nil {
-				child.symlinkTarget = target
-			}
-			// Follow symlink to determine directory/executable status.
-			if targetInfo, err := os.Stat(childPath); err == nil {
-				child.isDir = targetInfo.IsDir()
-				if !targetInfo.IsDir() {
-					child.isExecutable = targetInfo.Mode()&0o111 != 0
-				}
-			}
-		} else {
-			child.isDir = info.IsDir()
-			if !info.IsDir() {
-				child.isExecutable = info.Mode()&0o111 != 0
-			}
-		}
-
-		children = append(children, child)
-	}
-
-	ft.sortChildren(children)
-	n.children = children
-	n.loaded = true
+	loaded, _ := buildDetachedTree(context.Background(), request)
+	copyLoadedNode(n, loaded)
 }
 
 // loadChildrenStatic is a standalone version of loadChildren that uses
@@ -97,48 +51,26 @@ func loadChildrenStatic(n *node, cfg Config) {
 	if n.loaded || !n.isDir {
 		return
 	}
-	if n.depth+1 >= cfg.GetMaxDepth() {
-		n.loaded = true
+	request := treeLoadRequest{
+		config:    snapshotTreeLoadConfig(cfg),
+		name:      n.name,
+		path:      n.path,
+		rootPath:  n.path,
+		depth:     n.depth,
+		isSymlink: n.isSymlink,
+	}
+	loaded, _ := buildDetachedTree(context.Background(), request)
+	copyLoadedNode(n, loaded)
+}
+
+func copyLoadedNode(target, loaded *node) {
+	if target == nil || loaded == nil {
 		return
 	}
-	entries, err := os.ReadDir(n.path)
-	if err != nil {
-		n.loadErr = err
-		n.loaded = true
-		return
-	}
-	n.loadErr = nil
-	children := make([]*node, 0, len(entries))
-	for _, entry := range entries {
-		name := entry.Name()
-		childPath := filepath.Join(n.path, name)
-		child := &node{name: name, path: childPath, depth: n.depth + 1}
-		info, err := os.Lstat(childPath)
-		if err != nil {
-			continue
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			child.isSymlink = true
-			if target, err := os.Readlink(childPath); err == nil {
-				child.symlinkTarget = target
-			}
-			if targetInfo, err := os.Stat(childPath); err == nil {
-				child.isDir = targetInfo.IsDir()
-				if !targetInfo.IsDir() {
-					child.isExecutable = targetInfo.Mode()&0o111 != 0
-				}
-			}
-		} else {
-			child.isDir = info.IsDir()
-			if !info.IsDir() {
-				child.isExecutable = info.Mode()&0o111 != 0
-			}
-		}
-		children = append(children, child)
-	}
-	sortChildrenStatic(children, cfg.GetSortDirectoriesFirst())
-	n.children = children
-	n.loaded = true
+	target.children = loaded.children
+	target.loaded = loaded.loaded
+	target.loading = false
+	target.loadErr = loaded.loadErr
 }
 
 // ---------------------------------------------------------------------------
@@ -148,21 +80,6 @@ func loadChildrenStatic(n *node, cfg Config) {
 // sortChildrenStatic sorts children without a FileTree receiver. Safe for
 // use in background goroutines.
 func sortChildrenStatic(children []*node, dirFirst bool) {
-	slices.SortStableFunc(children, func(a, b *node) int {
-		if dirFirst && a.isDir != b.isDir {
-			if a.isDir {
-				return -1
-			}
-			return 1
-		}
-		return compareFold(a.name, b.name)
-	})
-}
-
-func (ft *FileTree) sortChildren(children []*node) {
-	// Stable sort: directories first (when configured), then case-insensitive
-	// alphabetical. Uses stdlib slices.SortStableFunc (Go 1.21+).
-	dirFirst := ft.cfg.GetSortDirectoriesFirst()
 	slices.SortStableFunc(children, func(a, b *node) int {
 		if dirFirst && a.isDir != b.isDir {
 			if a.isDir {
@@ -323,9 +240,11 @@ func isHidden(name string) bool {
 
 // handleRefresh reloads the tree from disk and restarts the watcher command.
 func (ft *FileTree) handleRefresh() (panels.Panel, tea.Cmd) {
-	ft.reloadTree()
-
-	cmds := []tea.Cmd{ft.loadGitFileStatus(), ft.loadGitIgnored()}
+	cmds := []tea.Cmd{
+		ft.requestTreeReload(treeLoadRefresh),
+		ft.loadGitFileStatus(),
+		ft.loadGitIgnored(),
+	}
 
 	// Restart the watcher to continue receiving events.
 	if ft.watcher != nil && ft.ctx != nil {
@@ -336,42 +255,8 @@ func (ft *FileTree) handleRefresh() (panels.Panel, tea.Cmd) {
 
 // reloadTree reloads the entire tree from disk, preserving the cursor
 // position as much as possible.
-func (ft *FileTree) reloadTree() {
-	ft.clearDirSizeCache()
-
-	// Remember the current cursor path for restoration.
-	var cursorPath string
-	if ft.viewport.cursor >= 0 && ft.viewport.cursor < len(ft.visible) {
-		cursorPath = ft.visible[ft.viewport.cursor].path
-	}
-
-	// Collect expanded directories.
-	expanded := ft.collectExpanded(ft.root)
-
-	// Rebuild root.
-	ft.root = &node{
-		name:  filepath.Base(ft.rootPath),
-		path:  ft.rootPath,
-		isDir: true,
-		depth: -1,
-	}
-	ft.loadChildren(ft.root)
-
-	// Re-expand previously expanded directories.
-	ft.restoreExpanded(ft.root, expanded)
-
-	ft.rebuildVisible()
-
-	// Restore cursor position.
-	if cursorPath != "" {
-		for i, n := range ft.visible {
-			if n.path == cursorPath {
-				ft.viewport.cursor = i
-				ft.ensureCursorVisible()
-				return
-			}
-		}
-	}
+func (ft *FileTree) reloadTree() tea.Cmd {
+	return ft.requestTreeReload(treeLoadReload)
 }
 
 // collectExpanded gathers paths of all expanded directories.
@@ -390,65 +275,13 @@ func (ft *FileTree) collectExpanded(n *node) map[string]bool {
 	return expanded
 }
 
-// restoreExpanded re-expands directories that were expanded before a reload.
-func (ft *FileTree) restoreExpanded(n *node, expanded map[string]bool) {
-	for _, child := range n.children {
-		if child.isDir && expanded[child.path] {
-			child.expanded = true
-			ft.loadChildren(child)
-			ft.restoreExpanded(child, expanded)
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Path safety
 // ---------------------------------------------------------------------------
 
 // isPathSafe checks that a symlink target resolves inside the repo root.
 func (ft *FileTree) isPathSafe(symlinkPath string) bool {
-	rootResolved, err := filepath.EvalSymlinks(ft.rootPath)
-	if err != nil {
-		rootResolved = filepath.Clean(ft.rootPath)
-	}
-	resolved, err := filepath.EvalSymlinks(symlinkPath)
-	if err != nil {
-		return false
-	}
-	resolved = filepath.Clean(resolved)
-
-	rel, err := filepath.Rel(rootResolved, resolved)
-	if err != nil {
-		return false
-	}
-	// Outside root when relative path starts with "..".
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-// isSymlinkLoop detects whether expanding the symlink would create a cycle.
-// A loop exists when the symlink target is an ancestor of (or equal to) the
-// directory that contains the symlink.
-func (ft *FileTree) isSymlinkLoop(symlinkPath string) bool {
-	target, err := filepath.EvalSymlinks(symlinkPath)
-	if err != nil {
-		return true // cannot resolve → play safe
-	}
-	target = filepath.Clean(target)
-
-	symlinkDir := filepath.Dir(symlinkPath)
-	symlinkDirReal, err := filepath.EvalSymlinks(symlinkDir)
-	if err != nil {
-		return true
-	}
-	symlinkDirReal = filepath.Clean(symlinkDirReal)
-
-	rel, err := filepath.Rel(target, symlinkDirReal)
-	if err != nil {
-		return true // cannot determine relationship → play safe
-	}
-	// If target is an ancestor of (or equal to) symlinkDir, rel will NOT start
-	// with ".." — that means it's a loop.
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return pathResolvesWithinRoot(ft.rootPath, symlinkPath)
 }
 
 // displayWidth returns the visible column width of s, treating Private Use
@@ -741,56 +574,6 @@ func (ft *FileTree) restoreCursorToPath(path string) {
 		ft.viewport.cursor = 0
 	}
 	ft.ensureCursorVisible()
-}
-
-// revealFile expands all parent directories of the given path and
-// positions the cursor on it. Used when the fuzzy finder selects a file.
-func (ft *FileTree) revealFile(path string) {
-	if path == "" || ft.root == nil {
-		return
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return
-	}
-
-	// Build the list of path segments from root to the target.
-	rel, err := filepath.Rel(ft.rootPath, absPath)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return
-	}
-
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-
-	// Walk the tree, loading and expanding each directory segment.
-	current := ft.root
-	for i, part := range parts {
-		if !current.loaded {
-			ft.loadChildren(current)
-		}
-		current.expanded = true
-
-		var found *node
-		for _, child := range current.children {
-			if child.name == part {
-				found = child
-				break
-			}
-		}
-		if found == nil {
-			return // path segment not found in tree
-		}
-
-		if i < len(parts)-1 {
-			// Intermediate directory — continue walking.
-			current = found
-		} else {
-			// Final segment — rebuild visible and position cursor.
-			ft.rebuildVisible()
-			ft.restoreCursorToPath(found.path)
-		}
-	}
 }
 
 // ---------------------------------------------------------------------------

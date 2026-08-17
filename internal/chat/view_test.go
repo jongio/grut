@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/jongio/grut/internal/ai"
 	"github.com/jongio/grut/internal/config"
 	"github.com/jongio/grut/internal/theme"
@@ -19,7 +20,7 @@ import (
 
 // newViewTestModel creates a minimal Model for view tests with optional
 // theme colors populated.
-func newViewTestModel(t *testing.T) Model {
+func newViewTestModel(t testing.TB) Model {
 	t.Helper()
 
 	provider := newChatMockProvider()
@@ -592,6 +593,139 @@ func TestRenderModalContent_StreamingShowsSpinner(t *testing.T) {
 
 	content := m.RenderModalContent(60, 30)
 	assert.Contains(t, content, "Thinking...")
+}
+
+func TestRenderModalContent_ReusesMessageLinesUntilContentChanges(t *testing.T) {
+	m := newViewTestModel(t)
+	m.renderMD = true
+	m.messages = []ai.ChatMessage{
+		{Role: RoleAssistant, Content: "## Cached\n\nRendered **once**."},
+	}
+
+	m.RenderModalContent(60, 20)
+	originalIdentity := messageIdentity{role: RoleAssistant, content: m.messages[0].Content}
+	originalLines := m.messageCache.lines[originalIdentity]
+	require.NotEmpty(t, originalLines)
+	originalFirstLine := &originalLines[0]
+
+	m.spinnerFrame++
+	m.RenderModalContent(60, 20)
+	reusedLines := m.messageCache.lines[originalIdentity]
+	require.NotEmpty(t, reusedLines)
+	assert.Same(t, originalFirstLine, &reusedLines[0])
+
+	m.messages[0].Content = "## Changed\n\nNew content."
+	m.RenderModalContent(60, 20)
+	changedIdentity := messageIdentity{role: RoleAssistant, content: m.messages[0].Content}
+	changedLines := m.messageCache.lines[changedIdentity]
+	require.NotEmpty(t, changedLines)
+	assert.NotSame(t, originalFirstLine, &changedLines[0])
+	assert.NotContains(t, m.messageCache.lines, originalIdentity)
+}
+
+func TestRenderModalContent_PreservesUnchangedEntriesWhenHistoryGrows(t *testing.T) {
+	m := newViewTestModel(t)
+	first := ai.ChatMessage{Role: RoleAssistant, Content: "first response"}
+	m.messages = []ai.ChatMessage{first}
+
+	m.RenderModalContent(60, 20)
+	identity := messageIdentity{role: first.Role, content: first.Content}
+	firstLines := m.messageCache.lines[identity]
+	require.NotEmpty(t, firstLines)
+	firstLine := &firstLines[0]
+
+	m.messages = append(m.messages, ai.ChatMessage{Role: RoleUser, Content: "follow-up"})
+	m.RenderModalContent(60, 20)
+	reusedLines := m.messageCache.lines[identity]
+	require.NotEmpty(t, reusedLines)
+	assert.Same(t, firstLine, &reusedLines[0])
+	assert.Len(t, m.messageCache.lines, 2)
+}
+
+func TestRenderModalContent_InvalidatesCacheOnWidthAndThemeChanges(t *testing.T) {
+	m := newViewTestModel(t)
+	message := ai.ChatMessage{Role: RoleAssistant, Content: "A response that is long enough to wrap differently."}
+	m.messages = []ai.ChatMessage{message}
+	identity := messageIdentity{role: message.Role, content: message.Content}
+
+	m.RenderModalContent(60, 20)
+	initialLines := m.messageCache.lines[identity]
+	require.NotEmpty(t, initialLines)
+	initialFirstLine := &initialLines[0]
+
+	m.RenderModalContent(40, 20)
+	narrowLines := m.messageCache.lines[identity]
+	require.NotEmpty(t, narrowLines)
+	assert.NotSame(t, initialFirstLine, &narrowLines[0])
+	narrowFirstLine := &narrowLines[0]
+
+	m.theme.Colors.NormalCyan = "#123456"
+	m.RenderModalContent(40, 20)
+	rethemedLines := m.messageCache.lines[identity]
+	require.NotEmpty(t, rethemedLines)
+	assert.NotSame(t, narrowFirstLine, &rethemedLines[0])
+}
+
+func TestStreamLineCache_MatchesFullWrappingAcrossChunks(t *testing.T) {
+	m := newViewTestModel(t)
+	m.streaming = true
+	const width = 14
+	chunks := []string{
+		"alpha beta",
+		" gamma\n",
+		"delta eps",
+		"ilon zeta",
+		"\n\nomega",
+	}
+
+	for _, chunk := range chunks {
+		var cmd tea.Cmd
+		m, cmd = m.Update(StreamChunkMsg{Chunk: ai.StreamChunk{Delta: chunk}})
+		assert.Nil(t, cmd)
+		got := m.streamCache.wrappedLines(m.streamBuf.String(), width)
+		want := strings.Split(wrapText(m.streamBuf.String(), width), "\n")
+		assert.Equal(t, want, got)
+	}
+	assert.Equal(t, m.streamBuf.Len(), m.streamCache.sourceLen)
+}
+
+func TestStreamLineCache_SpinnerTickReusesWrappedLines(t *testing.T) {
+	m := newViewTestModel(t)
+	m.streaming = true
+	m.expanded = true
+	m.streamBuf.WriteString("alpha beta gamma delta epsilon")
+
+	m.renderStreaming()
+	require.NotEmpty(t, m.streamCache.lines)
+	firstLine := &m.streamCache.lines[0]
+	sourceLen := m.streamCache.sourceLen
+
+	var cmd tea.Cmd
+	m, cmd = m.Update(spinnerTickMsg{})
+	require.NotNil(t, cmd)
+	m.renderStreaming()
+
+	assert.Equal(t, sourceLen, m.streamCache.sourceLen)
+	assert.Same(t, firstLine, &m.streamCache.lines[0])
+}
+
+func TestMessageCache_HistoryCapKeepsMostRecentHalf(t *testing.T) {
+	m := newViewTestModel(t)
+	messages := make([]ai.ChatMessage, maxChatMessages+1)
+	for i := range messages {
+		messages[i] = ai.ChatMessage{
+			Role:    RoleUser,
+			Content: fmt.Sprintf("message-%03d", i),
+		}
+	}
+
+	m.messages = trimMessages(messages)
+	require.Len(t, m.messages, maxChatMessages/2)
+	assert.Equal(t, "message-101", m.messages[0].Content)
+	assert.Equal(t, "message-200", m.messages[len(m.messages)-1].Content)
+
+	m.RenderModalContent(60, 20)
+	assert.Len(t, m.messageCache.identities, maxChatMessages/2)
 }
 
 // ---------------------------------------------------------------------------

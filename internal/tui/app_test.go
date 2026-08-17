@@ -27,7 +27,7 @@ import (
 )
 
 // newTestModel creates a Model with the explorer preset for testing.
-func newTestModel(t *testing.T) Model {
+func newTestModel(t testing.TB) Model {
 	t.Helper()
 	reg := layout.NewRegistry()
 	cfg, _ := config.LoadDefaults()

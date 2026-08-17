@@ -257,15 +257,15 @@ func (ft *FileTree) requestUndoDelete() (panels.Panel, tea.Cmd) {
 }
 
 func (ft *FileTree) handleUndoDeleteResult(msg undoDeleteResultMsg) (panels.Panel, tea.Cmd) {
-	ft.reloadTree()
+	reloadCmd := ft.reloadTree()
 	if msg.err != "" {
 		errMsg := msg.err
-		return ft, func() tea.Msg {
+		return ft, tea.Batch(reloadCmd, func() tea.Msg {
 			return notify.ShowToastMsg{Message: "Cannot restore: " + errMsg, Level: notify.Error}
-		}
+		})
 	}
 	name := filepath.Base(msg.entry.OriginalPath)
-	return ft, func() tea.Msg {
+	return ft, tea.Batch(reloadCmd, func() tea.Msg {
 		return notify.ShowToastMsg{Message: "Restored " + name, Level: notify.Success}
-	}
+	})
 }

@@ -82,6 +82,18 @@ var deadcodeAllowlist = []string{
 	// filetree — test accessor methods (not wired to key bindings yet)
 	"FileTree.bookmarkCurrent",
 	"FileTree.addToContext",
+	"FileTree.loadChildren",
+	"loadChildrenStatic",
+	"copyLoadedNode",
+	"FileTree.isPathSafe",
+
+	// diagnostics and notifications — test-only state accessors
+	"blockProfileRateController.current",
+	"toastQueue.at",
+	"toastQueue.ids",
+
+	// mcp — invoked through the mcpCommandServer interface in cmd/mcp.go
+	"Server.Serve",
 
 	// actions registry — public API getter
 	"Description",

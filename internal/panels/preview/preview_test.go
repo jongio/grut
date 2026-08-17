@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -83,6 +84,15 @@ func loadFile(t *testing.T, p *Preview, path string) {
 	if msg != nil {
 		p.Update(msg)
 	}
+}
+
+func applyPreviewCmd(t testing.TB, p *Preview, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	require.NotNil(t, msg)
+	p.Update(msg)
+	return msg
 }
 
 // writeBinaryFile creates a file with binary content (PNG header).
@@ -1014,8 +1024,11 @@ func TestIssueSelectedMsg(t *testing.T) {
 	assert.Contains(t, p.ghContent, "Labels: `bug`, `needs triage`")
 	assert.Contains(t, p.ghContent, "The login flow is broken.")
 	assert.Equal(t, 0, p.scrollY)
+	assert.True(t, p.loading)
+	assert.Nil(t, p.lines)
+	applyPreviewCmd(t, p, cmd)
+	assert.False(t, p.loading)
 	assert.NotNil(t, p.lines)
-	assert.Nil(t, cmd)
 
 	// Title should reflect the issue.
 	assert.Equal(t, "#42 Fix authentication bug", p.Title())
@@ -1147,6 +1160,119 @@ func TestActionRunSelectedMsg(t *testing.T) {
 	assert.Equal(t, 0, p.scrollY)
 	assert.NotNil(t, p.lines)
 	assert.Nil(t, cmd)
+}
+
+func TestGitHubMarkdownRenderRejectsStaleGeneration(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 30)
+
+	_, firstCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 1,
+		Title:  "First",
+		Body:   strings.Repeat("first body ", 200),
+	})
+	firstGeneration := p.ghRenderGen
+	_, secondCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 2,
+		Title:  "Second",
+		Body:   strings.Repeat("second body ", 200),
+	})
+	secondGeneration := p.ghRenderGen
+	require.Greater(t, secondGeneration, firstGeneration)
+
+	firstResult := firstCmd().(githubMarkdownRenderedMsg)
+	secondResult := secondCmd().(githubMarkdownRenderedMsg)
+	assert.Equal(t, firstGeneration, firstResult.generation)
+	assert.Equal(t, secondGeneration, secondResult.generation)
+
+	p.Update(firstResult)
+	assert.True(t, p.loading)
+	assert.Nil(t, p.lines)
+	assert.Equal(t, "#2 Second", p.ghTitle)
+
+	p.Update(secondResult)
+	assert.False(t, p.loading)
+	assert.Contains(t, ansi.Strip(strings.Join(p.lines, "\n")), "Second")
+	assert.NotContains(t, ansi.Strip(strings.Join(p.lines, "\n")), "First")
+}
+
+func TestGitHubMarkdownRenderCommandsRunConcurrentlyWithoutStateRaces(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 30)
+
+	_, firstCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 1,
+		Title:  "First",
+		Body:   strings.Repeat("first body\n", 1000),
+	})
+	_, secondCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 2,
+		Title:  "Second",
+		Body:   strings.Repeat("second body\n", 1000),
+	})
+
+	var firstResult, secondResult tea.Msg
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		firstResult = firstCmd()
+	}()
+	go func() {
+		defer wg.Done()
+		secondResult = secondCmd()
+	}()
+	wg.Wait()
+
+	p.Update(secondResult)
+	currentLines := append([]string(nil), p.lines...)
+	p.Update(firstResult)
+	assert.Equal(t, currentLines, p.lines)
+	assert.Equal(t, "#2 Second", p.ghTitle)
+}
+
+func TestGitHubMarkdownRenderResultRejectedAfterDeselection(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 30)
+
+	_, renderCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 1,
+		Title:  "First",
+		Body:   "body",
+	})
+	result := renderCmd()
+	p.Update(panels.IssueDeselectedMsg{})
+	p.Update(result)
+
+	assert.False(t, p.ghMode)
+	assert.False(t, p.loading)
+	assert.Nil(t, p.lines)
+}
+
+func TestFileLoadResultRejectedWhileGitHubContentSelected(t *testing.T) {
+	p := New(defaultCfg(), defaultEditorCfg(), nil)
+	p.SetSize(80, 30)
+	p.filePath = "README.md"
+
+	_, renderCmd := p.Update(panels.IssueSelectedMsg{
+		Number: 2,
+		Title:  "Selected issue",
+		Body:   "issue body",
+	})
+	fileResult := fileLoadedMsg{
+		path:    "README.md",
+		content: "stale file",
+		lines:   []string{"stale file"},
+	}
+
+	p.Update(fileResult)
+	assert.True(t, p.loading)
+	assert.Nil(t, p.lines)
+	assert.Equal(t, "#2 Selected issue", p.ghTitle)
+
+	applyPreviewCmd(t, p, renderCmd)
+	assert.False(t, p.loading)
+	assert.NotContains(t, strings.Join(p.lines, "\n"), "stale file")
 }
 
 func TestActionRunDeselectedMsg(t *testing.T) {
