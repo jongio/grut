@@ -321,7 +321,7 @@ func BenchmarkRenderLine(b *testing.B) {
 // Benchmarks: loadChildren (lazy directory reading)
 // ---------------------------------------------------------------------------
 
-func BenchmarkLazyLoad(b *testing.B) {
+func BenchmarkDetachedLazyLoad(b *testing.B) {
 	b.Run("50_entries", func(b *testing.B) {
 		root := createFlatDir(b, 50)
 		assertRootEntryCount(b, root, 50)

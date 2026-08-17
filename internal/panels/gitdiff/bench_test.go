@@ -151,7 +151,7 @@ func newBenchDiff(diffs []git.FileDiff, mode viewMode, width int) *GitDiff {
 // Benchmarks: Inline diff rendering
 // ---------------------------------------------------------------------------
 
-func BenchmarkInlineDiffRender(b *testing.B) {
+func BenchmarkInlineDiffRenderExact(b *testing.B) {
 	b.Run("10_lines", func(b *testing.B) {
 		diffs := genFileDiffs(b, 10)
 		d := newBenchDiff(diffs, viewInline, 120)
@@ -204,7 +204,7 @@ func BenchmarkInlineDiffRenderCold(b *testing.B) {
 // Benchmarks: Side-by-side diff rendering
 // ---------------------------------------------------------------------------
 
-func BenchmarkSideBySideDiffRender(b *testing.B) {
+func BenchmarkSideBySideDiffRenderExact(b *testing.B) {
 	b.Run("10_lines", func(b *testing.B) {
 		diffs := genFileDiffs(b, 10)
 		d := newBenchDiff(diffs, viewSideBySide, 160)
@@ -301,7 +301,7 @@ func BenchmarkPairDiffLines(b *testing.B) {
 // Benchmark: renderViewport
 // ---------------------------------------------------------------------------
 
-func BenchmarkRenderViewport(b *testing.B) {
+func BenchmarkRenderViewportWithStats(b *testing.B) {
 	b.Run("small", func(b *testing.B) {
 		diffs := genFileDiffs(b, 50)
 		d := newBenchDiff(diffs, viewInline, 120)
