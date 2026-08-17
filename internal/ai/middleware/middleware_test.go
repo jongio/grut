@@ -996,6 +996,16 @@ func TestLogAuditEntry(t *testing.T) {
 	client.logAudit("test_op", "error", errors.New("something failed"))
 }
 
+func TestNewAIGitClientReusesBuilderRedactor(t *testing.T) {
+	inner := newMockGitClient()
+	redactor := ai.NewRedactor([]string{"*.custom"})
+	builder := ai.NewBuilder(inner, redactor, 0)
+
+	client := NewAIGitClient(inner, nil, builder, nil, config.AIConfig{})
+
+	assert.Same(t, redactor, client.redactor)
+}
+
 // ---------------------------------------------------------------------------
 // Tests: ops types are correctly returned
 // ---------------------------------------------------------------------------

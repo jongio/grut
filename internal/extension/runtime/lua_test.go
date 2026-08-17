@@ -205,6 +205,7 @@ func TestLuaRuntime_SandboxRequireOsBlocked(t *testing.T) {
 	rt, err := NewLuaRuntime(testManifest(), api)
 	require.NoError(t, err)
 	defer rt.Close()
+	rt.SetTimeout(time.Second)
 
 	script := writeLua(t, t.TempDir(), "main.lua", `
 		local ok, err = pcall(function()

@@ -154,7 +154,7 @@ func TestUndoDeleteRequestReturnsToastResult(t *testing.T) {
 	panel, toastCmd := ft.handleUndoDeleteResult(result)
 	require.IsType(t, ft, panel)
 	require.NotNil(t, toastCmd)
-	toast, ok := toastCmd().(notify.ShowToastMsg)
+	toast, ok := runCmd(t, ft, toastCmd).(notify.ShowToastMsg)
 	require.True(t, ok)
 
 	assert.Equal(t, notify.Success, toast.Level)

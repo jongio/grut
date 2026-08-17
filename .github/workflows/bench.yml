@@ -4,6 +4,13 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1' # weekly Monday 6 AM UTC
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'gotuiperf.yaml'
+      - '.github/workflows/bench.yml'
   push:
     branches: [main]
     paths:
@@ -12,11 +19,11 @@ on:
       - 'go.sum'
 
 permissions:
-  contents: write       # commit updated baselines on main dispatches
+  contents: read
 
 jobs:
   bench:
-    # One benchmark run per branch per platform — avoids artifact collisions.
+    # One benchmark run per branch per platform , avoids artifact collisions.
     concurrency:
       group: bench-${{ github.ref }}-${{ matrix.os }}
       cancel-in-progress: true
@@ -34,12 +41,14 @@ jobs:
       CGO_ENABLED: "0"
       # Packages that have benchmark files.
       BENCH_PKGS: >-
-        ./internal/git/
         ./internal/ai/
         ./internal/config/
         ./internal/crashlog/
-        ./internal/panels/gitdiff/
+        ./internal/git/
+        ./internal/markdown/
+        ./internal/notify/
         ./internal/panels/filetree/
+        ./internal/panels/gitdiff/
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +57,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
 
       - name: Install benchstat
         run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260615155930-9e4b9ddef5b6
@@ -85,7 +94,7 @@ jobs:
           echo "Checking out base ($BASE_SHA) for same-runner comparison…"
           git checkout "$BASE_SHA" --quiet
 
-          # Only benchmark packages that exist on the base branch — the PR may
+          # Only benchmark packages that exist on the base branch , the PR may
           # introduce new packages that have no main-branch counterpart.
           VALID_PKGS=""
           for pkg in $BENCH_PKGS; do
@@ -97,7 +106,7 @@ jobs:
           done
 
           if [ -z "$VALID_PKGS" ]; then
-            echo "No benchmark packages found on base — skipping comparison."
+            echo "No benchmark packages found on base , skipping comparison."
             echo "no_baseline=true" >> "$GITHUB_ENV"
           else
             echo "Benchmarking on base: $VALID_PKGS"
@@ -124,7 +133,7 @@ jobs:
             echo "## Benchmarks: \`${{ env.PLATFORM }}\`"
             echo ""
             echo "<details>"
-            echo "<summary>📊 Results vs <code>main</code> (same-runner) — click to expand</summary>"
+            echo "<summary>📊 Results vs <code>main</code> (same-runner) , click to expand</summary>"
             echo ""
             echo '```'
             cat benchstat-diff.txt
@@ -141,13 +150,23 @@ jobs:
             fi
           } > bench-comment.md
 
-      # Each platform gets its own sticky comment (keyed by platform).
-      - name: Post PR comment
-        if: github.event_name == 'pull_request' && env.no_baseline != 'true'
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+      - name: Build PR comment body without baseline
+        if: github.event_name == 'pull_request' && env.no_baseline == 'true'
+        run: |
+          {
+            echo "## Benchmarks: \`${{ env.PLATFORM }}\`"
+            echo ""
+            echo "> [!NOTE]"
+            echo "> No benchmark packages were available on the base commit for comparison."
+          } > bench-comment.md
+
+      - name: Upload PR comment body
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          header: benchmarks-${{ env.PLATFORM }}
+          name: bench-comment-${{ env.PLATFORM }}
           path: bench-comment.md
+          retention-days: 1
 
       - name: Fail on significant regression
         if: github.event_name == 'pull_request' && env.regression == 'true'
@@ -163,6 +182,30 @@ jobs:
           name: baseline-${{ env.PLATFORM }}
           path: bench-current.txt
           retention-days: 7
+
+  comment:
+    if: always() && github.event_name == 'pull_request'
+    needs: [bench]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux-amd64
+          - darwin-arm64
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bench-comment-${{ matrix.platform }}
+
+      - name: Post PR comment
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: benchmarks-${{ matrix.platform }}
+          path: bench-comment.md
 
   # Collect baselines from all matrix legs and commit in a single push,
   # avoiding the git-push race that occurs when matrix jobs push concurrently.

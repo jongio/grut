@@ -15,7 +15,8 @@ type ToastTickMsg struct {
 // ToastExpiredMsg indicates that a specific toast has expired and should
 // be removed from the display.
 type ToastExpiredMsg struct {
-	// ID uniquely identifies the toast that expired.
+	// ID identifies the toast to remove. Negative values are reserved for
+	// internal manager timer generations.
 	ID int64
 }
 

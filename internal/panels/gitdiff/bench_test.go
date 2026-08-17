@@ -2,7 +2,6 @@ package gitdiff
 
 import (
 	"fmt"
-	"runtime"
 	"testing"
 
 	"github.com/jongio/grut/internal/git"
@@ -11,50 +10,55 @@ import (
 // benchResultStr prevents the compiler from optimizing away string results.
 var benchResultStr string
 
+// benchResultLines prevents the compiler from optimizing away rendered lines.
+var benchResultLines []string
+
 // ---------------------------------------------------------------------------
 // Test data generators
 // ---------------------------------------------------------------------------
 
 // genFileDiffs creates realistic FileDiff data with the specified number of
 // total diff lines distributed across multiple hunks.
-func genFileDiffs(totalLines int) []git.FileDiff {
-	filesCount := 1 + totalLines/50
-	linesPerFile := totalLines / filesCount
-	if linesPerFile < 1 {
-		linesPerFile = 1
+func genFileDiffs(tb testing.TB, totalLines int) []git.FileDiff {
+	tb.Helper()
+	if totalLines < 1 {
+		tb.Fatalf("totalLines must be positive, got %d", totalLines)
 	}
 
+	filesCount := (totalLines + 49) / 50
 	diffs := make([]git.FileDiff, filesCount)
+	remainingLines := totalLines
 	for f := range filesCount {
+		filesRemaining := filesCount - f
+		linesForFile := remainingLines / filesRemaining
+		remainingLines -= linesForFile
 		fd := git.FileDiff{
 			Path:    fmt.Sprintf("src/pkg/module%d/handler.go", f),
 			OldPath: fmt.Sprintf("src/pkg/module%d/handler.go", f),
 		}
 
-		hunksPerFile := 1 + linesPerFile/20
-		linesPerHunk := linesPerFile / hunksPerFile
-		if linesPerHunk < 1 {
-			linesPerHunk = 1
-		}
-
+		hunksPerFile := (linesForFile + 19) / 20
+		remainingFileLines := linesForFile
+		oldLine := 1
+		newLine := 1
 		for h := range hunksPerFile {
-			startLine := h*linesPerHunk + 1
+			hunksRemaining := hunksPerFile - h
+			linesForHunk := remainingFileLines / hunksRemaining
+			remainingFileLines -= linesForHunk
+			oldStart := oldLine
+			newStart := newLine
 			hunk := git.Hunk{
-				Header:   fmt.Sprintf("@@ -%d,%d +%d,%d @@ func handler%d() {", startLine, linesPerHunk, startLine, linesPerHunk+2, h),
-				OldStart: startLine,
-				OldLines: linesPerHunk,
-				NewStart: startLine,
-				NewLines: linesPerHunk + 2,
+				OldStart: oldStart,
+				NewStart: newStart,
 			}
 
-			oldLine := startLine
-			newLine := startLine
-			for l := range linesPerHunk {
+			for l := range linesForHunk {
+				contentIndex := oldStart + l
 				switch l % 5 {
 				case 0:
 					hunk.Lines = append(hunk.Lines, git.DiffLine{
 						Type:    git.DiffLineContext,
-						Content: fmt.Sprintf("\tresult := processItem(items[%d])", startLine+l),
+						Content: fmt.Sprintf("\tresult := processItem(items[%d])", contentIndex),
 						OldLine: oldLine,
 						NewLine: newLine,
 					})
@@ -63,21 +67,21 @@ func genFileDiffs(totalLines int) []git.FileDiff {
 				case 1:
 					hunk.Lines = append(hunk.Lines, git.DiffLine{
 						Type:    git.DiffLineRemoved,
-						Content: fmt.Sprintf("\tlog.Printf(\"processing %%d\", %d)", startLine+l),
+						Content: fmt.Sprintf("\tlog.Printf(\"processing %%d\", %d)", contentIndex),
 						OldLine: oldLine,
 					})
 					oldLine++
 				case 2:
 					hunk.Lines = append(hunk.Lines, git.DiffLine{
 						Type:    git.DiffLineAdded,
-						Content: fmt.Sprintf("\tslog.Info(\"processing\", \"index\", %d)", startLine+l),
+						Content: fmt.Sprintf("\tslog.Info(\"processing\", \"index\", %d)", contentIndex),
 						NewLine: newLine,
 					})
 					newLine++
 				case 3:
 					hunk.Lines = append(hunk.Lines, git.DiffLine{
 						Type:    git.DiffLineContext,
-						Content: fmt.Sprintf("\tif err != nil { return fmt.Errorf(\"step %%d: %%w\", %d, err) }", startLine+l),
+						Content: fmt.Sprintf("\tif err != nil { return fmt.Errorf(\"step %%d: %%w\", %d, err) }", contentIndex),
 						OldLine: oldLine,
 						NewLine: newLine,
 					})
@@ -86,17 +90,51 @@ func genFileDiffs(totalLines int) []git.FileDiff {
 				case 4:
 					hunk.Lines = append(hunk.Lines, git.DiffLine{
 						Type:    git.DiffLineAdded,
-						Content: fmt.Sprintf("\tmetrics.RecordLatency(ctx, time.Since(start%d))", startLine+l),
+						Content: fmt.Sprintf("\tmetrics.RecordLatency(ctx, time.Since(start%d))", contentIndex),
 						NewLine: newLine,
 					})
 					newLine++
 				}
 			}
+			hunk.OldLines = oldLine - oldStart
+			hunk.NewLines = newLine - newStart
+			hunk.Header = fmt.Sprintf(
+				"@@ -%d,%d +%d,%d @@ func handler%d() {",
+				oldStart,
+				hunk.OldLines,
+				newStart,
+				hunk.NewLines,
+				h,
+			)
 			fd.Hunks = append(fd.Hunks, hunk)
 		}
 		diffs[f] = fd
 	}
+	if got := countDiffLines(diffs); got != totalLines {
+		tb.Fatalf("generated %d diff lines, want %d", got, totalLines)
+	}
 	return diffs
+}
+
+func countDiffLines(diffs []git.FileDiff) int {
+	total := 0
+	for _, fd := range diffs {
+		for _, hunk := range fd.Hunks {
+			total += len(hunk.Lines)
+		}
+	}
+	return total
+}
+
+func TestGenFileDiffsCardinality(t *testing.T) {
+	for _, totalLines := range []int{1, 10, 50, 100, 500, 1000} {
+		t.Run(fmt.Sprintf("%d_lines", totalLines), func(t *testing.T) {
+			diffs := genFileDiffs(t, totalLines)
+			if got := countDiffLines(diffs); got != totalLines {
+				t.Fatalf("countDiffLines() = %d, want %d", got, totalLines)
+			}
+		})
+	}
 }
 
 // newBenchDiff creates a GitDiff instance for benchmarking with pre-set diffs.
@@ -115,34 +153,51 @@ func newBenchDiff(diffs []git.FileDiff, mode viewMode, width int) *GitDiff {
 
 func BenchmarkInlineDiffRender(b *testing.B) {
 	b.Run("10_lines", func(b *testing.B) {
-		diffs := genFileDiffs(10)
+		diffs := genFileDiffs(b, 10)
 		d := newBenchDiff(diffs, viewInline, 120)
+		d.buildInlineLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildInlineLines()
+			benchResultLines = d.lines
 		}
 	})
 
 	b.Run("100_lines", func(b *testing.B) {
-		diffs := genFileDiffs(100)
+		diffs := genFileDiffs(b, 100)
 		d := newBenchDiff(diffs, viewInline, 120)
+		d.buildInlineLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildInlineLines()
+			benchResultLines = d.lines
 		}
 	})
 
 	b.Run("1000_lines", func(b *testing.B) {
-		diffs := genFileDiffs(1000)
+		diffs := genFileDiffs(b, 1000)
 		d := newBenchDiff(diffs, viewInline, 120)
+		d.buildInlineLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildInlineLines()
+			benchResultLines = d.lines
 		}
 	})
+}
+
+func BenchmarkInlineDiffRenderCold(b *testing.B) {
+	diffs := genFileDiffs(b, 100)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		d := newBenchDiff(diffs, viewInline, 120)
+		d.buildInlineLines()
+		benchResultLines = d.lines
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -151,34 +206,51 @@ func BenchmarkInlineDiffRender(b *testing.B) {
 
 func BenchmarkSideBySideDiffRender(b *testing.B) {
 	b.Run("10_lines", func(b *testing.B) {
-		diffs := genFileDiffs(10)
+		diffs := genFileDiffs(b, 10)
 		d := newBenchDiff(diffs, viewSideBySide, 160)
+		d.buildSideBySideLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildSideBySideLines()
+			benchResultLines = d.lines
 		}
 	})
 
 	b.Run("100_lines", func(b *testing.B) {
-		diffs := genFileDiffs(100)
+		diffs := genFileDiffs(b, 100)
 		d := newBenchDiff(diffs, viewSideBySide, 160)
+		d.buildSideBySideLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildSideBySideLines()
+			benchResultLines = d.lines
 		}
 	})
 
 	b.Run("1000_lines", func(b *testing.B) {
-		diffs := genFileDiffs(1000)
+		diffs := genFileDiffs(b, 1000)
 		d := newBenchDiff(diffs, viewSideBySide, 160)
+		d.buildSideBySideLines()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			d.buildSideBySideLines()
+			benchResultLines = d.lines
 		}
 	})
+}
+
+func BenchmarkSideBySideDiffRenderCold(b *testing.B) {
+	diffs := genFileDiffs(b, 100)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		d := newBenchDiff(diffs, viewSideBySide, 160)
+		d.buildSideBySideLines()
+		benchResultLines = d.lines
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -231,9 +303,16 @@ func BenchmarkPairDiffLines(b *testing.B) {
 
 func BenchmarkRenderViewport(b *testing.B) {
 	b.Run("small", func(b *testing.B) {
-		diffs := genFileDiffs(50)
+		diffs := genFileDiffs(b, 50)
 		d := newBenchDiff(diffs, viewInline, 120)
-		d.buildInlineLines()
+		d.rebuildLines()
+		if d.stats.files != len(diffs) {
+			b.Fatalf("diff stats report %d files, want %d", d.stats.files, len(diffs))
+		}
+		benchResultStr = d.renderViewport(120, 40)
+		if len(d.viewportBuf) != 39 {
+			b.Fatalf("viewport buffer has %d lines, want 39", len(d.viewportBuf))
+		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
@@ -242,86 +321,21 @@ func BenchmarkRenderViewport(b *testing.B) {
 	})
 
 	b.Run("large_scrolled", func(b *testing.B) {
-		diffs := genFileDiffs(500)
+		diffs := genFileDiffs(b, 500)
 		d := newBenchDiff(diffs, viewInline, 120)
-		d.buildInlineLines()
+		d.rebuildLines()
+		if d.stats.files != len(diffs) {
+			b.Fatalf("diff stats report %d files, want %d", d.stats.files, len(diffs))
+		}
 		d.scrollY = len(d.lines) / 2 // scroll to middle
+		benchResultStr = d.renderViewport(120, 40)
+		if len(d.viewportBuf) != 39 {
+			b.Fatalf("viewport buffer has %d lines, want 39", len(d.viewportBuf))
+		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
 			benchResultStr = d.renderViewport(120, 40)
 		}
-	})
-}
-
-// ---------------------------------------------------------------------------
-// Benchmark: memory growth across repeated renders
-//
-// benchMemoryGrowth measures heap-inuse delta and GC cycles per render
-// operation using runtime.ReadMemStats before and after the benchmark loop.
-// This is a CUSTOM metric (not a standard benchstat metric) that must be
-// interpreted alongside the standard B/op and allocs/op values.
-//
-// Key interpretation:
-//   - heap-inuse-b/op > 0: heap grew — possible retained allocations / leak.
-//   - heap-inuse-b/op ~ 0: steady state — memory correctly reclaimed.
-//   - heap-inuse-b/op < 0: heap shrank — memory is being freed correctly
-//     (e.g. GC reclaimed warmup allocations during the measured loop).
-//   - gc-cycles/op: GC runs per render op; < 1.0 means GC fires less than
-//     once per render, which is healthy for a TUI frame budget.
-// ---------------------------------------------------------------------------
-
-func benchMemoryGrowth(b *testing.B, mode viewMode, width, totalLines int) {
-	b.Helper()
-	diffs := genFileDiffs(totalLines)
-	d := newBenchDiff(diffs, mode, width)
-
-	// Warmup: reach steady-state allocator behaviour before measuring.
-	for range 5 {
-		if mode == viewInline {
-			d.buildInlineLines()
-		} else {
-			d.buildSideBySideLines()
-		}
-	}
-
-	runtime.GC()
-	var memBefore, memAfter runtime.MemStats
-	runtime.ReadMemStats(&memBefore)
-
-	b.ResetTimer()
-	for range b.N {
-		if mode == viewInline {
-			d.buildInlineLines()
-		} else {
-			d.buildSideBySideLines()
-		}
-	}
-	b.StopTimer()
-
-	runtime.GC()
-	runtime.ReadMemStats(&memAfter)
-
-	// HeapInuse delta: positive means the heap grew (retained allocations).
-	// Near-zero means memory is being reclaimed correctly between renders.
-	heapDelta := int64(memAfter.HeapInuse) - int64(memBefore.HeapInuse)
-	gcCycles := memAfter.NumGC - memBefore.NumGC
-
-	b.ReportMetric(float64(heapDelta)/float64(b.N), "heap-inuse-b/op")
-	b.ReportMetric(float64(gcCycles)/float64(b.N), "gc-cycles/op")
-}
-
-func BenchmarkMemoryGrowth(b *testing.B) {
-	b.Run("inline_100_lines", func(b *testing.B) {
-		benchMemoryGrowth(b, viewInline, 120, 100)
-	})
-	b.Run("inline_1000_lines", func(b *testing.B) {
-		benchMemoryGrowth(b, viewInline, 120, 1000)
-	})
-	b.Run("sidebyside_100_lines", func(b *testing.B) {
-		benchMemoryGrowth(b, viewSideBySide, 160, 100)
-	})
-	b.Run("sidebyside_1000_lines", func(b *testing.B) {
-		benchMemoryGrowth(b, viewSideBySide, 160, 1000)
 	})
 }

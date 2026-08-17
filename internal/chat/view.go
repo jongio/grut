@@ -39,7 +39,7 @@ const (
 // conversation is rendered separately as a modal by app.go, so View()
 // returns a compact footer. Otherwise it renders the normal collapsed
 // or expanded footer.
-func (m Model) renderView() string {
+func (m *Model) renderView() string {
 	if m.overlayMode {
 		return m.renderInput()
 	}
@@ -69,11 +69,16 @@ func (m Model) renderView() string {
 // RenderModalContent renders the inner content of the floating chat modal
 // dialog. The caller (app.go) applies the border, title, and positioning.
 // width and height are the inner dimensions available after the border is
-// subtracted. This method uses a value receiver so local width/input
-// adjustments do not persist.
-func (m Model) RenderModalContent(width, height int) string {
+// subtracted. Local width and input adjustments are restored before return.
+func (m *Model) RenderModalContent(width, height int) string {
 	// Override model dimensions for modal-scoped rendering.
+	originalWidth := m.width
+	originalInputWidth := m.input.Width()
 	m.width = width
+	defer func() {
+		m.width = originalWidth
+		m.input.SetWidth(originalInputWidth)
+	}()
 	inputWidth := width - 4 // account for prompt and padding
 	if inputWidth < 1 {
 		inputWidth = 1
@@ -110,7 +115,7 @@ func (m Model) RenderModalContent(width, height int) string {
 
 // renderMessageHistory renders a scrollable window of conversation messages
 // for the overlay mode.
-func (m Model) renderMessageHistory(height, width int) string {
+func (m *Model) renderMessageHistory(height, width int) string {
 	contentWidth := width - 4 // 2-char left + 2-char right padding
 	if contentWidth < 10 {
 		contentWidth = 10
@@ -130,65 +135,32 @@ func (m Model) renderMessageHistory(height, width int) string {
 		dimColor = m.theme.Colors.BrightBlack
 	}
 
+	context := messageRenderContext{
+		contentWidth:   contentWidth,
+		renderMarkdown: m.renderMD,
+		greenColor:     greenColor,
+		cyanColor:      cyanColor,
+		dimColor:       dimColor,
+	}
+	if m.theme != nil {
+		context.themeName = m.theme.Name
+		context.themeVariant = m.theme.Variant
+	}
+	m.messageCache.sync(m.messages, context)
+
 	var allLines []string
 
 	for _, msg := range m.messages {
-		var prefix, color string
-		switch msg.Role {
-		case RoleUser:
-			prefix = "You: "
-			color = greenColor
-		case RoleAssistant:
-			prefix = "AI: "
-			color = cyanColor
-		case RoleTool:
-			prefix = "Tool: "
-			color = dimColor
-		default:
-			continue
-		}
-
-		styledPrefix := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(color)).
-			Render(prefix)
-
-		content := msg.Content
-		if content == "" {
-			content = "(empty)"
-		}
-
-		// Render assistant markdown when enabled.
-		if m.renderMD && msg.Role == RoleAssistant {
-			rendered := markdown.RenderStatic(content, contentWidth-2)
-			for i, line := range rendered {
-				if i == 0 {
-					allLines = append(allLines, "  "+styledPrefix+line)
-				} else {
-					allLines = append(allLines, "  "+strings.Repeat(" ", len([]rune(prefix)))+line)
-				}
+		identity := messageIdentity{role: msg.Role, content: msg.Content}
+		lines, ok := m.messageCache.lines[identity]
+		if !ok {
+			lines = renderMessageLines(msg, context)
+			if lines == nil {
+				continue
 			}
-			allLines = append(allLines, "") // blank line between messages
-			continue
+			m.messageCache.lines[identity] = lines
 		}
-
-		prefixWidth := len([]rune(prefix))
-		wrapWidth := contentWidth - prefixWidth
-		if wrapWidth < 5 {
-			wrapWidth = 5
-		}
-
-		wrapped := wrapText(content, wrapWidth)
-		lines := strings.Split(wrapped, "\n")
-		pad := strings.Repeat(" ", prefixWidth)
-
-		for i, line := range lines {
-			if i == 0 {
-				allLines = append(allLines, "  "+styledPrefix+line)
-			} else {
-				allLines = append(allLines, "  "+pad+line)
-			}
-		}
-		allLines = append(allLines, "") // blank line between messages
+		allLines = append(allLines, lines...)
 	}
 
 	// Append in-progress streaming content.
@@ -202,8 +174,7 @@ func (m Model) renderMessageHistory(height, width int) string {
 		if partial == "" {
 			allLines = append(allLines, "  "+spinnerPrefix+"Thinking...")
 		} else {
-			wrapped := wrapText(partial, contentWidth-4)
-			for i, line := range strings.Split(wrapped, "\n") {
+			for i, line := range m.streamCache.wrappedLines(partial, contentWidth-4) {
 				if i == 0 {
 					allLines = append(allLines, "  "+spinnerPrefix+line)
 				} else {
@@ -389,7 +360,7 @@ func (m Model) renderExpandedResponse(text string) string {
 
 // renderStreaming renders the animated spinner with any accumulated
 // partial response text.
-func (m Model) renderStreaming() string {
+func (m *Model) renderStreaming() string {
 	accentColor := defaultAccentColor
 	if m.theme != nil && m.theme.Colors.NormalCyan != "" {
 		accentColor = m.theme.Colors.NormalCyan
@@ -413,20 +384,16 @@ func (m Model) renderStreaming() string {
 	}
 
 	if !m.expanded {
-		// Collapsed: take last non-empty line, wrap, show tail.
-		lines := strings.Split(partial, "\n")
-		partial = lastNonEmptyLine(lines)
+		// Collapsed: show the last non-empty wrapped segment.
+		partial = lastNonEmptyLine(m.streamCache.wrappedLines(partial, wrapWidth))
 		if partial == "" {
 			partial = "Thinking..."
 		}
-		wrapped := wrapText(partial, wrapWidth)
-		wLines := strings.Split(wrapped, "\n")
-		return "  " + prefix + wLines[len(wLines)-1] + "\n"
+		return "  " + prefix + partial + "\n"
 	}
 
-	// Expanded: wrap and show all lines.
-	wrapped := wrapText(partial, wrapWidth)
-	lines := strings.Split(wrapped, "\n")
+	// Expanded: show the incrementally wrapped stream.
+	lines := m.streamCache.wrappedLines(partial, wrapWidth)
 	var b strings.Builder
 	for i, line := range lines {
 		if i == 0 {

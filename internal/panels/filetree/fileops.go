@@ -287,18 +287,19 @@ func (ft *FileTree) navigateToPath(path string) (panels.Panel, tea.Cmd) {
 		isDir: true,
 		depth: -1,
 	}
-	ft.loadChildren(ft.root)
-	ft.rebuildVisible()
 	// Update watcher to watch new root.
 	if ft.watcher != nil {
 		ft.watcher.addDir(absPath)
 	}
-	return ft, func() tea.Msg {
-		return notify.ShowToastMsg{
-			Message: "Navigated to " + filepath.Base(absPath),
-			Level:   notify.Info,
-		}
-	}
+	return ft, tea.Batch(
+		ft.requestRootLoad(treeLoadNavigate, nil, false, "", false, "", 0),
+		func() tea.Msg {
+			return notify.ShowToastMsg{
+				Message: "Navigated to " + filepath.Base(absPath),
+				Level:   notify.Info,
+			}
+		},
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -394,13 +395,12 @@ func (ft *FileTree) executeNewFile(dir, name string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-	ft.reloadTree()
-	return ft, func() tea.Msg {
+	return ft, tea.Batch(ft.reloadTree(), func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Created " + name,
 			Level:   notify.Success,
 		}
-	}
+	})
 }
 
 // executeNewDir creates a new directory with the given name.
@@ -416,13 +416,12 @@ func (ft *FileTree) executeNewDir(dir, name string) (panels.Panel, tea.Cmd) {
 			return notify.ShowToastMsg{Message: errMsg, Level: notify.Error}
 		}
 	}
-	ft.reloadTree()
-	return ft, func() tea.Msg {
+	return ft, tea.Batch(ft.reloadTree(), func() tea.Msg {
 		return notify.ShowToastMsg{
 			Message: "Created " + name + "/",
 			Level:   notify.Success,
 		}
-	}
+	})
 }
 
 // ---------------------------------------------------------------------------

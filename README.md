@@ -282,7 +282,7 @@ go vet ./...     # Vet all packages
 
 ## Tech Stack
 
-- **Go 1.26.5** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
+- **Go 1.26.6** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
 - **Chroma v2** (syntax highlighting) + **Glamour** (markdown rendering)
 - **fsnotify** (filesystem watching) + **mimetype** (file type detection)
 - **TOML** configuration via go-toml/v2

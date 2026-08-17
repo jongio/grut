@@ -665,3 +665,25 @@ func TestStreaming_BlocksNewSend(t *testing.T) {
 	assert.Empty(t, m.messages, "should not send while streaming")
 	assert.Nil(t, cmd)
 }
+
+func TestStreaming_EscapeCancelsAndPreservesPartialResponse(t *testing.T) {
+	m, _ := newTestChatModel(t)
+	m.Focus()
+	m.streaming = true
+	cancelled := false
+	m.streamCancel = func() {
+		cancelled = true
+	}
+	m, _ = m.Update(StreamChunkMsg{Chunk: ai.StreamChunk{Delta: "partial response"}})
+	m.renderStreaming()
+	require.NotEmpty(t, m.streamCache.lines)
+
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	assert.Nil(t, cmd)
+	assert.True(t, cancelled)
+	assert.False(t, m.streaming)
+	assert.Equal(t, "partial response", m.lastResponse)
+	assert.Zero(t, m.streamBuf.Len())
+	assert.Empty(t, m.streamCache.lines)
+}

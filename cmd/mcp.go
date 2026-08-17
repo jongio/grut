@@ -3,18 +3,100 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 
 	"github.com/jongio/grut/internal/config"
+	"github.com/jongio/grut/internal/diag"
 	"github.com/jongio/grut/internal/git"
 	grut_mcp "github.com/jongio/grut/internal/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 )
 
+type mcpCommandServer interface {
+	Serve(context.Context) error
+}
+
+type mcpWatchdog interface {
+	Start(context.Context) func()
+}
+
+type stdioMCPServer struct {
+	server *mcpserver.StdioServer
+	input  io.Reader
+	output io.Writer
+}
+
+func (s *stdioMCPServer) Serve(ctx context.Context) error {
+	err := s.server.Listen(ctx, s.input, s.output)
+	if ctx.Err() != nil && (err == nil || errors.Is(err, ctx.Err())) {
+		return nil
+	}
+	return err
+}
+
+type mcpCommandDeps struct {
+	buildServer   func(context.Context, *cobra.Command) (mcpCommandServer, error)
+	newWatchdog   func() mcpWatchdog
+	notifyContext func(context.Context) (context.Context, context.CancelFunc)
+}
+
+func defaultMCPCommandDeps() mcpCommandDeps {
+	return mcpCommandDeps{
+		buildServer: buildMCPCommandServer,
+		newWatchdog: func() mcpWatchdog {
+			return diag.New()
+		},
+		notifyContext: func(parent context.Context) (context.Context, context.CancelFunc) {
+			return signal.NotifyContext(parent, os.Interrupt)
+		},
+	}
+}
+
+func buildMCPCommandServer(ctx context.Context, cmd *cobra.Command) (mcpCommandServer, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	applyNoAIFlag(cmd, cfg)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get working directory: %w", err)
+	}
+
+	gc, err := git.NewClient(cwd)
+	if err != nil {
+		return nil, fmt.Errorf("create git client: %w", err)
+	}
+
+	repoRoot, err := gc.RepoRoot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find repo root: %w", err)
+	}
+
+	srv, err := grut_mcp.NewServer(gc, repoRoot, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create MCP server: %w", err)
+	}
+	return &stdioMCPServer{
+		server: mcpserver.NewStdioServer(srv.MCPServer()),
+		input:  os.Stdin,
+		output: os.Stdout,
+	}, nil
+}
+
 // newMCPCmd creates the MCP server command.
 func newMCPCmd() *cobra.Command {
+	return newMCPCmdWithDeps(defaultMCPCommandDeps())
+}
+
+func newMCPCmdWithDeps(deps mcpCommandDeps) *cobra.Command {
 	var socketPath string
 
 	cmd := &cobra.Command{
@@ -31,38 +113,22 @@ Use --socket to serve over a Unix domain socket (future).`,
 				return fmt.Errorf("socket mode is not yet implemented")
 			}
 
-			cfg, err := config.Load()
+			ctx, stopSignals := deps.notifyContext(cmd.Context())
+			defer stopSignals()
+
+			srv, err := deps.buildServer(ctx, cmd)
 			if err != nil {
-				return fmt.Errorf("load config: %w", err)
+				return err
 			}
 
-			// Override AI if --no-ai flag is set.
-			applyNoAIFlag(cmd, cfg)
+			stopWatchdog := deps.newWatchdog().Start(ctx)
+			defer stopWatchdog()
 
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+			err = srv.Serve(ctx)
+			if ctx.Err() != nil && (err == nil || errors.Is(err, ctx.Err())) {
+				return nil
 			}
-
-			gc, err := git.NewClient(cwd)
-			if err != nil {
-				return fmt.Errorf("create git client: %w", err)
-			}
-
-			repoRoot, err := gc.RepoRoot(context.Background())
-			if err != nil {
-				return fmt.Errorf("find repo root: %w", err)
-			}
-
-			srv, err := grut_mcp.NewServer(gc, repoRoot, cfg)
-			if err != nil {
-				return fmt.Errorf("create MCP server: %w", err)
-			}
-
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-			defer stop()
-
-			return srv.Serve(ctx)
+			return err
 		},
 	}
 

@@ -322,7 +322,7 @@ func TestWriteCrashReportListJSON_SummaryFields(t *testing.T) {
 		ID:         "crash-1",
 		Timestamp:  when,
 		Version:    "1.2.3",
-		GoVersion:  "go1.26.5",
+		GoVersion:  "go1.26.6",
 		OS:         "windows",
 		Arch:       "amd64",
 		Terminal:   "Windows Terminal",

@@ -1523,6 +1523,17 @@ func (m Model) renderSeparatorWithTitle(
 // renderPanel renders a single panel's content at the specified rect size.
 // No individual border is drawn; the single outer border is applied by
 // renderLayout after all panels are composed together.
+func nextRenderRow(content string, start int) (row string, next int, ok bool) {
+	if start > len(content) {
+		return "", start, false
+	}
+	remaining := content[start:]
+	if newline := strings.IndexByte(remaining, '\n'); newline >= 0 {
+		return remaining[:newline], start + newline + 1, true
+	}
+	return remaining, len(content) + 1, true
+}
+
 func (m Model) renderPanel(
 	_ string,
 	p panels.Panel,
@@ -1548,44 +1559,36 @@ func (m Model) renderPanel(
 	if innerW < 1 {
 		innerW = 1
 	}
-	leftPad := strings.Repeat(" ", pad)
-	rightPad := strings.Repeat(" ", pad)
 	content := p.View(innerW, contentH)
 	// Normalize every content line to exactly innerW, then wrap with
 	// horizontal padding so the final line width equals contentW.
-	{
-		lines := strings.Split(content, "\n")
-		// Truncate to contentH lines so panels never overflow.
-		if len(lines) > contentH {
-			lines = lines[:contentH]
+	var result strings.Builder
+	result.Grow(contentH*(innerW+2*pad) + contentH - 1)
+	rowStart := 0
+	for row := 0; row < contentH; row++ {
+		if row > 0 {
+			result.WriteByte('\n')
 		}
-		// Ensure we have exactly contentH lines.
-		for len(lines) < contentH {
-			lines = append(lines, strings.Repeat(" ", innerW))
+		line, next, ok := nextRenderRow(content, rowStart)
+		if ok {
+			rowStart = next
 		}
-		// strings.Builder: avoid per-iteration string concat in render loop.
-		// Reusing a single Builder across iterations amortises the buffer
-		// allocation; writing padding bytes directly avoids strings.Repeat.
-		var b strings.Builder
-		for i, line := range lines {
-			b.Reset()
-			w := lipgloss.Width(line)
-			if w > innerW {
-				line = ansi.Truncate(line, innerW, "")
-			}
-			b.WriteString(leftPad)
-			b.WriteString(line)
-			if w < innerW {
-				for j := 0; j < innerW-w; j++ {
-					b.WriteByte(' ')
-				}
-			}
-			b.WriteString(rightPad)
-			lines[i] = b.String()
+		w := lipgloss.Width(line)
+		if w > innerW {
+			line = ansi.Truncate(line, innerW, "")
 		}
-		content = strings.Join(lines, "\n")
+		for range pad {
+			result.WriteByte(' ')
+		}
+		result.WriteString(line)
+		for column := w; column < innerW; column++ {
+			result.WriteByte(' ')
+		}
+		for range pad {
+			result.WriteByte(' ')
+		}
 	}
-	return content
+	return result.String()
 }
 
 // buildOuterBorder wraps the composed inner panel content in a single
@@ -1613,57 +1616,61 @@ func (m Model) buildOuterBorder(content string, contentWidth, contentHeight int,
 	}
 	// Build top border line with panel titles.
 	topLine := m.buildTopBorderWithTitles(contentWidth, junctionCols, topTitles, bdr, border)
-	// Build content lines with left/right border characters.
-	contentLines := strings.Split(content, "\n")
-	for len(contentLines) < contentHeight {
-		contentLines = append(contentLines, strings.Repeat(" ", contentWidth))
-	}
-	if len(contentLines) > contentHeight {
-		contentLines = contentLines[:contentHeight]
-	}
-	// strings.Builder: pre-render border chars and avoid per-line
-	// lipgloss.Render + string concat in render loop.
+	// Pre-render border characters so each row can be written directly into
+	// the final output without temporary row strings.
 	renderedLeft := bdr.Render(border.Left)
 	renderedRight := bdr.Render(border.Right)
 	renderedLeftJ := bdr.Render("├")
 	renderedRightJ := bdr.Render("┤")
-	var borderB strings.Builder
-	for i, line := range contentLines {
-		borderB.Reset()
+
+	var result strings.Builder
+	rowCapacity := contentWidth + len(renderedLeft) + len(renderedRight)
+	result.Grow(len(topLine) + contentHeight*(rowCapacity+1) + contentWidth + 2)
+	result.WriteString(topLine)
+	result.WriteByte('\n')
+	rowStart := 0
+	for i := 0; i < contentHeight; i++ {
+		if i > 0 {
+			result.WriteByte('\n')
+		}
 		if leftJ[i] {
-			borderB.WriteString(renderedLeftJ)
+			result.WriteString(renderedLeftJ)
 		} else {
-			borderB.WriteString(renderedLeft)
+			result.WriteString(renderedLeft)
 		}
-		borderB.WriteString(line)
+		line, next, ok := nextRenderRow(content, rowStart)
+		if ok {
+			rowStart = next
+			result.WriteString(line)
+		} else {
+			for range contentWidth {
+				result.WriteByte(' ')
+			}
+		}
 		if rightJ[i] {
-			borderB.WriteString(renderedRightJ)
+			result.WriteString(renderedRightJ)
 		} else {
-			borderB.WriteString(renderedRight)
+			result.WriteString(renderedRight)
 		}
-		contentLines[i] = borderB.String()
 	}
+	result.WriteByte('\n')
 	// Build bottom border line with junctions. Group consecutive non-junction
 	// characters into single Render calls to avoid per-character ANSI overhead.
-	var bottomParts []string
-	bottomParts = append(bottomParts, bdr.Render(border.BottomLeft))
+	result.WriteString(bdr.Render(border.BottomLeft))
 	runStart := 0
 	for col := 0; col <= contentWidth; col++ {
 		if col == contentWidth || bottomJ[col] {
 			if run := col - runStart; run > 0 {
-				bottomParts = append(bottomParts, bdr.Render(strings.Repeat(border.Bottom, run)))
+				result.WriteString(bdr.Render(strings.Repeat(border.Bottom, run)))
 			}
 			if col < contentWidth {
-				bottomParts = append(bottomParts, bdr.Render("┴"))
+				result.WriteString(bdr.Render("┴"))
 			}
 			runStart = col + 1
 		}
 	}
-	bottomParts = append(bottomParts, bdr.Render(border.BottomRight))
-	bottomLine := strings.Join(bottomParts, "")
-	// Assemble: top + content + bottom.
-	result := topLine + "\n" + strings.Join(contentLines, "\n") + "\n" + bottomLine
-	return result
+	result.WriteString(bdr.Render(border.BottomRight))
+	return result.String()
 }
 
 // buildTopBorderWithTitles constructs the top border line, injecting panel

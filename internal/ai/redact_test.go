@@ -386,6 +386,38 @@ func TestNewRedactorNilPatterns(t *testing.T) {
 	assert.NotEmpty(t, r.secretRegexps, "built-in secret regexps must be compiled")
 }
 
+func TestBuiltinSecretRegexpsUnique(t *testing.T) {
+	seen := make(map[string]struct{}, len(builtinSecretRegexps))
+	for _, re := range builtinSecretRegexps {
+		require.NotNil(t, re)
+		pattern := re.String()
+		assert.NotContains(t, seen, pattern, "built-in secret regexp must not be duplicated")
+		seen[pattern] = struct{}{}
+	}
+}
+
+func TestNewRedactorReusesCompiledBuiltins(t *testing.T) {
+	first := NewRedactor(nil)
+	second := NewRedactor(nil)
+
+	for i := range first.secretRegexps {
+		assert.Same(t, first.secretRegexps[i], second.secretRegexps[i],
+			"built-in regexp %d must be compiled once", i)
+	}
+	assert.NotSame(t, &first.secretRegexps[0], &second.secretRegexps[0],
+		"each redactor must own its regexp pointer array")
+}
+
+func TestBuilderRedactorReturnsConfiguredInstance(t *testing.T) {
+	redactor := NewRedactor([]string{"*.custom"})
+	builder := NewBuilder(nil, redactor, 0)
+
+	assert.Same(t, redactor, builder.Redactor())
+
+	var nilBuilder *Builder
+	assert.Nil(t, nilBuilder.Redactor())
+}
+
 // ---------------------------------------------------------------------------
 // Empty content
 // ---------------------------------------------------------------------------
@@ -395,6 +427,45 @@ func TestRedactEmptyContent(t *testing.T) {
 	got, count, _ := r.RedactContent("")
 	assert.Equal(t, "", got)
 	assert.Equal(t, 0, count)
+}
+
+func TestRedactContentCountsEachReplacementOnce(t *testing.T) {
+	r := NewRedactor(nil)
+	input := "AKIAIOSFODNN7EXAMPLE AKIAIOSFODNN7EXAMPLE"
+
+	got, count, err := r.RedactContent(input)
+
+	require.NoError(t, err)
+	assert.Equal(t, RedactedPlaceholder+" "+RedactedPlaceholder, got)
+	assert.Equal(t, 2, count)
+}
+
+func TestRedactContentIsSafeForConcurrentUse(t *testing.T) {
+	r := NewRedactor(nil)
+	const workers = 32
+	results := make(chan struct {
+		content string
+		count   int
+		err     error
+	}, workers)
+
+	for range workers {
+		go func() {
+			content, count, err := r.RedactContent("before AKIAIOSFODNN7EXAMPLE after")
+			results <- struct {
+				content string
+				count   int
+				err     error
+			}{content: content, count: count, err: err}
+		}()
+	}
+
+	for range workers {
+		result := <-results
+		require.NoError(t, result.err)
+		assert.Equal(t, "before "+RedactedPlaceholder+" after", result.content)
+		assert.Equal(t, 1, result.count)
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -97,6 +97,8 @@ type Model struct {
 	expanded     bool               // Expanded vs collapsed view
 	overlayMode  bool               // Full-screen conversation overlay when focused
 	renderMD     bool               // Render AI responses as formatted markdown
+	messageCache messageLineCache
+	streamCache  streamLineCache
 }
 
 // Deps bundles the required dependencies for creating a chat Model,
@@ -184,7 +186,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View implements tea.Model. Returns the chat UI as a string.
 // Rendering is delegated to renderView() in view.go.
-func (m Model) View() string {
+func (m *Model) View() string {
 	return m.renderView()
 }
 
@@ -227,6 +229,10 @@ func (m Model) Height() int {
 
 // SetSize updates the available dimensions for the chat model.
 func (m *Model) SetSize(width, height int) {
+	if m.width != width {
+		m.messageCache.reset()
+		m.streamCache.reset()
+	}
 	m.width = width
 	m.height = height
 	inputWidth := width - 4 // Account for prompt and padding
@@ -240,7 +246,8 @@ func (m *Model) SetSize(width, height int) {
 func (m *Model) ClearHistory() {
 	m.messages = m.messages[:0]
 	m.lastResponse = ""
-	m.streamBuf.Reset()
+	m.resetStream()
+	m.messageCache.reset()
 	m.scrollOffset = 0
 	m.err = nil
 	m.status = StatusReady
@@ -288,7 +295,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.streamCancel()
 			m.streaming = false
 			m.lastResponse = m.streamBuf.String()
-			m.streamBuf.Reset()
+			m.resetStream()
 			return m, nil
 		}
 		m.Blur()
@@ -368,7 +375,7 @@ func (m Model) sendMessage(content string) (Model, tea.Cmd) {
 	})
 	m.messages = trimMessages(m.messages)
 	m.streaming = true
-	m.streamBuf.Reset()
+	m.resetStream()
 	m.err = nil
 	m.scrollOffset = 0
 	m.status = "Connecting..."
@@ -443,6 +450,7 @@ func (m Model) handleStreamChunk(msg StreamChunkMsg) (Model, tea.Cmd) {
 		// streaming responses (CWE-400).
 		if m.streamBuf.Len()+len(msg.Chunk.Delta) <= maxStreamResponseSize {
 			m.streamBuf.WriteString(msg.Chunk.Delta)
+			m.streamCache.append(msg.Chunk.Delta)
 		}
 		m.status = "Streaming..." //nolint:goconst // inline status string
 	}
@@ -455,12 +463,12 @@ func (m Model) handleStreamDone(msg streamDoneMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.err = msg.err
 		m.lastResponse = m.streamBuf.String()
-		m.streamBuf.Reset()
+		m.resetStream()
 		m.status = "Error"
 		return m, nil
 	}
 	m.lastResponse = msg.response
-	m.streamBuf.Reset()
+	m.resetStream()
 	m.status = StatusReady
 	// Add the assistant response to conversation history.
 	m.messages = append(m.messages, ai.ChatMessage{
@@ -555,7 +563,7 @@ func (m Model) handleToolResults(msg ToolResultMsg) (Model, tea.Cmd) {
 	}
 	m.messages = trimMessages(m.messages)
 	m.streaming = true
-	m.streamBuf.Reset()
+	m.resetStream()
 	m.status = "Connecting..."
 	// Create a new cancellable context for the continuation stream.
 	streamCtx, streamCancel := context.WithCancel(m.ctx)
@@ -591,4 +599,9 @@ func (m Model) rejectConfirmation() (Model, tea.Cmd) {
 	m.messages = trimMessages(m.messages)
 	m.lastResponse = "Cancelled: " + desc
 	return m, nil
+}
+
+func (m *Model) resetStream() {
+	m.streamBuf.Reset()
+	m.streamCache.reset()
 }

@@ -100,10 +100,22 @@ func newTestFT(t *testing.T, cfg config.FileTreeConfig, dir string) *FileTree {
 	t.Helper()
 	ft := New(cfg, dir, nil)
 	ft.ctx = context.Background()
-	// Synchronously load root children and rebuild the visible list.
+	// Synchronously preload the test tree while leaving directories collapsed.
+	// Dedicated loader tests use lazy trees to exercise async behavior.
 	loadChildrenStatic(ft.root, cfg)
+	preloadTestTree(ft, ft.root)
 	ft.rebuildVisible()
 	return ft
+}
+
+func preloadTestTree(ft *FileTree, root *node) {
+	for _, child := range root.children {
+		if !child.isDir || child.isSymlink {
+			continue
+		}
+		ft.loadChildren(child)
+		preloadTestTree(ft, child)
+	}
 }
 
 // runCmd executes a tea.Cmd and feeds the result back through ft.Update,
@@ -111,23 +123,50 @@ func newTestFT(t *testing.T, cfg config.FileTreeConfig, dir string) *FileTree {
 // (F13: file op cmd → result msg → toast msg).
 func runCmd(t *testing.T, ft *FileTree, cmd tea.Cmd) tea.Msg {
 	t.Helper()
+	msgs := applyFileTreeCmd(t, ft, cmd)
+	var last tea.Msg
+	var lastToast tea.Msg
+	for _, msg := range msgs {
+		last = msg
+		if _, ok := msg.(notify.ShowToastMsg); ok {
+			lastToast = msg
+		}
+	}
+	if lastToast != nil {
+		return lastToast
+	}
+	return last
+}
+
+func applyFileTreeCmd(t *testing.T, ft *FileTree, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
 	if cmd == nil {
 		return nil
 	}
-	msg := cmd()
-	if msg == nil {
-		return nil
+	queue := []tea.Cmd{cmd}
+	var messages []tea.Msg
+	for steps := 0; len(queue) > 0; steps++ {
+		require.Less(t, steps, 100, "filetree command chain did not terminate")
+		next := queue[0]
+		queue = queue[1:]
+		if next == nil {
+			continue
+		}
+		msg := next()
+		if msg == nil {
+			continue
+		}
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, batch...)
+			continue
+		}
+		messages = append(messages, msg)
+		_, followUp := ft.Update(msg)
+		if followUp != nil {
+			queue = append(queue, followUp)
+		}
 	}
-	// Check if this is already a ShowToastMsg (no second stage).
-	if _, ok := msg.(notify.ShowToastMsg); ok {
-		return msg
-	}
-	// Feed intermediate result back through Update.
-	_, cmd2 := ft.Update(msg)
-	if cmd2 == nil {
-		return msg
-	}
-	return cmd2()
+	return messages
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +308,7 @@ func TestGitFilterShowsHiddenChangedFiles(t *testing.T) {
 	absWorkflow := filepath.Clean(filepath.Join(dir, ".github", "workflow.yml"))
 	ft.gitChanged = newChangedFiles(map[string]bool{absWorkflow: true}, ft.rootPath)
 	// Ensure .github is loaded and expanded so children are reachable.
-	ft.expandGitChangedDirs()
+	applyFileTreeCmd(t, ft, ft.requestExpandedTreeLoad(ft.gitChanged.dirs, ft.CursorPath(), false))
 	ft.rebuildVisible()
 
 	// .github dir and workflow.yml should now be visible.
@@ -303,7 +342,7 @@ func TestGitFilterShowsUntrackedInHiddenDir(t *testing.T) {
 	ft.filter.gitFilter = true
 	absNew := filepath.Clean(filepath.Join(dir, ".config", "settings", "new.toml"))
 	ft.gitChanged = newChangedFiles(map[string]bool{absNew: true}, ft.rootPath)
-	ft.expandGitChangedDirs()
+	applyFileTreeCmd(t, ft, ft.requestExpandedTreeLoad(ft.gitChanged.dirs, ft.CursorPath(), false))
 	ft.rebuildVisible()
 
 	var names []string
@@ -846,7 +885,8 @@ func TestSymlinkDirExpandsWhenFollowEnabled(t *testing.T) {
 	}
 
 	before := ft.visibleCount()
-	ft.Update(specialKeyMsg(tea.KeyEnter))
+	_, cmd := ft.Update(specialKeyMsg(tea.KeyEnter))
+	applyFileTreeCmd(t, ft, cmd)
 	assert.Greater(t, ft.visibleCount(), before,
 		"symlink dir should expand when FollowSymlinks=true and path is safe")
 }
@@ -1208,7 +1248,7 @@ func TestNewFileKey_ConfirmCreatesFile(t *testing.T) {
 	_, cmd := ft.Update(notify.ModalResultMsg{Accept: true, Value: "brand_new.txt"})
 	require.NotNil(t, cmd)
 
-	msg := cmd()
+	msg := runCmd(t, ft, cmd)
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok)
 	assert.Equal(t, notify.Success, toast.Level)
@@ -1242,7 +1282,7 @@ func TestNewDirKey_ConfirmCreatesDir(t *testing.T) {
 	_, cmd := ft.Update(notify.ModalResultMsg{Accept: true, Value: "newsubdir"})
 	require.NotNil(t, cmd)
 
-	msg := cmd()
+	msg := runCmd(t, ft, cmd)
 	toast, ok := msg.(notify.ShowToastMsg)
 	require.True(t, ok)
 	assert.Equal(t, notify.Success, toast.Level)
@@ -1300,7 +1340,8 @@ func TestRefreshMsg_ReloadsTree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "external.txt"), []byte("x"), 0o644))
 
 	// Send RefreshMsg.
-	ft.Update(RefreshMsg{})
+	_, cmd := ft.Update(RefreshMsg{})
+	applyFileTreeCmd(t, ft, cmd)
 
 	assert.Greater(t, ft.visibleCount(), initial,
 		"tree should show new file after refresh")
@@ -1314,7 +1355,8 @@ func TestRefreshMsg_PreservesCursor(t *testing.T) {
 	ft.Update(keyMsg('j'))
 	assert.Equal(t, "src", ft.visibleName(ft.cursorIndex()))
 
-	ft.Update(RefreshMsg{})
+	_, cmd := ft.Update(RefreshMsg{})
+	applyFileTreeCmd(t, ft, cmd)
 	assert.Equal(t, "src", ft.visibleName(ft.cursorIndex()),
 		"cursor position should be preserved after refresh")
 }
@@ -1327,7 +1369,8 @@ func TestRefreshMsg_PreservesExpanded(t *testing.T) {
 	ft.Update(specialKeyMsg(tea.KeyEnter))
 	assert.Contains(t, ft.View(60, 20), "guide.md")
 
-	ft.Update(RefreshMsg{})
+	_, cmd := ft.Update(RefreshMsg{})
+	applyFileTreeCmd(t, ft, cmd)
 	assert.Contains(t, ft.View(60, 20), "guide.md",
 		"expanded state should be preserved after refresh")
 }
@@ -1818,8 +1861,9 @@ func TestRevealFileMsg_ThreadsLine(t *testing.T) {
 	_, cmd := ft.Update(panels.RevealFileMsg{Path: filepath.Join(dir, "main.go"), Line: 7})
 	require.NotNil(t, cmd, "revealing a file should produce a command")
 
-	fsm, ok := cmd().(panels.FileSelectedMsg)
-	require.True(t, ok, "expected FileSelectedMsg, got %T", cmd())
+	msg := runCmd(t, ft, cmd)
+	fsm, ok := msg.(panels.FileSelectedMsg)
+	require.True(t, ok, "expected FileSelectedMsg, got %T", msg)
 	assert.Equal(t, filepath.Join(dir, "main.go"), fsm.Path)
 	assert.Equal(t, 7, fsm.Line, "reveal should carry the requested line")
 }
@@ -2356,6 +2400,29 @@ func TestHandleTabActivated_AlreadyInGitMode(t *testing.T) {
 	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "git"})
 	assert.True(t, ft.filter.gitFilter)
 	assert.Nil(t, cmd, "already in git mode should be no-op")
+}
+
+func TestHandleTabActivated_RestoresGitModeExpansion(t *testing.T) {
+	dir := createTestTree(t)
+	ft := newTestFT(t, defaultCfg(), dir)
+	ft.gitClient = &mockGitClient{
+		StatusFunc: func(context.Context) ([]git.FileStatus, error) {
+			return []git.FileStatus{{
+				Path:           "docs/guide.md",
+				WorktreeStatus: git.StatusModified,
+			}}, nil
+		},
+	}
+	docsPath := filepath.Join(dir, "docs")
+	ft.gitModeExpanded = map[string]bool{docsPath: true}
+
+	_, cmd := ft.Update(panels.TabActivatedMsg{PresetName: "git"})
+	applyFileTreeCmd(t, ft, cmd)
+
+	docs := findNodeByPath(ft.root, docsPath)
+	require.NotNil(t, docs)
+	assert.True(t, docs.expanded)
+	assert.Contains(t, ft.View(60, 20), "guide.md")
 }
 
 // ---------------------------------------------------------------------------
@@ -3637,10 +3704,11 @@ func TestBranchFilesMode_PathTraversalInOutput(t *testing.T) {
 		"main.go", // legitimate file that exists in the test tree
 	}
 
-	ft.Update(branchFilesLoadedMsg{
+	_, cmd := ft.Update(branchFilesLoadedMsg{
 		files:  traversalFiles,
 		branch: "evil/traversal",
 	})
+	applyFileTreeCmd(t, ft, cmd)
 
 	require.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
 
@@ -3685,10 +3753,11 @@ func TestBranchFilesMode_LargeFileList(t *testing.T) {
 	// Also include one real file so the mode has something to show.
 	largeFileList = append(largeFileList, "main.go")
 
-	ft.Update(branchFilesLoadedMsg{
+	_, cmd := ft.Update(branchFilesLoadedMsg{
 		files:  largeFileList,
 		branch: "feature/massive-diff",
 	})
+	applyFileTreeCmd(t, ft, cmd)
 
 	require.True(t, ft.filter.branchFilesMode, "should enter branch-files mode")
 	// branchChanged.paths should have all 5001 entries.
