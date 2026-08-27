@@ -2,6 +2,18 @@
 
 > Part of [grut](../../../README.md) | See also: [plan-architecture.md](../plan-architecture.md)
 
+> [!IMPORTANT]
+> **Status, reconciled 2026-08-27.** The AI layer described here is built. See
+> [tasks.md](tasks.md) for the per-task status with implementing files.
+>
+> One part of this spec was **not** built and has been dropped: the CLI examples
+> below assume `grut merge`, `commit`, `diff`, `branch`, `log`, and `push`
+> subcommands. Those never existed. Git operations live in the TUI, and the CLI
+> is a management surface (`doctor`, `config`, `theme`, `keys`, `report`, `run`,
+> `status`, `clean`, `update`, `ext`, `mcp`). Read every `**CLI**:` line below as
+> historical design intent, not as shipped behaviour. The global `--no-ai` flag
+> is the one piece of that surface that did ship.
+
 ## Problem
 
 Git operations like rebasing, merging, and conflict resolution are cognitively expensive. Developers must understand the intent behind conflicting changes, remember the purpose of each branch, and manually reconcile diffs that an LLM could reason about in seconds. Grut already wraps the full git CLI with structured types (23 files in `internal/git/`), but today every merge conflict, commit message, and PR description is a manual effort.

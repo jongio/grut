@@ -2,7 +2,7 @@
 
 > Combines: [AI-Git-Ops Spec](spec.md) + Chat Box Feature
 > Source repo analysis: Go 1.24, Bubble Tea v2, Lipgloss v2, Cobra CLI
-> Existing packages: `internal/ai/` (not yet created), `internal/git/`, `internal/tui/`, `internal/panels/`, `internal/layout/`, `internal/config/`, `internal/keymap/`
+> Existing packages: `internal/ai/` (built, see [tasks.md](tasks.md)), `internal/git/`, `internal/tui/`, `internal/panels/`, `internal/layout/`, `internal/config/`, `internal/keymap/`
 
 ## Overview
 
