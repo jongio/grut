@@ -205,8 +205,6 @@ outside every listed location — this narrowing applies on top of the always-on
 repository jail. An empty list (the default) leaves the jail as the only
 boundary.
 
-> **Note:** `socket_auth` is reserved and not yet enforced ([#174](https://github.com/jongio/grut/issues/174)); setting it currently has no effect.
-
 ---
 
 ## Example: Full Config
