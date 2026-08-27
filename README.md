@@ -118,7 +118,7 @@ curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- v0.1.0
+curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- v0.8.0
 ```
 
 ### PowerShell script (Windows)
@@ -130,7 +130,7 @@ irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
 To install a specific version:
 
 ```powershell
-$v="v0.1.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+$v="v0.8.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
 ```
 
 ### Go Install
@@ -242,6 +242,12 @@ See [docs/keybindings.md](docs/keybindings.md) for the complete reference.
 Config file: `~/.config/grut/config.toml` (Linux/macOS) or `%APPDATA%\grut\config.toml` (Windows)
 
 See [docs/configuration.md](docs/configuration.md) for all options.
+
+## Stability
+
+grut is pre-1.0, so pin a version if you depend on it in automation. See
+[docs/stability.md](docs/stability.md) for what 1.0 will guarantee and what
+still has to be documented before it is tagged.
 
 ## Building from Source
 

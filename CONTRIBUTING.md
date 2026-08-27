@@ -48,13 +48,13 @@ To install the latest release (or test against a specific version):
 curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh
 
 # Specific version — Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- v0.1.0
+curl -fsSL https://raw.githubusercontent.com/jongio/grut/main/install.sh | sh -s -- v0.8.0
 
 # Latest — Windows (PowerShell)
 irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
 
 # Specific version — Windows (PowerShell)
-$v="v0.1.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
+$v="v0.8.0"; irm https://raw.githubusercontent.com/jongio/grut/main/install.ps1 | iex
 ```
 
 ## Development Workflow
