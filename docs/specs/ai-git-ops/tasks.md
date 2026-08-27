@@ -15,6 +15,8 @@ Enhance `internal/panels/branches/`: when AI enabled, stale/merged/abandoned bra
 
 The analysis engine already exists in `internal/ai/ops/branch.go` (task 12); only the panel wiring is outstanding. `ops.Branch` is currently referenced from no non-test panel code.
 
+**Blocked on #418.** The wiring is not panel-local. `AnalyzeBranches` lives on the concrete `*middleware.AIGitClient` rather than the `git.GitClient` interface, panels are registered with the plain client before the AI client is built (`cmd/root.go:232` vs `:283`), and the layer that converts op results into panel messages does not exist yet. The same gap blocks six other shipped ops, so the access pattern should be decided once in #418 rather than invented here.
+
 ## IN PROGRESS
 
 (none)
