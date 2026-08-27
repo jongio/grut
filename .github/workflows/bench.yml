@@ -69,9 +69,34 @@ jobs:
           echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
 
       - name: Run benchmarks
+        if: github.event_name != 'pull_request'
         run: |
           go test -bench=. -benchmem -count=6 -run='^$' -timeout=15m \
             ${{ env.BENCH_PKGS }} | tee bench-current.txt
+
+      # ── PR: benchmark base and PR code on the SAME RUNNER, interleaved.
+      #    Apple Silicon GitHub Actions VMs show 30-50% variance across runner
+      #    instances, so a stored baseline is unusable.  Running both versions
+      #    on one runner fixes that, but running them as two consecutive blocks
+      #    leaves a second failure mode: if the runner drifts between the two
+      #    blocks, every benchmark in the later block shifts at once and reads
+      #    as a uniform package-wide regression.  Interleaving the samples puts
+      #    both versions in the same time window, so drift cancels out.
+      - name: Run interleaved benchmarks (same-runner baseline)
+        if: github.event_name == 'pull_request'
+        run: |
+          set +e
+          bash scripts/bench-interleaved.sh \
+            "${{ github.event.pull_request.base.sha }}" 6 \
+            bench-baseline.txt bench-current.txt ${{ env.BENCH_PKGS }}
+          status=$?
+          set -e
+          # Exit 3 means nothing on the base commit is comparable.
+          if [ "$status" -eq 3 ]; then
+            echo "no_baseline=true" >> "$GITHUB_ENV"
+          elif [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -80,50 +105,20 @@ jobs:
           path: bench-current.txt
           retention-days: 90
 
-      # ── PR: run main benchmarks on the SAME RUNNER to eliminate cross-machine
-      #    variance.  Apple Silicon GitHub Actions VMs show 30-50% variance across
-      #    different runner instances, making stored-baseline comparisons unreliable.
-      #    By benchmarking both main and PR code on the same machine we keep a
-      #    tight threshold and detect real regressions without false positives.
-      - name: Run main benchmarks (same-runner baseline)
-        if: github.event_name == 'pull_request'
-        run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          PR_REF="$(git rev-parse HEAD)"
-          echo "Checking out base ($BASE_SHA) for same-runner comparison…"
-          git checkout "$BASE_SHA" --quiet
-
-          # Only benchmark packages that exist on the base branch , the PR may
-          # introduce new packages that have no main-branch counterpart.
-          VALID_PKGS=""
-          for pkg in $BENCH_PKGS; do
-            dir="${pkg#./}"
-            dir="${dir%/}"
-            if [ -d "$dir" ]; then
-              VALID_PKGS="$VALID_PKGS $pkg"
-            fi
-          done
-
-          if [ -z "$VALID_PKGS" ]; then
-            echo "No benchmark packages found on base , skipping comparison."
-            echo "no_baseline=true" >> "$GITHUB_ENV"
-          else
-            echo "Benchmarking on base: $VALID_PKGS"
-            go test -bench=. -benchmem -count=6 -run='^$' -timeout=15m \
-              $VALID_PKGS | tee bench-baseline.txt
-          fi
-
-          # Return to PR code.
-          git checkout "$PR_REF" --quiet
-
       - name: Compare vs same-runner baseline
         if: github.event_name == 'pull_request' && env.no_baseline != 'true'
         run: |
           benchstat bench-baseline.txt bench-current.txt > benchstat-diff.txt
           cat benchstat-diff.txt
-          bash scripts/bench-regress.sh bench-baseline.txt bench-current.txt ${{ matrix.time_threshold }} 10 || {
+          set +e
+          bash scripts/bench-regress.sh bench-baseline.txt bench-current.txt \
+            ${{ matrix.time_threshold }} 10 > bench-regressions.txt 2>&1
+          status=$?
+          set -e
+          cat bench-regressions.txt
+          if [ "$status" -ne 0 ]; then
             echo "regression=true" >> "$GITHUB_ENV"
-          }
+          fi
 
       - name: Build PR comment body
         if: github.event_name == 'pull_request' && env.no_baseline != 'true'
@@ -143,6 +138,22 @@ jobs:
             if [ "${{ env.regression }}" = "true" ]; then
               echo "> [!CAUTION]"
               echo "> Benchmarks regressed by more than ${{ matrix.time_threshold }}% on \`${{ env.PLATFORM }}\`."
+              echo ""
+              echo "Flagged:"
+              echo ""
+              echo '```'
+              cat bench-regressions.txt
+              echo '```'
+              echo ""
+              echo "Samples are interleaved between base and PR code, so runner drift"
+              echo "should cancel out.  If the flagged benchmarks live in packages this"
+              echo "PR cannot reach, or a whole package moved together, treat the result"
+              echo "as suspect and confirm locally with:"
+              echo ""
+              echo '```'
+              echo "go test -bench=<name> -count=10 -run='^\$' <pkg>   # on base, then on the PR"
+              echo "benchstat base.txt pr.txt"
+              echo '```'
             else
               echo "> [!NOTE]"
               echo "> No significant regressions on \`${{ env.PLATFORM }}\` (threshold: ${{ matrix.time_threshold }}%, same-runner comparison)."
