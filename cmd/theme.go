@@ -48,14 +48,15 @@ func newThemeListCmd(list themeListFunc) *cobra.Command {
 }
 
 func filterThemeNames(themes []string, filter string) []string {
-	query := strings.TrimSpace(strings.ToLower(filter))
-	if query == "" {
+	if strings.TrimSpace(filter) == "" {
 		return themes
 	}
 
+	// Initialized rather than nil so `--filter <nomatch> --json` encodes []
+	// instead of null.
 	out := []string{}
 	for _, name := range themes {
-		if strings.Contains(strings.ToLower(name), query) {
+		if textFilterMatches(filter, name) {
 			out = append(out, name)
 		}
 	}
