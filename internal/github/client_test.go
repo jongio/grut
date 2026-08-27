@@ -23,14 +23,20 @@ import (
 
 // urlRewriteTransport redirects all outgoing requests to the test server,
 // preserving the request path so existing mock handlers keep matching.
+//
+// transport is per-instance rather than http.DefaultTransport so that each
+// mock client owns its connection pool. Sharing the process-global default
+// couples every t.Parallel() test in this package to the others' server
+// teardown.
 type urlRewriteTransport struct {
-	base *url.URL
+	base      *url.URL
+	transport http.RoundTripper
 }
 
 func (t *urlRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.URL.Scheme = t.base.Scheme
 	req.URL.Host = t.base.Host
-	return http.DefaultTransport.RoundTrip(req)
+	return t.transport.RoundTrip(req)
 }
 
 // setupMockClient creates a clientImpl backed by an httptest server.
@@ -43,7 +49,14 @@ func setupMockClient(t *testing.T, handler http.HandlerFunc) (*clientImpl, *http
 	baseURL, err := url.Parse(server.URL + "/")
 	require.NoError(t, err)
 
-	httpClient := &http.Client{Transport: &urlRewriteTransport{base: baseURL}}
+	// Clone rather than construct so the transport keeps http.DefaultTransport's
+	// settings while owning its own connection pool. Registering the cleanup
+	// after server.Close means it runs first, draining this client's idle
+	// connections before the server it points at goes away.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+
+	httpClient := &http.Client{Transport: &urlRewriteTransport{base: baseURL, transport: transport}}
 	ghClient, err := gh.NewClient(gh.WithHTTPClient(httpClient), gh.WithAuthToken("test-token"))
 	require.NoError(t, err)
 
