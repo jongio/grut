@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+func TestWSLTestTimeoutAllowsFullSuite(t *testing.T) {
+	if wslTestTimeout < 30*time.Minute {
+		t.Fatalf("wslTestTimeout = %s, want at least 30m", wslTestTimeout)
+	}
+}
+
 func TestLinuxGoArchFromUname(t *testing.T) {
 	tests := []struct {
 		name  string
