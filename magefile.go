@@ -38,6 +38,7 @@ const (
 	windowsRaceToolchainSHA256          = "6252bf34fe2231a55ac7f03d482b36d2c7c58697990551bba508102cfb3f342e"
 	windowsRaceToolchainDownloadTimeout = 10 * time.Minute
 	windowsRaceToolchainExtractTimeout  = 10 * time.Minute
+	wslTestTimeout                      = 30 * time.Minute
 )
 
 var validGoVersionRE = regexp.MustCompile(`^go\d+\.\d+(\.\d+)?(rc\d+|beta\d+)?$`)
@@ -509,7 +510,6 @@ func TestWSL() error {
 		}
 	}
 
-	const wslTestTimeout = 10 * time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), wslTestTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "wsl", "bash", "-s")
