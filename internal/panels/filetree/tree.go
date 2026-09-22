@@ -127,7 +127,11 @@ func compareFold(a, b string) int {
 // filter and any active mode filters (commit-files, PR-files, git-changed).
 func (ft *FileTree) rebuildVisible() {
 	ft.visible = ft.visible[:0]
-	ft.walkVisible(ft.root)
+	if ft.hasActiveVisibleFilter() {
+		ft.walkVisible(ft.root)
+	} else {
+		ft.walkVisibleUnfiltered(ft.root)
+	}
 
 	// Clamp cursor.
 	if len(ft.visible) == 0 {
@@ -144,10 +148,33 @@ func (ft *FileTree) rebuildVisible() {
 	ft.ensureCursorVisible()
 }
 
+func (ft *FileTree) hasActiveVisibleFilter() bool {
+	return (ft.filter.commitFilesMode && ft.filter.commitChanged.loaded()) ||
+		(ft.filter.prFilesMode && ft.filter.prChanged.loaded()) ||
+		(ft.filter.releaseCompareMode && ft.filter.releaseChanged.loaded()) ||
+		(ft.filter.branchFilesMode && ft.filter.branchChanged.loaded()) ||
+		(ft.filter.gitFilter && ft.gitChanged.loaded())
+}
+
+func (ft *FileTree) walkVisibleUnfiltered(n *node) {
+	for _, child := range n.children {
+		if child.name == gitDirName && child.isDir {
+			continue
+		}
+		if !ft.showHidden && isHidden(child.name) {
+			continue
+		}
+		ft.visible = append(ft.visible, child)
+		if child.isDir && child.expanded {
+			ft.walkVisibleUnfiltered(child)
+		}
+	}
+}
+
 func (ft *FileTree) walkVisible(n *node) {
 	for _, child := range n.children {
 		// Always hide the .git metadata directory.
-		if child.name == ".git" && child.isDir {
+		if child.name == gitDirName && child.isDir {
 			continue
 		}
 		// In filtered modes (commit/PR/branch/git-changed) the mode's own
