@@ -36,6 +36,7 @@ jobs:
             time_threshold: 40   # Apple Silicon VMs amplify Go binary-layout non-determinism
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     env:
       CGO_ENABLED: "0"
       # Packages that have benchmark files.
