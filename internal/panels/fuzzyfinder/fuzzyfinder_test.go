@@ -863,6 +863,23 @@ func TestFileSourceFallsBackWithoutGitignore(t *testing.T) {
 	InvalidateFileCache()
 }
 
+func TestFileSourceDoesNotInheritIgnoreAboveRepository(t *testing.T) {
+	InvalidateFileCache()
+
+	parent := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(parent, ".gitignore"), []byte("*\n"), 0o644))
+	root := filepath.Join(parent, "project")
+	require.NoError(t, os.Mkdir(root, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "app.go"), []byte("a"), 0o644))
+
+	items := NewFileSource(root).Items()
+	require.Len(t, items, 1)
+	assert.Equal(t, "app.go", items[0].Text)
+
+	InvalidateFileCache()
+}
+
 func TestDirectorySourceRespectsGitignore(t *testing.T) {
 	dir := t.TempDir()
 
