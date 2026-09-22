@@ -105,6 +105,17 @@ type Item struct {
 // when no .gitignore files exist.
 func loadGitIgnore(root string) *ignore.GitIgnore {
 	var patterns []string
+	searchLimit := filepath.Clean(root)
+	for dir := searchLimit; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, dirGit)); err == nil {
+			searchLimit = dir
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
 	// Walk upward from root collecting .gitignore files, starting from
 	// the deepest directory so that closer files take precedence (appended
 	// last to the pattern list).
@@ -114,6 +125,9 @@ func loadGitIgnore(root string) *ignore.GitIgnore {
 		gi := filepath.Join(dir, ".gitignore")
 		if _, err := os.Stat(gi); err == nil {
 			ancestors = append(ancestors, gi)
+		}
+		if dir == searchLimit {
+			break
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -128,7 +142,7 @@ func loadGitIgnore(root string) *ignore.GitIgnore {
 		patterns = append(patterns, lines...)
 	}
 	// Also read .git/info/exclude if it exists.
-	exclude := filepath.Join(root, dirGit, "info", "exclude")
+	exclude := filepath.Join(searchLimit, dirGit, "info", "exclude")
 	if _, err := os.Stat(exclude); err == nil {
 		patterns = append(patterns, readIgnoreLines(exclude)...)
 	}
