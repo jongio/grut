@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.6"
+          go-version: "1.27.1"
 
       - name: Check formatting (gofmt)
         if: runner.os == 'Linux'
@@ -73,7 +73,7 @@ jobs:
       - name: Check strict formatting (gofumpt)
         if: runner.os == 'Linux'
         run: |
-          go install mvdan.cc/gofumpt@v0.10.0 || { echo "gofumpt install failed, skipping"; exit 0; }
+          go install mvdan.cc/gofumpt@v0.12.0 || { echo "gofumpt install failed, skipping"; exit 0; }
           unformatted=$(gofumpt -l .)
           if [ -n "$unformatted" ]; then
             echo "::error::Files need strict formatting (gofumpt):"
@@ -84,7 +84,7 @@ jobs:
       - name: Check dead code
         if: runner.os == 'Linux'
         run: |
-          go install golang.org/x/tools/cmd/deadcode@v0.47.0
+          go install golang.org/x/tools/cmd/deadcode@v0.50.0
           go install github.com/magefile/mage@v1.17.2
           mage deadcode
 
@@ -96,7 +96,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.12.2
+          version: v2.14.0
           install-mode: goinstall
 
       - name: Test with coverage
@@ -139,7 +139,7 @@ jobs:
       - name: govulncheck
         if: runner.os == 'Linux'
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
 
   # Verify the binary compiles for all release platforms.
@@ -155,7 +155,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.6"
+          go-version: "1.27.1"
 
       - name: Cross-compile
         run: |
