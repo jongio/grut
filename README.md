@@ -109,6 +109,8 @@ See the [Roadmap](ROADMAP.md) for what's coming next.
 
 ## Installation
 
+**macOS support:** Prebuilt binaries require macOS 13 (Ventura) or later.
+
 ### Shell script (Linux / macOS)
 
 ```bash
@@ -288,7 +290,7 @@ go vet ./...     # Vet all packages
 
 ## Tech Stack
 
-- **Go 1.26.6** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
+- **Go 1.27.1** + **Bubble Tea v2** (TUI) + **Lipgloss v2** (styling) + **Bubbles v2** (widgets)
 - **Chroma v2** (syntax highlighting) + **Glamour** (markdown rendering)
 - **fsnotify** (filesystem watching) + **mimetype** (file type detection)
 - **TOML** configuration via go-toml/v2
