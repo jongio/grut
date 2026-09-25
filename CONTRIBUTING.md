@@ -6,7 +6,7 @@ Thank you for your interest in contributing to grüt! This document provides gui
 
 ### Prerequisites
 
-- **Go 1.26+** (check with `go version`)
+- **Go 1.27.1+** (check with `go version`)
 - **Git** (check with `git --version`)
 - **Mage** (optional, install with `go install github.com/magefile/mage@latest`)
 

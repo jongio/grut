@@ -43,7 +43,7 @@ linters:
       - path: magefile\.go
         linters: [unparam, errcheck]
       # External library enum types — only a relevant subset is handled.
-      - text: "missing cases in switch of type tea\\.Mouse"
+      - text: "missing cases in switch of type (tea\\.Mouse|ansi\\.MouseButton)"
         linters:
           - exhaustive
       # runtime.GOOS comparisons are idiomatic Go, not magic strings.
