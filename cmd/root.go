@@ -57,7 +57,14 @@ func flagWasChanged(cmd *cobra.Command, name string) bool {
 // resources are released even when RunE returns an error (Cobra does not
 // call PersistentPostRunE on RunE failure).
 func buildRootCommand() (rootCmd *cobra.Command, cleanup func()) {
+	return buildRootCommandWithProgramFactory(func(model tea.Model) *tea.Program {
+		return tea.NewProgram(model)
+	})
+}
+
+func buildRootCommandWithProgramFactory(newProgram func(tea.Model) *tea.Program) (rootCmd *cobra.Command, cleanup func()) {
 	var profiler *diag.Profiler
+	var originalStderr *os.File
 	var startupLayout string
 	var demoScenario string
 	var demoKeep bool
@@ -153,7 +160,10 @@ Environment:
 				origStderr = os.Stderr
 			}
 			if origStderr != os.Stderr {
-				defer origStderr.Close()
+				originalStderr = origStderr
+			}
+			if cmd.ErrOrStderr() == os.Stderr {
+				cmd.SetErr(origStderr)
 			}
 
 			// Redirect stderr BEFORE starting Bubble Tea. Subprocess stderr
@@ -309,7 +319,7 @@ Environment:
 			stopWatchdog := diag.New().Start(context.Background())
 			defer stopWatchdog()
 
-			p := tea.NewProgram(model)
+			p := newProgram(model)
 			if _, err := p.Run(); err != nil {
 				// A TUI panic is caught by Bubble Tea (which restores the
 				// terminal) but its value is swallowed; crashlog.GuardTUI in
@@ -409,6 +419,10 @@ Environment:
 	cleanup = func() {
 		if profiler != nil {
 			profiler.Close()
+		}
+		if originalStderr != nil {
+			_ = originalStderr.Close()
+			originalStderr = nil
 		}
 	}
 

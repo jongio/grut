@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -15,6 +16,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRootCommand_ConfigLoadErrorUsesOriginalStderr_Subprocess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("subprocess integration test skipped with -short")
+	}
+
+	root, err := filepath.Abs("..")
+	require.NoError(t, err)
+	if _, statErr := os.Stat(filepath.Join(root, "main.go")); statErr != nil {
+		t.Skipf("cannot locate main.go at %s: %v", root, statErr)
+	}
+
+	configHome := t.TempDir()
+	configDir := filepath.Join(configHome, config.AppName)
+	require.NoError(t, os.MkdirAll(configDir, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "config.toml"),
+		[]byte("[theme]\nname = 'dracula'\nbroken'"),
+		0o600,
+	))
+
+	command := exec.Command("go", "run", ".")
+	command.Dir = root
+	command.Env = append(
+		os.Environ(),
+		"GRUT_FORCE_TERMINAL=1",
+		"GRUT_LOG=",
+		"XDG_CONFIG_HOME="+configHome,
+	)
+	output, runErr := command.CombinedOutput()
+
+	require.Error(t, runErr)
+	assert.Contains(t, string(output), "load config")
+	assert.Contains(t, string(output), "expected '=' after key")
+}
 
 // ---------------------------------------------------------------------------
 // buildRootCommand — PersistentPreRunE (profiling paths)
