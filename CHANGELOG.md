@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Updated the Anthropic SDK to v1.76.0, GitHub Copilot SDK to v1.0.15, and GoReleaser to v2.18.2.
 - The minimum required Go version and project toolchain are now Go 1.27.1.
 - Prebuilt macOS binaries now require macOS 13 or later.
 - Dispatching a GitHub Actions workflow now prompts for each `workflow_dispatch` input in turn: `choice` and `boolean` inputs are picked from their valid values (preselected on the workflow's default) and free-form inputs are pre-filled with the default and accept a custom value, instead of a single free-form `key=value` text blob.
