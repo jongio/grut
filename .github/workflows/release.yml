@@ -24,6 +24,7 @@ jobs:
   release:
     needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write            # Scoped to job, not workflow
       id-token: write            # Required for cosign keyless (OIDC) signing
@@ -36,7 +37,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.3"
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
@@ -47,6 +48,8 @@ jobs:
 
       - name: Compute next version
         id: version
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
           # Get the latest semver tag, default to v0.0.0 if none exists
           LATEST=$(git tag --list 'v*' --sort=-v:refname | head -n1)
@@ -61,7 +64,7 @@ jobs:
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
           # Bump based on input
-          case "${{ inputs.bump }}" in
+          case "$BUMP" in
             major)
               MAJOR=$((MAJOR + 1))
               MINOR=0
@@ -78,7 +81,7 @@ jobs:
 
           NEXT="${MAJOR}.${MINOR}.${PATCH}"
           echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "Bumping ${CURRENT} -> ${NEXT} (${{ inputs.bump }})"
+          echo "Bumping ${CURRENT} -> ${NEXT} (${BUMP})"
 
       - name: Create and push tag
         run: |
