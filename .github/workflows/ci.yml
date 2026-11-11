@@ -31,6 +31,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     continue-on-error: ${{ matrix.os == 'macos-latest' }}
     # Skip push-triggered runs from automated release commits. The release
     # workflow already calls ci.yml via workflow_call — an independent
@@ -48,7 +49,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.3"
 
       - name: Check formatting (gofmt)
         if: runner.os == 'Linux'
@@ -146,6 +147,7 @@ jobs:
   # CGO_ENABLED=0 means cross-compilation is pure Go — no native runners needed.
   cross-compile:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     env:
       CGO_ENABLED: "0"
@@ -155,9 +157,11 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.3"
 
       - name: Cross-compile
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=$(echo $platform | cut -d/ -f1)
@@ -166,7 +170,7 @@ jobs:
             if [ "$os" = "windows" ]; then ext=".exe"; fi
             echo "Building $os/$arch..."
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build \
-              -ldflags "-X github.com/jongio/grut/internal/config.AppVersion=pr-${{ github.event.pull_request.number }}" \
+              -ldflags "-X github.com/jongio/grut/internal/config.AppVersion=pr-${PR_NUMBER}" \
               -o "dist/grut_${os}_${arch}${ext}" .
           done
 
